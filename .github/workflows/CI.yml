@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# needed for the bundle commit-back on main (CI is the sole author of assets/overlay.js)
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  julia:
+    name: Julia ${{ matrix.version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ['1.10', '1']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ matrix.version }}
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/julia-buildpkg@v1
+      - uses: julia-actions/julia-runtest@v1
+
+  frontend:
+    name: Frontend (TS) + bundle
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+      # PRs (incl. forks, which can't push): fail if the committed bundle is stale.
+      - name: Verify committed bundle is up to date
+        if: github.event_name == 'pull_request'
+        working-directory: .
+        run: |
+          if ! git diff --quiet assets/overlay.js; then
+            echo "::error::assets/overlay.js is out of date — run 'cd frontend && npm run build' and commit."
+            git --no-pager diff --stat assets/overlay.js
+            exit 1
+          fi
+
+      # Push to main: CI owns the bundle — commit any rebuild so main is never stale.
+      - name: Commit rebuilt bundle
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: .
+        run: |
+          if ! git diff --quiet assets/overlay.js; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add assets/overlay.js
+            git commit -m "ci: rebuild assets/overlay.js [skip ci]"
+            git push
+          fi

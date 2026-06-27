@@ -1,0 +1,18 @@
+# Julia
+/Manifest.toml
+*.jl.cov
+*.jl.*.cov
+*.jl.mem
+/docs/build/
+
+# Node / TypeScript (frontend). The built bundle assets/overlay.js IS committed.
+frontend/node_modules/
+frontend/dist/
+*.tsbuildinfo
+npm-debug.log*
+
+# Local-only — not part of the package
+/spike/
+/pluto-makie-interactive-plots.md
+.playwright-mcp/
+*.png

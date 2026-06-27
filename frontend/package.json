@@ -1,0 +1,21 @@
+{
+  "name": "interactiveplots-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser overlay for Holo.jl. Source of truth for the committed assets/overlay.js bundle.",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src test",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "eslint": "^9.12.0",
+    "happy-dom": "^20.10.6",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.8.0",
+    "vitest": "^2.1.0"
+  }
+}
