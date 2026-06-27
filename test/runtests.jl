@@ -61,7 +61,7 @@ end
         @test L.kind === :circles && length(L.geometry) == 9
         img = Makie.colorbuffer(fig; px_per_unit = ppu)
         for k in 0:2
-            @test drawn_near(img, L.geometry[3k+1], L.geometry[3k+2])
+            @test drawn_near(img, L.geometry[3k + 1], L.geometry[3k + 2])
         end
     end
 
@@ -88,8 +88,10 @@ end
     @testset "Segment + Axis + custom" begin
         @test only(hitlayers(SegmentInteractable(ax, pts; mode = :polyline), ctx)).kind === :polyline
         @test only(hitlayers(AxisInteractable(ax), ctx)).geometry === nothing
-        ri = RegionInteractable(ax; regions = [(:circle, (1.0, 1.0), 10), (:rect, (2.0, 4.0), 1.0, 2.0)],
-                                payloads = ["a", "b"], tooltip = pl -> "tip:" * pl)
+        ri = RegionInteractable(
+            ax; regions = [(:circle, (1.0, 1.0), 10), (:rect, (2.0, 4.0), 1.0, 2.0)],
+            payloads = ["a", "b"], tooltip = pl -> "tip:" * pl
+        )
         @test Set(L.kind for L in hitlayers(ri, ctx)) == Set([:circles, :rects])
         @test IP.tooltip(ri, 1, "a") == "tip:a"
         fi = FunctionInteractable(c -> [HitLayer(:f, :circles, Float32[10, 10, 5], Any[(; v = 1)], :ax1, (:click,))])

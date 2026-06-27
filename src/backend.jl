@@ -8,11 +8,11 @@ The displayable artifact + the numbers JS needs to map it. `payload` is bytes (r
 or a string (svg); `mount` reports which.
 """
 struct RenderResult
-    mime    :: String
-    payload :: Union{Vector{UInt8}, String}
-    width   :: Int
-    height  :: Int
-    scaling :: Float64
+    mime::String
+    payload::Union{Vector{UInt8}, String}
+    width::Int
+    height::Int
+    scaling::Float64
 end
 
 """
@@ -22,16 +22,16 @@ One axis expressed declaratively, in the artifact's pixel space, so JS can inver
 pixels↔data for `AxisInteractable` and live hover-coordinate readout.
 """
 struct AxisTransform
-    id        :: Symbol
-    xlims     :: Tuple{Float64,Float64}
-    ylims     :: Tuple{Float64,Float64}
-    xscale    :: Symbol
-    yscale    :: Symbol
-    viewport  :: NTuple{4,Float64}      # (x,y,w,h) image px, top-left origin
-    xreversed :: Bool
-    yreversed :: Bool
-    xcats     :: Union{Nothing, Vector{String}}   # categorical tick map (v1; nothing if not categorical)
-    ycats     :: Union{Nothing, Vector{String}}
+    id::Symbol
+    xlims::Tuple{Float64, Float64}
+    ylims::Tuple{Float64, Float64}
+    xscale::Symbol
+    yscale::Symbol
+    viewport::NTuple{4, Float64}      # (x,y,w,h) image px, top-left origin
+    xreversed::Bool
+    yreversed::Bool
+    xcats::Union{Nothing, Vector{String}}   # categorical tick map (v1; nothing if not categorical)
+    ycats::Union{Nothing, Vector{String}}
 end
 
 """
@@ -42,12 +42,12 @@ data→image-px closure (so projection is not hard-wired to Makie). `transforms`
 serialized to JS; `ids` maps an axis object to its transform id.
 """
 struct InteractionContext
-    project    :: Function                       # (ax, point) -> Point2f, image px
-    transforms :: Dict{Symbol, AxisTransform}
-    ids        :: IdDict{Any, Symbol}
-    width      :: Int
-    height     :: Int
-    scaling    :: Float64
+    project::Function                       # (ax, point) -> Point2f, image px
+    transforms::Dict{Symbol, AxisTransform}
+    ids::IdDict{Any, Symbol}
+    width::Int
+    height::Int
+    scaling::Float64
 end
 
 "the one coordinate primitive interactables call — never re-derive projection"
@@ -71,8 +71,8 @@ fixed `px_per_unit`: output ≈ 2× the display width (retina-crisp, not wastefu
 `vector=true` emits SVG.
 """
 struct CairoBackend <: AbstractBackend
-    max_width :: Int
-    vector    :: Bool
+    max_width::Int
+    vector::Bool
 end
 CairoBackend(; max_width = 700, vector = false) = CairoBackend(max_width, vector)
 
@@ -108,12 +108,12 @@ function context(::CairoBackend, fig, ppu)
     project = function (ax, p)
         q = Makie.project(ax.scene, Point2f(Float64(p[1]), Float64(p[2])))
         o = ax.scene.viewport[].origin
-        Point2f((q[1] + o[1]) * scaling, out_h - (q[2] + o[2]) * scaling)  # flip to image coords
+        return Point2f((q[1] + o[1]) * scaling, out_h - (q[2] + o[2]) * scaling)  # flip to image coords
     end
 
     axes = [c for c in fig.content if c isa Makie.Axis]
-    ids = IdDict{Any,Symbol}()
-    transforms = Dict{Symbol,AxisTransform}()
+    ids = IdDict{Any, Symbol}()
+    transforms = Dict{Symbol, AxisTransform}()
     for (k, ax) in enumerate(axes)
         id = Symbol("ax", k); ids[ax] = id
         transforms[id] = _axis_transform(id, ax, scaling, out_h)
@@ -125,9 +125,11 @@ function _axis_transform(id, ax, scaling, out_h)
     vp = ax.scene.viewport[]; o = vp.origin; wv = vp.widths
     vpx = (o[1] * scaling, out_h - (o[2] + wv[2]) * scaling, wv[1] * scaling, wv[2] * scaling)
     fl = ax.finallimits[]; fo = fl.origin; fw = fl.widths
-    return AxisTransform(id,
+    return AxisTransform(
+        id,
         (fo[1], fo[1] + fw[1]), (fo[2], fo[2] + fw[2]),
         _scalesym(ax.xscale[]), _scalesym(ax.yscale[]),
         vpx, ax.xreversed[], ax.yreversed[],
-        _cats(ax.dim1_conversion[]), _cats(ax.dim2_conversion[]))
+        _cats(ax.dim1_conversion[]), _cats(ax.dim2_conversion[])
+    )
 end

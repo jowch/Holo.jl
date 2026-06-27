@@ -8,30 +8,32 @@ The typed value a bond returns on click (`nothing` until the first click). `payl
 JSON-serializable data the interactable attached (or `(; x, y)` for `AxisInteractable`).
 """
 struct InteractionEvent
-    layer   :: Symbol
-    index   :: Int
-    payload :: Any
+    layer::Symbol
+    index::Int
+    payload::Any
 end
 
 # ---- manifest assembly (pure; no published_to_js, no Pluto) -----------------
 
 function _layer_dict(i, L::HitLayer)
     hs = hoverstyle(i, 1)
-    d = Dict{String,Any}(
+    d = Dict{String, Any}(
         "id" => string(L.id), "kind" => string(L.kind), "axis" => string(L.axis),
         "geometry" => L.geometry, "payloads" => L.payloads,
         "events" => [string(e) for e in L.events],
-        "style" => Dict("stroke" => hs.stroke, "width" => hs.width))
+        "style" => Dict("stroke" => hs.stroke, "width" => hs.width)
+    )
     tips = [tooltip(i, k, pl) for (k, pl) in enumerate(L.payloads)]
     all(isnothing, tips) || (d["tooltips"] = tips)
     return d
 end
 
-_transform_dict(t::AxisTransform) = Dict{String,Any}(
+_transform_dict(t::AxisTransform) = Dict{String, Any}(
     "xlims" => collect(t.xlims), "ylims" => collect(t.ylims),
     "xscale" => string(t.xscale), "yscale" => string(t.yscale),
     "viewport" => collect(t.viewport), "xreversed" => t.xreversed, "yreversed" => t.yreversed,
-    "xcats" => t.xcats, "ycats" => t.ycats)
+    "xcats" => t.xcats, "ycats" => t.ycats
+)
 
 """
     build_manifest(interactables, ctx) -> Dict
@@ -48,18 +50,19 @@ function build_manifest(interactables, ctx::InteractionContext)
             push!(layers, _layer_dict(i, L))
         end
     end
-    return Dict{String,Any}(
+    return Dict{String, Any}(
         "width" => ctx.width, "height" => ctx.height, "scaling" => ctx.scaling,
         "layers" => layers,
-        "transforms" => Dict(string(id) => _transform_dict(t) for (id, t) in ctx.transforms))
+        "transforms" => Dict(string(id) => _transform_dict(t) for (id, t) in ctx.transforms)
+    )
 end
 
 # ---- the widget -------------------------------------------------------------
 
 struct HoloWidget
-    b64         :: String
-    manifest    :: Dict{String,Any}
-    display_css :: Int
+    b64::String
+    manifest::Dict{String, Any}
+    display_css::Int
 end
 
 """
@@ -97,17 +100,19 @@ function Base.show(io::IO, m::MIME"text/html", w::HoloWidget)
     # esbuild IIFE inside an `if`-block makes it install `{}` instead of `{mount}` (a
     # block-scope/strict heisenbug; verified). Re-parsing ~6KB per cell is negligible.
     boot = HypertextLiteral.JavaScript(_OVERLAY_JS[])
-    html = @htl("""
-    <div class="ip-host" style="position:relative; display:inline-block; width:100%; max-width:$(w.display_css)px;">
-      <img src="data:image/png;base64,$(w.b64)" style="display:block; width:100%; height:auto;" draggable="false">
-      <script>
-        $(boot)
-        const manifest = $(APD.Display.published_to_js(w.manifest));
-        window.Holo.mount(currentScript, manifest, invalidation);
-      </script>
-    </div>
-    """)
-    show(io, m, html)
+    html = @htl(
+        """
+        <div class="ip-host" style="position:relative; display:inline-block; width:100%; max-width:$(w.display_css)px;">
+          <img src="data:image/png;base64,$(w.b64)" style="display:block; width:100%; height:auto;" draggable="false">
+          <script>
+            $(boot)
+            const manifest = $(APD.Display.published_to_js(w.manifest));
+            window.Holo.mount(currentScript, manifest, invalidation);
+          </script>
+        </div>
+        """
+    )
+    return show(io, m, html)
 end
 
 # ---- bond plumbing (typed value) -------------------------------------------

@@ -24,7 +24,7 @@ include("render.jl")
 export AbstractBackend, CairoBackend
 export AbstractInteractable, HitLayer, InteractionContext, AxisTransform
 export PointInteractable, SegmentInteractable, RectInteractable, PolygonInteractable,
-       AxisInteractable, RegionInteractable, FunctionInteractable
+    AxisInteractable, RegionInteractable, FunctionInteractable
 export holo, InteractionEvent, data_to_image_px, hitlayers
 
 end # module Holo

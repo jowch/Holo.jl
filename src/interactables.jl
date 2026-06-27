@@ -9,12 +9,12 @@ a hit to an element index + payload. Compact by design (a heatmap ships edges, n
 `geometry` layout is keyed by `kind` (see architecture.md §3).
 """
 struct HitLayer
-    id       :: Symbol
-    kind     :: Symbol          # :circles|:polyline|:segments|:rects|:grid|:polygons|:axis
-    geometry :: Any
-    payloads :: Vector{Any}
-    axis     :: Symbol
-    events   :: Tuple
+    id::Symbol
+    kind::Symbol          # :circles|:polyline|:segments|:rects|:grid|:polygons|:axis
+    geometry::Any
+    payloads::Vector{Any}
+    axis::Symbol
+    events::Tuple
 end
 
 abstract type AbstractInteractable end
@@ -37,32 +37,38 @@ _proj(ctx, ax, p) = data_to_image_px(ctx, ax, p)
 struct PointInteractable <: AbstractInteractable
     ax; points::Vector{Point2f}; id::Symbol; payloads::Vector{Any}; radius::Float64
 end
-function PointInteractable(ax, points; id = :points,
-                           payloads = [(; index = k - 1, x = Float64(p[1]), y = Float64(p[2]))
-                                       for (k, p) in enumerate(points)],
-                           radius = 9)
+function PointInteractable(
+        ax, points; id = :points,
+        payloads = [
+            (; index = k - 1, x = Float64(p[1]), y = Float64(p[2]))
+                for (k, p) in enumerate(points)
+        ],
+        radius = 9
+    )
     pts = [Point2f(p[1], p[2]) for p in points]
     length(payloads) == length(pts) || throw(ArgumentError("payloads must match points"))
-    PointInteractable(ax, pts, id, collect(Any, payloads), Float64(radius))
+    return PointInteractable(ax, pts, id, collect(Any, payloads), Float64(radius))
 end
 function hitlayers(i::PointInteractable, ctx)
     g = Float32[]
     for p in i.points
         q = _proj(ctx, i.ax, p); append!(g, (q[1], q[2], i.radius * ctx.scaling))
     end
-    [HitLayer(i.id, :circles, g, i.payloads, axis_id(ctx, i.ax), events(i))]
+    return [HitLayer(i.id, :circles, g, i.payloads, axis_id(ctx, i.ax), events(i))]
 end
 
 # ============================ SegmentInteractable ==========================
 struct SegmentInteractable <: AbstractInteractable
     ax; vertices::Vector{Point2f}; mode::Symbol; id::Symbol; payloads::Vector{Any}; tol::Float64
 end
-function SegmentInteractable(ax, vertices; mode = :polyline, id = :segments,
-                             payloads = nothing, tol = 6)
+function SegmentInteractable(
+        ax, vertices; mode = :polyline, id = :segments,
+        payloads = nothing, tol = 6
+    )
     vs = [Point2f(v[1], v[2]) for v in vertices]
     nseg = mode === :polyline ? max(0, length(vs) - 1) : length(vs) ÷ 2
     pl = payloads === nothing ? Any[(; segment_index = k - 1) for k in 1:nseg] : collect(Any, payloads)
-    SegmentInteractable(ax, vs, mode, id, pl, Float64(tol))
+    return SegmentInteractable(ax, vs, mode, id, pl, Float64(tol))
 end
 function hitlayers(i::SegmentInteractable, ctx)
     g = Float32[]
@@ -70,7 +76,7 @@ function hitlayers(i::SegmentInteractable, ctx)
         q = _proj(ctx, i.ax, v); append!(g, (q[1], q[2]))
     end
     kind = i.mode === :polyline ? :polyline : :segments
-    [HitLayer(i.id, kind, g, i.payloads, axis_id(ctx, i.ax), events(i))]
+    return [HitLayer(i.id, kind, g, i.payloads, axis_id(ctx, i.ax), events(i))]
 end
 
 # ============================ RectInteractable =============================
@@ -79,7 +85,7 @@ struct RectInteractable <: AbstractInteractable
     ax; layout::Symbol; data::Any; id::Symbol; payloads::Vector{Any}
 end
 function RectInteractable(ax; rects = nothing, grid = nothing, id = :rects, payloads = nothing)
-    if grid !== nothing
+    return if grid !== nothing
         xe, ye, vals = grid
         RectInteractable(ax, :grid, (collect(Float64, xe), collect(Float64, ye), vals), id, Any[])
     else
@@ -92,7 +98,7 @@ function hitlayers(i::RectInteractable, ctx)
     if i.layout === :list
         g = Float32[]
         for (xc, yc, w, h) in i.data
-            a = _proj(ctx, i.ax, (xc - w/2, yc - h/2)); b = _proj(ctx, i.ax, (xc + w/2, yc + h/2))
+            a = _proj(ctx, i.ax, (xc - w / 2, yc - h / 2)); b = _proj(ctx, i.ax, (xc + w / 2, yc + h / 2))
             cx = (a[1] + b[1]) / 2; cy = (a[2] + b[2]) / 2
             append!(g, (cx, cy, abs(b[1] - a[1]), abs(b[2] - a[2])))
         end
@@ -105,8 +111,10 @@ function hitlayers(i::RectInteractable, ctx)
         yedges = Float32[_proj(ctx, i.ax, (x0, y))[2] for y in ye]
         ncols, nrows = length(xe) - 1, length(ye) - 1
         flat = Float32[Float32(vals[c, r]) for r in 1:nrows for c in 1:ncols]  # row-major: r*ncols+c
-        geom = Dict("xedges" => xedges, "yedges" => yedges,
-                    "ncols" => ncols, "nrows" => nrows, "values" => flat)
+        geom = Dict(
+            "xedges" => xedges, "yedges" => yedges,
+            "ncols" => ncols, "nrows" => nrows, "values" => flat
+        )
         return [HitLayer(i.id, :grid, geom, Any[], axis_id(ctx, i.ax), events(i))]
     end
 end
@@ -118,16 +126,18 @@ end
 function PolygonInteractable(ax, rings; id = :polygons, payloads = nothing)
     rs = [[Point2f(p[1], p[2]) for p in ring] for ring in rings]
     pl = payloads === nothing ? Any[(; index = k - 1) for k in 1:length(rs)] : collect(Any, payloads)
-    PolygonInteractable(ax, rs, id, pl)
+    return PolygonInteractable(ax, rs, id, pl)
 end
 function hitlayers(i::PolygonInteractable, ctx)
     geom = Vector{Float32}[]
     for ring in i.rings
         flat = Float32[]
-        for p in ring; q = _proj(ctx, i.ax, p); append!(flat, (q[1], q[2])); end
+        for p in ring
+            q = _proj(ctx, i.ax, p); append!(flat, (q[1], q[2]))
+        end
         push!(geom, flat)
     end
-    [HitLayer(i.id, :polygons, geom, i.payloads, axis_id(ctx, i.ax), events(i))]
+    return [HitLayer(i.id, :polygons, geom, i.payloads, axis_id(ctx, i.ax), events(i))]
 end
 
 # ============================ AxisInteractable ============================
@@ -140,7 +150,7 @@ function validate(i::AxisInteractable, ctx::InteractionContext)
     t = ctx.transforms[axis_id(ctx, i.ax)]
     (t.xscale in _JS_INVERTIBLE && t.yscale in _JS_INVERTIBLE) ||
         return "AxisInteractable: scale (x=$(t.xscale), y=$(t.yscale)) is not invertible client-side; " *
-               "supported: identity/log10/log (categorical is fine)."
+        "supported: identity/log10/log (categorical is fine)."
     return nothing
 end
 hitlayers(i::AxisInteractable, ctx) =
@@ -151,10 +161,12 @@ hitlayers(i::AxisInteractable, ctx) =
 struct RegionInteractable <: AbstractInteractable
     ax; regions::Vector; payloads::Vector{Any}; id::Symbol; tip::Function; evs::Tuple
 end
-function RegionInteractable(ax; regions, payloads, id = :region,
-                            tooltip = (pl -> nothing), events = (:click, :hover))
+function RegionInteractable(
+        ax; regions, payloads, id = :region,
+        tooltip = (pl -> nothing), events = (:click, :hover)
+    )
     length(regions) == length(payloads) || throw(ArgumentError("regions/payloads length mismatch"))
-    RegionInteractable(ax, collect(regions), collect(Any, payloads), id, tooltip, events)
+    return RegionInteractable(ax, collect(regions), collect(Any, payloads), id, tooltip, events)
 end
 events(i::RegionInteractable) = i.evs
 tooltip(i::RegionInteractable, ::Int, pl) = i.tip(pl)
@@ -166,10 +178,12 @@ function hitlayers(i::RegionInteractable, ctx)
             q = _proj(ctx, i.ax, reg[2]); append!(circ, (q[1], q[2], Float64(reg[3]) * ctx.scaling)); push!(cpl, pl)
         elseif kind === :rect
             xc, yc = reg[2]; w, h = Float64(reg[3]), Float64(reg[4])
-            a = _proj(ctx, i.ax, (xc - w/2, yc - h/2)); b = _proj(ctx, i.ax, (xc + w/2, yc + h/2))
-            append!(rect, ((a[1]+b[1])/2, (a[2]+b[2])/2, abs(b[1]-a[1]), abs(b[2]-a[2]))); push!(rpl, pl)
+            a = _proj(ctx, i.ax, (xc - w / 2, yc - h / 2)); b = _proj(ctx, i.ax, (xc + w / 2, yc + h / 2))
+            append!(rect, ((a[1] + b[1]) / 2, (a[2] + b[2]) / 2, abs(b[1] - a[1]), abs(b[2] - a[2]))); push!(rpl, pl)
         elseif kind === :polygon
-            flat = Float32[]; for p in reg[2]; q = _proj(ctx, i.ax, p); append!(flat, (q[1], q[2])); end
+            flat = Float32[]; for p in reg[2]
+                q = _proj(ctx, i.ax, p); append!(flat, (q[1], q[2]))
+            end
             push!(polys, flat); push!(ppl, pl)
         else
             throw(ArgumentError("RegionInteractable: unknown region kind $(kind)"))

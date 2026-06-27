@@ -104,6 +104,12 @@ your local build is optional. Julia tests:
 julia --project -e 'using Pkg; Pkg.test()'
 ```
 
+Julia code is formatted with [Runic](https://github.com/fredrikekre/Runic.jl) (CI enforces it):
+
+```bash
+julia -e 'using Runic; exit(Runic.main(["--inplace", "src", "test"]))'
+```
+
 ## License
 
 See [LICENSE](LICENSE).
