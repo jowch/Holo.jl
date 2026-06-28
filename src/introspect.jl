@@ -145,6 +145,12 @@ SegmentInteractable(ax, p::Makie.VLines; id = :vlines, payloads = nothing, tol =
 function _spy_rects(p)
     sc = _childof(p, Makie.Scatter)
     ms = sc.markersize[]
+    # ms is a Vec2 cell size (uniform across nonzeros). Fail loud if it's ever a per-marker
+    # size vector (length != 2) — we'd silently misread ms[1]/ms[2] as width/height.
+    ms isa AbstractVector && length(ms) != 2 && error(
+        "Spy introspection: expected a length-2 Vec cell size, got length-$(length(ms)) markersize " *
+            "(per-marker sizes unsupported)."
+    )
     w, h = ms isa AbstractVector ? (Float64(ms[1]), Float64(ms[2])) : (Float64(ms), Float64(ms))
     return [(Float64(c[1]), Float64(c[2]), w, h) for c in sc.converted[][1]]
 end

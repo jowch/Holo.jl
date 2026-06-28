@@ -311,6 +311,24 @@ end
             @test geom(SegmentInteractable(a, pr), c) ==
                 geom(SegmentInteractable(a, rbars; mode = :pairs), c)
             @test only(hitlayers(SegmentInteractable(a, pr), c)).id === :rangebars
+            # endpoint lands on a rendered bar (convention: assert pixel-landing, not just geom)
+            Lg = only(hitlayers(SegmentInteractable(a, pe), c)).geometry
+            img = Makie.colorbuffer(f; px_per_unit = 2.0)
+            @test drawn_near(img, Lg[1], Lg[2])
+        end
+
+        @testset "errorbars/rangebars direction=:x (horizontal)" begin
+            f = Figure(size = (500, 350)); a = Axis(f[1, 1])
+            # error runs along x, position along y
+            pe = errorbars!(a, [1.0, 2.0], [3.0, 4.0], [0.2, 0.3]; direction = :x)
+            pr = rangebars!(a, [1.0, 2.0], [0.5, 1.0], [1.5, 2.0]; direction = :x)
+            _, _, c = ctx_for(f)
+            ebars = [(0.8, 3.0), (1.2, 3.0), (1.7, 4.0), (2.3, 4.0)]
+            @test geom(SegmentInteractable(a, pe), c) ==
+                geom(SegmentInteractable(a, ebars; mode = :pairs), c)
+            rbars = [(0.5, 1.0), (1.5, 1.0), (1.0, 2.0), (2.0, 2.0)]
+            @test geom(SegmentInteractable(a, pr), c) ==
+                geom(SegmentInteractable(a, rbars; mode = :pairs), c)
         end
 
         @testset "hlines/vlines -> Segment(:pairs) spanning finallimits" begin
@@ -327,6 +345,17 @@ end
                 geom(SegmentInteractable(a, vexp; mode = :pairs), c)
             @test only(hitlayers(SegmentInteractable(a, ph), c)).id === :hlines
             @test only(hitlayers(SegmentInteractable(a, pv), c)).id === :vlines
+            # the first hline's midpoint (between its two span endpoints) lands on the drawn line
+            g = only(hitlayers(SegmentInteractable(a, ph), c)).geometry
+            img = Makie.colorbuffer(f; px_per_unit = 2.0)
+            @test drawn_near(img, (g[1] + g[3]) / 2, (g[2] + g[4]) / 2)
+        end
+
+        @testset "empty data -> empty layer (no pairs)" begin
+            f = Figure(size = (500, 350)); a = Axis(f[1, 1])
+            p = errorbars!(a, Float64[], Float64[], Float64[]); _, _, c = ctx_for(f)
+            L = only(hitlayers(SegmentInteractable(a, p), c))
+            @test isempty(L.geometry) && isempty(L.payloads)
         end
 
         @testset "spy -> Rect(:list) of unit cells at the nonzeros" begin
