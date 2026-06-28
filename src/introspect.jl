@@ -69,3 +69,53 @@ function PolygonInteractable(ax, p::Makie.Poly; id = :poly, payloads = nothing)
     rings = (isempty(g) || first(g) isa _GB.Point) ? [g] : g
     return PolygonInteractable(ax, rings; id, payloads)
 end
+
+# ====================== M2.2 holo(fig) auto-extraction ======================
+# Walk each Axis's top-level plots and emit the Vector{AbstractInteractable} a user could
+# hand-write, via the M2.1 constructors. Unsupported plot type → skip + warn. Pure sugar.
+
+# the layer-id base for a plot, or nothing if Holo can't introspect it
+function _plotbase(p)
+    p isa Makie.Scatter && return :scatter
+    p isa Makie.Lines && return :lines
+    p isa Makie.LineSegments && return :segments
+    (p isa Makie.Heatmap || p isa Makie.Image) && return :cells
+    p isa Makie.BarPlot && return :bars
+    p isa Makie.Poly && return :poly
+    return nothing
+end
+
+function _construct(ax, p, id)
+    p isa Makie.Scatter && return PointInteractable(ax, p; id)
+    (p isa Makie.Lines || p isa Makie.LineSegments) && return SegmentInteractable(ax, p; id)
+    (p isa Makie.Heatmap || p isa Makie.Image || p isa Makie.BarPlot) && return RectInteractable(ax, p; id)
+    return PolygonInteractable(ax, p; id)   # Poly — the only remaining supported kind
+end
+
+"""
+    auto_interactables(fig) -> Vector{AbstractInteractable}
+
+Introspect a Makie `Figure`: for every supported plot in every `Axis`, build the interactable
+its M2.1 constructor would. Unsupported plot types are skipped with a warning. Layer ids are
+the plot kind (`:scatter`, `:lines`, …), suffixed `_2`, `_3`, … when a kind repeats. Returns
+the same concrete vector you could pass to [`holo`](@ref) yourself — edit or extend it freely.
+"""
+function auto_interactables(fig)
+    ints = AbstractInteractable[]
+    seen = Dict{Symbol, Int}()
+    for ax in fig.content
+        ax isa Makie.Axis || continue
+        for p in ax.scene.plots
+            base = _plotbase(p)
+            if base === nothing
+                @warn "holo: skipping unsupported plot type $(typeof(p).name.name) (no introspection recipe)" maxlog = 16
+                continue
+            end
+            n = get(seen, base, 0) + 1
+            seen[base] = n
+            id = n == 1 ? base : Symbol(base, :_, n)
+            push!(ints, _construct(ax, p, id))
+        end
+    end
+    return ints
+end

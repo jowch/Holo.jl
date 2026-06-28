@@ -218,4 +218,53 @@ end
             @test w.manifest["layers"][1]["id"] == "scatter"
         end
     end
+
+    @testset "M2.2 holo(fig) auto-extraction" begin
+        @testset "walks every axis, maps each known plot, unique ids" begin
+            f = Figure(size = (700, 350))
+            a1 = Axis(f[1, 1])
+            scatter!(a1, [1.0, 2.0], [1.0, 2.0])
+            lines!(a1, [0.0, 1.0, 2.0], [0.0, 1.0, 0.5])
+            heatmap!(a1, 1:3, 1:3, rand(3, 3))
+            barplot!(a1, [1, 2], [3.0, 4.0])
+            poly!(a1, Point2f[(0, 0), (1, 0), (0.5, 1)])
+            a2 = Axis(f[1, 2])
+            scatter!(a2, [5.0], [5.0])             # second scatter -> :scatter_2
+
+            ints = auto_interactables(f)
+            @test length(ints) == 6
+            _, _, c = ctx_for(f)
+            ids = [only(hitlayers(i, c)).id for i in ints]
+            @test ids == [:scatter, :lines, :cells, :bars, :poly, :scatter_2]
+            @test length(unique(ids)) == 6      # no collisions across axes
+            # a2's scatter resolves to a2's transform (its own axis), not a1's
+            @test only(hitlayers(ints[6], c)).axis != only(hitlayers(ints[1], c)).axis
+        end
+
+        @testset "skips unsupported plot types with a warning" begin
+            f = Figure(size = (500, 350)); a = Axis(f[1, 1])
+            scatter!(a, [1.0], [1.0])
+            contour!(a, 1:5, 1:5, rand(5, 5))     # unsupported -> skip + warn
+            ints = @test_logs (:warn,) match_mode = :any auto_interactables(f)
+            @test length(ints) == 1
+            @test only(ints) isa PointInteractable
+        end
+
+        @testset "holo(fig) overlays the auto-extracted set" begin
+            f = Figure(size = (500, 350)); a = Axis(f[1, 1])
+            scatter!(a, [1.0, 2.0], [1.0, 2.0]; markersize = 18)
+            heatmap!(a, 1:3, 1:3, rand(3, 3))
+            w = holo(f)
+            @test [L["id"] for L in w.manifest["layers"]] == ["scatter", "cells"]
+            @test [L["kind"] for L in w.manifest["layers"]] == ["circles", "grid"]
+        end
+
+        @testset "no introspectable plots -> warn, render image only" begin
+            f = Figure(size = (400, 300)); a = Axis(f[1, 1])
+            contour!(a, 1:5, 1:5, rand(5, 5))
+            w = @test_logs (:warn,) match_mode = :any holo(f)
+            @test isempty(w.manifest["layers"])
+            @test !isempty(w.b64)                  # static image still produced
+        end
+    end
 end
