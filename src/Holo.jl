@@ -19,6 +19,7 @@ end
 
 include("backend.jl")
 include("interactables.jl")
+include("introspect.jl")
 include("render.jl")
 
 export AbstractBackend, CairoBackend

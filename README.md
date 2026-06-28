@@ -138,6 +138,30 @@ Every interactable takes an `Axis` and geometry in **data space** (projected in 
 `AxisInteractable` inverts pixels→data client-side, so it supports `identity` / `log10` /
 `log` scales (categorical is fine); any other scale fails loud at `holo()` time.
 
+### From a plot object (no hand-written geometry)
+
+Pass the plot a `plot!` call returns and the geometry is pulled from it — no need to repeat
+coordinates you already gave Makie. These produce the **same** interactable the explicit
+constructor would, so everything above (payloads, `selected`, tooltips) still applies.
+
+```julia
+p = scatter!(ax, xs, ys; markersize = 14)
+@bind sel holo(fig, PointInteractable(ax, p))   # radius taken from markersize
+```
+
+| Plot | Constructor | Notes |
+|---|---|---|
+| `Scatter` | `PointInteractable(ax, p)` | `radius` defaults to `markersize/2` (pixel markers); override with `radius =` |
+| `Lines` | `SegmentInteractable(ax, p)` | `:polyline` (nearest-segment) |
+| `LineSegments` | `SegmentInteractable(ax, p)` | `:pairs` (disjoint) |
+| `Heatmap` / `Image` | `RectInteractable(ax, p)` | compact grid; cell `(i, j, value)` resolved client-side |
+| `BarPlot` | `RectInteractable(ax, p)` | reads the laid-out bars, so dodge/stack/auto-width are honored |
+| `Poly` | `PolygonInteractable(ax, p)` | one ring or many |
+
+The `ax` is passed because a plot has no back-reference to its axis. `id`/`payloads` take the
+same keywords as the explicit form (defaults: `:scatter`, `:lines`, `:cells`, `:bars`, `:poly`).
+Other plot types still need the explicit constructor.
+
 ### Custom interactions
 
 For geometry the built-ins don't cover — no JavaScript required:
