@@ -85,6 +85,23 @@ end
         @test length(L.geometry["xedges"]) == 21 && length(L.geometry["values"]) == 600
     end
 
+    @testset "fail loud on unsupported axis types" begin
+        for mk in (Makie.PolarAxis, Axis3, LScene)
+            fu = Figure(); mk(fu[1, 1])
+            err = (@test_throws ArgumentError ctx_for(fu)).value
+            @test occursin("supports 2D `Makie.Axis` only", err.msg)
+        end
+    end
+
+    @testset "Polygon geometry projects per ring" begin
+        rings = [[(1.0, 1.0), (2.0, 4.0), (3.0, 1.0)], [(1.5, 2.0), (2.5, 2.0), (2.0, 3.0)]]
+        L = only(hitlayers(PolygonInteractable(ax, rings; id = :poly), ctx))
+        @test L.kind === :polygons && L.id === :poly
+        @test length(L.geometry) == 2                       # two rings
+        @test all(r -> length(r) == 6, L.geometry)          # 3 pts × (x,y) each
+        @test [p.index for p in L.payloads] == [0, 1]       # default per-ring payloads
+    end
+
     @testset "Segment + Axis + custom" begin
         @test only(hitlayers(SegmentInteractable(ax, pts; mode = :polyline), ctx)).kind === :polyline
         @test only(hitlayers(AxisInteractable(ax), ctx)).geometry === nothing
@@ -102,6 +119,18 @@ end
         m = build_manifest([PointInteractable(ax, pts; id = :scatter), AxisInteractable(ax)], ctx)
         @test [L["kind"] for L in m["layers"]] == ["circles", "axis"]
         @test haskey(m["transforms"], "ax1")
+
+        # selection round-trip: pre-highlight indices ride the manifest keyed by layer id
+        @test !haskey(m["layers"][1], "selected")                       # absent when unselected
+        ms = build_manifest([PointInteractable(ax, pts; id = :scatter)], ctx; selected = Dict(:scatter => [0, 2]))
+        @test ms["layers"][1]["selected"] == [0, 2]
+        @test !haskey(
+            build_manifest(
+                [PointInteractable(ax, pts; id = :scatter)], ctx;
+                selected = Dict(:scatter => Int[])
+            )["layers"][1], "selected"
+        )   # empty omitted
+        @test holo(fig, PointInteractable(ax, pts; id = :scatter); selected = Dict(:scatter => [1])).manifest["layers"][1]["selected"] == [1]
 
         w = holo(fig, PointInteractable(ax, pts; id = :scatter))
         @test w isa HoloWidget

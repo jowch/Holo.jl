@@ -30,6 +30,23 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
 
+  examples:
+    name: Example notebooks
+    runs-on: ubuntu-latest
+    # Each notebook devs the package + adds CairoMakie into a temp env (full Makie
+    # precompile on a cold cache); generous ceiling so a slow run fails loud, not hangs.
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+      - uses: julia-actions/cache@v2
+      # Runs every Pluto notebook in examples/ headlessly; fails if any cell errors,
+      # so an example can never silently drift out of sync with the package API.
+      - name: Run example notebooks headlessly
+        run: julia --color=yes examples/ci_run.jl
+
   frontend:
     name: Frontend (TS) + bundle
     runs-on: ubuntu-latest

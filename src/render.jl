@@ -36,18 +36,25 @@ _transform_dict(t::AxisTransform) = Dict{String, Any}(
 )
 
 """
-    build_manifest(interactables, ctx) -> Dict
+    build_manifest(interactables, ctx; selected) -> Dict
 
 Validate every interactable (fail loud) and assemble the JS-facing manifest. Pure — the unit
 tests call this directly; the Pluto-only `published_to_js` step happens later in `show`.
+
+`selected` pre-highlights elements on mount: a `layer_id => indices` map keyed by the same
+`Symbol` a click returns in `InteractionEvent.layer`. The overlay re-derives highlights from
+it each render, so threading a bond value back keeps a selection flicker-free across re-renders.
 """
-function build_manifest(interactables, ctx::InteractionContext)
+function build_manifest(interactables, ctx::InteractionContext; selected = nothing)
     layers = Any[]
     for i in interactables
         msg = validate(i, ctx)
         msg === nothing || throw(ArgumentError(msg))
         for L in hitlayers(i, ctx)
-            push!(layers, _layer_dict(i, L))
+            d = _layer_dict(i, L)
+            sel = selected === nothing ? nothing : get(selected, L.id, nothing)
+            (sel === nothing || isempty(sel)) || (d["selected"] = collect(Int, sel))
+            push!(layers, d)
         end
     end
     return Dict{String, Any}(
@@ -66,17 +73,21 @@ struct HoloWidget
 end
 
 """
-    holo(fig, interactables; backend=CairoBackend())
+    holo(fig, interactables; backend=CairoBackend(), selected=nothing)
 
 Render `fig` and overlay JS hit-testing for the declared `interactables`. Use as a Pluto
 `@bind` source; the bond value is `nothing` until a click, then an [`InteractionEvent`](@ref).
+
+`selected` (a `layer_id => indices` map) pre-highlights elements on mount. Feed a bond value
+back into it — `Dict(ev.layer => [ev.index])` — to keep clicked elements highlighted across
+re-renders. See [`build_manifest`](@ref).
 
 Does not corrupt the user's figure: Makie `Figure`s can't be `deepcopy`'d (they hold module
 refs), so instead the one mutation we introduce — forcing an opaque background — is saved and
 restored. `update_state_before_display!` is also run, but that is exactly the step Makie performs
 at display/save time, so it is benign (not corruption).
 """
-function holo(fig, interactables::AbstractVector; backend::AbstractBackend = CairoBackend())
+function holo(fig, interactables::AbstractVector; backend::AbstractBackend = CairoBackend(), selected = nothing)
     bg0 = fig.scene.backgroundcolor[]
     try
         # opaque background (dark-mode/transparent-bg footgun); restored in finally
@@ -84,7 +95,7 @@ function holo(fig, interactables::AbstractVector; backend::AbstractBackend = Cai
         Makie.update_state_before_display!(fig)        # finalize once; render + context share it
         ppu = _ppu(backend, fig)
         ctx = context(backend, fig, ppu)
-        manifest = build_manifest(interactables, ctx)  # validates (fail loud) before rendering
+        manifest = build_manifest(interactables, ctx; selected)  # validates (fail loud) before rendering
         result = render(backend, fig, ppu)
         display_css = round(Int, min(size(fig.scene)[1], backend.max_width))
         return HoloWidget(base64encode(result.payload), manifest, display_css)

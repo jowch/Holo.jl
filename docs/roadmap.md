@@ -20,14 +20,14 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 
 ---
 
-## M1 — Harden v1 (finish what exists)
+## M1 — Harden v1 (finish what exists) ✅ *done*
 *Goal: every shipped feature is real and demonstrated. No new surfaces.*
 
-- [ ] **Live-verify the remaining kinds** in Pluto: Segment, Rect(list+grid/heatmap), Polygon, Axis-readout. (Machinery is proven for circles; this closes the per-kind gap.) *Done: one example notebook exercises all five with a Playwright check.*
-- [ ] **Selection round-trip → re-highlight.** Wire the designed loop: bond value → Julia marks selected indices on the manifest → overlay pre-highlights on mount (`HitLayer.selected` already exists in the TS). *Done: clicked points stay highlighted across re-renders, flicker-free.*
-- [ ] **`examples/` notebook(s)** with a pinned `Project.toml`/`Manifest.toml` (avoids the ~6-min cold-start). Promote a cleaned `spike/integration.jl`. *Done: opens and works from a fresh checkout.*
-- [ ] **Docs**: a short Documenter site or expanded README API section (`holo`, each interactable, custom paths).
-- [ ] **Robustness validation**: fail loud on out-of-scope configs (PolarAxis, Axis3, LScene) at `holo()` time with a clear message.
+- [x] **Live-verify the remaining kinds** in Pluto: Segment, Rect(list+grid/heatmap), Polygon, Axis-readout. (Machinery is proven for circles; this closes the per-kind gap.) *Done: `examples/demo.jl` exercises all five live; verified via headless Pluto + Playwright.*
+- [x] **Selection round-trip → re-highlight.** Wire the designed loop: bond value → Julia marks selected indices on the manifest → overlay pre-highlights on mount (`HitLayer.selected` already exists in the TS). *Done: `selected` keyword on `holo`/`build_manifest`; clicked points re-highlight flicker-free (verified live).*
+- [x] **`examples/` notebook** — self-contained Pluto notebook (`examples/demo.jl`) that devs the package via a checkout-relative `@__DIR__` path. *Done: opens and runs clean from a fresh checkout; a CI job runs it headlessly so it can't rot.* (Used Pluto's self-contained notebook env, not a sidecar `Project.toml`.)
+- [x] **Docs**: expanded README API section (`holo`, each interactable, custom paths, payload-is-`Dict` contract, selection round-trip). Documenter site deferred to M5 (pre-registration → YAGNI).
+- [x] **Robustness validation**: fail loud on out-of-scope configs (PolarAxis/Axis3/LScene) at `holo()` time — one `AbstractAxis`-not-`Axis` guard in `context()`.
 
 ## M2 — Ergonomics (the big unlock)
 *Goal: stop hand-writing geometry. `survey-makie-surfaces.md` has the extraction recipes.*
