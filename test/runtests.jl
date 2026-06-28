@@ -120,6 +120,18 @@ end
         @test [L["kind"] for L in m["layers"]] == ["circles", "axis"]
         @test haskey(m["transforms"], "ax1")
 
+        # selection round-trip: pre-highlight indices ride the manifest keyed by layer id
+        @test !haskey(m["layers"][1], "selected")                       # absent when unselected
+        ms = build_manifest([PointInteractable(ax, pts; id = :scatter)], ctx; selected = Dict(:scatter => [0, 2]))
+        @test ms["layers"][1]["selected"] == [0, 2]
+        @test !haskey(
+            build_manifest(
+                [PointInteractable(ax, pts; id = :scatter)], ctx;
+                selected = Dict(:scatter => Int[])
+            )["layers"][1], "selected"
+        )   # empty omitted
+        @test holo(fig, PointInteractable(ax, pts; id = :scatter); selected = Dict(:scatter => [1])).manifest["layers"][1]["selected"] == [1]
+
         w = holo(fig, PointInteractable(ax, pts; id = :scatter))
         @test w isa HoloWidget
         @test w.manifest["layers"][1]["kind"] == "circles"
