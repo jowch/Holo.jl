@@ -73,8 +73,9 @@ Declare interactables explicitly (geometry in data space):
 - `RegionInteractable` / `FunctionInteractable` — custom interactions, no JavaScript required
 
 Linear, log, and categorical axes; single or multiple axes; linked selection via shared
-payloads through Pluto's reactive graph. Out of scope: 3D, `PolarAxis`/`Axis3`, and
-high-frequency live redraw (that's WGLMakie's domain) — these fail loud at `holo()` time.
+payloads through Pluto's reactive graph. Out of scope (that's WGLMakie's domain): 3D and
+high-frequency live redraw; unsupported axis blocks (`PolarAxis`/`Axis3`/`LScene`) fail loud
+at `holo()` time.
 
 [`examples/demo.jl`](examples/demo.jl) is a runnable gallery of every kind below plus the
 selection round-trip.
@@ -99,7 +100,9 @@ finalize step Makie performs at display time).
 - **`selected`** — a `layer_id => indices` map (e.g. `Dict(:scatter => [0, 2])`) that
   pre-highlights elements on mount. Indices are 0-based and match `InteractionEvent.index`.
   Feed a bond value back into it to keep clicked elements highlighted across re-renders,
-  flicker-free (see [Selection round-trip](#selection-round-trip)).
+  flicker-free (see [Selection round-trip](#selection-round-trip)). Keys are layer ids: for
+  the single-layer kinds that's the interactable's `id`, but `RegionInteractable` splits into
+  suffixed layers (`:id_c` circles / `:id_r` rects / `:id_p` polygons) — key on those.
 
 ### `InteractionEvent`
 
@@ -158,18 +161,38 @@ For geometry the built-ins don't cover — no JavaScript required:
 
 ### Selection round-trip
 
-Pass `selected` to pre-highlight, and feed the bond value back to make a selection persist:
+Pass `selected` to pre-highlight, and feed a bond value back to make a selection persist.
+The catch: feeding one widget's bond into *its own* `selected` is a Pluto reactive cycle
+("Cyclic references") and won't run. Break it across two cells — the click source and the
+highlighted display — with the accumulator in between:
 
 ```julia
-# cell 1 — the bond, reading the current selection
-@bind ev holo(fig, PointInteractable(ax, pts; id = :scatter); selected = picked)
-
-# cell 2 — derive the selection from clicks (keyed by the layer id)
-picked = ev === nothing ? Dict{Symbol,Vector{Int}}() : Dict(ev.layer => [ev.index])
+# once: a persistent accumulator (the Ref survives later cells' re-runs)
+picks = Ref(Int[])
 ```
 
-The overlay re-derives highlights from `selected` on every render, so highlighted elements
-survive a re-render without flicker. (See `examples/demo.jl` for an accumulating version.)
+```julia
+# the click source
+@bind ev holo(fig, PointInteractable(ax, pts; id = :scatter))
+```
+
+```julia
+# accumulate clicked indices (acyclic: reads `ev` + the once-init Ref)
+selected = begin
+    ev === nothing || push!(picks[], ev.index)
+    Dict(:scatter => unique!(sort(picks[])))
+end
+```
+
+```julia
+# the display: pre-highlights `selected` on mount (its own bond is unused)
+@bind _ holo(fig2, PointInteractable(ax2, pts; id = :scatter); selected = selected)
+```
+
+The overlay re-derives highlights from `selected` on every render, so the highlighted
+elements survive a re-render without flicker. This is exactly the pattern in
+[`examples/demo.jl`](examples/demo.jl) (cells under "Selection round-trip"), which CI runs
+headlessly on every change.
 
 ## How it works
 
