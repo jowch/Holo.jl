@@ -87,6 +87,7 @@ selection round-trip.
 ```julia
 holo(fig, interactables; backend = CairoBackend(), selected = nothing) -> HoloWidget
 holo(fig, interactable;  …)   # single-interactable convenience
+holo(fig; …)                  # zero-config: auto-extract interactables from the plots
 ```
 
 Renders `fig` and overlays hit-testing for the declared interactables. Use as a Pluto
@@ -137,6 +138,54 @@ Every interactable takes an `Axis` and geometry in **data space** (projected in 
 
 `AxisInteractable` inverts pixels→data client-side, so it supports `identity` / `log10` /
 `log` scales (categorical is fine); any other scale fails loud at `holo()` time.
+
+### From a plot object (no hand-written geometry)
+
+Pass the plot a `plot!` call returns and the geometry is pulled from it — no need to repeat
+coordinates you already gave Makie. These produce the **same** interactable the explicit
+constructor would, so everything above (payloads, `selected`, tooltips) still applies.
+
+```julia
+p = scatter!(ax, xs, ys; markersize = 14)
+@bind sel holo(fig, PointInteractable(ax, p))   # radius taken from markersize
+```
+
+| Plot | Constructor | Notes |
+|---|---|---|
+| `Scatter` | `PointInteractable(ax, p)` | `radius` defaults to `markersize/2` (pixel markers); override with `radius =` |
+| `Lines` | `SegmentInteractable(ax, p)` | `:polyline` (nearest-segment) |
+| `LineSegments` | `SegmentInteractable(ax, p)` | `:pairs` (disjoint) |
+| `Heatmap` / `Image` | `RectInteractable(ax, p)` | compact grid; cell `(i, j, value)` resolved client-side |
+| `BarPlot` | `RectInteractable(ax, p)` | reads the laid-out bars, so dodge/stack/auto-width are honored |
+| `Poly` | `PolygonInteractable(ax, p)` | one ring or many |
+
+The `ax` is passed because a plot has no back-reference to its axis. `id`/`payloads` take the
+same keywords as the explicit form (defaults: `:scatter`, `:lines`, `:segments`, `:cells`, `:bars`, `:poly`).
+Other plot types still need the explicit constructor.
+
+### Zero-config: `holo(fig)`
+
+Skip the constructors entirely — `holo(fig)` walks every `Axis`, introspects each supported
+plot, and overlays the lot:
+
+```julia
+fig = Figure(); ax = Axis(fig[1, 1])
+scatter!(ax, xs, ys)
+heatmap!(ax, X, Y, Z)
+@bind ev holo(fig)           # both plots interactive; ev.layer tells you which was clicked
+```
+
+Layer ids are the plot kind (`:scatter`, `:lines`, `:segments`, `:cells`, `:bars`, `:poly`), suffixed
+`_2`, `_3`, … when a kind repeats. Unsupported plot types are skipped with a warning.
+
+`auto_interactables(fig)` returns the same `Vector{AbstractInteractable}` `holo(fig)` builds, so
+you can grab it, tweak ids/payloads or append custom interactables, then pass it back:
+
+```julia
+ints = auto_interactables(fig)
+push!(ints, RegionInteractable(ax; regions = …, payloads = …))
+@bind ev holo(fig, ints)
+```
 
 ### Custom interactions
 

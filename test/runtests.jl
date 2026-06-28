@@ -143,4 +143,139 @@ end
         ev = IP.APD.Bonds.transform_value(w, Dict("layer" => "scatter", "index" => 2, "payload" => Dict("i" => 2)))
         @test ev isa InteractionEvent && ev.layer === :scatter && ev.index == 2
     end
+
+    @testset "M2.1 plot-introspection constructors" begin
+        # An introspected interactable must produce the SAME hitlayers as the explicit one a
+        # user would hand-write — introspection is sugar over M1, not a parallel path.
+        geom(int, c) = (L = only(hitlayers(int, c)); (L.kind, L.geometry, length(L.payloads)))
+
+        @testset "scatter -> Point" begin
+            f = Figure(size = (500, 350)); a = Axis(f[1, 1])
+            p = scatter!(a, [1.0, 2.0, 3.0], [1.0, 4.0, 9.0]; markersize = 20)
+            _, _, c = ctx_for(f)
+            # markersize=20 (diameter, :pixel) -> radius 10
+            @test geom(PointInteractable(a, p), c) == geom(PointInteractable(a, p.converted[][1]; radius = 10), c)
+            @test only(hitlayers(PointInteractable(a, p), c)).id === :scatter
+            # geometry lands on a rendered marker
+            g = only(hitlayers(PointInteractable(a, p), c)).geometry
+            img = Makie.colorbuffer(f; px_per_unit = 2.0)
+            @test drawn_near(img, g[1], g[2])
+        end
+
+        @testset "scatter radius fails loud on non-:pixel markerspace" begin
+            f = Figure(size = (500, 350)); a = Axis(f[1, 1])
+            p = scatter!(a, [1.0, 2.0], [1.0, 2.0]; markersize = 0.3, markerspace = :data)
+            @test_throws ErrorException PointInteractable(a, p)        # can't derive radius
+            @test PointInteractable(a, p; radius = 8) isa PointInteractable  # explicit radius is fine
+        end
+
+        @testset "lines -> Segment(:polyline), linesegments -> (:pairs)" begin
+            f = Figure(size = (500, 350)); a = Axis(f[1, 1])
+            pl = lines!(a, [0.0, 1.0, 2.0, 3.0], [0.0, 2.0, 1.0, 3.0])
+            ps = linesegments!(a, [Point2f(0, 0), Point2f(1, 1), Point2f(2, 0), Point2f(3, 1)])
+            _, _, c = ctx_for(f)
+            @test geom(SegmentInteractable(a, pl), c) == geom(SegmentInteractable(a, pl.converted[][1]; mode = :polyline), c)
+            @test only(hitlayers(SegmentInteractable(a, pl), c)).kind === :polyline
+            @test only(hitlayers(SegmentInteractable(a, ps), c)).kind === :segments
+        end
+
+        @testset "heatmap/image -> Rect(:grid), incl. EndPoints expansion" begin
+            z = [Float64((i + j) % 5) for i in 1:4, j in 1:3]
+            # explicit coords: Makie hands back full edge vectors
+            f1 = Figure(size = (500, 350)); a1 = Axis(f1[1, 1]); p1 = heatmap!(a1, 1:4, 1:3, z)
+            _, _, c1 = ctx_for(f1)
+            @test geom(RectInteractable(a1, p1), c1) ==
+                geom(RectInteractable(a1; grid = (collect(0.5:1:4.5), collect(0.5:1:3.5), z)), c1)
+            # coordinate-free: converted gives EndPoints (length 2) -> we expand to n+1 edges
+            f2 = Figure(size = (500, 350)); a2 = Axis(f2[1, 1]); p2 = heatmap!(a2, z)
+            _, _, c2 = ctx_for(f2)
+            @test geom(RectInteractable(a2, p2), c2) ==
+                geom(RectInteractable(a2; grid = (collect(0.5:1:4.5), collect(0.5:1:3.5), z)), c2)
+            # image! shares the method body but advertises its own row -> exercise it
+            f3 = Figure(size = (500, 350)); a3 = Axis(f3[1, 1]); p3 = image!(a3, rand(4, 3))
+            _, _, c3 = ctx_for(f3)
+            @test only(hitlayers(RectInteractable(a3, p3), c3)).kind === :grid
+        end
+
+        @testset "barplot -> Rect(:list), dodge/stack via child rects" begin
+            f = Figure(size = (500, 350)); a = Axis(f[1, 1])
+            p = barplot!(a, [1, 2, 3], [3.0, 5.0, 2.0])
+            _, _, c = ctx_for(f)
+            @test geom(RectInteractable(a, p), c) ==
+                geom(RectInteractable(a; rects = [(1.0, 1.5, 0.8, 3.0), (2.0, 2.5, 0.8, 5.0), (3.0, 1.0, 0.8, 2.0)]), c)
+            # dodge: 4 distinct laid-out rects pulled from the child Poly (solver already applied)
+            fd = Figure(size = (500, 350)); ad = Axis(fd[1, 1])
+            pd = barplot!(ad, [1, 1, 2, 2], [3.0, 1.0, 5.0, 2.0]; dodge = [1, 2, 1, 2])
+            _, _, cd = ctx_for(fd)
+            @test length(only(hitlayers(RectInteractable(ad, pd), cd)).payloads) == 4
+        end
+
+        @testset "poly -> Polygon (single ring and vector of rings)" begin
+            f = Figure(size = (500, 350)); a = Axis(f[1, 1])
+            single = poly!(a, Point2f[(0, 0), (1, 0), (1, 1), (0, 1)])
+            rings = [Point2f[(0, 0), (1, 0), (0.5, 1)], Point2f[(2, 0), (3, 0), (2.5, 1)]]
+            multi = poly!(a, rings)
+            _, _, c = ctx_for(f)
+            @test geom(PolygonInteractable(a, single), c) ==
+                geom(PolygonInteractable(a, [[(0.0, 0), (1, 0), (1, 1), (0, 1)]]), c)
+            @test length(only(hitlayers(PolygonInteractable(a, multi), c)).payloads) == 2
+        end
+
+        @testset "introspected interactable flows through holo unchanged" begin
+            f = Figure(size = (500, 350)); a = Axis(f[1, 1])
+            p = scatter!(a, [1.0, 2.0], [1.0, 2.0]; markersize = 18)
+            w = holo(f, PointInteractable(a, p))
+            @test w.manifest["layers"][1]["kind"] == "circles"
+            @test w.manifest["layers"][1]["id"] == "scatter"
+        end
+    end
+
+    @testset "M2.2 holo(fig) auto-extraction" begin
+        @testset "walks every axis, maps each known plot, unique ids" begin
+            f = Figure(size = (700, 350))
+            a1 = Axis(f[1, 1])
+            scatter!(a1, [1.0, 2.0], [1.0, 2.0])
+            lines!(a1, [0.0, 1.0, 2.0], [0.0, 1.0, 0.5])
+            heatmap!(a1, 1:3, 1:3, rand(3, 3))
+            barplot!(a1, [1, 2], [3.0, 4.0])
+            poly!(a1, Point2f[(0, 0), (1, 0), (0.5, 1)])
+            a2 = Axis(f[1, 2])
+            scatter!(a2, [5.0], [5.0])             # second scatter -> :scatter_2
+
+            ints = auto_interactables(f)
+            @test length(ints) == 6
+            _, _, c = ctx_for(f)
+            ids = [only(hitlayers(i, c)).id for i in ints]
+            @test ids == [:scatter, :lines, :cells, :bars, :poly, :scatter_2]
+            @test length(unique(ids)) == 6      # no collisions across axes
+            # a2's scatter resolves to a2's transform (its own axis), not a1's
+            @test only(hitlayers(ints[6], c)).axis != only(hitlayers(ints[1], c)).axis
+        end
+
+        @testset "skips unsupported plot types with a warning" begin
+            f = Figure(size = (500, 350)); a = Axis(f[1, 1])
+            scatter!(a, [1.0], [1.0])
+            contour!(a, 1:5, 1:5, rand(5, 5))     # unsupported -> skip + warn
+            ints = @test_logs (:warn,) match_mode = :any auto_interactables(f)
+            @test length(ints) == 1
+            @test only(ints) isa PointInteractable
+        end
+
+        @testset "holo(fig) overlays the auto-extracted set" begin
+            f = Figure(size = (500, 350)); a = Axis(f[1, 1])
+            scatter!(a, [1.0, 2.0], [1.0, 2.0]; markersize = 18)
+            heatmap!(a, 1:3, 1:3, rand(3, 3))
+            w = holo(f)
+            @test [L["id"] for L in w.manifest["layers"]] == ["scatter", "cells"]
+            @test [L["kind"] for L in w.manifest["layers"]] == ["circles", "grid"]
+        end
+
+        @testset "no introspectable plots -> warn, render image only" begin
+            f = Figure(size = (400, 300)); a = Axis(f[1, 1])
+            contour!(a, 1:5, 1:5, rand(5, 5))
+            w = @test_logs (:warn,) match_mode = :any holo(f)
+            @test isempty(w.manifest["layers"])
+            @test !isempty(w.b64)                  # static image still produced
+        end
+    end
 end

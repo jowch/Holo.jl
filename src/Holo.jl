@@ -19,12 +19,13 @@ end
 
 include("backend.jl")
 include("interactables.jl")
+include("introspect.jl")
 include("render.jl")
 
 export AbstractBackend, CairoBackend
 export AbstractInteractable, HitLayer, InteractionContext, AxisTransform
 export PointInteractable, SegmentInteractable, RectInteractable, PolygonInteractable,
     AxisInteractable, RegionInteractable, FunctionInteractable
-export holo, InteractionEvent, data_to_image_px, hitlayers
+export holo, auto_interactables, InteractionEvent, data_to_image_px, hitlayers
 
 end # module Holo

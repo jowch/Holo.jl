@@ -105,6 +105,19 @@ function holo(fig, interactables::AbstractVector; backend::AbstractBackend = Cai
 end
 holo(fig, i::AbstractInteractable; kwargs...) = holo(fig, [i]; kwargs...)
 
+"""
+    holo(fig; backend=CairoBackend(), selected=nothing)
+
+Auto-extract interactables from `fig` (see [`auto_interactables`](@ref)) and overlay them —
+the zero-config path. Equivalent to `holo(fig, auto_interactables(fig))`; unsupported plot
+types are skipped with a warning. For control over ids/payloads, build the vector yourself.
+"""
+function holo(fig; kwargs...)
+    ints = auto_interactables(fig)
+    isempty(ints) && @warn "holo(fig): no introspectable plots found — overlaying nothing (static image only)"
+    return holo(fig, ints; kwargs...)
+end
+
 function Base.show(io::IO, m::MIME"text/html", w::HoloWidget)
     # Inject the bundle UNCONDITIONALLY (it self-installs window.Holo and is
     # idempotent). We do NOT wrap it in `if (!window.Holo) {…}`: running the
