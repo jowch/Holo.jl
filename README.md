@@ -10,9 +10,10 @@ select — and round-trips deliberate clicks to Julia through `@bind`. No parall
 no WebGL: the plot is a publication-quality static image, and a transparent JS overlay
 does the hit-testing.
 
-> **Status: early / experimental (v0.1).** The architecture is validated end-to-end in
-> real Pluto for scatter points; other plot surfaces are unit-tested but not yet all
-> exercised live. APIs may change.
+> **Status: early / experimental (v0.1).** Validated end-to-end in real Pluto — all five
+> interactable kinds and the selection round-trip are exercised live by
+> [`examples/demo.jl`](examples/demo.jl) (CI runs it headlessly on every change). APIs may
+> still change.
 
 ## Why
 
@@ -73,7 +74,102 @@ Declare interactables explicitly (geometry in data space):
 
 Linear, log, and categorical axes; single or multiple axes; linked selection via shared
 payloads through Pluto's reactive graph. Out of scope: 3D, `PolarAxis`/`Axis3`, and
-high-frequency live redraw (that's WGLMakie's domain).
+high-frequency live redraw (that's WGLMakie's domain) — these fail loud at `holo()` time.
+
+[`examples/demo.jl`](examples/demo.jl) is a runnable gallery of every kind below plus the
+selection round-trip.
+
+## API reference
+
+### `holo`
+
+```julia
+holo(fig, interactables; backend = CairoBackend(), selected = nothing) -> HoloWidget
+holo(fig, interactable;  …)   # single-interactable convenience
+```
+
+Renders `fig` and overlays hit-testing for the declared interactables. Use as a Pluto
+`@bind` source; the bond value is `nothing` until a click, then an [`InteractionEvent`](#interactionevent).
+`holo` does not corrupt your figure (it saves/restores the background and runs the same
+finalize step Makie performs at display time).
+
+- **`backend`** — `CairoBackend(; max_width = 700, vector = false)`. `max_width` is the
+  display width to target (Pluto's column); render resolution is *derived* from it (~2× the
+  display width — retina-crisp, not wasteful), never a fixed DPI.
+- **`selected`** — a `layer_id => indices` map (e.g. `Dict(:scatter => [0, 2])`) that
+  pre-highlights elements on mount. Indices are 0-based and match `InteractionEvent.index`.
+  Feed a bond value back into it to keep clicked elements highlighted across re-renders,
+  flicker-free (see [Selection round-trip](#selection-round-trip)).
+
+### `InteractionEvent`
+
+The bond value after a click:
+
+```julia
+struct InteractionEvent
+    layer::Symbol   # the interactable's `id`
+    index::Int      # 0-based element index within the layer
+    payload::Any    # the data you attached — see note
+end
+```
+
+> **Payloads round-trip as a `Dict`** (via JSON), not the original `NamedTuple`. A payload
+> `(; label = "a")` comes back as `Dict("label" => "a")`, so index it as
+> `ev.payload["label"]`. `AxisInteractable` yields `Dict("x" => …, "y" => …)`.
+
+### Interactables
+
+Every interactable takes an `Axis` and geometry in **data space** (projected in Julia via
+`Makie.project`). All accept `id` — the `Symbol` the event reports as `layer` — and
+`payloads`, one entry per element (auto-generated with a 0-based `index` if omitted).
+
+| Constructor | Geometry | Default payload |
+|---|---|---|
+| `PointInteractable(ax, points; id = :points, payloads, radius = 9)` | `points :: Vector{(x, y)}`; `radius` is the px click target | `(; index, x, y)` |
+| `SegmentInteractable(ax, vertices; mode = :polyline, id = :segments, payloads, tol = 6)` | `:polyline` = connected path (hit = nearest segment); `:segments` = disjoint pairs; `tol` px slack | `(; segment_index)` |
+| `RectInteractable(ax; rects, id = :rects, payloads)` | `rects = [(xc, yc, w, h), …]` — explicit boxes (e.g. bars) | `(; index)` |
+| `RectInteractable(ax; grid, id, payloads)` | `grid = (xedges, yedges, values)` — a heatmap shipped as edges, not N rects | cell `(i, j, value)`, client-side |
+| `PolygonInteractable(ax, rings; id = :polygons, payloads)` | `rings :: Vector{Vector{(x, y)}}` — one or more filled rings | `(; index)` |
+| `AxisInteractable(ax; id = :axis)` | the whole axis: a click anywhere returns the data coordinate | `Dict("x" => …, "y" => …)` |
+
+`AxisInteractable` inverts pixels→data client-side, so it supports `identity` / `log10` /
+`log` scales (categorical is fine); any other scale fails loud at `holo()` time.
+
+### Custom interactions
+
+For geometry the built-ins don't cover — no JavaScript required:
+
+- **`RegionInteractable(ax; regions, payloads, id = :region, tooltip = pl -> nothing, events = (:click, :hover))`**
+  (Tier A) — declarative mixed regions in data space, grouped into one layer per kind. Each
+  region is one of:
+
+  ```julia
+  (:circle,  (cx, cy), r)            # r in data units
+  (:rect,    (cx, cy), w, h)         # w, h in data units
+  (:polygon, [(x, y), …])            # a ring of points
+  ```
+
+  `payloads` must match `regions` 1:1; `tooltip(payload) -> String | nothing` sets hover text.
+
+- **`FunctionInteractable(f; events = (:click, :hover))`** (Tier B) — full control:
+  `f(ctx) -> Vector{HitLayer}`. Project points with `data_to_image_px(ctx, ax, point)` and
+  emit `HitLayer(id, kind, geometry, payloads, axis_id(ctx, ax), events)`. The escape hatch
+  for a geometry kind the others don't express.
+
+### Selection round-trip
+
+Pass `selected` to pre-highlight, and feed the bond value back to make a selection persist:
+
+```julia
+# cell 1 — the bond, reading the current selection
+@bind ev holo(fig, PointInteractable(ax, pts; id = :scatter); selected = picked)
+
+# cell 2 — derive the selection from clicks (keyed by the layer id)
+picked = ev === nothing ? Dict{Symbol,Vector{Int}}() : Dict(ev.layer => [ev.index])
+```
+
+The overlay re-derives highlights from `selected` on every render, so highlighted elements
+survive a re-render without flicker. (See `examples/demo.jl` for an accumulating version.)
 
 ## How it works
 
