@@ -278,4 +278,124 @@ end
             @test !isempty(w.b64)                  # static image still produced
         end
     end
+
+    @testset "M3 cheap-wins introspection" begin
+        geom(int, c) = (L = only(hitlayers(int, c)); (L.kind, L.geometry, length(L.payloads)))
+
+        @testset "stairs -> Segment(:polyline) from the expanded staircase" begin
+            f = Figure(size = (500, 350)); a = Axis(f[1, 1])
+            p = stairs!(a, [0.0, 1.0, 2.0, 3.0], [0.0, 2.0, 1.0, 3.0])
+            _, _, c = ctx_for(f)
+            # uses the child Lines' 7-point staircase, NOT the 4 input points
+            steps = [(0.0, 0.0), (0.0, 2.0), (1.0, 2.0), (1.0, 1.0), (2.0, 1.0), (2.0, 3.0), (3.0, 3.0)]
+            @test geom(SegmentInteractable(a, p), c) ==
+                geom(SegmentInteractable(a, steps; mode = :polyline), c)
+            L = only(hitlayers(SegmentInteractable(a, p), c))
+            @test L.kind === :polyline && L.id === :stairs && length(L.payloads) == 6
+            img = Makie.colorbuffer(f; px_per_unit = 2.0)
+            @test drawn_near(img, L.geometry[3], L.geometry[4])   # a corner of the staircase
+        end
+
+        @testset "errorbars/rangebars -> Segment(:pairs)" begin
+            f = Figure(size = (500, 350)); a = Axis(f[1, 1])
+            pe = errorbars!(a, [1.0, 2.0, 3.0], [1.0, 2.0, 1.5], [0.2, 0.3, 0.1])
+            pr = rangebars!(a, [1.0, 2.0], [0.5, 1.0], [1.5, 2.0])
+            _, _, c = ctx_for(f)
+            # one disjoint pair per bar, spanning low->high about the value
+            ebars = [(1.0, 0.8), (1.0, 1.2), (2.0, 1.7), (2.0, 2.3), (3.0, 1.4), (3.0, 1.6)]
+            @test geom(SegmentInteractable(a, pe), c) ==
+                geom(SegmentInteractable(a, ebars; mode = :pairs), c)
+            Le = only(hitlayers(SegmentInteractable(a, pe), c))
+            @test Le.kind === :segments && Le.id === :errorbars && length(Le.payloads) == 3
+            rbars = [(1.0, 0.5), (1.0, 1.5), (2.0, 1.0), (2.0, 2.0)]
+            @test geom(SegmentInteractable(a, pr), c) ==
+                geom(SegmentInteractable(a, rbars; mode = :pairs), c)
+            @test only(hitlayers(SegmentInteractable(a, pr), c)).id === :rangebars
+            # endpoint lands on a rendered bar (convention: assert pixel-landing, not just geom)
+            Lg = only(hitlayers(SegmentInteractable(a, pe), c)).geometry
+            img = Makie.colorbuffer(f; px_per_unit = 2.0)
+            @test drawn_near(img, Lg[1], Lg[2])
+        end
+
+        @testset "errorbars/rangebars direction=:x (horizontal)" begin
+            f = Figure(size = (500, 350)); a = Axis(f[1, 1])
+            # error runs along x, position along y
+            pe = errorbars!(a, [1.0, 2.0], [3.0, 4.0], [0.2, 0.3]; direction = :x)
+            pr = rangebars!(a, [1.0, 2.0], [0.5, 1.0], [1.5, 2.0]; direction = :x)
+            _, _, c = ctx_for(f)
+            ebars = [(0.8, 3.0), (1.2, 3.0), (1.7, 4.0), (2.3, 4.0)]
+            @test geom(SegmentInteractable(a, pe), c) ==
+                geom(SegmentInteractable(a, ebars; mode = :pairs), c)
+            rbars = [(0.5, 1.0), (1.5, 1.0), (1.0, 2.0), (2.0, 2.0)]
+            @test geom(SegmentInteractable(a, pr), c) ==
+                geom(SegmentInteractable(a, rbars; mode = :pairs), c)
+        end
+
+        @testset "hlines/vlines -> Segment(:pairs) spanning finallimits" begin
+            f = Figure(size = (500, 350)); a = Axis(f[1, 1]); scatter!(a, [0.0, 5.0], [0.0, 5.0])
+            ph = hlines!(a, [1.0, 3.0]); pv = vlines!(a, [2.0, 4.0])
+            _, _, c = ctx_for(f)
+            fl = a.finallimits[]; x0 = fl.origin[1]; x1 = x0 + fl.widths[1]
+            y0 = fl.origin[2]; y1 = y0 + fl.widths[2]
+            hexp = [(x0, 1.0), (x1, 1.0), (x0, 3.0), (x1, 3.0)]
+            @test geom(SegmentInteractable(a, ph), c) ==
+                geom(SegmentInteractable(a, hexp; mode = :pairs), c)
+            vexp = [(2.0, y0), (2.0, y1), (4.0, y0), (4.0, y1)]
+            @test geom(SegmentInteractable(a, pv), c) ==
+                geom(SegmentInteractable(a, vexp; mode = :pairs), c)
+            @test only(hitlayers(SegmentInteractable(a, ph), c)).id === :hlines
+            @test only(hitlayers(SegmentInteractable(a, pv), c)).id === :vlines
+            # the first hline's midpoint (between its two span endpoints) lands on the drawn line
+            g = only(hitlayers(SegmentInteractable(a, ph), c)).geometry
+            img = Makie.colorbuffer(f; px_per_unit = 2.0)
+            @test drawn_near(img, (g[1] + g[3]) / 2, (g[2] + g[4]) / 2)
+        end
+
+        @testset "empty data -> empty layer (no pairs)" begin
+            f = Figure(size = (500, 350)); a = Axis(f[1, 1])
+            p = errorbars!(a, Float64[], Float64[], Float64[]); _, _, c = ctx_for(f)
+            L = only(hitlayers(SegmentInteractable(a, p), c))
+            @test isempty(L.geometry) && isempty(L.payloads)
+        end
+
+        @testset "spy -> Rect(:list) of unit cells at the nonzeros" begin
+            M = zeros(5, 5); M[1, 2] = 3.0; M[3, 4] = 1.0; M[5, 1] = 2.0
+            f = Figure(size = (500, 350)); a = Axis(f[1, 1])
+            p = spy!(a, M); _, _, c = ctx_for(f)
+            L = only(hitlayers(RectInteractable(a, p), c))
+            @test L.kind === :rects && L.id === :spy
+            @test length(L.payloads) == 3                  # one rect per nonzero
+            img = Makie.colorbuffer(f; px_per_unit = 2.0)
+            @test drawn_near(img, L.geometry[1], L.geometry[2])   # first cell center drawn
+        end
+
+        @testset "stem -> Point + Segment(:pairs) (composite, two layers)" begin
+            f = Figure(size = (500, 350)); a = Axis(f[1, 1])
+            stem!(a, [1.0, 2.0, 3.0], [3.0, 1.0, 2.0]); _, _, c = ctx_for(f)
+            ints = auto_interactables(f)
+            @test length(ints) == 2
+            kinds = [only(hitlayers(i, c)).kind for i in ints]
+            ids = [only(hitlayers(i, c)).id for i in ints]
+            @test kinds == [:circles, :segments]
+            @test ids == [:stem, :stem_stems]
+        end
+
+        @testset "scatterlines -> Point + Segment(:polyline) (composite)" begin
+            f = Figure(size = (500, 350)); a = Axis(f[1, 1])
+            scatterlines!(a, [1.0, 2.0, 3.0], [1.0, 4.0, 9.0]; markersize = 16); _, _, c = ctx_for(f)
+            ints = auto_interactables(f)
+            @test length(ints) == 2
+            @test [only(hitlayers(i, c)).kind for i in ints] == [:circles, :polyline]
+            @test [only(hitlayers(i, c)).id for i in ints] == [:scatterlines, :scatterlines_line]
+        end
+
+        @testset "holo(fig) auto-extracts the cheap-win surfaces" begin
+            f = Figure(size = (500, 350)); a = Axis(f[1, 1])
+            stairs!(a, [0.0, 1.0, 2.0], [0.0, 1.0, 0.5])
+            hlines!(a, [2.0])
+            w = holo(f)
+            @test [L["id"] for L in w.manifest["layers"]] == ["stairs", "hlines"]
+            @test [L["kind"] for L in w.manifest["layers"]] == ["polyline", "segments"]
+        end
+    end
 end
