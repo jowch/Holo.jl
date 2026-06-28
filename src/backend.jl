@@ -111,6 +111,18 @@ function context(::CairoBackend, fig, ppu)
         return Point2f((q[1] + o[1]) * scaling, out_h - (q[2] + o[2]) * scaling)  # flip to image coords
     end
 
+    # Fail loud, never silently wrong: an axis-like block that isn't a 2D `Makie.Axis`
+    # (PolarAxis/Axis3/LScene) would be silently dropped here, then interactables would
+    # project against the wrong axis. Reject it up front. (architecture.md non-goals)
+    unsupported = unique(typeof.(c for c in fig.content if c isa Makie.AbstractAxis && !(c isa Makie.Axis)))
+    isempty(unsupported) || throw(
+        ArgumentError(
+            "Holo overlays a static base + thin JS overlay and supports 2D `Makie.Axis` only; " *
+                "found unsupported $(join(unsupported, ", ")). PolarAxis/Axis3/LScene need a " *
+                "browser-side renderer (WGLMakie's domain), out of scope by design.",
+        ),
+    )
+
     axes = [c for c in fig.content if c isa Makie.Axis]
     ids = IdDict{Any, Symbol}()
     transforms = Dict{Symbol, AxisTransform}()

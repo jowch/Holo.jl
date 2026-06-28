@@ -85,6 +85,23 @@ end
         @test length(L.geometry["xedges"]) == 21 && length(L.geometry["values"]) == 600
     end
 
+    @testset "fail loud on unsupported axis types" begin
+        for mk in (Makie.PolarAxis, Axis3, LScene)
+            fu = Figure(); mk(fu[1, 1])
+            err = (@test_throws ArgumentError ctx_for(fu)).value
+            @test occursin("supports 2D `Makie.Axis` only", err.msg)
+        end
+    end
+
+    @testset "Polygon geometry projects per ring" begin
+        rings = [[(1.0, 1.0), (2.0, 4.0), (3.0, 1.0)], [(1.5, 2.0), (2.5, 2.0), (2.0, 3.0)]]
+        L = only(hitlayers(PolygonInteractable(ax, rings; id = :poly), ctx))
+        @test L.kind === :polygons && L.id === :poly
+        @test length(L.geometry) == 2                       # two rings
+        @test all(r -> length(r) == 6, L.geometry)          # 3 pts × (x,y) each
+        @test [p.index for p in L.payloads] == [0, 1]       # default per-ring payloads
+    end
+
     @testset "Segment + Axis + custom" begin
         @test only(hitlayers(SegmentInteractable(ax, pts; mode = :polyline), ctx)).kind === :polyline
         @test only(hitlayers(AxisInteractable(ax), ctx)).geometry === nothing
