@@ -12,6 +12,7 @@ frontend/dist/
 npm-debug.log*
 
 # Local-only — not part of the package
+/.worktrees/
 /spike/
 /pluto-makie-interactive-plots.md
 .playwright-mcp/
