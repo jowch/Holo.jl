@@ -74,6 +74,95 @@ function PolygonInteractable(ax, p::Makie.Poly; id = :poly, payloads = nothing)
     return PolygonInteractable(ax, rings; id, payloads)
 end
 
+# ====================== M3 cheap wins (same primitives) ======================
+# Each delegates to an existing explicit constructor; the only work is reading the right
+# laid-out geometry off the plot (or its children). No new types, no new manifest path.
+
+_childof(p, T) = (
+    for c in p.plots
+        c isa T && return c
+    end; error("$(typeof(p).name.name): no $T child plot found (Makie internals changed?)")
+)
+
+# ---- Stairs -> Segment(:polyline) ----
+# The parent `converted` is the raw input points; the rendered staircase (the actual click target)
+# lives in the child Lines as the pre-expanded step polyline — read that, don't replay the stepper.
+SegmentInteractable(ax, p::Makie.Stairs; id = :stairs, payloads = nothing, tol = 6) =
+    SegmentInteractable(ax, _childof(p, Makie.Lines).converted[][1]; mode = :polyline, id, payloads, tol)
+
+# ---- Errorbars / Rangebars -> Segment(:pairs) ----
+# One disjoint pair per element; caps/whiskers are decorative. Errorbars `converted` is Vec4
+# (x, y, low, high) with low/high RELATIVE offsets; Rangebars is Vec3 (val, low, high) ABSOLUTE.
+# `direction` (:y default) picks which axis the bar runs along.
+function _errorbar_pairs(p)
+    horiz = p.direction[] === :x
+    vs = Point2f[]
+    for v in p.converted[][1]
+        x, y, lo, hi = v[1], v[2], v[3], v[4]
+        horiz ? (push!(vs, Point2f(x - lo, y)); push!(vs, Point2f(x + hi, y))) :
+            (push!(vs, Point2f(x, y - lo)); push!(vs, Point2f(x, y + hi)))
+    end
+    return vs
+end
+function _rangebar_pairs(p)
+    horiz = p.direction[] === :x
+    vs = Point2f[]
+    for v in p.converted[][1]
+        val, lo, hi = v[1], v[2], v[3]
+        horiz ? (push!(vs, Point2f(lo, val)); push!(vs, Point2f(hi, val))) :
+            (push!(vs, Point2f(val, lo)); push!(vs, Point2f(val, hi)))
+    end
+    return vs
+end
+SegmentInteractable(ax, p::Makie.Errorbars; id = :errorbars, payloads = nothing, tol = 6) =
+    SegmentInteractable(ax, _errorbar_pairs(p); mode = :pairs, id, payloads, tol)
+SegmentInteractable(ax, p::Makie.Rangebars; id = :rangebars, payloads = nothing, tol = 6) =
+    SegmentInteractable(ax, _rangebar_pairs(p); mode = :pairs, id, payloads, tol)
+
+# ---- HLines / VLines -> Segment(:pairs) spanning the axis ----
+# Each line spans the full data range from `finallimits` (read post-update_state_before_display!).
+# ponytail: fractional xmin/xmax (HLines) / ymin/ymax (VLines) span attrs ignored — full span only.
+function _span_pairs(ax, p, ishoriz)
+    fl = ax.finallimits[]
+    lo = fl.origin[ishoriz ? 1 : 2]; hi = lo + fl.widths[ishoriz ? 1 : 2]
+    vs = Point2f[]
+    for c in p.converted[][1]
+        ishoriz ? (push!(vs, Point2f(lo, c)); push!(vs, Point2f(hi, c))) :
+            (push!(vs, Point2f(c, lo)); push!(vs, Point2f(c, hi)))
+    end
+    return vs
+end
+SegmentInteractable(ax, p::Makie.HLines; id = :hlines, payloads = nothing, tol = 6) =
+    SegmentInteractable(ax, _span_pairs(ax, p, true); mode = :pairs, id, payloads, tol)
+SegmentInteractable(ax, p::Makie.VLines; id = :vlines, payloads = nothing, tol = 6) =
+    SegmentInteractable(ax, _span_pairs(ax, p, false); mode = :pairs, id, payloads, tol)
+
+# ---- Spy -> Rect(:list) ----
+# Spy renders nonzeros as a child Scatter with markerspace=:data, so markersize IS the cell size
+# in data units. One unit rect per nonzero, centered on the laid-out marker. (Delegating to
+# PointInteractable would fail: :data markerspace can't derive a pixel radius.)
+# ponytail: default {index} payloads; survey's {i,j,value} deferred (needs nonzero↔marker ordering).
+function _spy_rects(p)
+    sc = _childof(p, Makie.Scatter)
+    ms = sc.markersize[]
+    w, h = ms isa AbstractVector ? (Float64(ms[1]), Float64(ms[2])) : (Float64(ms), Float64(ms))
+    return [(Float64(c[1]), Float64(c[2]), w, h) for c in sc.converted[][1]]
+end
+RectInteractable(ax, p::Makie.Spy; id = :spy, payloads = nothing) =
+    RectInteractable(ax; rects = _spy_rects(p), id, payloads)
+
+# ---- Composites: one plot -> two layers (survey: ScatterLines is the model) ----
+# Each half delegates to the existing child-plot constructor; the point layer keeps the base id,
+# the line/segment layer gets a suffix so the two ids stay distinct in the manifest.
+_stem_parts(ax, p, base) = AbstractInteractable[
+    PointInteractable(ax, _childof(p, Makie.Scatter); id = base),
+    SegmentInteractable(ax, _childof(p, Makie.LineSegments); id = Symbol(base, :_stems)),
+]
+_scatterlines_parts(ax, p, base) = AbstractInteractable[
+    PointInteractable(ax, _childof(p, Makie.Scatter); id = base),
+    SegmentInteractable(ax, _childof(p, Makie.Lines); id = Symbol(base, :_line)),
+]
+
 # ====================== M2.2 holo(fig) auto-extraction ======================
 # Walk each Axis's top-level plots and emit the Vector{AbstractInteractable} a user could
 # hand-write, via the M2.1 constructors. Unsupported plot type → skip + warn. Pure sugar.
@@ -86,14 +175,30 @@ function _plotbase(p)
     (p isa Makie.Heatmap || p isa Makie.Image) && return :cells
     p isa Makie.BarPlot && return :bars
     p isa Makie.Poly && return :poly
+    p isa Makie.Stairs && return :stairs
+    p isa Makie.Errorbars && return :errorbars
+    p isa Makie.Rangebars && return :rangebars
+    p isa Makie.HLines && return :hlines
+    p isa Makie.VLines && return :vlines
+    p isa Makie.Spy && return :spy
+    p isa Makie.Stem && return :stem
+    p isa Makie.ScatterLines && return :scatterlines
     return nothing
 end
 
+# returns a Vector{AbstractInteractable} — usually one, two for composites (Stem, ScatterLines).
 function _construct(ax, p, id)
-    p isa Makie.Scatter && return PointInteractable(ax, p; id)
-    (p isa Makie.Lines || p isa Makie.LineSegments) && return SegmentInteractable(ax, p; id)
-    (p isa Makie.Heatmap || p isa Makie.Image || p isa Makie.BarPlot) && return RectInteractable(ax, p; id)
-    p isa Makie.Poly && return PolygonInteractable(ax, p; id)
+    p isa Makie.Scatter && return [PointInteractable(ax, p; id)]
+    (p isa Makie.Lines || p isa Makie.LineSegments) && return [SegmentInteractable(ax, p; id)]
+    (
+        p isa Makie.Stairs || p isa Makie.Errorbars || p isa Makie.Rangebars ||
+            p isa Makie.HLines || p isa Makie.VLines
+    ) && return [SegmentInteractable(ax, p; id)]
+    (p isa Makie.Heatmap || p isa Makie.Image || p isa Makie.BarPlot || p isa Makie.Spy) &&
+        return [RectInteractable(ax, p; id)]
+    p isa Makie.Poly && return [PolygonInteractable(ax, p; id)]
+    p isa Makie.Stem && return _stem_parts(ax, p, id)
+    p isa Makie.ScatterLines && return _scatterlines_parts(ax, p, id)
     # unreachable while _plotbase gates callers; loud if the two ever drift (kind added to one, not the other)
     return error("auto_interactables: $(typeof(p).name.name) passed _plotbase but has no _construct branch")
 end
@@ -124,7 +229,7 @@ function auto_interactables(fig)
             n = get(seen, base, 0) + 1
             seen[base] = n
             id = n == 1 ? base : Symbol(base, :_, n)
-            push!(ints, _construct(ax, p, id))
+            append!(ints, _construct(ax, p, id))
         end
     end
     return ints

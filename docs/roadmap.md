@@ -39,7 +39,7 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 ## M3 — Surface coverage (v2 from the survey)
 *Goal: more plot types, same primitives. Add per real demand.*
 
-- [ ] **Cheap wins** (existing primitives): Stairs, Errorbars/Rangebars, HLines/VLines, Stem, Spy, ScatterLines (composite → two layers).
+- [x] **Cheap wins** (existing primitives): Stairs, Errorbars/Rangebars, HLines/VLines, Stem, Spy, ScatterLines (composite → two layers). *Done (`src/introspect.jl`): introspection constructors delegating to the M1 primitives — Stairs→`Segment(:polyline)` (reads the child Lines' expanded staircase, not the raw input pts), Errorbars/Rangebars→`Segment(:pairs)`, HLines/VLines→`Segment(:pairs)` spanning `finallimits`, Spy→`Rect(:list)` of unit cells off the `:data`-markerspace child Scatter, Stem/ScatterLines→two layers (Point+Segment) via their child plots. All wired into `holo(fig)`; unit-tested against the explicit constructors + rendered-geometry. Deferred: richer `{i,j,value}`/`value`/`equation` payloads (→ M2.3 tooltips), fractional HLines/VLines span attrs.*
 - [ ] **Computational-geometry extraction**: Contourf/Tricontourf, Violin, Voronoiplot, BoxPlot notches — produce polygons.
 - [ ] **Bars/areas**: BarPlot/Hist/Waterfall (list rects), HSpan/VSpan, Colorbar/Legend.
 - [ ] **Text bboxes** (Text/Annotation/TextLabel): needs font-metric measurement → the `bbox` geometry primitive (rotated → degenerate polygon).
