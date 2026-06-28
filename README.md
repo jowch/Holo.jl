@@ -160,7 +160,7 @@ p = scatter!(ax, xs, ys; markersize = 14)
 | `Poly` | `PolygonInteractable(ax, p)` | one ring or many |
 
 The `ax` is passed because a plot has no back-reference to its axis. `id`/`payloads` take the
-same keywords as the explicit form (defaults: `:scatter`, `:lines`, `:cells`, `:bars`, `:poly`).
+same keywords as the explicit form (defaults: `:scatter`, `:lines`, `:segments`, `:cells`, `:bars`, `:poly`).
 Other plot types still need the explicit constructor.
 
 ### Zero-config: `holo(fig)`
@@ -175,7 +175,7 @@ heatmap!(ax, X, Y, Z)
 @bind ev holo(fig)           # both plots interactive; ev.layer tells you which was clicked
 ```
 
-Layer ids are the plot kind (`:scatter`, `:lines`, `:cells`, `:bars`, `:poly`), suffixed
+Layer ids are the plot kind (`:scatter`, `:lines`, `:segments`, `:cells`, `:bars`, `:poly`), suffixed
 `_2`, `_3`, … when a kind repeats. Unsupported plot types are skipped with a warning.
 
 `auto_interactables(fig)` returns the same `Vector{AbstractInteractable}` `holo(fig)` builds, so

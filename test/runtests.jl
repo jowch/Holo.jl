@@ -162,6 +162,13 @@ end
             @test drawn_near(img, g[1], g[2])
         end
 
+        @testset "scatter radius fails loud on non-:pixel markerspace" begin
+            f = Figure(size = (500, 350)); a = Axis(f[1, 1])
+            p = scatter!(a, [1.0, 2.0], [1.0, 2.0]; markersize = 0.3, markerspace = :data)
+            @test_throws ErrorException PointInteractable(a, p)        # can't derive radius
+            @test PointInteractable(a, p; radius = 8) isa PointInteractable  # explicit radius is fine
+        end
+
         @testset "lines -> Segment(:polyline), linesegments -> (:pairs)" begin
             f = Figure(size = (500, 350)); a = Axis(f[1, 1])
             pl = lines!(a, [0.0, 1.0, 2.0, 3.0], [0.0, 2.0, 1.0, 3.0])
@@ -184,6 +191,10 @@ end
             _, _, c2 = ctx_for(f2)
             @test geom(RectInteractable(a2, p2), c2) ==
                 geom(RectInteractable(a2; grid = (collect(0.5:1:4.5), collect(0.5:1:3.5), z)), c2)
+            # image! shares the method body but advertises its own row -> exercise it
+            f3 = Figure(size = (500, 350)); a3 = Axis(f3[1, 1]); p3 = image!(a3, rand(4, 3))
+            _, _, c3 = ctx_for(f3)
+            @test only(hitlayers(RectInteractable(a3, p3), c3)).kind === :grid
         end
 
         @testset "barplot -> Rect(:list), dodge/stack via child rects" begin

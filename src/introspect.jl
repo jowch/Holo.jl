@@ -12,9 +12,13 @@ _conv(p) = p.converted[]
 
 # ---- Scatter -> PointInteractable ----
 # markersize is a diameter in :pixel space (Makie's default markerspace) → radius = ms/2 in
-# logical px, matching the explicit `radius=` (×scaling applied at hitlayer time).
-# ponytail: assumes markerspace=:pixel (the default); :data markers would need projecting.
+# logical px, matching the explicit `radius=` (×scaling applied at hitlayer time). Fail loud on
+# non-:pixel markerspace (e.g. :data), where ms/2 is the wrong unit — pass radius= instead.
 function _marker_radius(p)
+    p.markerspace[] === :pixel || error(
+        "PointInteractable: scatter has markerspace=$(repr(p.markerspace[])); radius can only be " *
+            "derived from markersize for :pixel markers (the default). Pass radius=… explicitly."
+    )
     ms = p.markersize[]
     d = ms isa AbstractVector ? (isempty(ms) ? 0.0 : Float64(maximum(ms))) : Float64(ms)
     return d / 2
@@ -89,7 +93,9 @@ function _construct(ax, p, id)
     p isa Makie.Scatter && return PointInteractable(ax, p; id)
     (p isa Makie.Lines || p isa Makie.LineSegments) && return SegmentInteractable(ax, p; id)
     (p isa Makie.Heatmap || p isa Makie.Image || p isa Makie.BarPlot) && return RectInteractable(ax, p; id)
-    return PolygonInteractable(ax, p; id)   # Poly — the only remaining supported kind
+    p isa Makie.Poly && return PolygonInteractable(ax, p; id)
+    # unreachable while _plotbase gates callers; loud if the two ever drift (kind added to one, not the other)
+    return error("auto_interactables: $(typeof(p).name.name) passed _plotbase but has no _construct branch")
 end
 
 """
@@ -99,6 +105,10 @@ Introspect a Makie `Figure`: for every supported plot in every `Axis`, build the
 its M2.1 constructor would. Unsupported plot types are skipped with a warning. Layer ids are
 the plot kind (`:scatter`, `:lines`, …), suffixed `_2`, `_3`, … when a kind repeats. Returns
 the same concrete vector you could pass to [`holo`](@ref) yourself — edit or extend it freely.
+
+Note: each interactable inherits M1's default per-element payloads (e.g. a `Scatter` materializes
+one `(; index, x, y)` per point), so the zero-config path on a very large plot allocates one
+payload per element. For huge data, construct the interactable with a lean `payloads=` yourself.
 """
 function auto_interactables(fig)
     ints = AbstractInteractable[]
