@@ -112,11 +112,13 @@ number — everything else is reorderable by demand.
   source-resolution `values[]` matrix (by design today, ~4.78 MB at 1000², tens of MB for a 2000²–4000²
   `heatmap!`/`image!`) purely for the `(i,j)=value` hover. **De-speculated** (`bench/encoding_experiment.jl`):
   dropping it is **499× smaller** (4.78 MB → 9.8 KB) and hit-testing needs only edges+dims. **Cap criterion =
-  display-pixel resolution, not a cell count:** the figure size/projection are known at build, so ship
-  `values[]` only when cells are targetable (`min(cell_px) ≥ τ`, τ≈1–3 px — it's the spacing of the
-  projected edges we already compute); sub-pixel cells (the giant-image case) can't be cursor-targeted so
-  the value is useless → drop, payload falls back to `{i,j}`, one-time `@warn`. Self-tuning and **subsumes
-  the special `Image` case** (source-res > display-res → sub-pixel → auto-drop). See `architecture.md` §8.
+  *display*-pixel resolution, not a cell count:** the figure size/projection are known at build. Note the PNG
+  is rendered at 2× the display width (`px_per_unit = 2·min(scene,max_width)/scene`), so cell **display** px =
+  projected-edge spacing (image px) × `display_css/image_width` ≈ image-px spacing ÷ 2. Ship `values[]` only
+  when `min(cell_display_px) ≥ τ` (τ≈1–2 px); sub-pixel-on-screen cells can't be cursor-targeted so the value
+  is useless → drop, payload falls back to `{i,j}`, one-time `@warn`. For a 600-wide figure: 50²≈12 px (keep),
+  200²≈3 px (keep), **1000²≈0.6 px (drop)**, 2000²–4000² (drop). Self-tuning and **subsumes the special
+  `Image` case** (source-res > display-res → sub-pixel → auto-drop). See `architecture.md` §8.
 - **M4 Multi-select / box-select** — the `Vector{InteractionEvent}` contract extension. Builds
   on the M2 typed bond (`Bonds.transform_value`) + v1 manifest selected-state. Kernel-only
   (inert in static export); accumulate selection client-side since Pluto throttling is lossy.

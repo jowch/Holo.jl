@@ -344,17 +344,20 @@ routine input ships tens of MB of redundant numbers on top of the PNG that alrea
 user's matrix already lives in their Julia session. Today `values[]` ships unconditionally (it powers the
 no-round-trip `(i,j)=value` hover).
 
-**The cap criterion is display-pixel resolution, not an arbitrary cell count.** The figure size and
-projection are known at manifest-build, so each cell's pixel size is known — it's just the spacing of the
-projected `xedges`/`yedges` we already compute. **Ship `values[]` only when cells are targetable**
-(`min(cell_px) ≥ τ`, τ a small pixel threshold ≈ 1–3 px); below that the cells are sub-pixel, the user
-*cannot* put the cursor over an individual cell, so the per-cell value is unusable and is dropped. This is
-principled and self-tuning: a 50²–200² heatmap (6–24 px cells) keeps its readout; a 2000²–4000² image
-(0.3–0.6 px cells) drops it — and it **subsumes the special `Image` case** (images are source-res >
-display-res → sub-pixel → auto-dropped), so no separate rule is needed. When dropped, the payload falls
-back to `{i,j}` (the click still localizes the region) and a one-time `@warn` fires (fail-loud). Measured
-benefit: 499× smaller at 1000² (`perf-findings.md`). M2.3 owns the `{i,j,value}` payload shape, but the
-cap is decoupled and can ship independently.
+**The cap criterion is *display*-pixel resolution, not an arbitrary cell count.** The figure size and
+projection are known at manifest-build, so each cell's *on-screen* size is known. Key subtlety: the DPI
+policy renders the PNG at **2× the display width** (`px_per_unit = 2·min(scene, max_width)/scene`, image
+shown at `width:100%` → 0.5 on-screen scale), so a cell's **display** px = (projected `xedges`/`yedges`
+spacing, in image px) × `display_css/image_width` ≈ image-px spacing **÷ 2** — *not* the raw image-px
+spacing. The cursor lives in display px, so that is what governs targetability. **Ship `values[]` only when
+cells are targetable in display px** (`min(cell_display_px) ≥ τ`, τ ≈ 1–2 px); below that the user *cannot*
+put the cursor over an individual cell, so the per-cell value is unusable and is dropped. Self-tuning: for
+a 600-wide figure (~600 display px) a 50² heatmap is ~12 px/cell (keep), 200² is ~3 px (keep), **1000² is
+~0.6 px (drop)**, 2000²–4000² are 0.3–0.15 px (drop) — and it **subsumes the special `Image` case** (images
+are source-res > display-res → sub-pixel → auto-dropped), so no separate rule is needed. When dropped, the
+payload falls back to `{i,j}` (the click still localizes the region) and a one-time `@warn` fires
+(fail-loud). Measured size benefit: 499× smaller at 1000² (`perf-findings.md`). M2.3 owns the `{i,j,value}`
+payload shape, but the cap is decoupled and can ship independently.
 
 ## 9. Wire encoding & precision
 
