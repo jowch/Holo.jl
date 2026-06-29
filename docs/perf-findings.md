@@ -129,10 +129,29 @@ Nothing crashed; it degrades gracefully into the half-second range. The crossove
   carries the full value matrix (O(cells)), so 1000² = 4.78 MB. Payload, not render, is the cost.
 - **Raw canvas pixels are *not* a payload driver for sparse content**: a 3200×2000 figure with 2 000
   points produced a *smaller* PNG (132 KB) than a 600×400 one — density drives PNG size, not resolution.
-- **This is where the binary fast-path would finally pay off** (see below): at multi-MB manifests, the
-  ~290 ms serialize+transfer is exactly the cost lifting geometry/values to a top-level typed numeric
-  vector (engaging MsgPack's TypedArray path) would cut. A real optimization *if* high-N surfaces get
-  built — still YAGNI until one does.
+- **What actually shrinks the multi-MB manifest** (de-speculated by `bench/encoding_experiment.jl`, real
+  MsgPack bytes — see the encoding experiment below): **int-pixel geometry** (−58%, no structural change)
+  and **capping heatmap `values[]`** (−499×). The TypedArray binary fast-path, which I first guessed was
+  the lever, buys only ~5% over int-quantization and is *not* worth the manifest-shape change.
+
+### Encoding experiment (de-speculation)
+`bench/encoding_experiment.jl` MsgPack-encodes a real 50k-circle geometry and a 1000² heatmap `values[]`
+under each scheme — replacing theoretical byte math with measured wire bytes:
+
+| Encoding | bytes/coord | 50k circles | note |
+|----------|------------:|------------:|------|
+| `Float32` (current, nested or typed) | 5.00 | 732 KB | baseline |
+| **int-pixel quantized** (generic) | **2.10** | **307 KB** | **−58%, no manifest-shape change** |
+| Int16 raw binary (Pluto TypedArray) | 2.00 | 293 KB | only ~5% beyond int-quant → not worth the rewrite |
+
+| Heatmap 1000² `values[]` | size |
+|---|---:|
+| with `values[]` (current) | 4.78 MB |
+| capped → `{i,j}` only | 9.8 KB (**499× smaller**) |
+
+**Conclusion:** the cheap, non-structural wins (int-pixel coords + `values[]` cap) capture essentially all
+of it; the structural typed-array fast-path does not earn its cost. `Float16` is a non-starter (no MsgPack
+float16; lossy >2048px). Keep `AxisTransform` lims `Float64` (drag inversion) — quantize geometry only.
 
 ## Scope bounds for downstream phases
 
@@ -163,10 +182,11 @@ root is `Dict{String,Any}` with `Any[]` layers**, so the bulk serializes as gene
 maps/arrays, *not* binary blobs — even though leaf geometry is `Vector{Float32}`, it's nested
 inside `Any` containers. Practical impact is small at normal sizes, but at the multi-MB extreme
 (scatter-200k → 9.3 MB, heatmap-1000² → 4.78 MB) the generic-map serialization is exactly the
-~290 ms non-render cost the stress round-trip exposed. If a high-N surface ever makes manifest
-size the bottleneck, lifting geometry/values to a top-level typed numeric vector (e.g.
-`Vector{Float32}`/`Vector{Float64}`) would engage the binary fast-path — a real micro-opt then,
-not needed now.
+~290 ms non-render cost the stress round-trip exposed. **But the fix is *not* the fast-path** — the
+encoding experiment above measured that engaging it (lifting geometry to a top-level typed vector)
+buys only ~5% over plain int-pixel quantization, which already gets 58% *inside* the current
+`Dict/Any` structure. So the manifest-shape rewrite is rejected; int-pixel coords + capping
+`values[]` are the committed wins.
 
 ## Not measured (deliberately deferred)
 

@@ -54,7 +54,7 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 - [ ] **Wide mode**: `holo(fig, …; max_width=W)` vendoring the `PlutoUI.WideCell` technique inside the widget (it no-ops under `@bind` if used externally).
 
 ## M5 — Scale & polish
-- [ ] **Spatial acceleration** (quadtree/grid) for large-N hit-testing — only when the documented O(n) ceiling is actually hit (`log()` the cap until then). *Phase 0 reframe:* hit-test is ~0 ms; the wall is manifest **payload size** (~290 ms serialize+transfer at 4.78 MB), so wire-encoding (typed-array fast-path / int coords / capping `values[]`) outranks a quadtree (see Phase 4).
+- [ ] **Spatial acceleration** (quadtree/grid) for large-N hit-testing — only when the documented O(n) ceiling is actually hit (`log()` the cap until then). *Phase 0 reframe:* hit-test is ~0 ms; the wall is manifest **payload size** (~290 ms serialize+transfer at 4.78 MB), so wire-encoding (int-pixel coords / capping `values[]`) outranks a quadtree (see Phase 4).
 - [x] **Perf benchmarking**: the unmeasured Q5 envelope — base64 size + click latency knee; confirm MsgPack fast-path engages. *Done (`bench/payload_envelope.jl` → `docs/perf-findings.md`): single plots 50–400 KB, manifest O(N) elements, heatmaps O(cells), animation = frames × PNG (the hard ceiling, 5.5–22 MB). MsgPack confirmed (generic maps, not the TypedArray fast-path). Full click round-trip measured live (headless Pluto + Chromium): ~65 ms median — render-bound, browser overhead negligible. Editor-lag knee (editor stutter, distinct from latency) deferred.*
 - [ ] **Theming**: respect Pluto light/dark for highlight/tooltip styling (shadow-DOM scoped).
 - [ ] **GLMakie-static backend**: GPU offscreen → PNG, same `AbstractBackend` contract (for envs with a GPU).
@@ -106,11 +106,17 @@ number — everything else is reorderable by demand.
   tooltip seam. (Watch: per-element HTML edges toward the "rich UI chrome" framework-revisit
   trigger in `frontend-delivery.md`, and inflates payload.) **Measured budget** (`perf-findings.md`):
   keep per-element HTML under ~200 B at N≈1000 (+196 KB, 22→218 KB, sub-300-KB band); at N≈10000 rich
-  per-element HTML pushes the manifest into MB territory; 50000 × 200 B = 10.6 MB → gate it. **Also
-  owns the grid `values[]` guard** (worth *considering*): the `{i,j,value}` payload ships the full
-  source-resolution `values[]` matrix (by design today, ~4.78 MB at 1000²) — a candidate cell-count
-  cap, drop-for-`Image`, `@warn`-when-dropped guard (fail-loud; the user's matrix is already in their
-  session). See `architecture.md` §8.
+  per-element HTML pushes the manifest into MB territory; 50000 × 200 B = 10.6 MB → gate it.
+- [ ] **Bound the grid `values[]` payload (committed robustness fix).** *Day-one bug in shipped
+  `holo(fig)`, decoupled from M2.3 — can ship independently.* The `:grid` manifest ships the full
+  source-resolution `values[]` matrix (by design today, ~4.78 MB at 1000², tens of MB for a 2000²–4000²
+  `heatmap!`/`image!`) purely for the `(i,j)=value` hover. **De-speculated** (`bench/encoding_experiment.jl`):
+  dropping it is **499× smaller** (4.78 MB → 9.8 KB) and hit-testing needs only edges+dims. **Cap criterion =
+  display-pixel resolution, not a cell count:** the figure size/projection are known at build, so ship
+  `values[]` only when cells are targetable (`min(cell_px) ≥ τ`, τ≈1–3 px — it's the spacing of the
+  projected edges we already compute); sub-pixel cells (the giant-image case) can't be cursor-targeted so
+  the value is useless → drop, payload falls back to `{i,j}`, one-time `@warn`. Self-tuning and **subsumes
+  the special `Image` case** (source-res > display-res → sub-pixel → auto-drop). See `architecture.md` §8.
 - **M4 Multi-select / box-select** — the `Vector{InteractionEvent}` contract extension. Builds
   on the M2 typed bond (`Bonds.transform_value`) + v1 manifest selected-state. Kernel-only
   (inert in static export); accumulate selection client-side since Pluto throttling is lossy.
@@ -152,11 +158,16 @@ These three are independent and can run concurrently.
   first wall is manifest *payload size* (serialize+transfer), not hit-test CPU — so build this *only*
   if a profile ever shows JS hit-test **specifically** (not serialize/transfer) is the bottleneck.
   (Phase 0 did not stress hit-test at extreme N≈200k; but there the 9.28 MB manifest dominates anyway.)
-- **Wire encoding** (higher-leverage than spatial acceleration) — lift geometry/values to a top-level
-  typed numeric `Vector` to engage MsgPack's binary fast-path (the `Dict{String,Any}`/`Any[]` root
-  currently defeats it); per-element geometry is also quantizable to integer/fixed-point pixels. Demand-
-  gated / YAGNI. **Design constraint** (not a measured result): keep `AxisTransform` lims/viewport
-  `Float64` — the M4 drag inverts pixel→data through them. See `architecture.md` §9.
+- [ ] **Int-pixel geometry quantization (committed perf win).** Round manifest geometry coords to `Int`
+  before building each `HitLayer`. **De-speculated** (`bench/encoding_experiment.jl`): real MsgPack gives
+  **−58%** on the geometry term (5.00 → 2.10 B/coord), it needs **no manifest-shape change** (msgpack
+  already encodes small ints in 1–3 B; the frontend reads numbers either way), and ≤0.5px rounding is
+  inside the ~1px hit-test tolerance. Roughly halves the manifest at high N, pushing the payload-bound
+  crossover out. **Constraint:** quantize per-element geometry only — keep `AxisTransform` lims/viewport
+  `Float64` (the M4 drag inverts pixel→data through them). See `architecture.md` §9.
+  - *Rejected by the same experiment:* lifting geometry to a top-level typed `Vector` to engage MsgPack's
+    TypedArray binary fast-path — measured only ~5% beyond int-quantization (2.00 vs 2.10 B/coord), not
+    worth the manifest-shape rewrite. `Float16` is a non-starter (no msgpack float16; lossy >2048px).
 
 ### Phase 5 — Polish & release
 - **Theming** (Pluto light/dark, shadow-DOM scoped) — overlay can theme freely (shadow root +

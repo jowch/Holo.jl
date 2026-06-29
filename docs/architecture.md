@@ -152,8 +152,8 @@ data to resolve a hit to an element index and its payload.
 > but to power the client-side `(i,j)=value` readout the layer also ships the full **source-resolution**
 > `values[]` matrix — O(source-cells), the dominant grid term. So a routine 2000²–4000² `heatmap!`/`image!`
 > ships tens of MB of values on top of a display-bounded PNG (4.78 MB measured at 1000²). This is the
-> day-one-reachable face of "the manifest is the scaling wall" (§8). Capping/dropping `values[]` is a
-> *candidate* M2.3 guard, not current behavior — today it ships by design. See `perf-findings.md`.
+> day-one-reachable face of "the manifest is the scaling wall" (§8). The committed fix ships `values[]`
+> only when cells are targetable (≥~1 px on the known display) — sub-pixel grids drop it (§8).
 
 ```julia
 struct HitLayer
@@ -337,32 +337,47 @@ multi-MB and flip to **payload-bound** (~290 ms serialize+transfer at a 4.78 MB 
 for a 1000² heatmap). Nothing crashes — it degrades into the half-second range — but tens of MB would lag
 the Pluto editor.
 
-**Robustness to large inputs (assume a user *will* do this).** We ship a tool to Pluto/Makie users, so
-assume someone overlays `holo` on a 2000²–4000² `heatmap!`/`image!` *because they can*. The PNG is safe
-(display-bounded), but the `:grid` `values[]` matrix is **source-bounded**, so that routine input ships
-tens of MB of redundant numbers on top of the PNG that already shows them — and the user's matrix already
-lives in their Julia session. Today `values[]` ships by design (it powers the no-round-trip `(i,j)=value`
-hover). The **candidate** guard, to be designed in M2.3 (which owns the `{i,j,value}` payload): ship
-`values[]` only under a cell-count cap, drop it for `Image`, default the payload to `{i,j}`, and `@warn`
-when dropped (the project's "fail loud, never silently wrong"). Recorded as a constraint, not committed scope.
+**Robustness to large inputs (assume a user *will* do this) — committed fix.** We ship a tool to
+Pluto/Makie users, so assume someone overlays `holo` on a 2000²–4000² `heatmap!`/`image!` *because they
+can*. The PNG is safe (display-bounded), but the `:grid` `values[]` matrix is **source-bounded**, so that
+routine input ships tens of MB of redundant numbers on top of the PNG that already shows them — and the
+user's matrix already lives in their Julia session. Today `values[]` ships unconditionally (it powers the
+no-round-trip `(i,j)=value` hover).
 
-## 9. Wire encoding & precision (deferred / YAGNI)
+**The cap criterion is display-pixel resolution, not an arbitrary cell count.** The figure size and
+projection are known at manifest-build, so each cell's pixel size is known — it's just the spacing of the
+projected `xedges`/`yedges` we already compute. **Ship `values[]` only when cells are targetable**
+(`min(cell_px) ≥ τ`, τ a small pixel threshold ≈ 1–3 px); below that the cells are sub-pixel, the user
+*cannot* put the cursor over an individual cell, so the per-cell value is unusable and is dropped. This is
+principled and self-tuning: a 50²–200² heatmap (6–24 px cells) keeps its readout; a 2000²–4000² image
+(0.3–0.6 px cells) drops it — and it **subsumes the special `Image` case** (images are source-res >
+display-res → sub-pixel → auto-dropped), so no separate rule is needed. When dropped, the payload falls
+back to `{i,j}` (the click still localizes the region) and a one-time `@warn` fires (fail-loud). Measured
+benefit: 499× smaller at 1000² (`perf-findings.md`). M2.3 owns the `{i,j,value}` payload shape, but the
+cap is decoupled and can ship independently.
 
-Phase 0 *measured* that the manifest is the wall and that `published_to_js` serializes as **generic
-MsgPack** maps/arrays (the `Dict{String,Any}` / `Any[]` root defeats the TypedArray binary fast-path even
-though leaf geometry is `Vector{Float32}`). The encoding options below are **design reasoning**, not
-measured findings — they bound *how* a future high-N optimization could go, gated on a surface actually
-pulling for it:
+## 9. Wire encoding & precision
 
-- **Scalar precision.** Geometry is `Float32` *pixel* coordinates — overkill for ~1px hit-testing. Integer
-  / fixed-point pixels are more compact *and* match the real accuracy need. **`Float16` is the wrong way
-  down**: MsgPack has no float16 type (it promotes to float32 → no saving) and it is lossy above 2048px.
-- **Container structure.** Lifting geometry to a *top-level typed numeric vector* would engage MsgPack's
-  binary fast-path (no per-element tags) — the bigger structural lever, but a change to the manifest shape.
-- **The precision split (a real constraint now).** Per-element **geometry** is quantizable to pixels, but
-  the **`AxisTransform` lims/viewport must stay `Float64`**: the M4 drag path inverts pixel→data through
-  them and the error amplifies — and at O(1)/axis the precision costs nothing. Do not blanket-quantize the
-  manifest; only per-element geometry is a candidate.
+`published_to_js` serializes the manifest as **generic MsgPack** maps/arrays (the `Dict{String,Any}` /
+`Any[]` root defeats the TypedArray binary fast-path even though leaf geometry is `Vector{Float32}`). The
+encoding levers were **de-speculated by a measurement experiment** (`bench/encoding_experiment.jl` →
+`perf-findings.md`), which changed the verdict from my first design guess:
 
-Both levers are demand-gated. The point of recording them: when a high-N surface makes the manifest the
-bottleneck, reach for wire encoding before a quadtree (§7).
+- **Scalar precision — int-pixel quantization (the win).** Geometry is `Float32` *pixel* coordinates,
+  overkill for ~1px hit-testing. Rounding coords to `Int` measured **58% off the geometry term** (5.00 →
+  2.10 B/coord; 732 → 307 KB at 50k circles) — and it needs **no structural change**: MsgPack already
+  encodes small ints in 1–3 bytes, the frontend reads numbers either way, and ≤0.5px rounding is inside the
+  hit-test tolerance. **A committed item** (roadmap M5/Phase-4), not deferred. `Float16` is *not* the way
+  down: MsgPack has no float16 (it promotes to float32 → no saving) and is lossy above 2048px.
+- **Container structure — typed-array fast-path (rejected by the experiment).** Lifting geometry to a
+  top-level typed numeric vector to engage the binary fast-path measured only **~5% beyond int-quantization**
+  (2.00 vs 2.10 B/coord) — because compact ints already sit near the 2-byte binary floor. The structural
+  manifest-shape change is **not worth 5%**; dropped. (It would only pay off if we kept *floats*, 5→4 B,
+  which int-quantization already beats.)
+- **The precision split (a real constraint).** Per-element **geometry** is quantizable to pixels, but the
+  **`AxisTransform` lims/viewport must stay `Float64`**: the M4 drag path inverts pixel→data through them and
+  the error amplifies — and at O(1)/axis the precision costs nothing. Only per-element geometry is quantized.
+
+The other manifest term — heatmap/image `values[]` (§8) — is bounded not by encoding but by *not shipping
+it*: capping/dropping it measured **499×** smaller (4.78 MB → 9.8 KB at 1000²). That, plus int-pixel coords,
+is the committed manifest-payload work; reach for them before a quadtree (§7).
