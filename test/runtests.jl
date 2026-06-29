@@ -540,4 +540,21 @@ end
         end
         @test occursin("^", sprint(showerror, e))
     end
+
+    @testset "markup field check + segments" begin
+        m = holo"<b>$(name)</b> — $(pop:,)"
+        @test Holo.check_fields(m, (:name, :pop)) === m            # all present → returns m
+        @test_throws ArgumentError Holo.check_fields(m, (:name,))  # pop missing
+        err = try
+            Holo.check_fields(holo"$(nam)", (:name, :pop))
+        catch e
+            e
+        end
+        @test occursin("did you mean `name`", sprint(showerror, err))
+
+        seg = Holo.markup_segments(m)
+        @test seg[1] == "<b>"
+        @test seg[2] == Dict("f" => "name")
+        @test any(s -> s == Dict("f" => "pop", "spec" => ","), seg)
+    end
 end

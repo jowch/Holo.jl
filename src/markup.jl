@@ -102,3 +102,62 @@ macro holo_str(s)
     parse_template(s)
     return :($(parse_template)($s))
 end
+
+# Levenshtein for did-you-mean (Base has no public closest-string API).
+function _editdistance(a::AbstractString, b::AbstractString)
+    ca, cb = collect(a), collect(b)
+    m, n = length(ca), length(cb)
+    d = collect(0:n)
+    for ii in 1:m
+        prev = d[1]
+        d[1] = ii
+        for jj in 1:n
+            cur = d[jj + 1]
+            d[jj + 1] = min(d[jj + 1] + 1, d[jj] + 1, prev + (ca[ii] == cb[jj] ? 0 : 1))
+            prev = cur
+        end
+    end
+    return d[n + 1]
+end
+
+function _suggest(name::Symbol, avail)
+    isempty(avail) && return nothing
+    best = argmin(k -> _editdistance(string(name), string(k)), collect(avail))
+    return _editdistance(string(name), string(best)) <= 2 ? best : nothing
+end
+
+"""
+    check_fields(m::Markup, payload_keys) -> m
+
+Build-time check: every `\$(field)` in the template must exist in `payload_keys` (an iterable of
+Symbols). Throws `ArgumentError` listing missing fields + a did-you-mean and the available fields.
+"""
+function check_fields(m::Markup, payload_keys)
+    keyset = Set(Symbol.(collect(payload_keys)))
+    missing_fields = [f for f in m.fields if !(f in keyset)]
+    isempty(missing_fields) && return m
+    lines = map(missing_fields) do f
+        s = _suggest(f, keyset)
+        s === nothing ? "  • \$($f) — no field `$f`" : "  • \$($f) — no field `$f`; did you mean `$s`?"
+    end
+    throw(
+        ArgumentError(
+            "holo tooltip template references fields missing from the payload:\n" *
+                join(lines, "\n") *
+                "\n  available: " * join(sort(string.(collect(keyset))), ", "),
+        ),
+    )
+end
+
+"Serialize a Markup to the wire: an array of literal `String` | `Dict(\"f\"=>name[, \"spec\"=>spec])`."
+function markup_segments(m::Markup)
+    return Any[
+        if seg isa Field
+                seg.spec === nothing ? Dict("f" => string(seg.name)) :
+                Dict("f" => string(seg.name), "spec" => seg.spec)
+        else
+                seg
+        end
+            for seg in m.segments
+    ]
+end
