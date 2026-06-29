@@ -90,23 +90,24 @@ number — everything else is reorderable by demand.
 ### Phase 0 — Measure (front-loaded spike) ✅ *done*
 - **Perf benchmarking** — *Done. See `docs/perf-findings.md` (`bench/payload_envelope.jl` to
   re-run).* The envelope: single interactive plots land 50–400 KB (at/just above Q5's plausible
-  band, not below the <10 KB anecdote); manifest is O(N) elements (~46 B/elem) and O(cells) for
-  heatmaps; **animation = frames × per-frame PNG is the hard ceiling (5.5–22 MB) — gate it.** Tooltip
+  band, not below the <10 KB anecdote); manifest is O(N) elements (int-pixel geometry; per-element bytes
+  in `perf-findings.md`) and O(cells) for heatmaps; **animation = frames × per-frame PNG is the hard ceiling (5.5–22 MB) — gate it.** Tooltip
   budget: <~200 B/element at N≈1 000. MsgPack confirmed (generic maps; geometry doesn't hit the
   TypedArray fast-path because the root is `Dict{String,Any}`). Full click round-trip measured
   live (headless Pluto + Chromium): **~65 ms median** (render-bound; browser/websocket overhead is
   ~tens of ms). Only the editor-lag *knee* (editor stutter at MB-scale output, distinct from
   latency) is deferred — a cheap follow-up if animation ships. **Stress-tested to the extremes:**
-  round-trip is render-bound below ~1 MB but flips to *payload-bound* above a few MB (1000² heatmap:
-  2.13 MB PNG + 4.78 MB manifest → 553 ms, mostly serialize+transfer). The manifest (O(N) elements,
-  O(cells) heatmaps) is the high-N wall, not the PNG — it degrades gracefully, nothing breaks.
+  round-trip is render-bound below ~1 MB but flips to *payload-bound* above a few MB (measured at a 1000²
+  heatmap's 4.78 MB manifest → 553 ms, mostly serialize+transfer; that heatmap is now `values[]`-capped to
+  KB, so high-N *scatter* — 200k → 7.72 MB — is the payload wall). The manifest is the high-N wall, not the
+  PNG — it degrades gracefully, nothing breaks.
 
 ### Phase 1 — Foundations that unblock the rest
 - **M2.3 Richer tooltips** — pre-serialized per-element HTML/template; extends the existing
   tooltip seam. (Watch: per-element HTML edges toward the "rich UI chrome" framework-revisit
   trigger in `frontend-delivery.md`, and inflates payload.) **Measured budget** (`perf-findings.md`):
-  keep per-element HTML under ~200 B at N≈1000 (+196 KB, 22→218 KB, sub-300-KB band); at N≈10000 rich
-  per-element HTML pushes the manifest into MB territory; 50000 × 200 B = 10.6 MB → gate it.
+  keep per-element HTML under ~200 B at N≈1000 (+196 KB, 14→210 KB, sub-300-KB band); at N≈10000 rich
+  per-element HTML pushes the manifest into MB territory; 50000 × 200 B ≈ 10.2 MB → gate it.
 - [x] **Bound the grid `values[]` payload (robustness fix).** *Done (`src/interactables.jl`:
   `GRID_VALUES_MIN_SCREEN_PX`, gated on `InteractionContext.display_scale`; overlay tolerates an
   absent `values[]`). Day-one bug in shipped `holo(fig)`, shipped independently of M2.3.* The `:grid` manifest shipped the full
@@ -163,14 +164,16 @@ These three are independent and can run concurrently.
   manifest-order first-match. **Phase 0 measured hit-test at ~0 ms** (scatter-50/10k) and found the
   first wall is manifest *payload size* (serialize+transfer), not hit-test CPU — so build this *only*
   if a profile ever shows JS hit-test **specifically** (not serialize/transfer) is the bottleneck.
-  (Phase 0 did not stress hit-test at extreme N≈200k; but there the 9.28 MB manifest dominates anyway.)
-- [ ] **Int-pixel geometry quantization (committed perf win).** Round manifest geometry coords to `Int`
-  before building each `HitLayer`. **De-speculated** (`bench/encoding_experiment.jl`): real MsgPack gives
-  **−58%** on the geometry term (5.00 → 2.10 B/coord), it needs **no manifest-shape change** (msgpack
-  already encodes small ints in 1–3 B; the frontend reads numbers either way), and ≤0.5px rounding is
-  inside the ~1px hit-test tolerance. Roughly halves the manifest at high N, pushing the payload-bound
-  crossover out. **Constraint:** quantize per-element geometry only — keep `AxisTransform` lims/viewport
-  `Float64` (the M4 drag inverts pixel→data through them). See `architecture.md` §9.
+  (Phase 0 did not stress hit-test at extreme N≈200k; but there the 7.72 MB manifest dominates anyway.)
+- [x] **Int-pixel geometry quantization (perf win).** *Done (`src/interactables.jl`: per-element geometry
+  vectors built as `Int` via `_q(x) = round(Int, x)` — circles/segments/rects/polygons/regions + grid edges).*
+  **De-speculated** (`bench/encoding_experiment.jl`): real MsgPack gives **−58%** on the geometry term
+  (5.00 → 2.10 B/coord); it needs **no manifest-shape change** (msgpack already encodes small ints in 1–3 B;
+  the frontend reads numbers either way), and ≤0.5px rounding is inside the ~1px hit-test tolerance. On a
+  whole realistic manifest the saving is ~17 % (geometry is one term beside the payload's Float64 `x`/`y`);
+  at high-N scatter it pushed the 200k wall 9.28 → 7.72 MB (`perf-findings.md`). **Constraint (held):**
+  quantize per-element geometry only — `AxisTransform` lims/viewport stay `Float64` (the M4 drag inverts
+  pixel→data through them). See `architecture.md` §9.
   - *Rejected by the same experiment:* lifting geometry to a top-level typed `Vector` to engage MsgPack's
     TypedArray binary fast-path — measured only ~5% beyond int-quantization (2.00 vs 2.10 B/coord), not
     worth the manifest-shape rewrite. `Float16` is a non-starter (no msgpack float16; lossy >2048px).

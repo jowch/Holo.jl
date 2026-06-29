@@ -37,6 +37,18 @@ const GRID_VALUES_MIN_SCREEN_PX = 1.0
 
 _proj(ctx, ax, p) = data_to_image_px(ctx, ax, p)
 
+# Quantize a finite geometry coordinate to integer image-px. MsgPack encodes a small Int in 1–3 bytes
+# vs a Float32's flat 5, so per-element geometry stores Int — −58% on that term, no manifest-shape change
+# (the frontend reads numbers either way), and ≤0.5px is inside the ~1px hit-test tolerance. AxisTransform
+# lims/viewport stay Float64 (M4 drag inverts pixel→data through them). See architecture.md §9.
+#
+# Non-finite coords pass through as Float32 (NOT rounded — `round(Int, NaN/Inf)` throws): element layers
+# are un-gated on scale (above), so a log out-of-domain point projects to NaN/±Inf, and `:polyline`
+# uses NaN as a gap sentinel (types.ts/geometry.ts). Geometry vectors are therefore `Real[]` (Int for
+# finite, Float32 for non-finite) — an abstract eltype, so the value still ships generically (the
+# measured 1–3 B/coord), never via Pluto's binary typed-array path (which would be 8 B/coord for Int64).
+_q(x) = isfinite(x) ? round(Int, x) : Float32(x)
+
 # ============================ PointInteractable ============================
 struct PointInteractable <: AbstractInteractable
     ax; points::Vector{Point2f}; id::Symbol; payloads::Vector{Any}; radius::Float64
@@ -54,9 +66,9 @@ function PointInteractable(
     return PointInteractable(ax, pts, id, collect(Any, payloads), Float64(radius))
 end
 function hitlayers(i::PointInteractable, ctx)
-    g = Float32[]
+    g = Real[]
     for p in i.points
-        q = _proj(ctx, i.ax, p); append!(g, (q[1], q[2], i.radius * ctx.scaling))
+        q = _proj(ctx, i.ax, p); append!(g, (_q(q[1]), _q(q[2]), _q(i.radius * ctx.scaling)))
     end
     return [HitLayer(i.id, :circles, g, i.payloads, axis_id(ctx, i.ax), events(i))]
 end
@@ -75,9 +87,9 @@ function SegmentInteractable(
     return SegmentInteractable(ax, vs, mode, id, pl, Float64(tol))
 end
 function hitlayers(i::SegmentInteractable, ctx)
-    g = Float32[]
+    g = Real[]
     for v in i.vertices
-        q = _proj(ctx, i.ax, v); append!(g, (q[1], q[2]))
+        q = _proj(ctx, i.ax, v); append!(g, (_q(q[1]), _q(q[2])))
     end
     kind = i.mode === :polyline ? :polyline : :segments
     return [HitLayer(i.id, kind, g, i.payloads, axis_id(ctx, i.ax), events(i))]
@@ -100,19 +112,19 @@ function RectInteractable(ax; rects = nothing, grid = nothing, id = :rects, payl
 end
 function hitlayers(i::RectInteractable, ctx)
     if i.layout === :list
-        g = Float32[]
+        g = Real[]
         for (xc, yc, w, h) in i.data
             a = _proj(ctx, i.ax, (xc - w / 2, yc - h / 2)); b = _proj(ctx, i.ax, (xc + w / 2, yc + h / 2))
             cx = (a[1] + b[1]) / 2; cy = (a[2] + b[2]) / 2
-            append!(g, (cx, cy, abs(b[1] - a[1]), abs(b[2] - a[2])))
+            append!(g, (_q(cx), _q(cy), _q(abs(b[1] - a[1])), _q(abs(b[2] - a[2]))))
         end
         return [HitLayer(i.id, :rects, g, i.payloads, axis_id(ctx, i.ax), events(i))]
     else
         xe, ye, vals = i.data
         y0 = ye[1]
-        xedges = Float32[_proj(ctx, i.ax, (x, y0))[1] for x in xe]
+        xedges = Real[_q(_proj(ctx, i.ax, (x, y0))[1]) for x in xe]
         x0 = xe[1]
-        yedges = Float32[_proj(ctx, i.ax, (x0, y))[2] for y in ye]
+        yedges = Real[_q(_proj(ctx, i.ax, (x0, y))[2]) for y in ye]
         ncols, nrows = length(xe) - 1, length(ye) - 1
         geom = Dict{String, Any}(
             "xedges" => xedges, "yedges" => yedges, "ncols" => ncols, "nrows" => nrows
@@ -146,11 +158,11 @@ function PolygonInteractable(ax, rings; id = :polygons, payloads = nothing)
     return PolygonInteractable(ax, rs, id, pl)
 end
 function hitlayers(i::PolygonInteractable, ctx)
-    geom = Vector{Float32}[]
+    geom = Vector{Real}[]
     for ring in i.rings
-        flat = Float32[]
+        flat = Real[]
         for p in ring
-            q = _proj(ctx, i.ax, p); append!(flat, (q[1], q[2]))
+            q = _proj(ctx, i.ax, p); append!(flat, (_q(q[1]), _q(q[2])))
         end
         push!(geom, flat)
     end
@@ -258,18 +270,18 @@ end
 events(i::RegionInteractable) = i.evs
 tooltip(i::RegionInteractable, ::Int, pl) = i.tip(pl)
 function hitlayers(i::RegionInteractable, ctx)
-    circ = Float32[]; cpl = Any[]; rect = Float32[]; rpl = Any[]; polys = Vector{Float32}[]; ppl = Any[]
+    circ = Real[]; cpl = Any[]; rect = Real[]; rpl = Any[]; polys = Vector{Real}[]; ppl = Any[]
     for (reg, pl) in zip(i.regions, i.payloads)
         kind = reg[1]
         if kind === :circle
-            q = _proj(ctx, i.ax, reg[2]); append!(circ, (q[1], q[2], Float64(reg[3]) * ctx.scaling)); push!(cpl, pl)
+            q = _proj(ctx, i.ax, reg[2]); append!(circ, (_q(q[1]), _q(q[2]), _q(Float64(reg[3]) * ctx.scaling))); push!(cpl, pl)
         elseif kind === :rect
             xc, yc = reg[2]; w, h = Float64(reg[3]), Float64(reg[4])
             a = _proj(ctx, i.ax, (xc - w / 2, yc - h / 2)); b = _proj(ctx, i.ax, (xc + w / 2, yc + h / 2))
-            append!(rect, ((a[1] + b[1]) / 2, (a[2] + b[2]) / 2, abs(b[1] - a[1]), abs(b[2] - a[2]))); push!(rpl, pl)
+            append!(rect, (_q((a[1] + b[1]) / 2), _q((a[2] + b[2]) / 2), _q(abs(b[1] - a[1])), _q(abs(b[2] - a[2])))); push!(rpl, pl)
         elseif kind === :polygon
-            flat = Float32[]; for p in reg[2]
-                q = _proj(ctx, i.ax, p); append!(flat, (q[1], q[2]))
+            flat = Real[]; for p in reg[2]
+                q = _proj(ctx, i.ax, p); append!(flat, (_q(q[1]), _q(q[2])))
             end
             push!(polys, flat); push!(ppl, pl)
         else
