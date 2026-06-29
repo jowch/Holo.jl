@@ -175,4 +175,25 @@ describe("mount", () => {
         expect(committed!.payload.ymin).toBeCloseTo(0)    // image y 800 → data 100*(1-800/800)=0
         expect(committed!.payload.ymax).toBeCloseTo(75)   // image y 200 → data 100*(1-200/800)=75
     })
+
+    it("resize flips past the anchor and clamps to the viewport", () => {
+        const { host, script } = setup()
+        mount(script, roiManifest)
+        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        const box = shadowOf(host).querySelectorAll("rect")[0] as SVGRectElement
+        // grab BR corner image (600,600)==client (300,300); anchor = TL (200,200)
+        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 300, clientY: 300, bubbles: true }))
+        // drag PAST the TL anchor to image (100,100)==client (50,50): box flips, stays non-degenerate
+        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 50, clientY: 50, bubbles: true }))
+        expect(box.getAttribute("x")).toBe("100")        // min(200, 100)
+        expect(box.getAttribute("y")).toBe("100")
+        expect(box.getAttribute("width")).toBe("100")    // |100 - 200|
+        expect(box.getAttribute("height")).toBe("100")
+        // drag beyond the viewport image (1400,1000)==client (700,500): clamps to (1200,800)
+        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 700, clientY: 500, bubbles: true }))
+        expect(box.getAttribute("x")).toBe("200")        // min(200, 1200)
+        expect(box.getAttribute("width")).toBe("1000")   // |1200 - 200|
+        expect(box.getAttribute("height")).toBe("600")   // |800 - 200|
+        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 700, clientY: 500, bubbles: true }))
+    })
 })
