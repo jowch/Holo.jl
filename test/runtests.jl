@@ -153,10 +153,10 @@ end
         @test only(hitlayers(AxisInteractable(ax), ctx)).geometry === nothing
         ri = RegionInteractable(
             ax; regions = [(:circle, (1.0, 1.0), 10), (:rect, (2.0, 4.0), 1.0, 2.0)],
-            payloads = ["a", "b"], tooltip = pl -> "tip:" * pl
+            payloads = ["a", "b"], tooltip = holo"region"
         )
         @test Set(L.kind for L in hitlayers(ri, ctx)) == Set([:circles, :rects])
-        @test IP.tooltip(ri, 1, "a") == "tip:a"
+        @test IP.tooltip_spec(ri) isa Holo.Markup
         fi = FunctionInteractable(c -> [HitLayer(:f, :circles, Float32[10, 10, 5], Any[(; v = 1)], :ax1, (:click,))])
         @test only(hitlayers(fi, ctx)).id === :f
     end
@@ -566,5 +566,15 @@ end
         @test d["--holo-tip-caret"] == "none"
         @test Holo.tip_style_dict(; tooltip_bg = "#abc")["--holo-tip-bg"] == "#abc"  # CSS string passthrough
         @test !haskey(Holo.tip_style_dict(; tooltip_bg = :red), "--holo-tip-color")  # unset omitted
+    end
+
+    @testset "tooltip_spec on interactables" begin
+        pts = [(1.0, 1.0), (2.0, 2.0)]
+        @test Holo.tooltip_spec(PointInteractable(ax, pts)) === nothing
+        pi = PointInteractable(ax, pts; tooltip = holo"$(x)")
+        @test Holo.tooltip_spec(pi) isa Holo.Markup
+        @test Holo.tooltip_spec(PointInteractable(ax, pts; tooltip = false)) === false
+        ri = RegionInteractable(ax; regions = [(:circle, (1.0, 1.0), 0.5)], payloads = [(; n = "a")], tooltip = holo"$(n)")
+        @test Holo.tooltip_spec(ri) isa Holo.Markup
     end
 end

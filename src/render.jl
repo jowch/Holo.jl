@@ -49,8 +49,8 @@ function _layer_dict(i, L::HitLayer)
         "events" => [string(e) for e in L.events],
         "style" => Dict("stroke" => hs.stroke, "width" => hs.width)
     )
-    tips = [tooltip(i, k, pl) for (k, pl) in enumerate(L.payloads)]
-    all(isnothing, tips) || (d["tooltips"] = tips)
+    ts = tooltip_spec(i)
+    ts === nothing || (d["tooltip"] = ts === false ? false : markup_segments(ts))
     return d
 end
 
