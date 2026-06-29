@@ -52,7 +52,6 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 - [ ] **Animation / scrubbing (Tier 1)**: precomputed frame sequence in the manifest + a JS scrubber; bond value = current frame/param. Latency paid once, up front.
 - [ ] **Multi-select / box-select**: `Vector{InteractionEvent}` (the forward-compat extension single-select was shaped for).
 - [ ] **Wide mode**: `holo(fig, …; max_width=W)` vendoring the `PlutoUI.WideCell` technique inside the widget (it no-ops under `@bind` if used externally).
-- [ ] **`with_js_link` tooltips** (opt-in): Julia-computed rich tooltip content on hover without a full re-run. Needs a live kernel (breaks export) → opt-in, not default.
 
 ## M5 — Scale & polish
 - [ ] **Spatial acceleration** (quadtree/grid) for large-N hit-testing — only when the documented O(n) ceiling is actually hit (`log()` the cap until then).
