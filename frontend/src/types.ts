@@ -9,6 +9,7 @@ export type Kind =
     | "grid"      // geometry: GridGeometry  (compact; edges not N rects)
     | "polygons"  // geometry: number[][]  rings, even-odd fill rule
     | "axis"      // geometry: null  — continuous, rides the axis transform
+    | "threshold" // geometry: ThresholdGeometry — a draggable h/v line; value computed via AxisTransform on drag
 
 export interface GridGeometry {
     xedges: number[]
@@ -16,6 +17,12 @@ export interface GridGeometry {
     ncols: number
     nrows: number
     values: number[] // row-major: values[j*ncols + i]
+}
+
+export interface ThresholdGeometry {
+    orientation: "h" | "v"
+    pos: number            // image-px coordinate of the line (y if "h", x if "v")
+    span: [number, number] // image-px extent along the axis viewport
 }
 
 export interface AxisTransform {
@@ -38,7 +45,7 @@ export interface LayerStyle {
 export interface HitLayer {
     id: string
     kind: Kind
-    geometry: number[] | number[][] | GridGeometry | null
+    geometry: number[] | number[][] | GridGeometry | ThresholdGeometry | null
     payloads: unknown[]
     axis: string
     events: string[] // "click" | "hover"

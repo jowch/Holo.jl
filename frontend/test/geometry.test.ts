@@ -64,3 +64,18 @@ describe("hitLayer + hitTest", () => {
         expect(resolvePayload(hit, m, 300, 300)).toEqual({ i: 1 })
     })
 })
+
+describe("threshold hit-test", () => {
+    const h: HitLayer = { id: "thr", kind: "threshold", axis: "ax1", events: ["drag"], payloads: [],
+        geometry: { orientation: "h", pos: 100, span: [0, 200] } }
+    it("hits within SEG_TOL of a horizontal line, misses beyond", () => {
+        expect(hitLayer(h, 50, 102)).toMatchObject({ index: 0 })       // 2px ≤ 8
+        expect(hitLayer(h, 50, 120)).toBeNull()                        // 20px
+        expect(hitLayer(h, 50, 100)?.geom).toEqual(["seg", 0, 100, 200, 100])
+    })
+    it("vertical line hits along x", () => {
+        const v: HitLayer = { ...h, geometry: { orientation: "v", pos: 80, span: [0, 400] } }
+        expect(hitLayer(v, 83, 200)).toMatchObject({ index: 0 })
+        expect(hitLayer(v, 130, 200)).toBeNull()
+    })
+})
