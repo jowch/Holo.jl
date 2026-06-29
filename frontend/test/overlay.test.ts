@@ -59,4 +59,33 @@ describe("mount", () => {
         await Promise.resolve()
         expect(host.lastElementChild?.tagName).toBe("SCRIPT") // shadow host gone, script remains
     })
+
+    it("drags a threshold line and commits the inverted value on mouse-up", () => {
+        const dragManifest: Manifest = {
+            width: 1200, height: 800, scaling: 2,
+            transforms: { ax1: { xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
+                viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false } },
+            layers: [{ id: "thr", kind: "threshold", axis: "ax1", events: ["drag"], payloads: [],
+                geometry: { orientation: "h", pos: 400, span: [0, 1200] } }],
+        }
+        const { host, script } = setup()
+        mount(script, dragManifest)
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const line = shadow.querySelector("line") as SVGLineElement
+        expect(line).toBeTruthy()
+        expect(line.getAttribute("y1")).toBe("400")              // persistent, drawn on mount
+        let committed: { layer: string; index: number; payload: number } | null = null
+        host.addEventListener("input", () => {
+            committed = (host as unknown as { value: { layer: string; index: number; payload: number } }).value
+        })
+        // display scale = 1200/600 = 2 → client (300,200) == image (600,400) == on the line
+        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 300, clientY: 200, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 300, bubbles: true }))
+        expect(line.getAttribute("y1")).toBe("600")              // line followed the drag (image y = 2*300)
+        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 300, clientY: 300, bubbles: true }))
+        expect(committed).toMatchObject({ layer: "thr", index: 0 })
+        // image (600,600): fy = 1 - 600/800 = 0.25; ylims [0,100] → 25
+        expect(committed!.payload).toBeCloseTo(25)
+    })
 })

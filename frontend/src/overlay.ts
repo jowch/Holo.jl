@@ -1,7 +1,7 @@
 // DOM layer: builds a shadow-root overlay over the (light-DOM) base image, wires hover/click,
 // draws highlights, and round-trips clicks through the @bind element. Stateless across re-render.
-import { hitTest, resolvePayload } from "./geometry"
-import type { Hit, Manifest } from "./types"
+import { hitTest, invertAxis, resolvePayload } from "./geometry"
+import type { AxisTransform, Hit, Manifest, ThresholdGeometry } from "./types"
 
 const SVG_NS = "http://www.w3.org/2000/svg"
 
@@ -9,6 +9,8 @@ const STYLE = `
 :host { position: absolute; inset: 0; }
 .surface { position: absolute; inset: 0; cursor: crosshair; }
 .surface.hot { cursor: pointer; }
+.surface.grab { cursor: grab; }
+.surface.grabbing { cursor: grabbing; }
 svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .tip { position: absolute; display: none; padding: 2px 6px; font: 12px sans-serif;
        background: #111; color: #fff; border-radius: 4px; pointer-events: none;
@@ -41,6 +43,8 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     const svg = document.createElementNS(SVG_NS, "svg")
     svg.setAttribute("viewBox", `0 0 ${manifest.width} ${manifest.height}`)
     svg.setAttribute("preserveAspectRatio", "none")
+    const hiGroup = document.createElementNS(SVG_NS, "g") // transient hover/selected highlights
+    svg.appendChild(hiGroup)
     const surface = document.createElement("div")
     surface.className = "surface"
     const tip = document.createElement("div")
@@ -54,7 +58,32 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         return { x: (e.clientX - r.left) * s, y: (e.clientY - r.top) * s }
     }
 
-    const clearHi = () => { while (svg.firstChild) svg.removeChild(svg.firstChild) }
+    // --- draggable threshold lines (Tier 0): persistent, inverted via AxisTransform on release ---
+    const setLine = (line: SVGLineElement, tg: ThresholdGeometry, pos: number) => {
+        const [lo, hi] = tg.span
+        const [x1, y1, x2, y2] = tg.orientation === "h" ? [lo, pos, hi, pos] : [pos, lo, pos, hi]
+        line.setAttribute("x1", String(x1)); line.setAttribute("y1", String(y1))
+        line.setAttribute("x2", String(x2)); line.setAttribute("y2", String(y2))
+    }
+    const thresholdLines = new Map<string, SVGLineElement>()
+    for (const layer of manifest.layers) {
+        if (layer.kind !== "threshold") continue
+        const tg = layer.geometry as ThresholdGeometry
+        const line = document.createElementNS(SVG_NS, "line")
+        setLine(line, tg, tg.pos)
+        const st = layer.style ?? { stroke: "#ff3b30", width: 3 }
+        line.setAttribute("stroke", st.stroke); line.setAttribute("stroke-width", String(st.width))
+        line.setAttribute("vector-effect", "non-scaling-stroke")
+        svg.appendChild(line) // sibling of hiGroup → never hover-cleared
+        thresholdLines.set(layer.id, line)
+    }
+
+    interface Drag { id: string; line: SVGLineElement; tg: ThresholdGeometry; t: AxisTransform }
+    let drag: Drag | null = null
+    const clampX = (t: AxisTransform, x: number) => Math.max(t.viewport[0], Math.min(t.viewport[0] + t.viewport[2], x))
+    const clampY = (t: AxisTransform, y: number) => Math.max(t.viewport[1], Math.min(t.viewport[1] + t.viewport[3], y))
+
+    const clearHi = () => { while (hiGroup.firstChild) hiGroup.removeChild(hiGroup.firstChild) }
 
     const drawHi = (hit: Hit) => {
         clearHi()
@@ -86,7 +115,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         el.setAttribute("stroke", st.stroke)
         el.setAttribute("stroke-width", String(st.width))
         el.setAttribute("vector-effect", "non-scaling-stroke")
-        svg.appendChild(el)
+        hiGroup.appendChild(el)
     }
 
     const showTip = (hit: Hit, x: number, y: number, e: MouseEvent) => {
@@ -108,12 +137,43 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     }
 
     const onMove = (e: MouseEvent) => {
+        if (drag) return // window-level onDrag owns the pointer mid-drag
         const p = imgPx(e)
+        if (hitTest(manifest, p.x, p.y, "drag")) { clearHi(); tip.style.display = "none"; surface.classList.add("grab"); surface.classList.remove("hot"); return }
+        surface.classList.remove("grab")
         const hit = hitTest(manifest, p.x, p.y, "hover")
         if (hit) { drawHi(hit); showTip(hit, p.x, p.y, e); surface.classList.add("hot") }
         else { clearHi(); tip.style.display = "none"; surface.classList.remove("hot") }
     }
     const onLeave = () => { clearHi(); tip.style.display = "none" }
+    const onDown = (e: MouseEvent) => {
+        const p = imgPx(e)
+        const hit = hitTest(manifest, p.x, p.y, "drag")
+        if (!hit || hit.layer.kind !== "threshold") return
+        const line = thresholdLines.get(hit.layer.id)
+        if (!line) return
+        drag = { id: hit.layer.id, line, tg: hit.layer.geometry as ThresholdGeometry, t: manifest.transforms[hit.layer.axis] }
+        surface.classList.add("grabbing")
+        e.preventDefault()
+    }
+    const onDrag = (e: MouseEvent) => {
+        if (!drag) return
+        const p = imgPx(e)
+        const pos = drag.tg.orientation === "h" ? clampY(drag.t, p.y) : clampX(drag.t, p.x)
+        setLine(drag.line, drag.tg, pos)
+        const v = invertAxis(drag.t, clampX(drag.t, p.x), clampY(drag.t, p.y))
+        tip.textContent = fmt(drag.tg.orientation === "h" ? v.y : v.x)
+        tip.style.display = "block"; tip.style.left = `${e.offsetX}px`; tip.style.top = `${e.offsetY}px`
+    }
+    const onUp = (e: MouseEvent) => {
+        if (!drag) return
+        const p = imgPx(e)
+        const v = invertAxis(drag.t, clampX(drag.t, p.x), clampY(drag.t, p.y))
+        ;(host as unknown as { value: unknown }).value = { layer: drag.id, index: 0, payload: drag.tg.orientation === "h" ? v.y : v.x }
+        host.dispatchEvent(new CustomEvent("input"))
+        tip.style.display = "none"; surface.classList.remove("grabbing")
+        drag = null
+    }
     const onClick = (e: MouseEvent) => {
         const p = imgPx(e)
         const hit = hitTest(manifest, p.x, p.y, "click")
@@ -126,6 +186,9 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     surface.addEventListener("mousemove", onMove)
     surface.addEventListener("mouseleave", onLeave)
     surface.addEventListener("click", onClick)
+    surface.addEventListener("mousedown", onDown)
+    window.addEventListener("mousemove", onDrag)
+    window.addEventListener("mouseup", onUp)
 
     // persistent selected-state from the manifest (re-derived each render)
     for (const layer of manifest.layers) {
@@ -139,6 +202,9 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         surface.removeEventListener("mousemove", onMove)
         surface.removeEventListener("mouseleave", onLeave)
         surface.removeEventListener("click", onClick)
+        surface.removeEventListener("mousedown", onDown)
+        window.removeEventListener("mousemove", onDrag)
+        window.removeEventListener("mouseup", onUp)
         shadowHost.remove()
     }
     invalidation?.then(cleanup)
