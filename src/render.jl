@@ -13,6 +13,32 @@ struct InteractionEvent
     payload::Any
 end
 
+# ---- tooltip styling: tooltip_* kwargs -> CSS custom-property dict (figure-level) ------------
+# Accepts a CSS string or any Makie-convertible color. Only set knobs are emitted; everything else
+# falls through to the overlay's built-in NYT defaults (incl. the dark-mode media query).
+function _css_color(c)
+    c isa AbstractString && return c
+    rgba = Makie.RGBAf(Makie.to_color(c))
+    r, g, b = round(Int, 255 * rgba.r), round(Int, 255 * rgba.g), round(Int, 255 * rgba.b)
+    return rgba.alpha >= 1 ? "rgb($r,$g,$b)" : "rgba($r,$g,$b,$(round(rgba.alpha; digits = 3)))"
+end
+
+function tip_style_dict(;
+        tooltip_bg = nothing, tooltip_color = nothing, tooltip_accent = nothing,
+        tooltip_font = nothing, tooltip_font_size = nothing, tooltip_radius = nothing,
+        tooltip_caret = true,
+    )
+    d = Dict{String, String}()
+    tooltip_bg === nothing || (d["--holo-tip-bg"] = _css_color(tooltip_bg))
+    tooltip_color === nothing || (d["--holo-tip-color"] = _css_color(tooltip_color))
+    tooltip_accent === nothing || (d["--holo-tip-accent"] = _css_color(tooltip_accent))
+    tooltip_font === nothing || (d["--holo-tip-font"] = String(tooltip_font))
+    tooltip_font_size === nothing || (d["--holo-tip-font-size"] = "$(tooltip_font_size)px")
+    tooltip_radius === nothing || (d["--holo-tip-radius"] = "$(tooltip_radius)px")
+    tooltip_caret === false && (d["--holo-tip-caret"] = "none")
+    return d
+end
+
 # ---- manifest assembly (pure; no published_to_js, no Pluto) -----------------
 
 function _layer_dict(i, L::HitLayer)

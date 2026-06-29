@@ -557,4 +557,14 @@ end
         @test seg[2] == Dict("f" => "name")
         @test any(s -> s == Dict("f" => "pop", "spec" => ","), seg)
     end
+
+    @testset "tooltip_* style kwargs" begin
+        @test isempty(Holo.tip_style_dict())                                  # nothing set → empty
+        d = Holo.tip_style_dict(; tooltip_bg = :red, tooltip_font_size = 13, tooltip_caret = false)
+        @test d["--holo-tip-bg"] == "rgb(255,0,0)"                            # Makie color → CSS
+        @test d["--holo-tip-font-size"] == "13px"
+        @test d["--holo-tip-caret"] == "none"
+        @test Holo.tip_style_dict(; tooltip_bg = "#abc")["--holo-tip-bg"] == "#abc"  # CSS string passthrough
+        @test !haskey(Holo.tip_style_dict(; tooltip_bg = :red), "--holo-tip-color")  # unset omitted
+    end
 end
