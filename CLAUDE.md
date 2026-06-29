@@ -7,7 +7,7 @@ plots in Pluto. Browser layer is TypeScript in `frontend/`, bundled by esbuild t
 ## Commands
 - Julia tests: `julia --project=. test/runtests.jl`
 - Frontend gate: `cd frontend && npm run lint && npm run typecheck && npm test && npm run build` (build → `../assets/overlay.js`)
-- Format (Runic, CI-enforced): `julia -e 'using Runic; exit(Runic.main(["--inplace","src","test"]))'`
+- Format (Runic, CI-enforced): `julia -e 'using Runic; exit(Runic.main(["--inplace","src","test","bench"]))'`. **CI's `runic-action` has no `paths:` filter → it checks the WHOLE repo** (incl. `bench/`, `examples/`), and tracks the latest Runic (1.7+); a locally-old Runic can pass a file CI rejects. Format every `.jl` you add, with current Runic.
 - Registry name-clash check: `grep '^name = "X"$' ~/.julia/registries/General/Registry.toml`
 
 ## Gotchas (verified this session)
@@ -28,7 +28,21 @@ plots in Pluto. Browser layer is TypeScript in `frontend/`, bundled by esbuild t
 - To test the local package: `Pkg.develop(path=...)` in a notebook cell (disables Pluto's pkg mgmt).
 - Headless: `Pluto.run(; port=1234, launch_browser=false, require_secret_for_open_links=false, require_secret_for_access=false)`; open `localhost:1234/open?path=…`; click "Run notebook code" to exit Safe preview; export HTML via `localhost:1234/notebookexport?id=…`.
 
+## Profiling → design feedback (standing practice)
+Profiling exists to inform the design, not to sit in a file. The loop is anchored on the committed
+`bench/payload_envelope.jl` + `bench/stress.jl` → `docs/perf-findings.md` pair.
+- **`perf-findings.md` is the single source of every size/latency number.** Other docs (architecture/
+  design/survey/research/roadmap) **cite** it — never restate figures (numbers duplicated across docs
+  drift; one reconciliation already had to fix exactly that).
+- **Re-run + reconcile whenever the wire format changes**: a new interactable kind / geometry layout, a
+  new payload field (e.g. M2.3 tooltips), an encoding change, or an animation/frames slot. Each is a
+  "manifest-shape change" that can invalidate the envelope. Re-run the benches, update `perf-findings.md`
+  (note the commit), then grep the other docs for size/latency claims that now contradict it.
+- Treat each milestone that touches the manifest as re-opening a mini Phase 0 (measure → reconcile) before
+  it's marked done — same gating spirit as M5 spatial-acceleration. A whole-`docs/` reconciliation can be
+  fanned out as a workflow (see how Phase 0 was propagated).
+
 ## Layout
-- Design docs in `docs/` (architecture.md = the contract; frontend-delivery.md = build/delivery decisions). `spike/` is gitignored scratch.
+- Design docs in `docs/` (architecture.md = the contract; perf-findings.md = the measured payload/latency envelope + the single source of those numbers; frontend-delivery.md = build/delivery decisions). `spike/` is gitignored scratch; `bench/` holds the committed, re-runnable benchmarks.
 - Process docs (brainstorming specs, implementation plans) go in `.superpowers/` — gitignored, local-only, not part of the package.
 - Repo folder is `InteractivePlots.jl/` but the package is `Holo` (cosmetic mismatch; remote is `Holo.jl`).

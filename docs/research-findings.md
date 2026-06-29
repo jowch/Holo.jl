@@ -12,7 +12,7 @@
 | Q2 | CairoMakie SVG structure for hit-testing | **Confirmed** | High | SVG is anonymous path-soup with no ids/groups; SVG-native hit-testing is impossible. Manifest is mandatory. |
 | Q3 | Makie projection/layout API | **Confirmed** | High | All assumed APIs exist and are stable in Makie 0.24.x; no renames/deprecations. |
 | Q4 | CairoMakie DPI/resolution scalar | **Confirmed** | High | Fold `device_scaling_factor` (px_per_unit for PNG) into the manifest as the single scene→pixel scalar. |
-| Q5 | @bind round-trip limits | **Partly true** | Medium | Auto-throttling and MsgPack fast-path are real; payload/image-size ceilings are undocumented and must be measured. |
+| Q5 | @bind round-trip limits | **Partly true** | High (measured) | Auto-throttling is real; the MsgPack TypedArray fast-path is real *in Pluto* but does **not** engage for our `Dict{String,Any}` manifest. Ceilings now measured (`perf-findings.md`): the manifest is the scaling wall (50–400 KB typical, multi-MB at high N). |
 
 ## Go / No-go on the core bet
 
@@ -88,13 +88,17 @@ architecture well, since the image is a static DOM node and clicks are the only 
 
 ### Q5 — @bind round-trip limits
 - Pluto auto-throttles: while a cell runs, queued @bind events are discarded and only the latest
-  is sent (lossy, not configurable). Serialization JSON by default, with MsgPack/TypedArray
-  fast-path for large `Vector{UInt8}`/`Vector{Float64}`. **No published numeric limits** on
-  payload or WebSocket message size. Large base64 images cause editor lag; one source says
-  <10 KB (conservative/anecdotal), more plausible working range 10–100 KB+.
-- **Correction:** don't cite hard payload ceilings. Rely on built-in throttling; filter clicks
-  JS-side; prefer MsgPack-friendly return types. Treat image size + latency as quantities to
-  **benchmark**. Weakest-sourced finding (medium confidence).
+  is sent (lossy, not configurable). **No published numeric limits** on payload or WebSocket
+  message size. Large base64 images cause editor lag; one source says <10 KB (conservative/anecdotal),
+  more plausible working range 10–100 KB+.
+- **Correction (now measured — `perf-findings.md`):** our manifest crosses the wire via
+  `published_to_js`, which is **always MsgPack, never JSON**. The TypedArray/binary fast-path engages
+  only for *top-level* typed numeric vectors; our manifest root is `Dict{String,Any}` with `Any[]`
+  layers, so it serializes as **generic MsgPack maps** even though leaf geometry is `Vector{Float32}`
+  — the fast-path does *not* engage. The real envelope: a realistic plot is 50–400 KB total; the
+  manifest (not the PNG) is the O(N)/O(cells) scaling wall and reaches multi-MB at high N. The bond
+  *return* value is tiny, so "prefer MsgPack-friendly return types" is moot — the lever is manifest
+  geometry encoding (`architecture.md` §9), not return-value tuning.
 
 ## Remaining unknowns — resolve with a code spike, not more reading
 1. **Re-render survival (Q1):** minimal CairoMakie-PNG + overlay + @bind cell — does the overlay
@@ -105,9 +109,11 @@ architecture well, since the image is a static DOM node and clicks are the only 
 3. **Manifest pixel accuracy (Q3/Q4):** verify `Makie.project` + `device_scaling_factor` hit
    regions align to within ~1px against the actual PNG across px_per_unit values, multi-axis
    layouts, and after `update_state_before_display!`.
-4. **Payload/latency envelope (Q5):** benchmark base64 sizes (100 KB → several MB) and click
-   round-trip latency to find the editor-lag / responsiveness knee; confirm MsgPack fast-path
-   engages.
+4. **Payload/latency envelope (Q5): RESOLVED — `perf-findings.md`.** Realistic plot 50–400 KB;
+   round-trip 65 ms (tiny) → 335 ms (scatter-10k) → 553 ms (heatmap-1000², 2.13 MB PNG + 4.78 MB
+   manifest); render-bound below ~1 MB, payload-bound above a few MB. The MsgPack TypedArray fast-path
+   was found *not* to engage (generic maps) — the opposite of "confirm fast-path engages". The
+   editor-lag *knee* itself remains deliberately unmeasured (only round-trip latency was).
 5. **SVG viability threshold (Q2):** primitive count at which SVG file size / editor perf
    becomes unacceptable, to set the PNG-vs-SVG switch.
 

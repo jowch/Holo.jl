@@ -51,11 +51,17 @@ Two-layer system:
    JS, never round-trip to Julia for hover.**
 
 Data flow (two streams, asymmetric):
-- **Julia → JS, once per render:** a "hit-region manifest" (JSON) — geometry +
-  payload + style for every declared interactable, emitted atomically with the
-  base image so they can never desync.
+- **Julia → JS, once per render:** a "hit-region manifest" — geometry + payload + style for every
+  declared interactable, emitted atomically with the base image so they can never desync. It crosses
+  the wire via `published_to_js` as **MsgPack** (not inlined JSON). This manifest — *not* the base64
+  PNG — is the scaling wall: O(#hit-elements) (~46 B/element, Float32 geometry) plus O(source-cells)
+  for heatmap/image. A realistic plot is 50–400 KB total and render-bound (~65 ms round-trip); high-N
+  scatter / large grids reach multi-MB and flip to payload-bound (~553 ms at a 4.78 MB heatmap manifest).
+  Measured in `perf-findings.md` — the authoritative source for these numbers; see `architecture.md` §8.
 - **JS → Julia, only on deliberate interaction:** clicks/selections via `@bind`
-  (`dispatchEvent(new Event('input'))`). Hover never crosses this boundary.
+  (`dispatchEvent(new Event('input'))`). Hover never crosses this boundary. The return value
+  (`{layer,index,payload}`) is tiny — never a size factor, so multi-select is a contract change, not a
+  payload concern.
 
 Division of ownership:
 - **Julia owns:** the rendered image + the hit-region manifest (ground truth).
@@ -88,6 +94,11 @@ validate(i::AbstractInteractable, fig)::Union{Nothing,String}  # fail-fast check
 # Element-level: hit-test in pixel space, return index + payload
 struct PointInteractable   <: AbstractInteractable  # Scatter
 struct CellInteractable    <: AbstractInteractable  # Heatmap / image pixels
+#   ^ grid payload ships the full SOURCE-resolution values[] matrix (O(cells)) to power the
+#     (i,j)=value hover — source-bounded, unlike the display-bounded PNG, so a 2000²–4000²
+#     heatmap/image reaches tens of MB (4.78 MB at 1000²). Committed fix: ship values[] only when
+#     the cell's expected on-screen size (display bounded by the Pluto column) is targetable
+#     (≥~1–2 px), else drop → payload {i,j} + @warn; subsumes Image. See architecture.md §8.
 struct SegmentInteractable <: AbstractInteractable  # Lines (nearest-segment in JS)
 
 # Axis-level: hit-test = bbox check, returns data-space (x,y)
@@ -239,6 +250,12 @@ not engineered around.
 > (1) re-render survival of the overlay, (2) click-only round-trip UX,
 > (3) ~1px manifest accuracy across px_per_unit/multi-axis, (4) payload/latency
 > envelope, (5) SVG primitive-count threshold.
+>
+> **Update — (4) RESOLVED by the Phase 0 perf spike (`perf-findings.md`).** The manifest, not the
+> PNG, is the scaling wall: render-bound below ~1 MB total (~65 ms round-trip), payload-bound above a
+> few MB (335 ms scatter-10k → 553 ms heatmap-1000²). Q5's "MsgPack fast-path" was found *not* to
+> engage for our manifest (generic maps, not TypedArray). The editor-lag *knee* itself remains
+> deliberately unmeasured (only round-trip latency was). See also `architecture.md` §8–§9.
 >
 > Original questions, for the record:
 
