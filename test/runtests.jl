@@ -636,4 +636,45 @@ end
         roi2 = ROIInteractable(ax; bounds = (2.0, 8.0, 2.0, 8.0), selects = :pts)
         @test selects(roi2) === :pts
     end
+
+    @testset "selects: manifest field + selector validation (M4 Task 3)" begin
+        pts_i = PointInteractable(ax, [(1.0, 1.0), (5.0, 5.0)]; id = :pts)
+        seg_i = SegmentInteractable(ax, [(1.0, 1.0), (5.0, 5.0)]; id = :segs)
+        roi_bare = ROIInteractable(ax; bounds = (2.0, 8.0, 2.0, 8.0))
+        roi_linked = ROIInteractable(ax; bounds = (2.0, 8.0, 2.0, 8.0), selects = :pts)
+
+        # ROI without selects: no "selects" key in layer dict
+        @test !haskey(build_manifest([roi_bare], ctx)["layers"][1], "selects")
+
+        # ROI with selects = :pts: "selects" => "pts" in layer dict; circles layer gets no "selects"
+        layers_sel = build_manifest([pts_i, roi_linked], ctx)["layers"]
+        roi_d = filter(l -> l["kind"] == "roi", layers_sel) |> only
+        @test roi_d["selects"] == "pts"
+        @test !haskey(filter(l -> l["kind"] == "circles", layers_sel) |> only, "selects")
+
+        # Validation: target layer absent → ArgumentError
+        @test_throws ArgumentError build_manifest(
+            [ROIInteractable(ax; bounds = (2.0, 8.0, 2.0, 8.0), selects = :ghost)], ctx
+        )
+
+        # did-you-mean: :pt is within edit-distance 2 of :pts → suggestion appears in error message
+        err = try
+            build_manifest(
+                [pts_i, ROIInteractable(ax; bounds = (2.0, 8.0, 2.0, 8.0), selects = :pt)], ctx
+            )
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError && occursin("pts", err.msg)
+
+        # Validation: target exists but kind not in compatible_kinds (:polyline ∉ (:circles,:grid)) → error
+        @test_throws ArgumentError build_manifest(
+            [seg_i, ROIInteractable(ax; bounds = (2.0, 8.0, 2.0, 8.0), selects = :segs)], ctx
+        )
+
+        # happy path: valid selects → manifest ROI layer carries "selects"; no error thrown
+        m_ok = build_manifest([pts_i, roi_linked], ctx)
+        @test filter(l -> l["kind"] == "roi", m_ok["layers"]) |> only |> l -> l["selects"] == "pts"
+    end
 end
