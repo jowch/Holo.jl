@@ -55,7 +55,7 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 
 ## M5 — Scale & polish
 - [ ] **Spatial acceleration** (quadtree/grid) for large-N hit-testing — only when the documented O(n) ceiling is actually hit (`log()` the cap until then).
-- [ ] **Perf benchmarking**: the unmeasured Q5 envelope — base64 size + click latency knee; confirm MsgPack fast-path engages.
+- [x] **Perf benchmarking**: the unmeasured Q5 envelope — base64 size + click latency knee; confirm MsgPack fast-path engages. *Done (`bench/payload_envelope.jl` → `docs/perf-findings.md`): single plots 50–400 KB, manifest O(N) elements, heatmaps O(cells), animation = frames × PNG (the hard ceiling, 7–29 MB). MsgPack confirmed (generic maps, not the TypedArray fast-path). Full click round-trip measured live (headless Pluto + Chromium): ~65 ms median — render-bound, browser overhead negligible. Editor-lag knee (editor stutter, distinct from latency) deferred.*
 - [ ] **Theming**: respect Pluto light/dark for highlight/tooltip styling (shadow-DOM scoped).
 - [ ] **GLMakie-static backend**: GPU offscreen → PNG, same `AbstractBackend` contract (for envs with a GPU).
 - [ ] **Register in General** once the API stabilizes (CHANGELOG → 0.1.0 tag → Registrator/TagBot).
@@ -69,7 +69,7 @@ renderer — that's **WGLMakie's** domain, a different product. Holo stays stati
 
 ## Suggested order
 
-Done: M1 · M2.1/M2.2 · M3 cheap-wins · M4 drag. What remains, sequenced for a polished
+Done: M1 · M2.1/M2.2 · M3 cheap-wins · M4 drag · Phase 0 measure. What remains, sequenced for a polished
 (not-MVP) first release. The order is driven by four real dependency edges, not by milestone
 number — everything else is reorderable by demand.
 
@@ -87,10 +87,19 @@ number — everything else is reorderable by demand.
   more surfaces on it. Preserve the "never `Nothing`" invariant (empty vector, not nothing).
 - **Everything → registration.** Last, after the API stops moving.
 
-### Phase 0 — Measure (front-loaded spike)
-- **Perf benchmarking** — base64 size knee (10–100 KB+ plausible, unmeasured), click round-trip
-  latency, confirm MsgPack fast-path engages. A spike, not a feature; it *bounds the scope* of
-  tooltips/animation/SVG below. The roadmap files this under M5 but the docs put it early.
+### Phase 0 — Measure (front-loaded spike) ✅ *done*
+- **Perf benchmarking** — *Done. See `docs/perf-findings.md` (`bench/payload_envelope.jl` to
+  re-run).* The envelope: single interactive plots land 50–400 KB (at/just above Q5's plausible
+  band, not below the <10 KB anecdote); manifest is O(N) elements (~58 B/elem) and O(cells) for
+  heatmaps; **animation = frames × per-frame PNG is the hard ceiling (7–29 MB) — gate it.** Tooltip
+  budget: <~200 B/element at N≈1 000. MsgPack confirmed (generic maps; geometry doesn't hit the
+  TypedArray fast-path because the root is `Dict{String,Any}`). Full click round-trip measured
+  live (headless Pluto + Chromium): **~65 ms median** (render-bound; browser/websocket overhead is
+  ~tens of ms). Only the editor-lag *knee* (editor stutter at MB-scale output, distinct from
+  latency) is deferred — a cheap follow-up if animation ships. **Stress-tested to the extremes:**
+  round-trip is render-bound below ~1 MB but flips to *payload-bound* above a few MB (1000² heatmap:
+  2.13 MB PNG + 8.6 MB manifest → 553 ms, mostly serialize+transfer). The manifest (O(N) elements,
+  O(cells) heatmaps) is the high-N wall, not the PNG — it degrades gracefully, nothing breaks.
 
 ### Phase 1 — Foundations that unblock the rest
 - **M2.3 Richer tooltips** — pre-serialized per-element HTML/template; extends the existing
