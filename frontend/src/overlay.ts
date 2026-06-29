@@ -1,7 +1,7 @@
 // DOM layer: builds a shadow-root overlay over the (light-DOM) base image, wires hover/click,
 // draws highlights, and round-trips clicks through the @bind element. Stateless across re-render.
 import { hitTest, invertAxis, resolvePayload } from "./geometry"
-import type { AxisTransform, Hit, Manifest, ThresholdGeometry } from "./types"
+import type { AxisTransform, Hit, Manifest, ThresholdGeometry, ROIGeometry } from "./types"
 
 const SVG_NS = "http://www.w3.org/2000/svg"
 
@@ -78,7 +78,48 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         thresholdLines.set(layer.id, line)
     }
 
-    interface Drag { id: string; line: SVGLineElement; tg: ThresholdGeometry; t: AxisTransform }
+    // --- draggable + resizable ROI boxes (Tier 0) ---
+    interface ROIBox { rect: SVGRectElement; handles: SVGRectElement[]; g: { x: number; y: number; w: number; h: number }; handle: number; t: AxisTransform }
+    const setROI = (box: ROIBox) => {
+        const { x, y, w, h } = box.g
+        box.rect.setAttribute("x", String(x)); box.rect.setAttribute("y", String(y))
+        box.rect.setAttribute("width", String(w)); box.rect.setAttribute("height", String(h))
+        const corners = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]
+        for (let k = 0; k < 4; k++) {
+            box.handles[k].setAttribute("x", String(corners[k][0] - box.handle))
+            box.handles[k].setAttribute("y", String(corners[k][1] - box.handle))
+            box.handles[k].setAttribute("width", String(2 * box.handle))
+            box.handles[k].setAttribute("height", String(2 * box.handle))
+        }
+    }
+    const roiBounds = (box: ROIBox) => {
+        const a = invertAxis(box.t, box.g.x, box.g.y), b = invertAxis(box.t, box.g.x + box.g.w, box.g.y + box.g.h)
+        const ax = a.x as number, bx = b.x as number, ay = a.y as number, by = b.y as number
+        return { xmin: Math.min(ax, bx), xmax: Math.max(ax, bx), ymin: Math.min(ay, by), ymax: Math.max(ay, by) }
+    }
+    const roiBoxes = new Map<string, ROIBox>()
+    for (const layer of manifest.layers) {
+        if (layer.kind !== "roi") continue
+        const rg = layer.geometry as ROIGeometry
+        const st = layer.style ?? { stroke: "#ff3b30", width: 3 }
+        const rect = document.createElementNS(SVG_NS, "rect")
+        rect.setAttribute("fill", "none"); rect.setAttribute("stroke", st.stroke)
+        rect.setAttribute("stroke-width", String(st.width)); rect.setAttribute("vector-effect", "non-scaling-stroke")
+        svg.appendChild(rect)
+        const handles: SVGRectElement[] = []
+        for (let k = 0; k < 4; k++) {
+            const hdl = document.createElementNS(SVG_NS, "rect")
+            hdl.setAttribute("fill", st.stroke)
+            svg.appendChild(hdl); handles.push(hdl)
+        }
+        const box: ROIBox = { rect, handles, g: { x: rg.x, y: rg.y, w: rg.w, h: rg.h }, handle: rg.handle, t: manifest.transforms[layer.axis] }
+        setROI(box)
+        roiBoxes.set(layer.id, box)
+    }
+
+    type Drag =
+        | { kind: "threshold"; id: string; line: SVGLineElement; tg: ThresholdGeometry; t: AxisTransform }
+        | { kind: "roi"; id: string; box: ROIBox; mode: { corner: number } | { move: true }; ax: number; ay: number }
     let drag: Drag | null = null
     let justDragged = false
     const clampX = (t: AxisTransform, x: number) => Math.max(t.viewport[0], Math.min(t.viewport[0] + t.viewport[2], x))
@@ -151,27 +192,61 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         justDragged = false
         const p = imgPx(e)
         const hit = hitTest(manifest, p.x, p.y, "drag")
-        if (!hit || hit.layer.kind !== "threshold") return
-        const line = thresholdLines.get(hit.layer.id)
-        if (!line) return
-        drag = { id: hit.layer.id, line, tg: hit.layer.geometry as ThresholdGeometry, t: manifest.transforms[hit.layer.axis] }
+        if (!hit) return
+        if (hit.layer.kind === "threshold") {
+            const line = thresholdLines.get(hit.layer.id)
+            if (!line) return
+            drag = { kind: "threshold", id: hit.layer.id, line, tg: hit.layer.geometry as ThresholdGeometry, t: manifest.transforms[hit.layer.axis] }
+        } else if (hit.layer.kind === "roi" && hit.roiPart) {
+            const box = roiBoxes.get(hit.layer.id)
+            if (!box) return
+            if (hit.roiPart.move) {
+                drag = { kind: "roi", id: hit.layer.id, box, mode: { move: true }, ax: p.x - box.g.x, ay: p.y - box.g.y }
+            } else {
+                const k = hit.roiPart.corner as number
+                const c = [[box.g.x, box.g.y], [box.g.x + box.g.w, box.g.y], [box.g.x + box.g.w, box.g.y + box.g.h], [box.g.x, box.g.y + box.g.h]]
+                const opp = c[(k + 2) % 4]
+                drag = { kind: "roi", id: hit.layer.id, box, mode: { corner: k }, ax: opp[0], ay: opp[1] }
+            }
+        } else return
         surface.classList.add("grabbing")
         e.preventDefault()
     }
     const onDrag = (e: MouseEvent) => {
         if (!drag) return
         const p = imgPx(e)
-        const pos = drag.tg.orientation === "h" ? clampY(drag.t, p.y) : clampX(drag.t, p.x)
-        setLine(drag.line, drag.tg, pos)
-        const v = invertAxis(drag.t, clampX(drag.t, p.x), clampY(drag.t, p.y))
-        tip.textContent = fmt(drag.tg.orientation === "h" ? v.y : v.x)
+        if (drag.kind === "threshold") {
+            const pos = drag.tg.orientation === "h" ? clampY(drag.t, p.y) : clampX(drag.t, p.x)
+            setLine(drag.line, drag.tg, pos)
+            const v = invertAxis(drag.t, clampX(drag.t, p.x), clampY(drag.t, p.y))
+            tip.textContent = fmt(drag.tg.orientation === "h" ? v.y : v.x)
+        } else {
+            const box = drag.box, [vx, vy, vw, vh] = box.t.viewport
+            if ("move" in drag.mode) {
+                box.g.x = Math.max(vx, Math.min(vx + vw - box.g.w, p.x - drag.ax))
+                box.g.y = Math.max(vy, Math.min(vy + vh - box.g.h, p.y - drag.ay))
+            } else {
+                const cx = clampX(box.t, p.x), cy = clampY(box.t, p.y)
+                box.g.x = Math.min(drag.ax, cx); box.g.y = Math.min(drag.ay, cy)
+                box.g.w = Math.abs(cx - drag.ax); box.g.h = Math.abs(cy - drag.ay)
+            }
+            setROI(box)
+            const b = roiBounds(box)
+            tip.textContent = `x:[${fmt(b.xmin)}, ${fmt(b.xmax)}] y:[${fmt(b.ymin)}, ${fmt(b.ymax)}]`
+        }
         tip.style.display = "block"; tip.style.left = `${e.offsetX}px`; tip.style.top = `${e.offsetY}px`
     }
     const onUp = (e: MouseEvent) => {
         if (!drag) return
         const p = imgPx(e)
-        const v = invertAxis(drag.t, clampX(drag.t, p.x), clampY(drag.t, p.y))
-        ;(host as unknown as { value: unknown }).value = { layer: drag.id, index: 0, payload: drag.tg.orientation === "h" ? v.y : v.x }
+        let payload: unknown
+        if (drag.kind === "threshold") {
+            const v = invertAxis(drag.t, clampX(drag.t, p.x), clampY(drag.t, p.y))
+            payload = drag.tg.orientation === "h" ? v.y : v.x
+        } else {
+            payload = roiBounds(drag.box)
+        }
+        ;(host as unknown as { value: unknown }).value = { layer: drag.id, index: 0, payload }
         host.dispatchEvent(new CustomEvent("input"))
         tip.style.display = "none"; surface.classList.remove("grabbing")
         justDragged = true
