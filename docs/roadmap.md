@@ -90,8 +90,8 @@ number — everything else is reorderable by demand.
 ### Phase 0 — Measure (front-loaded spike) ✅ *done*
 - **Perf benchmarking** — *Done. See `docs/perf-findings.md` (`bench/payload_envelope.jl` to
   re-run).* The envelope: single interactive plots land 50–400 KB (at/just above Q5's plausible
-  band, not below the <10 KB anecdote); manifest is O(N) elements (~38 B/elem with int-pixel geometry)
-  and O(cells) for heatmaps; **animation = frames × per-frame PNG is the hard ceiling (5.5–22 MB) — gate it.** Tooltip
+  band, not below the <10 KB anecdote); manifest is O(N) elements (int-pixel geometry; per-element bytes
+  in `perf-findings.md`) and O(cells) for heatmaps; **animation = frames × per-frame PNG is the hard ceiling (5.5–22 MB) — gate it.** Tooltip
   budget: <~200 B/element at N≈1 000. MsgPack confirmed (generic maps; geometry doesn't hit the
   TypedArray fast-path because the root is `Dict{String,Any}`). Full click round-trip measured
   live (headless Pluto + Chromium): **~65 ms median** (render-bound; browser/websocket overhead is

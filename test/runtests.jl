@@ -66,14 +66,36 @@ end
     end
 
     @testset "geometry quantized to integer pixels" begin
-        # per-element geometry ships as Int (1–3 B/coord in MsgPack vs Float32's 5) — architecture.md §9.
+        # finite per-element geometry ships as Int (1–3 B/coord in MsgPack vs Float32's 5) — architecture.md §9.
+        # Containers are Real[] (so non-finite coords can pass through), so assert the *values*, not eltype.
+        allint(g) = all(x -> !isfinite(x) || x isa Integer, g)   # finite coords are Int
         L = only(hitlayers(PointInteractable(ax, pts), ctx))
-        @test eltype(L.geometry) == Int
+        @test allint(L.geometry)
         q = data_to_image_px(ctx, ax, pts[1])
         @test L.geometry[1] == round(Int, q[1]) && L.geometry[2] == round(Int, q[2])  # within ≤0.5px of the projection
+        @test allint(only(hitlayers(SegmentInteractable(ax, pts), ctx)).geometry)
+        @test allint(only(hitlayers(RectInteractable(ax; rects = [(2.0, 5.0, 1.0, 2.0)]), ctx)).geometry)
+        @test allint(only(hitlayers(PolygonInteractable(ax, [[(1.0, 1.0), (2.0, 4.0), (3.0, 1.0)]]), ctx)).geometry[1])
+        # grid edges are quantized too — the sub-pixel cap math reads these Int edges
+        gridL = only(hitlayers(RectInteractable(ax; grid = (0.5:1:3.5, 0.5:1:3.5, rand(3, 3))), ctx))
+        @test allint(gridL.geometry["xedges"]) && allint(gridL.geometry["yedges"])
         # AxisTransform stays Float64 — the drag path inverts pixel→data through it (must not quantize)
         @test ctx.transforms[:ax1].viewport[3] isa Float64
-        @test eltype(only(hitlayers(SegmentInteractable(ax, pts), ctx)).geometry) == Int
+    end
+
+    @testset "non-finite projection degrades, never crashes" begin
+        # element layers are un-gated on scale (architecture.md §3); a log out-of-domain point projects to
+        # NaN/±Inf. `_q` must pass it through (round(Int, NaN) throws) so holo degrades, not crashes.
+        finite_int(g) = all(x -> !isfinite(x) || x isa Integer, g)
+        flog = Figure(); axlog = Axis(flog[1, 1]; xscale = log10)
+        scatter!(axlog, [1.0, 10.0], [1.0, 10.0])
+        _, _, clog = ctx_for(flog)
+        L = only(hitlayers(PointInteractable(axlog, [(-5.0, 1.0), (1.0, 1.0)]), clog))  # x=-5 out of log domain
+        @test length(L.geometry) == 6      # reaching here = no InexactError crash (the regression)
+        @test finite_int(L.geometry)       # the in-domain point still quantizes to Int
+        # :polyline NaN-gap sentinel (types.ts) survives quantization — stays NaN, doesn't crash/round
+        seg = only(hitlayers(SegmentInteractable(ax, [(1.0, 1.0), (NaN, NaN), (3.0, 3.0)]), ctx))
+        @test any(isnan, seg.geometry) && finite_int(seg.geometry)
     end
 
     @testset "validate is per-capability" begin

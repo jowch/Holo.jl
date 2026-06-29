@@ -54,8 +54,8 @@ Data flow (two streams, asymmetric):
 - **Julia → JS, once per render:** a "hit-region manifest" — geometry + payload + style for every
   declared interactable, emitted atomically with the base image so they can never desync. It crosses
   the wire via `published_to_js` as **MsgPack** (not inlined JSON). This manifest — *not* the base64
-  PNG — is the scaling wall: O(#hit-elements) (~38 B/element, with int-pixel geometry) plus O(source-cells)
-  for heatmap/image (capped when cells are sub-pixel, §8). A realistic plot is 50–400 KB total and
+  PNG — is the scaling wall: O(#hit-elements) (int-pixel geometry; per-element bytes in `perf-findings.md`)
+  plus O(source-cells) for heatmap/image (capped when cells are sub-pixel, §8). A realistic plot is 50–400 KB total and
   render-bound (~65 ms round-trip); high-N scatter reaches multi-MB and flips to payload-bound (200k pts
   → 7.72 MB manifest).
   Measured in `perf-findings.md` — the authoritative source for these numbers; see `architecture.md` §8.
