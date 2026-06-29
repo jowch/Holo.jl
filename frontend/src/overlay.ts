@@ -1,6 +1,7 @@
 // DOM layer: builds a shadow-root overlay over the (light-DOM) base image, wires hover/click,
 // draws highlights, and round-trips clicks through the @bind element. Stateless across re-render.
 import { hitTest, invertAxis, resolvePayload } from "./geometry"
+import { renderTemplate, renderAutoTable, esc } from "./template"
 import type { AxisTransform, Hit, Manifest, ThresholdGeometry, ROIGeometry } from "./types"
 
 const SVG_NS = "http://www.w3.org/2000/svg"
@@ -12,9 +13,25 @@ const STYLE = `
 .surface.grab { cursor: grab; }
 .surface.grabbing { cursor: grabbing; }
 svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.tip { position: absolute; display: none; padding: 2px 6px; font: 12px sans-serif;
-       background: #111; color: #fff; border-radius: 4px; pointer-events: none;
-       transform: translate(8px, 8px); white-space: nowrap; z-index: 10; }
+.holo-tip { position: absolute; display: none; pointer-events: none; z-index: 10;
+       padding: var(--holo-tip-padding, 8px 12px); border-radius: var(--holo-tip-radius, 4px);
+       background: var(--holo-tip-bg, #ffffff); color: var(--holo-tip-color, #1a1a1a);
+       border: 1px solid var(--holo-tip-border, rgba(0,0,0,0.1));
+       box-shadow: var(--holo-tip-shadow, 0 2px 4px rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.08));
+       font: var(--holo-tip-font-size, 11px)/1.4 var(--holo-tip-font, system-ui, -apple-system, sans-serif);
+       max-width: var(--holo-tip-maxwidth, 320px); white-space: normal; transform: translate(10px, 10px); }
+.holo-tip::before { content: ""; position: absolute; top: -5px; left: 8px;
+       border: 5px solid transparent; border-top: none; border-bottom-color: var(--holo-tip-bg, #ffffff);
+       display: var(--holo-tip-caret, block); }
+.holo-tip-row { display: flex; gap: 8px; justify-content: space-between; }
+.holo-tip-key { color: var(--holo-tip-accent, #6b7280); }
+.holo-tip-val { font-variant-numeric: tabular-nums; }
+@media (prefers-color-scheme: dark) {
+  .holo-tip { background: var(--holo-tip-bg, #1e1e1e); color: var(--holo-tip-color, #e8e8e8);
+       border-color: var(--holo-tip-border, rgba(255,255,255,0.15));
+       box-shadow: var(--holo-tip-shadow, 0 2px 4px rgba(0,0,0,0.4), 0 8px 16px rgba(0,0,0,0.3)); }
+  .holo-tip::before { border-bottom-color: var(--holo-tip-bg, #1e1e1e); }
+}
 `
 
 interface Mounted {
@@ -48,9 +65,10 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     const surface = document.createElement("div")
     surface.className = "surface"
     const tip = document.createElement("div")
-    tip.className = "tip"
+    tip.className = "holo-tip"
     shadow.append(style, svg, surface, tip)
     host.appendChild(shadowHost)
+    if (manifest.tipStyle) for (const [k, v] of Object.entries(manifest.tipStyle)) shadowHost.style.setProperty(k, v)
 
     const imgPx = (e: MouseEvent) => {
         const r = img.getBoundingClientRect()
@@ -161,18 +179,20 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     }
 
     const showTip = (hit: Hit, x: number, y: number, e: MouseEvent) => {
-        let txt = hit.layer.tooltips?.[hit.index] ?? null
-        if (txt == null) {
-            if (hit.grid) txt = hit.grid[2] === undefined ? `(${hit.grid[0]},${hit.grid[1]})` : `(${hit.grid[0]},${hit.grid[1]}) = ${hit.grid[2]}`
-            else if (hit.axis) {
-                const v = resolvePayload(hit, manifest, x, y) as { x: unknown; y: unknown }
-                txt = `x=${fmt(v.x)}, y=${fmt(v.y)}`
-            } else {
-                const pl = hit.layer.payloads[hit.index]
-                txt = pl && typeof pl === "object" ? JSON.stringify(pl) : String(pl)
-            }
+        const layer = hit.layer
+        if (layer.tooltip === false) { tip.style.display = "none"; return }
+        let html: string
+        if (layer.template) {
+            html = renderTemplate(layer.template, resolvePayload(hit, manifest, x, y))
+        } else if (hit.grid) {
+            html = hit.grid[2] === undefined ? `(${hit.grid[0]},${hit.grid[1]})` : `(${hit.grid[0]},${hit.grid[1]}) = ${esc(hit.grid[2])}`
+        } else if (hit.axis) {
+            const v = resolvePayload(hit, manifest, x, y) as { x: unknown; y: unknown }
+            html = `x=${esc(fmt(v.x))}, y=${esc(fmt(v.y))}`
+        } else {
+            html = renderAutoTable(hit.layer.payloads[hit.index])
         }
-        tip.textContent = txt
+        tip.innerHTML = html
         tip.style.display = "block"
         tip.style.left = `${e.offsetX}px`
         tip.style.top = `${e.offsetY}px`

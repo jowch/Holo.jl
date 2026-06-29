@@ -61,7 +61,8 @@ export interface HitLayer {
     axis: string
     events: string[] // "click" | "hover" | "drag"
     style?: LayerStyle
-    tooltips?: (string | null)[]
+    template?: TemplateSegment[] // holo"..." parsed once per layer; $() fields fill from payloads[]
+    tooltip?: false              // explicit suppress; absent + no template → auto name/value table
     selected?: number[] // element indices to draw pre-highlighted on mount
 }
 
@@ -71,6 +72,7 @@ export interface Manifest {
     scaling: number
     layers: HitLayer[]
     transforms: Record<string, AxisTransform>
+    tipStyle?: Record<string, string> // figure-level --holo-tip-* custom properties
 }
 
 export interface Hit {
