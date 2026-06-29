@@ -167,7 +167,7 @@ under each scheme — replacing theoretical byte math with measured wire bytes:
 | capped → `{i,j}` only | 9.8 KB (**499× smaller**) |
 
 Both wins **shipped**: the `values[]` cap in `52f174c` (PR #8), and **int-pixel geometry quantization
-in `7f0e633`** (this PR — element geometry vectors are `Int`, `architecture.md §9`). The
+in PR #9** (element geometry vectors are `Int`, `architecture.md §9`). The
 experiment's −58%/2.10-B-per-coord is the *geometry-term* saving; on a whole realistic manifest (where
 the payload's Float64 `x`/`y` dilute it) it lands ~17 % — see the envelope table. AxisTransform stays
 Float64. The measured experiment numbers above are unchanged — they just describe what now ships.
