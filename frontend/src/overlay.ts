@@ -163,7 +163,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     const showTip = (hit: Hit, x: number, y: number, e: MouseEvent) => {
         let txt = hit.layer.tooltips?.[hit.index] ?? null
         if (txt == null) {
-            if (hit.grid) txt = `(${hit.grid[0]},${hit.grid[1]}) = ${hit.grid[2]}`
+            if (hit.grid) txt = hit.grid[2] === undefined ? `(${hit.grid[0]},${hit.grid[1]})` : `(${hit.grid[0]},${hit.grid[1]}) = ${hit.grid[2]}`
             else if (hit.axis) {
                 const v = resolvePayload(hit, manifest, x, y) as { x: unknown; y: unknown }
                 txt = `x=${fmt(v.x)}, y=${fmt(v.y)}`

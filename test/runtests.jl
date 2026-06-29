@@ -85,6 +85,17 @@ end
         @test length(L.geometry["xedges"]) == 21 && length(L.geometry["values"]) == 600
     end
 
+    @testset "RectInteractable grid drops sub-pixel values[]" begin
+        # 1000² grid on a ~700px column → ~0.7 px/cell on screen, below the targetability floor:
+        # ship edges+dims (hit-testing needs only those), drop the source-resolution values[] matrix.
+        fb = Figure(); axb = Axis(fb[1, 1]); zb = rand(Float32, 1000, 1000); heatmap!(axb, zb)
+        _, _, ctxb = ctx_for(fb)
+        L = (@test_logs (:warn, r"sub-pixel"i) only(hitlayers(RectInteractable(axb; grid = (0.5:1:1000.5, 0.5:1:1000.5, zb)), ctxb)))
+        @test L.kind === :grid
+        @test L.geometry["ncols"] == 1000 && length(L.geometry["xedges"]) == 1001  # hit-test still works
+        @test !haskey(L.geometry, "values")                                        # the unbounded term is gone
+    end
+
     @testset "fail loud on unsupported axis types" begin
         for mk in (Makie.PolarAxis, Axis3, LScene)
             fu = Figure(); mk(fu[1, 1])

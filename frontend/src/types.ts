@@ -17,7 +17,7 @@ export interface GridGeometry {
     yedges: number[]
     ncols: number
     nrows: number
-    values: number[] // row-major: values[j*ncols + i]
+    values?: number[] // row-major: values[j*ncols + i]; absent when dropped for sub-pixel cells (Julia GRID_VALUES_MIN_SCREEN_PX)
 }
 
 export interface ThresholdGeometry {
@@ -75,7 +75,7 @@ export interface Hit {
     layer: HitLayer
     index: number // -1 for axis (continuous)
     geom?: unknown[] // shape descriptor for highlight drawing
-    grid?: [number, number, number] // [i, j, value]
+    grid?: [number, number, number?] // [i, j, value]; value absent when values[] was dropped
     axis?: string // transform id, for continuous inversion
     roiPart?: { corner?: number; move?: boolean } // which sub-part of an :roi a drag grabbed
 }

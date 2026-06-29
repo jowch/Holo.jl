@@ -337,12 +337,12 @@ multi-MB and flip to **payload-bound** (~290 ms serialize+transfer at a 4.78 MB 
 for a 1000² heatmap). Nothing crashes — it degrades into the half-second range — but tens of MB would lag
 the Pluto editor.
 
-**Robustness to large inputs (assume a user *will* do this) — committed fix.** We ship a tool to
+**Robustness to large inputs (assume a user *will* do this) — implemented.** We ship a tool to
 Pluto/Makie users, so assume someone overlays `holo` on a 2000²–4000² `heatmap!`/`image!` *because they
 can*. The PNG is safe (display-bounded), but the `:grid` `values[]` matrix is **source-bounded**, so that
 routine input ships tens of MB of redundant numbers on top of the PNG that already shows them — and the
-user's matrix already lives in their Julia session. Today `values[]` ships unconditionally (it powers the
-no-round-trip `(i,j)=value` hover).
+user's matrix already lives in their Julia session. `values[]` exists only to power the no-round-trip
+`(i,j)=value` hover, so it is dropped when the hover can't target a cell:
 
 **The cap criterion: compute the cell's *expected on-screen* size on the fly, and drop `values[]` when it's
 sub-pixel.** A Pluto output cell is only so wide — the display is **bounded by the column** (`max_width`,
@@ -361,7 +361,9 @@ true runtime scale via `getBoundingClientRect`, so the estimate only gates ship/
 display-res → sub-pixel → auto-dropped), so no separate rule is needed. When dropped, the payload falls back
 to `{i,j}` (the click still localizes the region) and a one-time `@warn` fires (fail-loud). Measured size
 benefit: 499× smaller at 1000² (`perf-findings.md`). M2.3 owns the `{i,j,value}` payload shape, but the cap
-is decoupled and can ship independently.
+is decoupled and ships independently. *Implemented:* `src/interactables.jl` (`GRID_VALUES_MIN_SCREEN_PX`,
+the `:grid` hitlayer) gated on `InteractionContext.display_scale` (= `display_css / image_width`, set in
+`context()`); the overlay tolerates an absent `values[]` (hover shows `(i,j)` only).
 
 ## 9. Wire encoding & precision
 

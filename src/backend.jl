@@ -48,6 +48,7 @@ struct InteractionContext
     width::Int
     height::Int
     scaling::Float64
+    display_scale::Float64                  # CSS px per image px on screen (image is rendered above display res)
 end
 
 "the one coordinate primitive interactables call — never re-derive projection"
@@ -100,10 +101,14 @@ function _cats(conv)
     return String[string(c) for (_, c) in sort(conv.int_to_category; by = first)]
 end
 
-function context(::CairoBackend, fig, ppu)
+function context(b::CairoBackend, fig, ppu)
     w, h = size(fig.scene)
     scaling = Float64(ppu)
     out_w, out_h = round(Int, w * scaling), round(Int, h * scaling)
+    # how much the rendered image is downscaled to fit Pluto's column on screen — the same
+    # display_css/image_width ratio the widget HTML uses (render.jl). Lets grid hitlayers reason
+    # in true on-screen px instead of hardcoding the 2× DPI factor.
+    display_scale = min(w, b.max_width) / out_w
 
     project = function (ax, p)
         q = Makie.project(ax.scene, Point2f(Float64(p[1]), Float64(p[2])))
@@ -130,7 +135,7 @@ function context(::CairoBackend, fig, ppu)
         id = Symbol("ax", k); ids[ax] = id
         transforms[id] = _axis_transform(id, ax, scaling, out_h)
     end
-    return InteractionContext(project, transforms, ids, out_w, out_h, scaling)
+    return InteractionContext(project, transforms, ids, out_w, out_h, scaling, display_scale)
 end
 
 function _axis_transform(id, ax, scaling, out_h)

@@ -23,10 +23,28 @@ plots in Pluto. Browser layer is TypeScript in `frontend/`, bundled by esbuild t
 - DPI is derived, not fixed: `px_per_unit = 2·min(scene_width, max_width=700)` (Pluto's column).
 - CI is the **sole author** of `assets/overlay.js` (rebuilds + commits on `main`); committing your local bundle is optional, but a stale committed bundle fails PR CI.
 
+## Live verification (standing practice — not optional)
+Unit/frontend tests assert the manifest and the JS in isolation; they don't prove the rendered
+widget behaves for the user. **Any change that can alter what the user interacts with must be
+live-verified in a real Pluto + browser before it's called done** — and "user-facing" includes
+**backend/Julia-only changes**: the manifest shape, payload contents, hit-test geometry, projection/
+DPI, `@bind` value, hover/tooltip text, and overlay behavior all originate in Julia. The test passing
+is necessary, not sufficient. (E.g. the grid `values[]` cap is a pure-Julia change with no visible
+markup, yet it changes hover text and the bond payload → it gets a live check.)
+- **What "live-verified" means:** open the affected case in headless Pluto, drive it with Playwright
+  (hover/click), and confirm the actual on-screen result — tooltip text, highlight, `@bind` round-trip,
+  no console errors — matches intent. Inspect the real `published_to_js` manifest in-page when the
+  change is about payload shape (a thing the unit tests can't reach — they never call `show`).
+- **Skip only** pure-internal refactors with zero observable delta (and say so). When unsure, it's
+  user-facing — verify.
+- Mechanics below. Reuse `examples/demo.jl`'s dev-the-local-package env cell.
+
 ## Pluto integration testing (slow — minutes)
 - A fresh per-notebook env re-resolves + precompiles the Makie stack (~6 min first open).
 - To test the local package: `Pkg.develop(path=...)` in a notebook cell (disables Pluto's pkg mgmt).
 - Headless: `Pluto.run(; port=1234, launch_browser=false, require_secret_for_open_links=false, require_secret_for_access=false)`; open `localhost:1234/open?path=…`; click "Run notebook code" to exit Safe preview; export HTML via `localhost:1234/notebookexport?id=…`.
+- **Readiness: poll the port (`curl localhost:1234` → 200), not the log** — Pluto doesn't reliably flush its "Go to…" line, so a log-grep readiness loop hangs on a server that's actually up.
+- **Selected/highlight is overlay-drawn, so the PNG is byte-identical across clicks** — don't detect interaction by watching `img.src`; assert the overlay/tooltip/`@bind` value instead (bake state into the figure only if you specifically need the PNG to differ).
 
 ## Profiling → design feedback (standing practice)
 Profiling exists to inform the design, not to sit in a file. The loop is anchored on the committed

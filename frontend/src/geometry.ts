@@ -113,7 +113,7 @@ export function hitLayer(layer: HitLayer, px: number, py: number): Omit<Hit, "la
             const idx = j * gg.ncols + i
             return {
                 index: idx,
-                grid: [i, j, gg.values[idx]],
+                grid: [i, j, gg.values?.[idx]],
                 geom: ["rect", (gg.xedges[i] + gg.xedges[i + 1]) / 2, (gg.yedges[j] + gg.yedges[j + 1]) / 2,
                     Math.abs(gg.xedges[i + 1] - gg.xedges[i]), Math.abs(gg.yedges[j + 1] - gg.yedges[j])],
             }
