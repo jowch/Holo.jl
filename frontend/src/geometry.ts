@@ -1,5 +1,5 @@
 // Pure hit-test math — no DOM. All coordinates are image pixels. Unit-tested in test/geometry.test.ts.
-import type { AxisTransform, GridGeometry, Hit, HitLayer, Manifest } from "./types"
+import type { AxisTransform, GridGeometry, Hit, HitLayer, Manifest, ThresholdGeometry } from "./types"
 
 const HIT_TOL = 4 // px slack for circles/rects
 const SEG_TOL = 8 // px slack for segments/polylines
@@ -117,6 +117,16 @@ export function hitLayer(layer: HitLayer, px: number, py: number): Omit<Hit, "la
                 geom: ["rect", (gg.xedges[i] + gg.xedges[i + 1]) / 2, (gg.yedges[j] + gg.yedges[j + 1]) / 2,
                     Math.abs(gg.xedges[i + 1] - gg.xedges[i]), Math.abs(gg.yedges[j + 1] - gg.yedges[j])],
             }
+        }
+        case "threshold": {
+            const tg = g as ThresholdGeometry
+            const [lo, hi] = tg.span
+            const x0 = tg.orientation === "h" ? lo : tg.pos
+            const y0 = tg.orientation === "h" ? tg.pos : lo
+            const x1 = tg.orientation === "h" ? hi : tg.pos
+            const y1 = tg.orientation === "h" ? tg.pos : hi
+            if (distToSegment(px, py, x0, y0, x1, y1) <= SEG_TOL) return { index: 0, geom: ["seg", x0, y0, x1, y1] }
+            return null
         }
         case "axis":
             return { index: -1, axis: layer.axis }

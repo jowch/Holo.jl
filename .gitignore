@@ -13,6 +13,7 @@ npm-debug.log*
 
 # Local-only — not part of the package
 /.worktrees/
+/.superpowers/
 /spike/
 /pluto-makie-interactive-plots.md
 .playwright-mcp/

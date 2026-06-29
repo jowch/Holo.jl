@@ -70,6 +70,7 @@ Declare interactables explicitly (geometry in data space):
 - `RectInteractable` — bars (list) and heatmap cells (compact grid)
 - `PolygonInteractable` — arbitrary polygons
 - `AxisInteractable` — the whole axis: click anywhere → data `(x, y)` (linear + log)
+- `ThresholdInteractable` — a draggable horizontal/vertical line; drag for a live readout, commit the data value on mouse-up
 - `RegionInteractable` / `FunctionInteractable` — custom interactions, no JavaScript required
 
 Linear, log, and categorical axes; single or multiple axes; linked selection via shared
@@ -135,8 +136,9 @@ Every interactable takes an `Axis` and geometry in **data space** (projected in 
 | `RectInteractable(ax; grid, id, payloads)` | `grid = (xedges, yedges, values)` — a heatmap shipped as edges, not N rects | cell `(i, j, value)`, client-side |
 | `PolygonInteractable(ax, rings; id = :polygons, payloads)` | `rings :: Vector{Vector{(x, y)}}` — one or more filled rings | `(; index)` |
 | `AxisInteractable(ax; id = :axis)` | the whole axis: a click anywhere returns the data coordinate | `Dict("x" => …, "y" => …)` |
+| `ThresholdInteractable(ax; orientation = :horizontal, value, id = :threshold)` | a draggable line (`:horizontal` = constant-y, dragged vertically; `:vertical` = constant-x); live readout while dragging, commit on mouse-up | scalar data coord (client-side, on release) |
 
-`AxisInteractable` inverts pixels→data client-side, so it supports `identity` / `log10` /
+`AxisInteractable` and `ThresholdInteractable` invert pixels→data client-side, so they support `identity` / `log10` /
 `log` scales (categorical is fine); any other scale fails loud at `holo()` time.
 
 ### From a plot object (no hand-written geometry)

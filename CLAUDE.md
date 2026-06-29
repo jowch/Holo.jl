@@ -30,4 +30,5 @@ plots in Pluto. Browser layer is TypeScript in `frontend/`, bundled by esbuild t
 
 ## Layout
 - Design docs in `docs/` (architecture.md = the contract; frontend-delivery.md = build/delivery decisions). `spike/` is gitignored scratch.
+- Process docs (brainstorming specs, implementation plans) go in `.superpowers/` — gitignored, local-only, not part of the package.
 - Repo folder is `InteractivePlots.jl/` but the package is `Holo` (cosmetic mismatch; remote is `Holo.jl`).

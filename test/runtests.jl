@@ -1,5 +1,5 @@
 using Holo
-using Holo: hitlayers, validate, HitLayer, build_manifest, HoloWidget
+using Holo: hitlayers, validate, events, HitLayer, build_manifest, HoloWidget
 import Holo as IP
 using CairoMakie
 import Makie
@@ -113,6 +113,35 @@ end
         @test IP.tooltip(ri, 1, "a") == "tip:a"
         fi = FunctionInteractable(c -> [HitLayer(:f, :circles, Float32[10, 10, 5], Any[(; v = 1)], :ax1, (:click,))])
         @test only(hitlayers(fi, ctx)).id === :f
+    end
+
+    @testset "ThresholdInteractable (M4 drag)" begin
+        th = ThresholdInteractable(ax; orientation = :horizontal, value = 4.0)
+        @test events(th) == (:drag,)
+        @test validate(th, ctx) === nothing
+        L = only(hitlayers(th, ctx))
+        @test L.kind === :threshold
+        t = ctx.transforms[L.axis]
+        # horizontal: pos = projected pixel-y of data-y; span = viewport x-extent
+        @test L.geometry["orientation"] == "h"
+        @test L.geometry["pos"] ≈ data_to_image_px(ctx, ax, (t.xlims[1], 4.0))[2]
+        @test L.geometry["span"] ≈ [t.viewport[1], t.viewport[1] + t.viewport[3]]
+        # vertical projects x; span = viewport y-extent
+        Lv = only(hitlayers(ThresholdInteractable(ax; orientation = :vertical, value = 2.0), ctx))
+        @test Lv.geometry["orientation"] == "v"
+        @test Lv.geometry["pos"] ≈ data_to_image_px(ctx, ax, (2.0, t.ylims[1]))[1]
+        @test Lv.geometry["span"] ≈ [t.viewport[2], t.viewport[2] + t.viewport[4]]
+        # fail loud: horizontal drag needs an invertible y-scale
+        fs = Figure(); axs = Axis(fs[1, 1]; yscale = sqrt); scatter!(axs, [1.0, 2.0], [1.0, 2.0])
+        _, _, ctxs = ctx_for(fs)
+        @test validate(ThresholdInteractable(axs; orientation = :horizontal, value = 1.0), ctxs) isa String
+        @test validate(ThresholdInteractable(axs; orientation = :vertical, value = 1.0), ctxs) === nothing  # x is identity
+        @test_throws ArgumentError ThresholdInteractable(ax; orientation = :diagonal, value = 1.0)
+        # end-to-end: the :threshold layer serializes through build_manifest (Dict geometry + drag event)
+        mt = build_manifest([th], ctx)["layers"][1]
+        @test mt["kind"] == "threshold" && mt["events"] == ["drag"]
+        @test mt["geometry"]["orientation"] == "h" && haskey(mt["geometry"], "pos") && haskey(mt["geometry"], "span")
+        @test isempty(mt["payloads"]) && !haskey(mt, "tooltips")   # computed client-side, no payloads/tooltips
     end
 
     @testset "build_manifest + widget + bond" begin
