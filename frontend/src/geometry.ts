@@ -113,7 +113,7 @@ export function hitLayer(layer: HitLayer, px: number, py: number): Omit<Hit, "la
             const idx = j * gg.ncols + i
             return {
                 index: idx,
-                grid: [i, j, gg.values[idx]],
+                grid: [i, j, gg.values?.[idx]],
                 geom: ["rect", (gg.xedges[i] + gg.xedges[i + 1]) / 2, (gg.yedges[j] + gg.yedges[j + 1]) / 2,
                     Math.abs(gg.xedges[i + 1] - gg.xedges[i]), Math.abs(gg.yedges[j + 1] - gg.yedges[j])],
             }
@@ -155,6 +155,6 @@ export function hitTest(manifest: Manifest, px: number, py: number, event: strin
 // the @bind payload for a hit (single-select)
 export function resolvePayload(hit: Hit, manifest: Manifest, px: number, py: number): unknown {
     if (hit.axis) return invertAxis(manifest.transforms[hit.axis], px, py)
-    if (hit.grid) return { i: hit.grid[0], j: hit.grid[1], value: hit.grid[2] }
+    if (hit.grid) return hit.grid[2] === undefined ? { i: hit.grid[0], j: hit.grid[1] } : { i: hit.grid[0], j: hit.grid[1], value: hit.grid[2] }
     return hit.layer.payloads[hit.index]
 }

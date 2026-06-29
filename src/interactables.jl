@@ -31,6 +31,10 @@ hoverstyle(::AbstractInteractable, ::Int) = (; stroke = "#ff3b30", width = 3)
 # Only AxisInteractable relies on client-side JS inversion, so it alone restricts scales.
 const _JS_INVERTIBLE = (:identity, :log10, :log)  # scales geometry.ts `invert` implements
 
+# Min on-screen cell size (CSS px) below which a heatmap/image's values[] is dropped: a cell
+# smaller than ~1 px can't be cursor-targeted, so the matrix is pure payload. See architecture.md §8.
+const GRID_VALUES_MIN_SCREEN_PX = 1.0
+
 _proj(ctx, ax, p) = data_to_image_px(ctx, ax, p)
 
 # ============================ PointInteractable ============================
@@ -110,11 +114,24 @@ function hitlayers(i::RectInteractable, ctx)
         x0 = xe[1]
         yedges = Float32[_proj(ctx, i.ax, (x0, y))[2] for y in ye]
         ncols, nrows = length(xe) - 1, length(ye) - 1
-        flat = Float32[Float32(vals[c, r]) for r in 1:nrows for c in 1:ncols]  # row-major: r*ncols+c
-        geom = Dict(
-            "xedges" => xedges, "yedges" => yedges,
-            "ncols" => ncols, "nrows" => nrows, "values" => flat
+        geom = Dict{String, Any}(
+            "xedges" => xedges, "yedges" => yedges, "ncols" => ncols, "nrows" => nrows
         )
+        # values[] is the unbounded payload term: a source-resolution matrix shipped only to power
+        # the no-round-trip (i,j)=value hover. When cells render sub-pixel on screen the user can't
+        # target a cell anyway, so drop it (the click still round-trips to the kernel, which has the
+        # matrix). Cap by expected on-screen cell size — architecture.md §8.
+        cell_px = min(
+            abs(xedges[end] - xedges[1]) / ncols,
+            abs(yedges[end] - yedges[1]) / nrows,
+        ) * ctx.display_scale
+        if cell_px >= GRID_VALUES_MIN_SCREEN_PX
+            geom["values"] = Float32[Float32(vals[c, r]) for r in 1:nrows for c in 1:ncols]  # row-major: r*ncols+c
+        else
+            @warn "Holo: heatmap/image grid cells are ~$(round(cell_px; digits = 2)) px on screen " *
+                "(sub-pixel); dropping the values[] payload to bound manifest size. Hover shows (i,j) " *
+                "only; clicks still carry it (the kernel round-trip has your matrix)." maxlog = 1
+        end
         return [HitLayer(i.id, :grid, geom, Any[], axis_id(ctx, i.ax), events(i))]
     end
 end

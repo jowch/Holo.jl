@@ -146,8 +146,13 @@ under each scheme — replacing theoretical byte math with measured wire bytes:
 
 | Heatmap 1000² `values[]` | size |
 |---|---:|
-| with `values[]` (current) | 4.78 MB |
+| with `values[]` (uncapped) | 4.78 MB |
 | capped → `{i,j}` only | 9.8 KB (**499× smaller**) |
+
+The cap **shipped** in `52f174c` (PR #8): `:grid` omits `values[]` when cells render sub-pixel on
+screen (`GRID_VALUES_MIN_SCREEN_PX`, architecture.md §8). The measured numbers above are unchanged —
+the cap just selects the "capped" row at build time — so the envelope stays valid; only the wire
+*presence* of `values[]` became conditional.
 
 **Conclusion:** the cheap, non-structural wins (int-pixel coords + `values[]` cap) capture essentially all
 of it; the structural typed-array fast-path does not earn its cost. `Float16` is a non-starter (no MsgPack

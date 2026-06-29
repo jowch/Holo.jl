@@ -52,6 +52,12 @@ describe("hitLayer + hitTest", () => {
         const h = hitLayer(grid, 15, 5)
         expect(h?.grid).toEqual([1, 0, 12]) // i=1, j=0, values[0*2+1]
     })
+    it("grid still hits (i,j) when values[] was dropped", () => {
+        const grid: HitLayer = { id: "hm", kind: "grid", axis: "ax1", events: ["hover"], payloads: [],
+            geometry: { xedges: [0, 10, 20], yedges: [0, 10, 20], ncols: 2, nrows: 2 } } // no values
+        const h = hitLayer(grid, 15, 5)
+        expect(h?.grid).toEqual([1, 0, undefined]) // index found; value absent, no crash
+    })
     it("hitTest respects the event filter and manifest order", () => {
         const m: Manifest = { width: 400, height: 400, scaling: 2, transforms: {},
             layers: [{ ...circles, events: ["hover"] }] }
@@ -62,6 +68,15 @@ describe("hitLayer + hitTest", () => {
         const m: Manifest = { width: 400, height: 400, scaling: 2, transforms: {}, layers: [circles] }
         const hit = hitTest(m, 300, 300, "click")!
         expect(resolvePayload(hit, m, 300, 300)).toEqual({ i: 1 })
+    })
+    it("resolvePayload omits value entirely when values[] was dropped", () => {
+        const grid: HitLayer = { id: "hm", kind: "grid", axis: "ax1", events: ["click"], payloads: [],
+            geometry: { xedges: [0, 10, 20], yedges: [0, 10, 20], ncols: 2, nrows: 2 } } // no values
+        const m: Manifest = { width: 20, height: 20, scaling: 1, transforms: {}, layers: [grid] }
+        const hit = hitTest(m, 15, 5, "click")!
+        const pl = resolvePayload(hit, m, 15, 5)
+        expect(pl).toEqual({ i: 1, j: 0 }) // {i,j} only — no `value` key, not value:undefined
+        expect("value" in (pl as object)).toBe(false)
     })
 })
 
