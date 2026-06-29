@@ -112,10 +112,9 @@ hoverstyle(i::AbstractInteractable, idx::Int)::NamedTuple = (; stroke="#000", wi
 struct HitRegion
     kind::Symbol          # :circle | :segment | :rect | :polygon | :bbox
     coords::Vector{Float32}   # image-px; interpretation keyed by `kind`
-    #   ^ Float32 pixel coords are overkill for ~1px hit-testing and (nested in the Dict/Any
-    #     manifest) still serialize as a generic MsgPack array. Deferred wire-encoding levers:
-    #     int/fixed-point px (~40% off) or lifting geometry to a top-level typed vector (binary
-    #     fast-path). NOT Float16 (no msgpack float16; lossy >2048px). YAGNI — architecture.md §9.
+    #   ^ Float32 pixel coords are overkill for ~1px hit-testing. Committed wire win: round to
+    #     integer pixels (measured, no manifest-shape change — architecture.md §9). The typed-vector
+    #     binary fast-path was measured NOT worth it; Float16 is wrong (no msgpack float16; lossy >2048px).
     payload               # JSON-serializable; THE linkage/identity primitive
 end
 ```
