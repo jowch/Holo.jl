@@ -41,16 +41,31 @@ end
 
 # ---- manifest assembly (pure; no published_to_js, no Pluto) -----------------
 
+# union of NamedTuple field names across a payload vector (empty if none are NamedTuples)
+function _payload_keys(payloads)
+    ks = Set{Symbol}()
+    for pl in payloads
+        pl isa NamedTuple && union!(ks, keys(pl))
+    end
+    return ks
+end
+
 function _layer_dict(i, L::HitLayer)
     hs = hoverstyle(i, 1)
     d = Dict{String, Any}(
         "id" => string(L.id), "kind" => string(L.kind), "axis" => string(L.axis),
         "geometry" => L.geometry, "payloads" => L.payloads,
         "events" => [string(e) for e in L.events],
-        "style" => Dict("stroke" => hs.stroke, "width" => hs.width)
+        "style" => Dict("stroke" => hs.stroke, "width" => hs.width),
     )
-    ts = tooltip_spec(i)
-    ts === nothing || (d["tooltip"] = ts === false ? false : markup_segments(ts))
+    spec = tooltip_spec(i)
+    if spec isa Markup
+        ks = _payload_keys(L.payloads)
+        isempty(ks) || check_fields(spec, ks)      # build-time field check (skip if no NamedTuple payloads)
+        d["template"] = markup_segments(spec)
+    elseif spec === false
+        d["tooltip"] = false
+    end
     return d
 end
 
@@ -71,7 +86,7 @@ tests call this directly; the Pluto-only `published_to_js` step happens later in
 `Symbol` a click returns in `InteractionEvent.layer`. The overlay re-derives highlights from
 it each render, so threading a bond value back keeps a selection flicker-free across re-renders.
 """
-function build_manifest(interactables, ctx::InteractionContext; selected = nothing)
+function build_manifest(interactables, ctx::InteractionContext; selected = nothing, tip_style = nothing)
     layers = Any[]
     for i in interactables
         msg = validate(i, ctx)
@@ -83,11 +98,13 @@ function build_manifest(interactables, ctx::InteractionContext; selected = nothi
             push!(layers, d)
         end
     end
-    return Dict{String, Any}(
+    m = Dict{String, Any}(
         "width" => ctx.width, "height" => ctx.height, "scaling" => ctx.scaling,
         "layers" => layers,
-        "transforms" => Dict(string(id) => _transform_dict(t) for (id, t) in ctx.transforms)
+        "transforms" => Dict(string(id) => _transform_dict(t) for (id, t) in ctx.transforms),
     )
+    (tip_style === nothing || isempty(tip_style)) || (m["tipStyle"] = tip_style)
+    return m
 end
 
 # ---- the widget -------------------------------------------------------------
@@ -113,15 +130,21 @@ refs), so instead the one mutation we introduce — forcing an opaque background
 restored. `update_state_before_display!` is also run, but that is exactly the step Makie performs
 at display/save time, so it is benign (not corruption).
 """
-function holo(fig, interactables::AbstractVector; backend::AbstractBackend = CairoBackend(), selected = nothing)
+function holo(
+        fig, interactables::AbstractVector; backend::AbstractBackend = CairoBackend(), selected = nothing,
+        tooltip_bg = nothing, tooltip_color = nothing, tooltip_accent = nothing,
+        tooltip_font = nothing, tooltip_font_size = nothing, tooltip_radius = nothing, tooltip_caret = true,
+    )
     bg0 = fig.scene.backgroundcolor[]
     try
-        # opaque background (dark-mode/transparent-bg footgun); restored in finally
         fig.scene.backgroundcolor[] = RGBAf(Makie.red(bg0), Makie.green(bg0), Makie.blue(bg0), 1)
         Makie.update_state_before_display!(fig)        # finalize once; render + context share it
         ppu = _ppu(backend, fig)
         ctx = context(backend, fig, ppu)
-        manifest = build_manifest(interactables, ctx; selected)  # validates (fail loud) before rendering
+        tip_style = tip_style_dict(;
+            tooltip_bg, tooltip_color, tooltip_accent, tooltip_font, tooltip_font_size, tooltip_radius, tooltip_caret,
+        )
+        manifest = build_manifest(interactables, ctx; selected, tip_style)
         result = render(backend, fig, ppu)
         display_css = round(Int, min(size(fig.scene)[1], backend.max_width))
         return HoloWidget(base64encode(result.payload), manifest, display_css)

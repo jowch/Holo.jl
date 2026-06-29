@@ -577,4 +577,23 @@ end
         ri = RegionInteractable(ax; regions = [(:circle, (1.0, 1.0), 0.5)], payloads = [(; n = "a")], tooltip = holo"$(n)")
         @test Holo.tooltip_spec(ri) isa Holo.Markup
     end
+
+    @testset "manifest tooltip wiring" begin
+        pts2 = [(1.0, 1.0), (2.0, 4.0), (3.0, 9.0)]
+        pi = PointInteractable(ax, pts2; tooltip = holo"x=$(x), y=$(y)")
+        man = build_manifest([pi], ctx; tip_style = Holo.tip_style_dict(; tooltip_bg = :red))
+        L = man["layers"][1]
+        @test haskey(L, "template")
+        @test !haskey(L, "tooltips")                       # old per-element array removed
+        @test L["template"][1] == "x="
+        @test man["tipStyle"]["--holo-tip-bg"] == "rgb(255,0,0)"
+
+        off = build_manifest([PointInteractable(ax, pts2; tooltip = false)], ctx)
+        @test off["layers"][1]["tooltip"] === false
+        @test !haskey(build_manifest([PointInteractable(ax, pts2)], ctx), "tipStyle")
+
+        # bad field → build-time error
+        bad = PointInteractable(ax, pts2; tooltip = holo"$(nope)")
+        @test_throws ArgumentError build_manifest([bad], ctx)
+    end
 end
