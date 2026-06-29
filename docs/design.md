@@ -96,8 +96,9 @@ struct PointInteractable   <: AbstractInteractable  # Scatter
 struct CellInteractable    <: AbstractInteractable  # Heatmap / image pixels
 #   ^ grid payload ships the full SOURCE-resolution values[] matrix (O(cells)) to power the
 #     (i,j)=value hover — source-bounded, unlike the display-bounded PNG, so a 2000²–4000²
-#     heatmap/image reaches tens of MB (4.78 MB at 1000²). By design today; candidate M2.3
-#     guard: cap by cell count, drop for Image, default payload {i,j}, @warn. See architecture.md §8.
+#     heatmap/image reaches tens of MB (4.78 MB at 1000²). Committed fix: ship values[] only when
+#     the cell's expected on-screen size (display bounded by the Pluto column) is targetable
+#     (≥~1–2 px), else drop → payload {i,j} + @warn; subsumes Image. See architecture.md §8.
 struct SegmentInteractable <: AbstractInteractable  # Lines (nearest-segment in JS)
 
 # Axis-level: hit-test = bbox check, returns data-space (x,y)
