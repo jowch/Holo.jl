@@ -156,6 +156,40 @@ end
 hitlayers(i::AxisInteractable, ctx) =
     [HitLayer(i.id, :axis, nothing, Any[], axis_id(ctx, i.ax), events(i))]
 
+# ============================ ThresholdInteractable ========================
+# A draggable horizontal/vertical line (Tier 0). Drags locally in JS; on mouse-up the
+# pixel is inverted to a data-space scalar via the shipped AxisTransform and round-tripped
+# to @bind. Lives entirely in the overlay — the base render never sees it.
+struct ThresholdInteractable <: AbstractInteractable
+    ax; orientation::Symbol; value::Float64; id::Symbol
+end
+function ThresholdInteractable(ax; orientation = :horizontal, value, id = :threshold)
+    orientation in (:horizontal, :vertical) ||
+        throw(ArgumentError("ThresholdInteractable: orientation must be :horizontal or :vertical, got $(orientation)"))
+    return ThresholdInteractable(ax, orientation, Float64(value), id)
+end
+events(::ThresholdInteractable) = (:drag,)
+function validate(i::ThresholdInteractable, ctx::InteractionContext)
+    t = ctx.transforms[axis_id(ctx, i.ax)]
+    sc = i.orientation === :horizontal ? t.yscale : t.xscale
+    sc in _JS_INVERTIBLE || return "ThresholdInteractable: $(i.orientation) drag needs a client-side " *
+        "invertible $(i.orientation === :horizontal ? "y" : "x")-scale ($(sc) is not; supported: identity/log10/log)."
+    return nothing
+end
+function hitlayers(i::ThresholdInteractable, ctx)
+    t = ctx.transforms[axis_id(ctx, i.ax)]
+    vx, vy, vw, vh = t.viewport
+    if i.orientation === :horizontal
+        pos = _proj(ctx, i.ax, (t.xlims[1], i.value))[2]   # constant data-y → its pixel-y
+        span = Float32[vx, vx + vw]; orient = "h"
+    else
+        pos = _proj(ctx, i.ax, (i.value, t.ylims[1]))[1]   # constant data-x → its pixel-x
+        span = Float32[vy, vy + vh]; orient = "v"
+    end
+    geom = Dict("orientation" => orient, "pos" => Float32(pos), "span" => span)
+    return [HitLayer(i.id, :threshold, geom, Any[], axis_id(ctx, i.ax), events(i))]
+end
+
 # ============================ custom: RegionInteractable (Tier A) =========
 # Declarative mixed regions in DATA space. Grouped into one layer per kind.
 struct RegionInteractable <: AbstractInteractable
