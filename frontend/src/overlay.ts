@@ -1,8 +1,8 @@
 // DOM layer: builds a shadow-root overlay over the (light-DOM) base image, wires hover/click,
 // draws highlights, and round-trips clicks through the @bind element. Stateless across re-render.
-import { hitTest, invertAxis, resolvePayload } from "./geometry"
+import { hitTest, invertAxis, resolvePayload, findBin } from "./geometry"
 import { renderTemplate, renderAutoTable, esc } from "./template"
-import type { AxisTransform, Hit, HitLayer, Manifest, ThresholdGeometry, ROIGeometry } from "./types"
+import type { AxisTransform, Hit, HitLayer, Manifest, ThresholdGeometry, ROIGeometry, GridGeometry } from "./types"
 
 const SVG_NS = "http://www.w3.org/2000/svg"
 
@@ -227,7 +227,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
             }
             setROI(box)
             if (drag.target) {
-                const sel = computeSelection(box.g, drag.target)
+                const sel = computeSelection(box.g, drag.target, manifest.transforms[drag.target.axis])
                 drawSelection(sel.hits)
                 tip.textContent = `${sel.items.length} selected`
             } else {
@@ -241,7 +241,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         if (!drag) return
         const p = imgPx(e)
         if (drag.kind === "roi" && drag.target) {
-            const sel = computeSelection(drag.box.g, drag.target)
+            const sel = computeSelection(drag.box.g, drag.target, manifest.transforms[drag.target.axis])
             drawSelection(sel.hits)
             ;(host as unknown as { value: unknown }).value = { items: sel.items }
         } else if (drag.kind === "threshold") {
@@ -333,11 +333,21 @@ function makeHiElement(hit: Hit): SVGElement | null {
 type SelectionItem = { layer: string; index: number; payload: unknown }
 type SelectionResult = { items: SelectionItem[]; hits: Hit[] }
 
+// [lo,hi] pixel span over an edge array → inclusive cell-index range clamped to the grid, or null if no overlap.
+function cellRange(edges: number[], lo: number, hi: number): [number, number] | null {
+    const gmin = Math.min(edges[0], edges[edges.length - 1]), gmax = Math.max(edges[0], edges[edges.length - 1])
+    const clo = Math.max(lo, gmin), chi = Math.min(hi, gmax)
+    if (chi < clo) return null
+    const a = findBin(edges, clo), b = findBin(edges, chi)
+    if (a < 0 || b < 0) return null
+    return [Math.min(a, b), Math.max(a, b)]
+}
+
 // Box pixel-rect → contained items + highlight hits, dispatched by target kind.
-// Task 5 replaces the grid branch body with real findBin-based region derivation.
 function computeSelection(
     box: { x: number; y: number; w: number; h: number },
-    target: HitLayer
+    target: HitLayer,
+    t: AxisTransform
 ): SelectionResult {
     const xlo = box.x, xhi = box.x + box.w, ylo = box.y, yhi = box.y + box.h
     if (target.kind === "circles" && Array.isArray(target.geometry)) {
@@ -352,7 +362,24 @@ function computeSelection(
         }
         return { items, hits }
     }
-    return { items: [], hits: [] } // Task 5: grid region via findBin on xedges/yedges
+    if (target.kind === "grid") {
+        const gg = target.geometry as GridGeometry
+        const ci = cellRange(gg.xedges, xlo, xhi), cj = cellRange(gg.yedges, ylo, yhi)
+        if (!ci || !cj) return { items: [], hits: [] }
+        const [i0, i1] = ci, [j0, j1] = cj
+        const a = invertAxis(t, xlo, ylo), b = invertAxis(t, xhi, yhi)
+        const ax = a.x as number, bx = b.x as number, ay = a.y as number, by = b.y as number
+        const payload = {
+            i0, i1, j0, j1,
+            xmin: Math.min(ax, bx), xmax: Math.max(ax, bx),
+            ymin: Math.min(ay, by), ymax: Math.max(ay, by),
+        }
+        const rx0 = gg.xedges[i0], rx1 = gg.xedges[i1 + 1], ry0 = gg.yedges[j0], ry1 = gg.yedges[j1 + 1]
+        const hits: Hit[] = [{ layer: target, index: 0,
+            geom: ["rect", (rx0 + rx1) / 2, (ry0 + ry1) / 2, Math.abs(rx1 - rx0), Math.abs(ry1 - ry0)] }]
+        return { items: [{ layer: target.id, index: 0, payload }], hits }
+    }
+    return { items: [], hits: [] } // unsupported target kind
 }
 
 // resolve a layer element by index to a highlight geom (for pre-selected drawing)

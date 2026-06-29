@@ -245,6 +245,38 @@ describe("mount", () => {
         expect(box).toBeTruthy()
         expect(committed!.items).toEqual([])
     })
+
+    const gridSelectManifest: Manifest = {
+        width: 1200, height: 800, scaling: 2,
+        transforms: { ax1: { xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
+            viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false } },
+        layers: [
+            { id: "img", kind: "grid", axis: "ax1", events: ["hover"], payloads: [],
+                geometry: { xedges: [0, 200, 400, 600], yedges: [0, 200, 400, 600], ncols: 3, nrows: 3 } },
+            { id: "roi", kind: "roi", axis: "ax1", events: ["drag"], payloads: [],
+                selects: "img", geometry: { x: 100, y: 100, w: 300, h: 300, handle: 16 } },
+        ],
+    }
+
+    it("box-select over a grid emits a single region (cell indices + data bounds)", () => {
+        const { host, script } = setup()
+        mount(script, gridSelectManifest)
+        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        let committed: { items: { layer: string; index: number; payload: Record<string, number> }[] } | null = null
+        host.addEventListener("input", () => {
+            committed = (host as unknown as { value: typeof committed }).value
+        })
+        // box is image [100,400]×[100,400]; grab interior (image 250,250 = client 125,125), release
+        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 125, clientY: 125, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 125, clientY: 125, bubbles: true }))
+        expect(committed!.items.length).toBe(1)
+        const r = committed!.items[0].payload
+        expect([r.i0, r.i1, r.j0, r.j1]).toEqual([0, 1, 0, 1])    // cells covered by [100,400]
+        expect(r.xmin).toBeCloseTo(10 * 100 / 1200)
+        expect(r.xmax).toBeCloseTo(10 * 400 / 1200)
+        expect(r.ymin).toBeCloseTo(50)                            // image y 400 → 100*(1-400/800)
+        expect(r.ymax).toBeCloseTo(87.5)                          // image y 100 → 100*(1-100/800)
+    })
 })
 
 // M2.3 tooltip glue in showTip: tipStyle application + the template / auto-table / suppress branches.
