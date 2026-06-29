@@ -80,6 +80,8 @@ function parse_template(s::AbstractString)
             isempty(field_str) && _markup_error("empty `\$()` — expected a payload field name.", s, i)
             Base.isidentifier(field_str) ||
                 _markup_error("`\$($inner)` — `$field_str` is not a field name. Reference payload fields by name; compute derived values in the payload, not the template.", s, i)
+            spec !== nothing && isempty(spec) &&
+                _markup_error("`\$($inner)` — empty format spec after `:`. Omit the colon for the default (`\$($field_str)`), or give a d3-format spec.", s, i)
             (spec === nothing || _valid_spec(spec)) ||
                 _markup_error("`\$($inner)` — `$spec` is not a valid d3-format spec (https://d3js.org/d3-format).", s, i)
             f = Field(Symbol(field_str), spec === nothing ? nothing : String(spec))

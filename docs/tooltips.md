@@ -121,6 +121,10 @@ heterogeneous payloads). Build-time field validation runs when the layer's paylo
 heterogeneous payloads, the build-time check is skipped — a missing `$(field)` renders
 empty at hover rather than raising at build.
 
+`:grid` (heatmap/image) layers carry no per-element payload; a template there resolves the
+fields **`$(i)`, `$(j)`, and `$(value)`** synthesised from the hovered cell. Those references
+are likewise not field-validated at build (a typo renders empty at hover).
+
 ## 4. Tooltip content — defaults and suppress
 
 The `tooltip` keyword is accepted by every interactable constructor. Its type governs

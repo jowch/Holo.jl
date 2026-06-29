@@ -59,6 +59,7 @@ function _layer_dict(i, L::HitLayer)
         "style" => Dict("stroke" => hs.stroke, "width" => hs.width),
     )
     spec = tooltip_spec(i)
+    spec === true && throw(ArgumentError("tooltip = true is not meaningful — omit `tooltip` for the auto name/value table (the default), pass holo\"…\" for a template, or `false` to suppress."))
     if spec isa Markup
         ks = _payload_keys(L.payloads)
         isempty(ks) || check_fields(spec, ks)      # build-time field check (skip if no NamedTuple payloads)

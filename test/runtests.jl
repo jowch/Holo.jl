@@ -531,6 +531,8 @@ end
             @test Holo._valid_spec(ok)
         end
         @test !Holo._valid_spec(".2z")
+        # an empty spec after `:` is a typo, not the default — rejected
+        @test_throws Holo.TemplateValidationError Holo.parse_template("\$(x:)")
 
         # showerror renders a caret
         e = try
@@ -595,5 +597,8 @@ end
         # bad field → build-time error
         bad = PointInteractable(ax, pts2; tooltip = holo"$(nope)")
         @test_throws ArgumentError build_manifest([bad], ctx)
+
+        # `tooltip = true` is meaningless (only `false` suppresses) → fail loud
+        @test_throws ArgumentError build_manifest([PointInteractable(ax, pts2; tooltip = true)], ctx)
     end
 end
