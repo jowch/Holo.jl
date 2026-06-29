@@ -128,7 +128,10 @@ hitlayers(i::AbstractInteractable, ctx::InteractionContext)::Vector{HitLayer}
 # OPTIONAL (defaulted):
 validate(::AbstractInteractable, ::InteractionContext)::Union{Nothing,String} = nothing   # fail loud
 events(::AbstractInteractable)::Tuple = (:click, :hover)   # which events the overlay wires
-tooltip(::AbstractInteractable, idx::Int, payload)::Union{Nothing,String} = nothing
+# tooltip content is per-LAYER, set via the `tooltip` kwarg on each interactable
+# constructor (nothing → auto-table, Markup → template, false → suppress).
+# The per-element `tooltip(interactable, idx, payload)` dispatch is retired (M2.3).
+# See docs/tooltips.md.
 hoverstyle(::AbstractInteractable, idx::Int)::NamedTuple = (; stroke="#ff3b30", width=3)
 ```
 
@@ -221,7 +224,7 @@ mark" analog.
 RegionInteractable(ax;
     regions  = [(:circle, Point2f(x,y), r), (:rect, p, w, h), (:polygon, ring)],
     payloads = [pl1, pl2, pl3],          # parallel; one per region (the linkage key)
-    tooltip  = pl -> string(pl),
+    tooltip  = holo"$(label)",           # Markup template; nothing → auto-table, false → suppress
     events   = (:click, :hover))
 ```
 
@@ -232,8 +235,9 @@ RegionInteractable(ax;
 FunctionInteractable(ax, f; id, events=(:click,:hover))   # f(ctx)::Vector{HitLayer}
 ```
 
-**Tier C — full struct.** Implement `hitlayers` (+ optional `validate`/`tooltip`/`hoverstyle`). A user
-struct is *indistinguishable* from a built-in — same manifest path, same overlay, same `@bind`. Example:
+**Tier C — full struct.** Implement `hitlayers` (+ optional `validate`/`hoverstyle`). A user
+struct is *indistinguishable* from a built-in — same manifest path, same overlay, same `@bind`. Tooltip
+content is set via the `tooltip` kwarg when calling `holo()` (see `docs/tooltips.md`). Example:
 
 ```julia
 struct CityInteractable <: AbstractInteractable
@@ -245,7 +249,7 @@ function Holo.hitlayers(c::CityInteractable, ctx)
     end
     [HitLayer(:cities, :circles, coords, [(; name=n) for n in c.names], :main, (:click,:hover))]
 end
-Holo.tooltip(c::CityInteractable, idx, pl) = pl.name
+# tooltip content: pass `tooltip = holo"$(name)"` (or nothing/false) to holo() — see docs/tooltips.md
 ```
 
 **Linkage = shared payloads through Pluto reactivity.** Two interactables writing the same payload field
@@ -337,6 +341,13 @@ flip to **payload-bound** (~553 ms total measured at a 4.78 MB manifest). Since 
 keeps even a 1 M-cell heatmap render-bound, the case that reaches this regime by default is now **high-N
 scatter** (200k pts → 7.72 MB manifest). Nothing crashes — it degrades into the half-second range — but
 tens of MB would lag the Pluto editor.
+
+**M2.3 (tooltip wire format):** shipping per-element tooltip strings as a retired `tooltips[]` array
+would have added O(N × string-bytes) — the dominant inflation term at high element counts (see
+`perf-findings.md` §"Scope bounds for downstream phases" for the measured upper bounds). M2.3 avoids
+this: tooltip content ships as two O(1)-per-layer fields — `template` (pre-parsed segments, present when
+`tooltip` is a `Markup`) and a top-level `tipStyle` dict — leaving the per-element envelope unchanged.
+See `docs/tooltips.md` for the wire shape and authoring API.
 
 **Robustness to large inputs (assume a user *will* do this) — implemented.** We ship a tool to
 Pluto/Makie users, so assume someone overlays `holo` on a 2000²–4000² `heatmap!`/`image!` *because they
