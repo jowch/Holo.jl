@@ -110,9 +110,10 @@ number — everything else is reorderable by demand.
 - [x] **Bound the grid `values[]` payload (robustness fix).** *Done (`src/interactables.jl`:
   `GRID_VALUES_MIN_SCREEN_PX`, gated on `InteractionContext.display_scale`; overlay tolerates an
   absent `values[]`). Day-one bug in shipped `holo(fig)`, shipped independently of M2.3.* The `:grid` manifest shipped the full
-  source-resolution `values[]` matrix (by design today, ~4.78 MB at 1000², tens of MB for a 2000²–4000²
+  source-resolution `values[]` matrix (by design today, tens of MB for a 2000²–4000²
   `heatmap!`/`image!`) purely for the `(i,j)=value` hover. **De-speculated** (`bench/encoding_experiment.jl`):
-  dropping it is **499× smaller** (4.78 MB → 9.8 KB) and hit-testing needs only edges+dims. **Cap criterion =
+  dropping it is far smaller (see `perf-findings.md` for the measured ratio) and hit-testing needs only
+  edges+dims. **Cap criterion =
   the cell's *expected on-screen* size, computed on the fly.** A Pluto cell is only so wide — display is
   bounded by the column (`max_width`, 700 px default), so we know it at build: `cell_screen_px =
   (viewport_image_px/ncols) × (display_css/image_width)`, `display_css = min(scene, max_width)`. (Today's DPI

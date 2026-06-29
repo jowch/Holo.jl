@@ -155,6 +155,6 @@ export function hitTest(manifest: Manifest, px: number, py: number, event: strin
 // the @bind payload for a hit (single-select)
 export function resolvePayload(hit: Hit, manifest: Manifest, px: number, py: number): unknown {
     if (hit.axis) return invertAxis(manifest.transforms[hit.axis], px, py)
-    if (hit.grid) return { i: hit.grid[0], j: hit.grid[1], value: hit.grid[2] }
+    if (hit.grid) return hit.grid[2] === undefined ? { i: hit.grid[0], j: hit.grid[1] } : { i: hit.grid[0], j: hit.grid[1], value: hit.grid[2] }
     return hit.layer.payloads[hit.index]
 }

@@ -69,6 +69,15 @@ describe("hitLayer + hitTest", () => {
         const hit = hitTest(m, 300, 300, "click")!
         expect(resolvePayload(hit, m, 300, 300)).toEqual({ i: 1 })
     })
+    it("resolvePayload omits value entirely when values[] was dropped", () => {
+        const grid: HitLayer = { id: "hm", kind: "grid", axis: "ax1", events: ["click"], payloads: [],
+            geometry: { xedges: [0, 10, 20], yedges: [0, 10, 20], ncols: 2, nrows: 2 } } // no values
+        const m: Manifest = { width: 20, height: 20, scaling: 1, transforms: {}, layers: [grid] }
+        const hit = hitTest(m, 15, 5, "click")!
+        const pl = resolvePayload(hit, m, 15, 5)
+        expect(pl).toEqual({ i: 1, j: 0 }) // {i,j} only — no `value` key, not value:undefined
+        expect("value" in (pl as object)).toBe(false)
+    })
 })
 
 describe("threshold hit-test", () => {

@@ -90,6 +90,8 @@ end
         # ship edges+dims (hit-testing needs only those), drop the source-resolution values[] matrix.
         fb = Figure(); axb = Axis(fb[1, 1]); zb = rand(Float32, 1000, 1000); heatmap!(axb, zb)
         _, _, ctxb = ctx_for(fb)
+        # This is the suite's only sub-pixel grid, so it's the sole trigger of the @warn (maxlog=1 is
+        # per-call-site per-process): keep it that way, or the warn is suppressed and this assert sees 0 logs.
         L = (@test_logs (:warn, r"sub-pixel"i) only(hitlayers(RectInteractable(axb; grid = (0.5:1:1000.5, 0.5:1:1000.5, zb)), ctxb)))
         @test L.kind === :grid
         @test L.geometry["ncols"] == 1000 && length(L.geometry["xedges"]) == 1001  # hit-test still works
