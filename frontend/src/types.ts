@@ -51,6 +51,8 @@ export interface LayerStyle {
     width: number
 }
 
+export type TemplateSegment = string | { f: string; spec?: string }
+
 export interface HitLayer {
     id: string
     kind: Kind

@@ -10,7 +10,11 @@
     "lint": "eslint src test",
     "test": "vitest run"
   },
+  "dependencies": {
+    "d3-format": "^3.1.0"
+  },
   "devDependencies": {
+    "@types/d3-format": "^3.0.4",
     "esbuild": "^0.24.0",
     "eslint": "^9.12.0",
     "happy-dom": "^20.10.6",
