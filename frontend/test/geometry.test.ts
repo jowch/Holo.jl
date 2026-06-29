@@ -79,3 +79,14 @@ describe("threshold hit-test", () => {
         expect(hitLayer(v, 130, 200)).toBeNull()
     })
 })
+
+describe("roi hit-test", () => {
+    const roi: HitLayer = { id: "roi", kind: "roi", axis: "ax1", events: ["drag"], payloads: [],
+        geometry: { x: 100, y: 50, w: 200, h: 120, handle: 8 } }
+    it("corners take precedence, then interior, else miss", () => {
+        expect(hitLayer(roi, 100, 50)).toMatchObject({ roiPart: { corner: 0 } })   // TL
+        expect(hitLayer(roi, 300, 170)).toMatchObject({ roiPart: { corner: 2 } })  // BR (x+w, y+h)
+        expect(hitLayer(roi, 200, 110)).toMatchObject({ roiPart: { move: true } }) // interior
+        expect(hitLayer(roi, 50, 50)).toBeNull()                                    // outside
+    })
+})
