@@ -210,6 +210,9 @@ function validate(i::ROIInteractable, ctx::InteractionContext)
     (t.xscale in _JS_INVERTIBLE && t.yscale in _JS_INVERTIBLE) ||
         return "ROIInteractable: drag needs client-side invertible x and y scales " *
         "(x=$(t.xscale), y=$(t.yscale); supported: identity/log10/log)."
+    (t.xcats === nothing && t.ycats === nothing) ||
+        return "ROIInteractable: bounds need continuous axes; a categorical axis has no numeric bounds " *
+        "(use AxisInteractable/ThresholdInteractable for categorical readout)."
     return nothing
 end
 function hitlayers(i::ROIInteractable, ctx)

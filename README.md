@@ -141,7 +141,8 @@ Every interactable takes an `Axis` and geometry in **data space** (projected in 
 | `ROIInteractable(ax; bounds = (xmin, xmax, ymin, ymax), id = :roi)` | a draggable + resizable box; move (interior) / resize (corner); commit on mouse-up | `Dict("xmin"=>…, "xmax"=>…, "ymin"=>…, "ymax"=>…)` (client-side, on release) |
 
 `AxisInteractable`, `ThresholdInteractable`, and `ROIInteractable` invert pixels→data client-side, so they support `identity` / `log10` /
-`log` scales (categorical is fine); any other scale fails loud at `holo()` time.
+`log` scales; any other scale fails loud at `holo()` time. Categorical axes are fine for `AxisInteractable`/`ThresholdInteractable` (which
+read a category), but `ROIInteractable` rejects them — its numeric bounds have no meaning on categories.
 
 ### From a plot object (no hand-written geometry)
 

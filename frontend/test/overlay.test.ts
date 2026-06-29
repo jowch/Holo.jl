@@ -136,16 +136,16 @@ describe("mount", () => {
         expect(rects.length).toBe(5)                 // 1 box + 4 corner handles
         const box = rects[0] as SVGRectElement
         expect(box.getAttribute("x")).toBe("200")
-        let committed: { layer: string; payload: { xmin: number; xmax: number; ymin: number; ymax: number } } | null = null
+        let committed: { layer: string; index: number; payload: { xmin: number; xmax: number; ymin: number; ymax: number } } | null = null
         host.addEventListener("input", () => {
-            committed = (host as unknown as { value: { layer: string; payload: { xmin: number; xmax: number; ymin: number; ymax: number } } }).value
+            committed = (host as unknown as { value: { layer: string; index: number; payload: { xmin: number; xmax: number; ymin: number; ymax: number } } }).value
         })
         // display scale 1200/600 = 2 → client (200,200) == image (400,400) == interior center
         surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 200, clientY: 200, bubbles: true }))
         window.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true })) // image x 400→600
         expect(box.getAttribute("x")).toBe("400")    // origin moved +200 image px (clamped within viewport)
         window.dispatchEvent(new MouseEvent("mouseup", { clientX: 300, clientY: 200, bubbles: true }))
-        expect(committed).toMatchObject({ layer: "roi" })
+        expect(committed).toMatchObject({ layer: "roi", index: 0 })
         // box x now [400,800] image → data [400/1200*10, 800/1200*10]
         expect(committed!.payload.xmin).toBeCloseTo(10 * 400 / 1200)
         expect(committed!.payload.xmax).toBeCloseTo(10 * 800 / 1200)
@@ -157,6 +157,10 @@ describe("mount", () => {
         const shadow = shadowOf(host)
         const surface = shadow.querySelector(".surface") as HTMLElement
         const box = shadow.querySelectorAll("rect")[0] as SVGRectElement
+        let committed: { layer: string; index: number; payload: { xmin: number; xmax: number; ymin: number; ymax: number } } | null = null
+        host.addEventListener("input", () => {
+            committed = (host as unknown as { value: { layer: string; index: number; payload: { xmin: number; xmax: number; ymin: number; ymax: number } } }).value
+        })
         // BR corner is image (600,600) == client (300,300); drag to image (800,800) == client (400,400)
         surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 300, clientY: 300, bubbles: true }))
         window.dispatchEvent(new MouseEvent("mousemove", { clientX: 400, clientY: 400, bubbles: true }))
@@ -165,5 +169,10 @@ describe("mount", () => {
         expect(box.getAttribute("width")).toBe("600")    // 800 - 200
         expect(box.getAttribute("height")).toBe("600")
         window.dispatchEvent(new MouseEvent("mouseup", { clientX: 400, clientY: 400, bubbles: true }))
+        // TL anchor (200,200), BR dragged to (800,800); viewport 1200x800
+        expect(committed!.payload.xmin).toBeCloseTo(10 * 200 / 1200)
+        expect(committed!.payload.xmax).toBeCloseTo(10 * 800 / 1200)
+        expect(committed!.payload.ymin).toBeCloseTo(0)    // image y 800 → data 100*(1-800/800)=0
+        expect(committed!.payload.ymax).toBeCloseTo(75)   // image y 200 → data 100*(1-200/800)=75
     })
 })

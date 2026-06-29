@@ -161,6 +161,16 @@ end
         _, _, ctxs = ctx_for(fs)
         @test validate(ROIInteractable(axs; bounds = (1.0, 2.0, 1.0, 2.0)), ctxs) isa String
         @test_throws ArgumentError ROIInteractable(ax; bounds = (3.0, 1.0, 2.0, 8.0))   # xmin >= xmax
+        @test_throws ArgumentError ROIInteractable(ax; bounds = (1.0, 3.0, 8.0, 2.0))   # ymin >= ymax
+        # xscale non-invertible also fails loud
+        fxx = Figure(); axx = Axis(fxx[1, 1]; xscale = sqrt); scatter!(axx, [1.0, 2.0], [1.0, 2.0])
+        _, _, ctxx = ctx_for(fxx)
+        @test validate(ROIInteractable(axx; bounds = (1.0, 2.0, 1.0, 2.0)), ctxx) isa String
+        # categorical axes rejected (no numeric bounds)
+        fc2 = Figure(); axc2 = Axis(fc2[1, 1]; dim1_conversion = Makie.CategoricalConversion())
+        scatter!(axc2, ["a", "b", "c"], [1.0, 2.0, 3.0])
+        _, _, ctxc2 = ctx_for(fc2)
+        @test validate(ROIInteractable(axc2; bounds = (1.0, 2.0, 1.0, 2.0)), ctxc2) isa String
         # end-to-end: the :roi layer serializes through build_manifest
         mr = build_manifest([r], ctx)["layers"][1]
         @test mr["kind"] == "roi" && mr["events"] == ["drag"]
