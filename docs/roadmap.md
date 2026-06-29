@@ -68,5 +68,79 @@ redraw** (dragging a data point and reflowing the plot per frame). These need a 
 renderer — that's **WGLMakie's** domain, a different product. Holo stays static-base + thin overlay.
 
 ## Suggested order
-M1 (make it solid) → M2.1 plot-introspection (the ergonomic unlock most users will want) →
-M3 cheap-wins + M4 drag (the two highest-demand expansions) → everything else as pulled.
+
+Done: M1 · M2.1/M2.2 · M3 cheap-wins · M4 drag. What remains, sequenced for a polished
+(not-MVP) first release. The order is driven by four real dependency edges, not by milestone
+number — everything else is reorderable by demand.
+
+**The four edges that constrain order:**
+- **Perf envelope → everything payload-heavy.** Tooltips, animation frames, SVG, and the
+  multi-select return shape all inflate the base64/manifest payload, whose ceiling is an
+  *undocumented empirical unknown* (`research-findings.md` Q5, `design.md` §10). Measure it
+  first so the rest is built against a known knee.
+- **Richer tooltips → all surface payloads.** M3 cheap-wins already deferred their good
+  payloads (`{i,j,value}`, `value`, `equation`) to it; every surface added after ships a real
+  tooltip instead of payload JSON. Rides the existing `tooltip(i,idx,payload)::Union{Nothing,String}`
+  seam + `HitStyle` field — additive, not a rework.
+- **Multi-select → the bond contract.** `Vector{InteractionEvent}` is the forward-compatible
+  extension v1 was shaped for (`architecture.md`:261). Land the contract change before stacking
+  more surfaces on it. Preserve the "never `Nothing`" invariant (empty vector, not nothing).
+- **Everything → registration.** Last, after the API stops moving.
+
+### Phase 0 — Measure (front-loaded spike)
+- **Perf benchmarking** — base64 size knee (10–100 KB+ plausible, unmeasured), click round-trip
+  latency, confirm MsgPack fast-path engages. A spike, not a feature; it *bounds the scope* of
+  tooltips/animation/SVG below. The roadmap files this under M5 but the docs put it early.
+
+### Phase 1 — Foundations that unblock the rest
+- **M2.3 Richer tooltips** — pre-serialized per-element HTML/template; extends the existing
+  tooltip seam. (Watch: per-element HTML edges toward the "rich UI chrome" framework-revisit
+  trigger in `frontend-delivery.md`, and inflates payload — stay inside the Phase-0 envelope.)
+- **M4 Multi-select / box-select** — the `Vector{InteractionEvent}` contract extension. Builds
+  on the M2 typed bond (`Bonds.transform_value`) + v1 manifest selected-state. Kernel-only
+  (inert in static export); accumulate selection client-side since Pluto throttling is lossy.
+
+### Phase 2 — Surface coverage (parallel; each now carries a real payload)
+No new JS primitive in this phase — every surface reuses v1's `:rects`/`:polygons` tests; the
+work is always a Julia-side extractor. (`update_state_before_display!(fig)` is the mandatory
+pre-manifest step for all three.)
+- **Bars/areas** (Waterfall/CrossBar, HSpan/VSpan, Colorbar/Legend) — cheapest: existing
+  rect-`:list`. Colorbar/Legend are the tractable slice; Waterfall's dodge/stack math is the
+  sharp edge.
+- **Computational-geometry extraction** (Contourf/Tricontourf, Violin, Voronoiplot, BoxPlot
+  notches → polygons) — hardest M3 item: Tier-4 Makie *recipes*, reach into recipe internals to
+  recover polygons. No new primitive (even-odd polygon test), but the extractor is the cost.
+- **Text bboxes** (Text/Annotation/TextLabel) — *not* a 7th primitive: rotated text = degenerate
+  polygon reusing the polygon test. The genuinely new work is **font-metric measurement**, the
+  one thing the coord system was built not to model (`design.md` §6) — do it last in this phase,
+  self-contained.
+
+These three are independent and can run concurrently.
+
+### Phase 3 — Interaction depth
+- **Animation / scrubbing (Tier 1)** — precomputed frames baked into one manifest (the snapshot
+  model *forces* this, not live Observables). Rehydrate scrubber position from
+  `data-*`/sessionStorage/`@bind`, never element instance state. Payload-heavy → must fit the
+  Phase-0 envelope; a JS scrubber may trip the framework-revisit trigger.
+- **Wide mode** (`max_width=W`) — *not* cheap: vendor the WideCell technique inside the widget
+  (PlutoUI's no-ops under `@bind`), and a `max_width` change forces a full re-render (new Screen
+  + regenerated manifest), not a CSS resize. Self-contained; slot anytime in this phase.
+
+### Phase 4 — Output & scale (gated by Phase 0)
+- **SVG output path** — base SVG output is already the `mount=:svg` seam; the new part is the
+  overlay over a vector base. Least-validated item: gate behind a viability spike (primitive-count
+  threshold; SVG uses `pt_per_unit/0.75`, not `px_per_unit`). Sparse-plot mode only — dense plots
+  stay PNG. Pairs naturally with Phase 0.
+- **Spatial acceleration** (quadtree/grid) — demand-gated; may never be built. Grids are already
+  O(1), so scope is only flat list layers (Scatter/rect-`:list`/segments). JS-only; must preserve
+  manifest-order first-match. Build *only* if Phase 0 shows the O(n) knee is real.
+
+### Phase 5 — Polish & release
+- **Theming** (Pluto light/dark, shadow-DOM scoped) — overlay can theme freely (shadow root +
+  bundled CSS already in place); the opaque base PNG can't follow the theme without a re-render —
+  scope accordingly.
+- **GLMakie-static backend** — first do the prerequisite seam refactor (move
+  `data_to_image_px`/projection onto the rendercontext so it isn't hard-bound to CairoMakie),
+  then the backend slots in behind the same contract. Must stay static→PNG (no 3D/live). Optional.
+- **Register in General** — strictly last, after the API stabilizes. Needs the committed in-tree
+  bundle + CI-on-GitHub; CHANGELOG → 0.1.0 tag on a CI-built commit → Registrator/TagBot.
