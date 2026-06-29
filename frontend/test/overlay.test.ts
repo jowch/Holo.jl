@@ -196,6 +196,55 @@ describe("mount", () => {
         expect(box.getAttribute("height")).toBe("600")   // |800 - 200|
         window.dispatchEvent(new MouseEvent("mouseup", { clientX: 700, clientY: 500, bubbles: true }))
     })
+
+    const boxSelectManifest: Manifest = {
+        width: 1200, height: 800, scaling: 2,
+        transforms: { ax1: { xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
+            viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false } },
+        layers: [
+            // three points (image px); box [200,600]×[200,600] encloses the first two
+            { id: "pts", kind: "circles", geometry: [300, 300, 10, 500, 500, 10, 900, 700, 10],
+                payloads: [{ i: 0 }, { i: 1 }, { i: 2 }], axis: "ax1", events: ["click", "hover"] },
+            { id: "roi", kind: "roi", axis: "ax1", events: ["drag"], payloads: [],
+                selects: "pts", geometry: { x: 200, y: 200, w: 400, h: 400, handle: 16 } },
+        ],
+    }
+
+    it("box-select over points emits a Vector envelope of contained points + highlights them", () => {
+        const { host, script } = setup()
+        mount(script, boxSelectManifest)
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        let committed: { items: { layer: string; index: number }[] } | null = null
+        host.addEventListener("input", () => {
+            committed = (host as unknown as { value: { items: { layer: string; index: number }[] } }).value
+        })
+        // grab the box interior (image 400,400 = client 200,200), release without moving → emit current enclosure
+        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 200, clientY: 200, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 200, clientY: 200, bubbles: true }))
+        expect(committed!.items.map((e) => e.index)).toEqual([0, 1])
+        expect(committed!.items.every((e) => e.layer === "pts")).toBe(true)
+        // two persistent selection highlights drawn
+        expect(shadow.querySelector("g.sel")!.children.length).toBe(2)
+    })
+
+    it("box-select with nothing enclosed emits an empty items envelope", () => {
+        const { host, script } = setup()
+        mount(script, boxSelectManifest)
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const box = shadow.querySelectorAll("rect")[0] as SVGRectElement
+        let committed: { items: unknown[] } | null = null
+        host.addEventListener("input", () => {
+            committed = (host as unknown as { value: { items: unknown[] } }).value
+        })
+        // move the box up so it encloses no point: grab interior, drag origin up-left out of the cluster
+        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 200, clientY: 200, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 350, clientY: 50, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 350, clientY: 50, bubbles: true }))
+        expect(box).toBeTruthy()
+        expect(committed!.items).toEqual([])
+    })
 })
 
 // M2.3 tooltip glue in showTip: tipStyle application + the template / auto-table / suppress branches.

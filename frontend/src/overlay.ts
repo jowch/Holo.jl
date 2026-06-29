@@ -2,7 +2,7 @@
 // draws highlights, and round-trips clicks through the @bind element. Stateless across re-render.
 import { hitTest, invertAxis, resolvePayload } from "./geometry"
 import { renderTemplate, renderAutoTable, esc } from "./template"
-import type { AxisTransform, Hit, Manifest, ThresholdGeometry, ROIGeometry } from "./types"
+import type { AxisTransform, Hit, HitLayer, Manifest, ThresholdGeometry, ROIGeometry } from "./types"
 
 const SVG_NS = "http://www.w3.org/2000/svg"
 
@@ -60,7 +60,11 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     const svg = document.createElementNS(SVG_NS, "svg")
     svg.setAttribute("viewBox", `0 0 ${manifest.width} ${manifest.height}`)
     svg.setAttribute("preserveAspectRatio", "none")
-    const hiGroup = document.createElementNS(SVG_NS, "g") // transient hover/selected highlights
+    const selGroup = document.createElementNS(SVG_NS, "g") // persistent box-selection highlights (g.sel, z-below hover)
+    selGroup.setAttribute("class", "sel")
+    svg.appendChild(selGroup)
+    const hiGroup = document.createElementNS(SVG_NS, "g") // transient hover highlights (g.hi, z-above sel)
+    hiGroup.setAttribute("class", "hi")
     svg.appendChild(hiGroup)
     const surface = document.createElement("div")
     surface.className = "surface"
@@ -137,46 +141,16 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
 
     type Drag =
         | { kind: "threshold"; id: string; line: SVGLineElement; tg: ThresholdGeometry; t: AxisTransform }
-        | { kind: "roi"; id: string; box: ROIBox; mode: { corner: number } | { move: true }; ax: number; ay: number }
+        | { kind: "roi"; id: string; box: ROIBox; mode: { corner: number } | { move: true }; ax: number; ay: number; target?: HitLayer }
     let drag: Drag | null = null
     let justDragged = false
     const clampX = (t: AxisTransform, x: number) => Math.max(t.viewport[0], Math.min(t.viewport[0] + t.viewport[2], x))
     const clampY = (t: AxisTransform, y: number) => Math.max(t.viewport[1], Math.min(t.viewport[1] + t.viewport[3], y))
 
     const clearHi = () => { while (hiGroup.firstChild) hiGroup.removeChild(hiGroup.firstChild) }
-
-    const drawHi = (hit: Hit) => {
-        clearHi()
-        if (!hit.geom) return
-        const st = hit.layer.style ?? { stroke: "#ff3b30", width: 3 }
-        const g = hit.geom as [string, ...number[]] | [string, number[]]
-        let el: SVGElement | null = null
-        if (g[0] === "circle") {
-            el = document.createElementNS(SVG_NS, "circle")
-            el.setAttribute("cx", String(g[1])); el.setAttribute("cy", String(g[2])); el.setAttribute("r", String((g[3] as number) + 2))
-        } else if (g[0] === "rect") {
-            el = document.createElementNS(SVG_NS, "rect")
-            el.setAttribute("x", String((g[1] as number) - (g[3] as number) / 2))
-            el.setAttribute("y", String((g[2] as number) - (g[4] as number) / 2))
-            el.setAttribute("width", String(g[3])); el.setAttribute("height", String(g[4]))
-        } else if (g[0] === "seg") {
-            el = document.createElementNS(SVG_NS, "line")
-            el.setAttribute("x1", String(g[1])); el.setAttribute("y1", String(g[2]))
-            el.setAttribute("x2", String(g[3])); el.setAttribute("y2", String(g[4]))
-        } else if (g[0] === "poly") {
-            el = document.createElementNS(SVG_NS, "polygon")
-            const ring = g[1] as number[]
-            let pts = ""
-            for (let k = 0; k < ring.length; k += 2) pts += `${ring[k]},${ring[k + 1]} `
-            el.setAttribute("points", pts.trim())
-        }
-        if (!el) return
-        el.setAttribute("fill", "none")
-        el.setAttribute("stroke", st.stroke)
-        el.setAttribute("stroke-width", String(st.width))
-        el.setAttribute("vector-effect", "non-scaling-stroke")
-        hiGroup.appendChild(el)
-    }
+    const clearSel = () => { while (selGroup.firstChild) selGroup.removeChild(selGroup.firstChild) }
+    const drawHi = (hit: Hit) => { clearHi(); const el = makeHiElement(hit); if (el) hiGroup.appendChild(el) }
+    const drawSelection = (hits: Hit[]) => { clearSel(); for (const h of hits) { const el = makeHiElement(h); if (el) selGroup.appendChild(el) } }
 
     const showTip = (hit: Hit, x: number, y: number, e: MouseEvent) => {
         const layer = hit.layer
@@ -220,13 +194,14 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         } else if (hit.layer.kind === "roi" && hit.roiPart) {
             const box = roiBoxes.get(hit.layer.id)
             if (!box) return
+            const target = hit.layer.selects ? (manifest.layers.find((l) => l.id === hit.layer.selects) as HitLayer | undefined) : undefined
             if (hit.roiPart.move) {
-                drag = { kind: "roi", id: hit.layer.id, box, mode: { move: true }, ax: p.x - box.g.x, ay: p.y - box.g.y }
+                drag = { kind: "roi", id: hit.layer.id, box, mode: { move: true }, ax: p.x - box.g.x, ay: p.y - box.g.y, target }
             } else {
                 const k = hit.roiPart.corner as number
                 const c = [[box.g.x, box.g.y], [box.g.x + box.g.w, box.g.y], [box.g.x + box.g.w, box.g.y + box.g.h], [box.g.x, box.g.y + box.g.h]]
                 const opp = c[(k + 2) % 4]
-                drag = { kind: "roi", id: hit.layer.id, box, mode: { corner: k }, ax: opp[0], ay: opp[1] }
+                drag = { kind: "roi", id: hit.layer.id, box, mode: { corner: k }, ax: opp[0], ay: opp[1], target }
             }
         } else return
         surface.classList.add("grabbing")
@@ -251,22 +226,31 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
                 box.g.w = Math.abs(cx - drag.ax); box.g.h = Math.abs(cy - drag.ay)
             }
             setROI(box)
-            const b = roiBounds(box)
-            tip.textContent = `x:[${fmt(b.xmin)}, ${fmt(b.xmax)}] y:[${fmt(b.ymin)}, ${fmt(b.ymax)}]`
+            if (drag.target) {
+                const sel = computeSelection(box.g, drag.target)
+                drawSelection(sel.hits)
+                tip.textContent = `${sel.items.length} selected`
+            } else {
+                const b = roiBounds(box)
+                tip.textContent = `x:[${fmt(b.xmin)}, ${fmt(b.xmax)}] y:[${fmt(b.ymin)}, ${fmt(b.ymax)}]`
+            }
         }
         tip.style.display = "block"; tip.style.left = `${e.offsetX}px`; tip.style.top = `${e.offsetY}px`
     }
     const onUp = (e: MouseEvent) => {
         if (!drag) return
         const p = imgPx(e)
-        let payload: unknown
-        if (drag.kind === "threshold") {
+        if (drag.kind === "roi" && drag.target) {
+            const sel = computeSelection(drag.box.g, drag.target)
+            drawSelection(sel.hits)
+            ;(host as unknown as { value: unknown }).value = { items: sel.items }
+        } else if (drag.kind === "threshold") {
             const v = invertAxis(drag.t, clampX(drag.t, p.x), clampY(drag.t, p.y))
-            payload = drag.tg.orientation === "h" ? v.y : v.x
+            const payload = drag.tg.orientation === "h" ? v.y : v.x
+            ;(host as unknown as { value: unknown }).value = { layer: drag.id, index: 0, payload }
         } else {
-            payload = roiBounds(drag.box)
+            ;(host as unknown as { value: unknown }).value = { layer: drag.id, index: 0, payload: roiBounds(drag.box) }
         }
-        ;(host as unknown as { value: unknown }).value = { layer: drag.id, index: 0, payload }
         host.dispatchEvent(new CustomEvent("input"))
         tip.style.display = "none"; surface.classList.remove("grabbing")
         justDragged = true
@@ -311,6 +295,65 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
 }
 
 const fmt = (v: unknown) => (typeof v === "number" ? v.toPrecision(4) : String(v))
+
+// --- highlight element factory (shared by hover drawHi and box-selection selGroup) ---
+function makeHiElement(hit: Hit): SVGElement | null {
+    if (!hit.geom) return null
+    const st = hit.layer.style ?? { stroke: "#ff3b30", width: 3 }
+    const g = hit.geom as [string, ...number[]] | [string, number[]]
+    let el: SVGElement | null = null
+    if (g[0] === "circle") {
+        el = document.createElementNS(SVG_NS, "circle")
+        el.setAttribute("cx", String(g[1])); el.setAttribute("cy", String(g[2])); el.setAttribute("r", String((g[3] as number) + 2))
+    } else if (g[0] === "rect") {
+        el = document.createElementNS(SVG_NS, "rect")
+        el.setAttribute("x", String((g[1] as number) - (g[3] as number) / 2))
+        el.setAttribute("y", String((g[2] as number) - (g[4] as number) / 2))
+        el.setAttribute("width", String(g[3])); el.setAttribute("height", String(g[4]))
+    } else if (g[0] === "seg") {
+        el = document.createElementNS(SVG_NS, "line")
+        el.setAttribute("x1", String(g[1])); el.setAttribute("y1", String(g[2]))
+        el.setAttribute("x2", String(g[3])); el.setAttribute("y2", String(g[4]))
+    } else if (g[0] === "poly") {
+        el = document.createElementNS(SVG_NS, "polygon")
+        const ring = g[1] as number[]
+        let pts = ""
+        for (let k = 0; k < ring.length; k += 2) pts += `${ring[k]},${ring[k + 1]} `
+        el.setAttribute("points", pts.trim())
+    }
+    if (!el) return null
+    el.setAttribute("fill", "none")
+    el.setAttribute("stroke", st.stroke)
+    el.setAttribute("stroke-width", String(st.width))
+    el.setAttribute("vector-effect", "non-scaling-stroke")
+    return el
+}
+
+// Bond item shape emitted per contained element in a selects-ROI { items: SelectionItem[] }
+type SelectionItem = { layer: string; index: number; payload: unknown }
+type SelectionResult = { items: SelectionItem[]; hits: Hit[] }
+
+// Box pixel-rect → contained items + highlight hits, dispatched by target kind.
+// Task 5 replaces the grid branch body with real findBin-based region derivation.
+function computeSelection(
+    box: { x: number; y: number; w: number; h: number },
+    target: HitLayer
+): SelectionResult {
+    const xlo = box.x, xhi = box.x + box.w, ylo = box.y, yhi = box.y + box.h
+    if (target.kind === "circles" && Array.isArray(target.geometry)) {
+        const a = target.geometry as number[]
+        const items: SelectionItem[] = [], hits: Hit[] = []
+        for (let k = 0; k < Math.floor(a.length / 3); k++) {
+            const cx = a[3 * k], cy = a[3 * k + 1]
+            if (cx >= xlo && cx <= xhi && cy >= ylo && cy <= yhi) {
+                items.push({ layer: target.id, index: k, payload: target.payloads[k] })
+                hits.push({ layer: target, index: k, geom: ["circle", cx, cy, a[3 * k + 2]] })
+            }
+        }
+        return { items, hits }
+    }
+    return { items: [], hits: [] } // Task 5: grid region via findBin on xedges/yedges
+}
 
 // resolve a layer element by index to a highlight geom (for pre-selected drawing)
 function hitLayerByIndex(layer: import("./types").HitLayer, index: number): Omit<Hit, "layer"> | null {
