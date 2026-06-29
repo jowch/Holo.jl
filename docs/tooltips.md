@@ -116,7 +116,10 @@ browser-side concern.
 
 A `@generated` check to surface field typos before `build_manifest` is deferred (it
 requires concretely-typed `NamedTuple` payloads and is a no-op on `Vector{Any}` /
-heterogeneous payloads). Build-time Phase 2 is the guarantee for all payload types.
+heterogeneous payloads). Build-time field validation runs when the layer's payloads are
+`NamedTuple`s (the default for the built-in interactables). For `Dict`-valued or
+heterogeneous payloads, the build-time check is skipped — a missing `$(field)` renders
+empty at hover rather than raising at build.
 
 ## 4. Tooltip content — defaults and suppress
 
@@ -201,8 +204,9 @@ property set on an ancestor element takes effect.
 ### Caret
 
 When `tooltip_caret = true` (the default), a speech-bubble tail is drawn between the
-card and the hovered data point. The caret edge flips automatically when the tooltip is
-near a figure boundary, keeping the card inside the viewport.
+card and the hovered data point. The caret is a fixed CSS triangle (`::before`)
+pointing toward the hovered point; the card is offset from the cursor by a fixed
+translate and is not clamped to the figure bounds.
 
 ### `--holo-tip-*` custom property reference
 
@@ -290,6 +294,7 @@ require breaking changes to add.
 | Per-element function tier (`tooltip = p -> @htl"..."`) | **Cut** — O(N) build footgun; per-element *values* belong in the payload | Partially covered by `$(field:raw)` (below) |
 | `$(field:raw)` — unescaped field interpolation | Deferred | Explicit opt-in marker (Bokeh `{safe}`-style); pre-render HTML into a payload field, inject unescaped |
 | Per-layer `tooltip_*` style override | Deferred | Non-breaking kwarg on the per-layer interactable constructor |
-| Compile-time field validation (`@generated`) | Deferred | No-op on heterogeneous payloads; build-time Phase 2 is the guarantee |
+| Compile-time field validation (`@generated`) | Deferred | No-op on heterogeneous payloads; build-time Phase 2 runs for `NamedTuple` payloads |
+| Caret edge-flipping / viewport-collision clamping | Deferred | Keep card inside viewport bounds on figure edges; auto-flip caret |
 | Inline date formatting | Deferred (would add `d3-time-format`) | Format dates in Julia into a payload string field |
 | Following Pluto's own dark-mode toggle | Deferred | Pluto exposes no stable JS event for this; `prefers-color-scheme` is the correct current default |
