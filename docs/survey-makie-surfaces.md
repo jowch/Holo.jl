@@ -48,10 +48,10 @@ The closed set is exactly six, and it is closed because every retained surface's
 
 1. **circle** `{cx,cy,r}` — markers. r derived from `markersize` × `px_per_unit` (markerspace=:pixel).
 2. **segment / polyline** — a vertex list + `mode`. Polyline shares vertices (segment i = v[i],v[i+1], NaN = gap); pairs are disjoint (v[2i],v[2i+1]). One JS distance-to-segment test serves both.
-3. **rect** (axis-aligned, data-space) `{cx,cy,w,h}` — bars, heatmap cells. Grid form ships only `(x_edges, y_edges)` + matrix dims, not N rects, so a 1000×1000 heatmap is a constant-size manifest with O(1) inversion.
+3. **rect** (axis-aligned, data-space) `{cx,cy,w,h}` — bars, heatmap cells. Grid form ships `(x_edges, y_edges)` + matrix dims, not N rects, so the *geometry* is compact with O(1) inversion — but it also ships the full **source-resolution** `values[]` matrix to power the `(i,j)=value` readout, which is O(source-cells): a 1000² heatmap is ~4.78 MB, *not* constant-size (a 2000²–4000² `image!` reaches tens of MB). Candidate M2.3 guard: cap `values[]` by cell count, drop for `Image`, default payload `{i,j}`, `@warn`. See `architecture.md` §8.
 4. **polygon** — vertex ring, even-odd fill rule for holes. Pie wedges, Poly, Band quads.
 5. **bbox** (pixel-space, may carry rotation θ) — reserved for v2 rotated text/markers; distinct from rect because it lives in pixel space post-projection and can be rotated. A θ=0 bbox is a rect; a θ≠0 bbox is a degenerate 4-vertex polygon. We keep it nominally separate so the cheap axis-aligned path stays cheap, but the JS test for it = the polygon test.
-6. **axis-transform** — per-axis `{limits, scale, viewport, reversed, float32_offset}` shipped once, enabling continuous data↔pixel inversion in JS for AxisInteractable and for any hover that wants live coordinates.
+6. **axis-transform** — per-axis `{limits, scale, viewport, reversed, float32_offset}` shipped once, enabling continuous data↔pixel inversion in JS for AxisInteractable and for any hover that wants live coordinates. *(Precision note: despite `float32_offset`, the limits/viewport must stay `Float64` — the M4 drag inverts pixel→data through them and error amplifies; geometry is quantizable, this transform channel is not. `architecture.md` §9.)*
 
 **What does not fit, and the disposition:**
 
@@ -112,6 +112,10 @@ hoverstyle(i::AbstractInteractable, idx::Int)::NamedTuple = (; stroke="#000", wi
 struct HitRegion
     kind::Symbol          # :circle | :segment | :rect | :polygon | :bbox
     coords::Vector{Float32}   # image-px; interpretation keyed by `kind`
+    #   ^ Float32 pixel coords are overkill for ~1px hit-testing and (nested in the Dict/Any
+    #     manifest) still serialize as a generic MsgPack array. Deferred wire-encoding levers:
+    #     int/fixed-point px (~40% off) or lifting geometry to a top-level typed vector (binary
+    #     fast-path). NOT Float16 (no msgpack float16; lossy >2048px). YAGNI — architecture.md §9.
     payload               # JSON-serializable; THE linkage/identity primitive
 end
 ```
@@ -173,7 +177,7 @@ FunctionInteractable(ax, f; id, events=(:click,:hover))
 
 - **PointInteractable:** Scatter, Stem, Spy, ScatterLines·points — markers are the canonical click target; circle test is trivial.
 - **SegmentInteractable:** Lines, LineSegments, Stairs, ScatterLines·lines, Errorbars, Rangebars, HLines, VLines — all reduce to data-space vertices projecting linearly; HLines/VLines are tier-2 only because they read `finallimits`, which we already have post-`update_state_before_display!`.
-- **RectInteractable:** Heatmap, Image (grid, O(1) inversion, constant manifest), BarPlot, Hist, BoxPlot (rect list).
+- **RectInteractable:** Heatmap, Image (grid, O(1) inversion; geometry compact but manifest **O(source-cells)** via `values[]` — ~4.78 MB at 1000², a candidate cap target in M2.3, droppable entirely for `Image`), BarPlot, Hist, BoxPlot (rect list).
 - **PolygonInteractable:** Poly, Band, Pie — vertices live directly in data space; the tier-2 label on Poly is *extraction* complexity (multiple meshes/holes), not projection, and even-odd point-in-polygon handles it.
 - **AxisInteractable:** the whole-axis coordinate readout, linear and log.
 

@@ -143,10 +143,17 @@ permissive; `AxisInteractable.validate` is the one that gates.
 
 ### `HitLayer` — the serialized unit (per interactable, per kind)
 
-The unit is a **layer**, not a single element, because two v1 surfaces need compact representations
+The unit is a **layer**, not a single element, because two v1 surfaces need compact *geometry*
 that a flat per-element list can't give: a 1000×1000 **heatmap grid** (ship edges, not 10⁶ rects) and
 a **polyline** (ship vertices once, hit-test segments in JS). A layer is one geometry *kind* plus the
 data to resolve a hit to an element index and its payload.
+
+> **Caveat (the grid is compact in geometry, not in payload).** The grid *geometry* is O(edges),
+> but to power the client-side `(i,j)=value` readout the layer also ships the full **source-resolution**
+> `values[]` matrix — O(source-cells), the dominant grid term. So a routine 2000²–4000² `heatmap!`/`image!`
+> ships tens of MB of values on top of a display-bounded PNG (4.78 MB measured at 1000²). This is the
+> day-one-reachable face of "the manifest is the scaling wall" (§8). Capping/dropping `values[]` is a
+> *candidate* M2.3 guard, not current behavior — today it ships by design. See `perf-findings.md`.
 
 ```julia
 struct HitLayer
@@ -167,7 +174,7 @@ Geometry layout by `kind` (all coords image-px, top-left origin):
 | `:polyline` | `Float32[x,y, …]` (NaN = gap) | nearest segment, dist ≤ tol | segment i = (v[i],v[i+1]) |
 | `:segments` | `Float32[x0,y0,x1,y1, …]` | nearest of disjoint pairs | pair index |
 | `:rects` | `Float32[cx,cy,w,h, …]` | point-in-rect | quad index |
-| `:grid` | `(xedges, yedges)` image-px | binary-search bin → (i,j) | `j*ncols+i` (O(1), constant manifest) |
+| `:grid` | `(xedges, yedges, ncols, nrows, values[])` image-px | binary-search bin → (i,j) | `j*ncols+i` (O(1) hit-test; manifest **O(source-cells)** via `values[]`, see §8) |
 | `:polygons` | `Vector{Vector{Float32}}` rings | even-odd point-in-polygon | ring index |
 | `:axis` | `nothing` | always-hit; invert via AxisTransform | `-1` (continuous) |
 
@@ -278,7 +285,9 @@ them cleanly:
   geometry. Enabled by shipping `AxisTransform` to JS. `events(i)` with only `:hover` keeps it local.
 - **Tier 1 (precomputed):** `hitlayers(i, ctx)` *is* this tier — Julia computes regions once after
   `update_state_before_display!`. Animation = a precomputed frame sequence (a future `frames` slot on
-  the manifest; the format is designed not to preclude it).
+  the manifest; the format is designed not to preclude it). **It is the one payload-unbounded feature**
+  (total = frames × per-frame PNG): ~5.5 MB (187 KB × 30) to ~22 MB (× 120) for a typical plot, 100s of MB
+  at scale. The `frames` slot must shrink per-frame cost (downscale / fewer frames) before it ships — §8.
 - **Tier 2 (round-trip):** `:click` events → `@bind`. Faithful plot redraw from arbitrary new state is
   the irreducible-latency wall and is out of scope (that's WGLMakie's domain, not this package's).
 
@@ -300,7 +309,10 @@ them cleanly:
 typed `InteractionEvent` (`transform_value`); **opaque-bg save/restore** (no figure mutation). Hover tooltips +
 JS highlight; click → `@bind`. **Hit-testing is naive O(n) per pointer move** with a documented
 ceiling (~few-thousand elements/segments); past that, `log()` a notice — no silent degradation. Spatial
-acceleration (bucketing/quadtree) is added only if someone hits the wall.
+acceleration (bucketing/quadtree) is added only if someone hits the wall — but note (§8) the wall that
+bites *first* is manifest **payload size** (serialize + transfer), not hit-test CPU, so the
+higher-leverage lever is wire encoding (§9), not a quadtree. Spatial acceleration stays YAGNI until a
+profile shows JS hit-test *specifically* is the bottleneck.
 
 **v2:** plot-object introspection constructors; multi-select / box-select (`Vector{InteractionEvent}`);
 ABLines/Arc, spans, Colorbar/Legend, contourf/violin/voronoi (computational-geometry extraction),
@@ -308,3 +320,49 @@ text bboxes (font metrics), animation frames, SVG-overlay annotations, spatial h
 
 **Never (without a new backend class):** 3D (Surface, MeshScatter, Arrows3D), PolarAxis/Axis3,
 high-frequency live redraw. These are WGLMakie's domain.
+
+## 8. Payload scaling & robustness to large inputs
+
+Measured in the Phase 0 spike (`perf-findings.md` is the single source of every number here; cite it,
+don't restate). A rendered cell ships **two** payloads — the JS→Julia click return is negligible:
+
+| Term | Carried by | Bounded by |
+|---|---|---|
+| **base64 PNG** | HTML `<img>` | the **display** (DPI/`max_width` policy → output px), *not* source resolution |
+| **manifest** | `published_to_js` (MsgPack) | **unbounded by display** — O(#hit-elements) + O(source-cells) for grids |
+
+**The manifest is the scaling wall** — not the PNG, not render, not hit-test CPU. A realistic single
+plot is **50–400 KB total and render-bound** (~65 ms round-trip). High-N scatter / large grids reach
+multi-MB and flip to **payload-bound** (~290 ms serialize+transfer at a 4.78 MB manifest; ~553 ms total
+for a 1000² heatmap). Nothing crashes — it degrades into the half-second range — but tens of MB would lag
+the Pluto editor.
+
+**Robustness to large inputs (assume a user *will* do this).** We ship a tool to Pluto/Makie users, so
+assume someone overlays `holo` on a 2000²–4000² `heatmap!`/`image!` *because they can*. The PNG is safe
+(display-bounded), but the `:grid` `values[]` matrix is **source-bounded**, so that routine input ships
+tens of MB of redundant numbers on top of the PNG that already shows them — and the user's matrix already
+lives in their Julia session. Today `values[]` ships by design (it powers the no-round-trip `(i,j)=value`
+hover). The **candidate** guard, to be designed in M2.3 (which owns the `{i,j,value}` payload): ship
+`values[]` only under a cell-count cap, drop it for `Image`, default the payload to `{i,j}`, and `@warn`
+when dropped (the project's "fail loud, never silently wrong"). Recorded as a constraint, not committed scope.
+
+## 9. Wire encoding & precision (deferred / YAGNI)
+
+Phase 0 *measured* that the manifest is the wall and that `published_to_js` serializes as **generic
+MsgPack** maps/arrays (the `Dict{String,Any}` / `Any[]` root defeats the TypedArray binary fast-path even
+though leaf geometry is `Vector{Float32}`). The encoding options below are **design reasoning**, not
+measured findings — they bound *how* a future high-N optimization could go, gated on a surface actually
+pulling for it:
+
+- **Scalar precision.** Geometry is `Float32` *pixel* coordinates — overkill for ~1px hit-testing. Integer
+  / fixed-point pixels are more compact *and* match the real accuracy need. **`Float16` is the wrong way
+  down**: MsgPack has no float16 type (it promotes to float32 → no saving) and it is lossy above 2048px.
+- **Container structure.** Lifting geometry to a *top-level typed numeric vector* would engage MsgPack's
+  binary fast-path (no per-element tags) — the bigger structural lever, but a change to the manifest shape.
+- **The precision split (a real constraint now).** Per-element **geometry** is quantizable to pixels, but
+  the **`AxisTransform` lims/viewport must stay `Float64`**: the M4 drag path inverts pixel→data through
+  them and the error amplifies — and at O(1)/axis the precision costs nothing. Do not blanket-quantize the
+  manifest; only per-element geometry is a candidate.
+
+Both levers are demand-gated. The point of recording them: when a high-N surface makes the manifest the
+bottleneck, reach for wire encoding before a quadtree (§7).

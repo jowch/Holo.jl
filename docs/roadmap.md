@@ -49,12 +49,12 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 *Goal: the Tier-0/Tier-1 interactions the architecture already supports.*
 
 - [x] **Drag (Tier 0)**: draggable overlay geometry with live data readout via the shipped `AxisTransform`; commit on mouse-up. 60 fps, no per-frame Julia. *Done (first cut): `ThresholdInteractable` — a draggable horizontal/vertical line. The line lives entirely in the overlay (base PNG never redraws); mouse-up inverts the dragged pixel to a data scalar via `invertAxis` and round-trips it through `@bind`. `ROIInteractable` adds a draggable + resizable box (data-space bounds → `@bind`); movable points reuse the same mechanism (deferred).*
-- [ ] **Animation / scrubbing (Tier 1)**: precomputed frame sequence in the manifest + a JS scrubber; bond value = current frame/param. Latency paid once, up front.
+- [ ] **Animation / scrubbing (Tier 1)**: precomputed frame sequence in the manifest + a JS scrubber; bond value = current frame/param. *Payload* (not latency) is the gate: total = frames × per-frame PNG = 5.5–22 MB typical, 144–481 MB at stress scale (`perf-findings.md`) — naive full-res scrub is not viable; must shrink per-frame cost (downscale / fewer frames).
 - [ ] **Multi-select / box-select**: `Vector{InteractionEvent}` (the forward-compat extension single-select was shaped for).
 - [ ] **Wide mode**: `holo(fig, …; max_width=W)` vendoring the `PlutoUI.WideCell` technique inside the widget (it no-ops under `@bind` if used externally).
 
 ## M5 — Scale & polish
-- [ ] **Spatial acceleration** (quadtree/grid) for large-N hit-testing — only when the documented O(n) ceiling is actually hit (`log()` the cap until then).
+- [ ] **Spatial acceleration** (quadtree/grid) for large-N hit-testing — only when the documented O(n) ceiling is actually hit (`log()` the cap until then). *Phase 0 reframe:* hit-test is ~0 ms; the wall is manifest **payload size** (~290 ms serialize+transfer at 4.78 MB), so wire-encoding (typed-array fast-path / int coords / capping `values[]`) outranks a quadtree (see Phase 4).
 - [x] **Perf benchmarking**: the unmeasured Q5 envelope — base64 size + click latency knee; confirm MsgPack fast-path engages. *Done (`bench/payload_envelope.jl` → `docs/perf-findings.md`): single plots 50–400 KB, manifest O(N) elements, heatmaps O(cells), animation = frames × PNG (the hard ceiling, 5.5–22 MB). MsgPack confirmed (generic maps, not the TypedArray fast-path). Full click round-trip measured live (headless Pluto + Chromium): ~65 ms median — render-bound, browser overhead negligible. Editor-lag knee (editor stutter, distinct from latency) deferred.*
 - [ ] **Theming**: respect Pluto light/dark for highlight/tooltip styling (shadow-DOM scoped).
 - [ ] **GLMakie-static backend**: GPU offscreen → PNG, same `AbstractBackend` contract (for envs with a GPU).
@@ -104,7 +104,13 @@ number — everything else is reorderable by demand.
 ### Phase 1 — Foundations that unblock the rest
 - **M2.3 Richer tooltips** — pre-serialized per-element HTML/template; extends the existing
   tooltip seam. (Watch: per-element HTML edges toward the "rich UI chrome" framework-revisit
-  trigger in `frontend-delivery.md`, and inflates payload — stay inside the Phase-0 envelope.)
+  trigger in `frontend-delivery.md`, and inflates payload.) **Measured budget** (`perf-findings.md`):
+  keep per-element HTML under ~200 B at N≈1000 (+196 KB, 22→218 KB, sub-300-KB band); at N≈10000 rich
+  per-element HTML pushes the manifest into MB territory; 50000 × 200 B = 10.6 MB → gate it. **Also
+  owns the grid `values[]` guard** (worth *considering*): the `{i,j,value}` payload ships the full
+  source-resolution `values[]` matrix (by design today, ~4.78 MB at 1000²) — a candidate cell-count
+  cap, drop-for-`Image`, `@warn`-when-dropped guard (fail-loud; the user's matrix is already in their
+  session). See `architecture.md` §8.
 - **M4 Multi-select / box-select** — the `Vector{InteractionEvent}` contract extension. Builds
   on the M2 typed bond (`Bonds.transform_value`) + v1 manifest selected-state. Kernel-only
   (inert in static export); accumulate selection client-side since Pluto throttling is lossy.
@@ -142,7 +148,15 @@ These three are independent and can run concurrently.
   stay PNG. Pairs naturally with Phase 0.
 - **Spatial acceleration** (quadtree/grid) — demand-gated; may never be built. Grids are already
   O(1), so scope is only flat list layers (Scatter/rect-`:list`/segments). JS-only; must preserve
-  manifest-order first-match. Build *only* if Phase 0 shows the O(n) knee is real.
+  manifest-order first-match. **Phase 0 measured hit-test at ~0 ms** (scatter-50/10k) and found the
+  first wall is manifest *payload size* (serialize+transfer), not hit-test CPU — so build this *only*
+  if a profile ever shows JS hit-test **specifically** (not serialize/transfer) is the bottleneck.
+  (Phase 0 did not stress hit-test at extreme N≈200k; but there the 9.28 MB manifest dominates anyway.)
+- **Wire encoding** (higher-leverage than spatial acceleration) — lift geometry/values to a top-level
+  typed numeric `Vector` to engage MsgPack's binary fast-path (the `Dict{String,Any}`/`Any[]` root
+  currently defeats it); per-element geometry is also quantizable to integer/fixed-point pixels. Demand-
+  gated / YAGNI. **Design constraint** (not a measured result): keep `AxisTransform` lims/viewport
+  `Float64` — the M4 drag inverts pixel→data through them. See `architecture.md` §9.
 
 ### Phase 5 — Polish & release
 - **Theming** (Pluto light/dark, shadow-DOM scoped) — overlay can theme freely (shadow root +
