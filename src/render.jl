@@ -194,5 +194,11 @@ end
 APD.Bonds.initial_value(::HoloWidget) = nothing
 function APD.Bonds.transform_value(::HoloWidget, js)
     js === nothing && return nothing
+    if haskey(js, "items")   # a selector's declared multi output (Design D) — always a vector
+        return InteractionEvent[
+            InteractionEvent(Symbol(it["layer"]), Int(it["index"]), get(it, "payload", nothing))
+                for it in js["items"]
+        ]
+    end
     return InteractionEvent(Symbol(js["layer"]), Int(js["index"]), get(js, "payload", nothing))
 end

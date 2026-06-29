@@ -253,6 +253,30 @@ end
         @test ev isa InteractionEvent && ev.layer === :scatter && ev.index == 2
     end
 
+    @testset "transform_value multi-select envelope" begin
+        using Holo: InteractionEvent
+        tv = Holo.APD.Bonds.transform_value
+        w = Holo.HoloWidget("", Dict{String, Any}(), 100)   # transform_value ignores the widget fields
+        @test tv(w, nothing) === nothing
+        # single (click / bounds) — unchanged
+        single = tv(w, Dict("layer" => "pts", "index" => 3, "payload" => Dict("city" => "NYC")))
+        @test single isa InteractionEvent && single.layer === :pts && single.index == 3
+        # multi (box-select over points)
+        multi = tv(
+            w, Dict(
+                "items" => [
+                    Dict("layer" => "pts", "index" => 1, "payload" => Dict("v" => 10)),
+                    Dict("layer" => "pts", "index" => 4, "payload" => Dict("v" => 40)),
+                ]
+            )
+        )
+        @test multi isa Vector{InteractionEvent} && length(multi) == 2
+        @test multi[1].index == 1 && multi[2].index == 4
+        # empty box — empty vector, never nothing
+        empty = tv(w, Dict("items" => []))
+        @test empty isa Vector{InteractionEvent} && isempty(empty)
+    end
+
     @testset "M2.1 plot-introspection constructors" begin
         # An introspected interactable must produce the SAME hitlayers as the explicit one a
         # user would hand-write — introspection is sugar over M1, not a parallel path.
