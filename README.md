@@ -71,6 +71,7 @@ Declare interactables explicitly (geometry in data space):
 - `PolygonInteractable` — arbitrary polygons
 - `AxisInteractable` — the whole axis: click anywhere → data `(x, y)` (linear + log)
 - `ThresholdInteractable` — a draggable horizontal/vertical line; drag for a live readout, commit the data value on mouse-up
+- `ROIInteractable` — a draggable + resizable rectangle; drag the interior to move, a corner to resize; commit the data-space bounds on mouse-up
 - `RegionInteractable` / `FunctionInteractable` — custom interactions, no JavaScript required
 
 Linear, log, and categorical axes; single or multiple axes; linked selection via shared
@@ -137,9 +138,11 @@ Every interactable takes an `Axis` and geometry in **data space** (projected in 
 | `PolygonInteractable(ax, rings; id = :polygons, payloads)` | `rings :: Vector{Vector{(x, y)}}` — one or more filled rings | `(; index)` |
 | `AxisInteractable(ax; id = :axis)` | the whole axis: a click anywhere returns the data coordinate | `Dict("x" => …, "y" => …)` |
 | `ThresholdInteractable(ax; orientation = :horizontal, value, id = :threshold)` | a draggable line (`:horizontal` = constant-y, dragged vertically; `:vertical` = constant-x); live readout while dragging, commit on mouse-up | scalar data coord (client-side, on release) |
+| `ROIInteractable(ax; bounds = (xmin, xmax, ymin, ymax), id = :roi)` | a draggable + resizable box; move (interior) / resize (corner); commit on mouse-up | `Dict("xmin"=>…, "xmax"=>…, "ymin"=>…, "ymax"=>…)` (client-side, on release) |
 
-`AxisInteractable` and `ThresholdInteractable` invert pixels→data client-side, so they support `identity` / `log10` /
-`log` scales (categorical is fine); any other scale fails loud at `holo()` time.
+`AxisInteractable`, `ThresholdInteractable`, and `ROIInteractable` invert pixels→data client-side, so they support `identity` / `log10` /
+`log` scales; any other scale fails loud at `holo()` time. Categorical axes are fine for `AxisInteractable`/`ThresholdInteractable` (which
+read a category), but `ROIInteractable` rejects them — its numeric bounds have no meaning on categories.
 
 ### From a plot object (no hand-written geometry)
 

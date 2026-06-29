@@ -1,5 +1,5 @@
 // Pure hit-test math — no DOM. All coordinates are image pixels. Unit-tested in test/geometry.test.ts.
-import type { AxisTransform, GridGeometry, Hit, HitLayer, Manifest, ThresholdGeometry } from "./types"
+import type { AxisTransform, GridGeometry, Hit, HitLayer, Manifest, ThresholdGeometry, ROIGeometry } from "./types"
 
 const HIT_TOL = 4 // px slack for circles/rects
 const SEG_TOL = 8 // px slack for segments/polylines
@@ -126,6 +126,15 @@ export function hitLayer(layer: HitLayer, px: number, py: number): Omit<Hit, "la
             const x1 = tg.orientation === "h" ? hi : tg.pos
             const y1 = tg.orientation === "h" ? tg.pos : hi
             if (distToSegment(px, py, x0, y0, x1, y1) <= SEG_TOL) return { index: 0, geom: ["seg", x0, y0, x1, y1] }
+            return null
+        }
+        case "roi": {
+            const rg = g as ROIGeometry
+            const corners: [number, number][] = [[rg.x, rg.y], [rg.x + rg.w, rg.y], [rg.x + rg.w, rg.y + rg.h], [rg.x, rg.y + rg.h]]
+            for (let k = 0; k < 4; k++) {
+                if (Math.abs(px - corners[k][0]) <= rg.handle && Math.abs(py - corners[k][1]) <= rg.handle) return { index: 0, roiPart: { corner: k } }
+            }
+            if (px >= rg.x && px <= rg.x + rg.w && py >= rg.y && py <= rg.y + rg.h) return { index: 0, roiPart: { move: true } }
             return null
         }
         case "axis":
