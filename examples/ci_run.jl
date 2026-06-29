@@ -15,9 +15,14 @@ using Pluto
 const HEADER = "### A Pluto.jl notebook ###"
 is_notebook(p) = isfile(p) && endswith(p, ".jl") && startswith(readline(p), HEADER)
 
-dir = @__DIR__
-notebooks = sort(filter(is_notebook, readdir(dir; join = true)))
-isempty(notebooks) && error("no Pluto notebooks found in $dir")
+dirs = [@__DIR__, normpath(joinpath(@__DIR__, "..", "gallery"))]
+notebooks = String[]
+for d in dirs
+    isdir(d) || continue
+    append!(notebooks, filter(is_notebook, readdir(d; join = true)))
+end
+notebooks = sort(notebooks)
+isempty(notebooks) && error("no Pluto notebooks found in $(join(dirs, ", "))")
 @info "Found $(length(notebooks)) notebook(s)" names = basename.(notebooks)
 
 failed = String[]
