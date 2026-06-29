@@ -601,4 +601,15 @@ end
         # `tooltip = true` is meaningless (only `false` suppresses) → fail loud
         @test_throws ArgumentError build_manifest([PointInteractable(ax, pts2; tooltip = true)], ctx)
     end
+
+    @testset "AbstractSelector / ROIInteractable selects" begin
+        using Holo: selects, compatible_kinds, ROIInteractable, AbstractSelector
+        fig = Figure(); ax = Axis(fig[1, 1]); lines!(ax, 1:10, 1:10)
+        roi = ROIInteractable(ax; bounds = (2.0, 8.0, 2.0, 8.0))
+        @test roi isa AbstractSelector
+        @test selects(roi) === nothing
+        @test compatible_kinds(roi) == (:circles, :grid)
+        roi2 = ROIInteractable(ax; bounds = (2.0, 8.0, 2.0, 8.0), selects = :pts)
+        @test selects(roi2) === :pts
+    end
 end

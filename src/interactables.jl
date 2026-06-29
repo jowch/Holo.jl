@@ -28,6 +28,12 @@ events(::AbstractInteractable) = (:click, :hover)
 tooltip_spec(::AbstractInteractable) = nothing
 hoverstyle(::AbstractInteractable, ::Int) = (; stroke = "#ff3b30", width = 3)
 
+abstract type AbstractSelector <: AbstractInteractable end
+
+# Selection interface (only AbstractSelectors override these).
+selects(::AbstractInteractable) = nothing
+compatible_kinds(::AbstractInteractable) = ()
+
 # validate is per-capability (architecture.md §3). Element interactables project in Julia via
 # Makie.project, so they work on any Makie-projectable scale → no gate (default `nothing`).
 # Only AxisInteractable relies on client-side JS inversion, so it alone restricts scales.
@@ -229,16 +235,18 @@ end
 # A draggable + resizable rectangle (Tier 0). Moves/resizes locally in JS; on mouse-up the two
 # opposite pixel corners are inverted to data-space bounds via the AxisTransform and round-tripped
 # to @bind. Lives entirely in the overlay — the base render never sees it.
-struct ROIInteractable <: AbstractInteractable
-    ax; bounds::NTuple{4, Float64}; id::Symbol   # (xmin, xmax, ymin, ymax) data space
+struct ROIInteractable <: AbstractSelector
+    ax; bounds::NTuple{4, Float64}; id::Symbol; selects::Union{Nothing, Symbol}   # (xmin,xmax,ymin,ymax) data space
 end
-function ROIInteractable(ax; bounds, id = :roi)
+function ROIInteractable(ax; bounds, id = :roi, selects = nothing)
     length(bounds) == 4 || throw(ArgumentError("ROIInteractable: bounds must be (xmin, xmax, ymin, ymax)"))
     xmin, xmax, ymin, ymax = Float64.(Tuple(bounds))
     (xmin < xmax && ymin < ymax) ||
         throw(ArgumentError("ROIInteractable: need xmin < xmax and ymin < ymax, got $(bounds)"))
-    return ROIInteractable(ax, (xmin, xmax, ymin, ymax), id)
+    return ROIInteractable(ax, (xmin, xmax, ymin, ymax), id, selects)
 end
+selects(i::ROIInteractable) = i.selects
+compatible_kinds(::ROIInteractable) = (:circles, :grid)
 events(::ROIInteractable) = (:drag,)
 function validate(i::ROIInteractable, ctx::InteractionContext)
     t = ctx.transforms[axis_id(ctx, i.ax)]

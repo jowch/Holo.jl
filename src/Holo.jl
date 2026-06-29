@@ -24,7 +24,7 @@ include("introspect.jl")
 include("render.jl")
 
 export AbstractBackend, CairoBackend
-export AbstractInteractable, HitLayer, InteractionContext, AxisTransform
+export AbstractInteractable, AbstractSelector, HitLayer, InteractionContext, AxisTransform
 export PointInteractable, SegmentInteractable, RectInteractable, PolygonInteractable,
     AxisInteractable, RegionInteractable, FunctionInteractable, ThresholdInteractable, ROIInteractable
 export holo, auto_interactables, InteractionEvent, data_to_image_px, hitlayers
