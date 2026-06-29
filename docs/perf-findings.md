@@ -4,8 +4,9 @@
 > A measurement spike, not a feature — it **bounds the scope** of every payload-heavy roadmap
 > item after it (M2.3 tooltips, M4 animation, SVG output, multi-select return shape).
 >
-> Reproduce (numbers below re-run 2026-06-29 after int-pixel geometry quantization, CairoMakie 0.15,
-> Julia 1.12):
+> Reproduce (numbers below re-run 2026-06-29, last reconciled for M2.3 template-tooltip design
+> on branch `worktree-m2.3-rich-tooltips`; baseline established after int-pixel geometry quantization,
+> CairoMakie 0.15, Julia 1.12):
 > - **base64-PNG / manifest / render numbers** — `julia --project=. bench/payload_envelope.jl`
 >   (normal envelope) and `julia --project=. bench/stress.jl` (the 10× extremes). Both `seed!(0)`,
 >   so PNG/manifest sizes reproduce *exactly* (render-ms is wall-clock, so it varies). These are the
@@ -26,6 +27,11 @@ From `src/render.jl` `show`, a rendered cell ships two payloads (the click *retu
 
 The "large base64 → editor lag" warning in Q5 is about the **PNG**. The manifest is the term
 that **future features inflate** (tooltips, animation frames, multi-select).
+
+**JS bundle (one-time, per page-load):** `assets/overlay.js` is inlined per cell and idempotent
+(no repeated download cost). M2.3 bundled d3-format as the **first runtime JS dependency**, growing
+the committed bundle **10 828 → 17 515 bytes raw minified** (+6 687 B raw; ~2–2.5 KB gzipped delta).
+This is a one-time delivery cost per page-load, independent of manifest or PNG size.
 
 ## Measured envelope
 
@@ -54,8 +60,8 @@ here. It becomes a real risk only at the extremes below.
 - **Per-element count** is linear: ~38 bytes/element (3 Int geometry coords at 1–3 B each + a small
   payload whose `x`/`y` stay Float64). 10 000 elements → ~379 KB.
 - **Heatmaps carry the full value matrix** (`:grid` geometry's `values[]`, O(cells)): 200×200 ≈
-  198 KB. By design — that value already feeds the deferred `{i,j,value}` tooltip, so M2.3 adds
-  no extra cost for heatmaps.
+  198 KB. By design — that value already feeds the `{i,j,value}` hover readout; M2.3 confirmed
+  no extra cost for heatmaps (template + tipStyle are O(1) per layer, not per-cell).
 - **px_per_unit (display width)** scales the PNG ~quadratically with width but **does not** touch
   the manifest (geometry is pixel coords; the count is unchanged): scatter-1000 PNG 90 KB @300px
   → 187 KB @700px, manifest ~38 KB both.
@@ -134,7 +140,7 @@ heatmap render-bound.
 | scatter 200 000 | 71 KB | **7.72 MB** | ~3.0 s |
 | heatmap 300×300 (cells visible) | 388 KB | 441 KB | ~50 ms |
 | heatmap 1000×1000 (cells sub-pixel) | 2.26 MB | **6 KB** | ~120 ms |
-| scatter 50 000 + 200 B tooltip/elem | 47 KB | **10.2 MB** | ~1.35 s |
+| scatter 50 000 + 200 B payload/elem | 47 KB | **10.2 MB** | ~1.35 s |
 
 - **PNG is non-monotonic in N** — past saturation, dense random scatter compresses to a near-solid mass
   (200 000 pts → only 71 KB), while the **manifest grows strictly O(N) to 7.7 MB** (int-pixel geometry,
@@ -178,12 +184,17 @@ float16; lossy >2048px). Keep `AxisTransform` lims `Float64` (drag inversion) �
 
 ## Scope bounds for downstream phases
 
-- **M2.3 Richer tooltips** — manifest grows by `Σ(tooltip bytes)`. Measured: 1 000 elements ×
-  200-byte HTML each = +196 KB (14 → 210 KB). **Budget: keep per-element tooltip HTML under
-  ~200 bytes at N≈1 000** to stay in the sub-300-KB band. Rich per-element HTML at N≈10 000 will
-  push the manifest into MB territory — gate it (truncate, or hand-roll only on hover via a
-  template) before shipping unbounded HTML. (Stress confirms: 50 000 elements × 200 B each =
-  **10.2 MB manifest** → a payload-bound ~0.5 s+ round-trip.)
+- **M2.3 Richer tooltips** *(delivered, branch `worktree-m2.3-rich-tooltips`)* — the original
+  prediction was correct: shipping per-element tooltip strings would grow the manifest by `Σ(tooltip
+  bytes)`. Measured upper bounds (bench section B / Stress D): 1 000 elements × 200-byte HTML each =
+  +196 KB (14 → 210 KB); 50 000 elements × 200 B each = **10.2 MB manifest** → payload-bound
+  ~0.5 s+ round-trip. M2.3 avoided this by design: the per-element `tooltips[]` array was **not
+  shipped** in the manifest. Instead, each layer that has a tooltip carries two O(1)-per-layer
+  terms — `template` (a small segments array evaluated per hover) and a top-level `tipStyle`
+  (CSS-var dict). The **default per-element envelope is unchanged** — confirmed by M2.3 bench
+  re-run: scatter-1000 → 38 KB manifest, scatter-10000 → 379 KB manifest. The JS bundle grew by
+  ~6.7 KB raw (10 828 → 17 515 B) to bundle d3-format (see "Two payload terms" above); this is
+  a one-time delivery cost, not a per-manifest term.
 - **M4 Animation / scrubbing** — frames are pre-baked PNGs: **total = frames × per-frame PNG**.
   Measured: a 187-KB plot × 30 frames = **5.5 MB**, × 120 = **22 MB**. This is the hard ceiling
   of the roadmap. Animation **must** shrink per-frame cost (smaller canvas / lower px_per_unit /
