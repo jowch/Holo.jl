@@ -5,7 +5,7 @@
 > item after it (M2.3 tooltips, M4 animation, SVG output, multi-select return shape).
 >
 > Reproduce (numbers below re-run 2026-06-29, last reconciled for M2.3 template-tooltip design
-> on branch `worktree-m2.3-rich-tooltips`; baseline established after int-pixel geometry quantization,
+> on PR #10; baseline established after int-pixel geometry quantization,
 > CairoMakie 0.15, Julia 1.12):
 > - **base64-PNG / manifest / render numbers** — `julia --project=. bench/payload_envelope.jl`
 >   (normal envelope) and `julia --project=. bench/stress.jl` (the 10× extremes). Both `seed!(0)`,
@@ -184,7 +184,7 @@ float16; lossy >2048px). Keep `AxisTransform` lims `Float64` (drag inversion) �
 
 ## Scope bounds for downstream phases
 
-- **M2.3 Richer tooltips** *(delivered, branch `worktree-m2.3-rich-tooltips`)* — the original
+- **M2.3 Richer tooltips** *(delivered, PR #10)* — the original
   prediction was correct: shipping per-element tooltip strings would grow the manifest by `Σ(tooltip
   bytes)`. Measured upper bounds (bench section B / Stress D): 1 000 elements × 200-byte HTML each =
   +196 KB (14 → 210 KB); 50 000 elements × 200 B each = **10.2 MB manifest** → payload-bound
