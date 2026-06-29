@@ -9,34 +9,46 @@
 #   - manifest    → shipped via published_to_js (MsgPack on the wire) each render.
 # The click return value (JS→Julia) is tiny (layer/index/payload) and not swept here.
 
-using Holo, CairoMakie, Printf
+using Holo, CairoMakie, Printf, Random
+Random.seed!(0)   # deterministic geometry/PNG so the committed numbers are exactly reproducible
+# (render-ms still varies run-to-run — it's wall-clock timing, not a size).
 
 # ponytail: a msgpack *size* counter, not a msgpack library — models Pluto's published_to_js
 # wire format (MsgPack) without adding MsgPack.jl to the package deps. We only need the byte
 # count, and the spec's sizing rules are a few lines. Upgrade to MsgPack.jl if exact bytes
 # ever matter. Encodings: https://github.com/msgpack/msgpack/blob/master/spec.md
-_str(n)  = (n < 32 ? 1 : n < 256 ? 2 : n < 65536 ? 3 : 5) + n
-_int(n)  = (-32 <= n < 128 ? 1 : abs(n) < 128 ? 2 : abs(n) < 32768 ? 3 : abs(n) < 2^31 ? 5 : 9)
-_hdr(n)  = n < 16 ? 1 : n < 65536 ? 3 : 5
+_str(n) = (n < 32 ? 1 : n < 256 ? 2 : n < 65536 ? 3 : 5) + n
+_int(n) = (-32 <= n < 128 ? 1 : abs(n) < 128 ? 2 : abs(n) < 32768 ? 3 : abs(n) < 2^31 ? 5 : 9)
+_hdr(n) = n < 16 ? 1 : n < 65536 ? 3 : 5
 mp(x::AbstractString) = _str(ncodeunits(x))
-mp(x::Symbol)         = _str(ncodeunits(String(x)))
-mp(::Nothing)         = 1
-mp(x::Bool)           = 1
-mp(x::Integer)        = _int(Int(x))
-mp(x::AbstractFloat)  = 9                              # always float64
-mp(x::AbstractDict)   = _hdr(length(x)) + sum(k -> mp(k) + mp(x[k]), keys(x); init = 0)
-mp(x::NamedTuple)     = _hdr(length(x)) + sum(p -> _str(ncodeunits(String(p[1]))) + mp(p[2]), pairs(x); init = 0)
+mp(x::Symbol) = _str(ncodeunits(String(x)))
+mp(::Nothing) = 1
+mp(x::Bool) = 1
+mp(x::Integer) = _int(Int(x))
+mp(x::Float32) = 5                              # msgpack float32 (HitLayer.geometry is Float32[])
+mp(x::AbstractFloat) = 9                              # float64 (axis transform lims/viewport)
+mp(x::AbstractDict) = _hdr(length(x)) + sum(k -> mp(k) + mp(x[k]), keys(x); init = 0)
+mp(x::NamedTuple) = _hdr(length(x)) + sum(p -> _str(ncodeunits(String(p[1]))) + mp(p[2]), pairs(x); init = 0)
 mp(x::Union{AbstractVector, Tuple}) = _hdr(length(x)) + sum(mp, x; init = 0)
-mp(x) = _hdr(length(x)) + 9 * length(x)               # Point2f & friends → array of floats
+mp(x) = _hdr(length(x)) + 5 * length(x)               # Point2f & friends → array of Float32 (not hit by these cases)
 
 kb(bytes) = round(bytes / 1024; digits = 1)
 b64bytes(w) = (length(w.b64) * 3) ÷ 4                  # base64 chars → decoded bytes
 
+# hit-element count: payload entries for list layers, ncols×nrows cells for :grid (heatmap)
+# layers — whose cells live in `geometry`, not `payloads`, so payload-count alone reads 0.
+function nhits(L)
+    g = L["geometry"]
+    return g isa AbstractDict ? get(g, "ncols", 0) * get(g, "nrows", 0) : length(get(L, "payloads", []))
+end
+
 function row(label, w)
     nlayers = length(w.manifest["layers"])
-    nelem = sum(L -> length(get(L, "payloads", [])), w.manifest["layers"]; init = 0)
-    @printf("  %-34s  png=%8s KB   manifest=%8s KB   layers=%2d  elems=%6d\n",
-        label, kb(b64bytes(w)), kb(mp(w.manifest)), nlayers, nelem)
+    nelem = sum(nhits, w.manifest["layers"]; init = 0)
+    return @printf(
+        "  %-34s  png=%8s KB   manifest=%8s KB   layers=%2d  elems/cells=%7d\n",
+        label, kb(b64bytes(w)), kb(mp(w.manifest)), nlayers, nelem
+    )
 end
 
 println("\n=== A. base64 PNG vs plot density (default width, px_per_unit) ===")
@@ -75,11 +87,13 @@ end
 
 println("\n=== D. projected animation cost (Tier-1) = frames × per-frame PNG ===")
 let
-    f = Figure(size = (600, 400)); ax = Axis(f[1, 1]); scatter!(ax, rand(1000), rand(1000))
-    per = b64bytes(holo(f))
+    f = Figure(size = (600, 400)); ax = Axis(f[1, 1]); scatter!(ax, rand(1000), rand(1000); markersize = 6)
+    per = b64bytes(holo(f))   # same config as section A's scatter-1000 → comparable per-frame size
     for nf in (30, 120)
-        @printf("  %-34s  total≈%8s KB  (%d frames × %s KB)\n",
-            "$nf-frame scrub", kb(per * nf), nf, kb(per))
+        @printf(
+            "  %-34s  total≈%8s KB  (%d frames × %s KB)\n",
+            "$nf-frame scrub", kb(per * nf), nf, kb(per)
+        )
     end
 end
 println("\n=== E. render latency — Julia half of the click→re-render round-trip (warmed) ===")
