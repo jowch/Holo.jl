@@ -271,9 +271,31 @@ no-server architecture.
 A typed `InteractionEvent` wrapper over the dict is shipped via
 `AbstractPlutoDingetjes.Bonds.transform_value`; the raw NamedTuple/Dict is the underlying value.
 
-**Single-select in v1.** The bond carries **one** event per click, not an accumulating set.
-The value is shaped so a `Vector{InteractionEvent}` is a forward-compatible extension (multi-select /
-box-select) without breaking the single-event contract — but v1 ships single.
+**M4 selector contract — Design D.** The bond value depends on whether the interactable is a
+selector (a `ROIInteractable` with `selects=:layer_id` set) or not:
+
+- **Click interactables and bounds-only `ROIInteractable`** (no `selects` kwarg) return a single
+  `InteractionEvent` (or `nothing` before the first interaction) — the v1 single-event contract is
+  unchanged. This is a deliberate Design-D decision: the union `single | Vector` is resolved by the
+  presence or absence of `selects`, not by a per-event flag.
+- **Selector ROIs** (`ROIInteractable(…; selects=:layer_id)`) implement
+  `AbstractSelector <: AbstractInteractable` and return `Vector{InteractionEvent}`:
+  - **Points / segments / rects target** → N point events, one per element whose geometry falls
+    within the dragged box.
+  - **Grid target** (`:grid` kind) → a 1-element vector holding a **region descriptor**
+    `(; i0, i1, j0, j1, xmin, xmax, ymin, ymax)` — 0-based inclusive cell indices plus
+    data-space bounds — for server-side aggregate statistics. The browser never needs `values[]`
+    for box-selection.
+  - **Empty box** → `InteractionEvent[]` (never `nothing`).
+
+**`AbstractSelector`** is the selector sub-interface (`selects(sel)::Symbol` returning the target
+layer id; `compatible_kinds(sel)` returning accepted geometry kinds). At manifest-build,
+`compatible_kinds` is validated against the target layer's `kind` — an incompatible pairing is a
+loud `ArgumentError`. The only new manifest field is `selects` (a string id) on the selector
+layer; `targetKind`/`arity` fields were designed but dropped as redundant — the JS reads the
+target kind from the looked-up layer, and `transform_value` detects the `{ items: [...] }` JS
+return envelope shape to produce the vector (versus the flat `{layer,index,payload}` dict for
+single events).
 
 **Selected-state lives in the manifest, not a `previous=` kwarg.** Because the overlay is wiped on
 every re-render, a *persistent* "this element is selected" highlight must be re-derived each render.
@@ -321,9 +343,14 @@ bites *first* is manifest **payload size** (serialize + transfer), not hit-test 
 higher-leverage lever is wire encoding (§9), not a quadtree. Spatial acceleration stays YAGNI until a
 profile shows JS hit-test *specifically* is the bottleneck.
 
-**v2:** plot-object introspection constructors; multi-select / box-select (`Vector{InteractionEvent}`);
-ABLines/Arc, spans, Colorbar/Legend, contourf/violin/voronoi (computational-geometry extraction),
-text bboxes (font metrics), animation frames, SVG-overlay annotations, spatial hit-test acceleration.
+**M4 (shipped):** `ThresholdInteractable` (draggable threshold line, Tier 0); `ROIInteractable`
+(draggable + resizable box, Tier 0 bounds + M4 box-select); `AbstractSelector` /
+`selects`-ROI — `Vector{InteractionEvent}` bond, Design-D contract (§5); gallery recipes
+(box-select scatter, image ROI per-channel stats).
+
+**v2:** plot-object introspection constructors; ABLines/Arc, spans, Colorbar/Legend,
+contourf/violin/voronoi (computational-geometry extraction), text bboxes (font metrics),
+animation frames, SVG-overlay annotations, spatial hit-test acceleration.
 
 **Never (without a new backend class):** 3D (Surface, MeshScatter, Arrows3D), PolarAxis/Axis3,
 high-frequency live redraw. These are WGLMakie's domain.

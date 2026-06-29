@@ -50,7 +50,11 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 
 - [x] **Drag (Tier 0)**: draggable overlay geometry with live data readout via the shipped `AxisTransform`; commit on mouse-up. 60 fps, no per-frame Julia. *Done (first cut): `ThresholdInteractable` — a draggable horizontal/vertical line. The line lives entirely in the overlay (base PNG never redraws); mouse-up inverts the dragged pixel to a data scalar via `invertAxis` and round-trips it through `@bind`. `ROIInteractable` adds a draggable + resizable box (data-space bounds → `@bind`); movable points reuse the same mechanism (deferred).*
 - [ ] **Animation / scrubbing (Tier 1)**: precomputed frame sequence in the manifest + a JS scrubber; bond value = current frame/param. *Payload* (not latency) is the gate: total = frames × per-frame PNG = 5.5–22 MB typical, 144–481 MB at stress scale (`perf-findings.md`) — naive full-res scrub is not viable; must shrink per-frame cost (downscale / fewer frames).
-- [ ] **Multi-select / box-select**: `Vector{InteractionEvent}` (the forward-compat extension single-select was shaped for).
+- [x] **Multi-select / box-select**: `Vector{InteractionEvent}` bond via `AbstractSelector` /
+  `selects`-ROI (Design D — clicks stay single; `selects`-ROI returns the vector: points target
+  → N events, grid target → 1-element region descriptor for server-side stats, empty box →
+  `InteractionEvent[]`). Shipped with `gallery/gallery.jl` recipes (box-select scatter;
+  image ROI per-channel stats).
 - [ ] **Wide mode**: `holo(fig, …; max_width=W)` vendoring the `PlutoUI.WideCell` technique inside the widget (it no-ops under `@bind` if used externally).
 
 ## M5 — Scale & polish
@@ -69,7 +73,7 @@ renderer — that's **WGLMakie's** domain, a different product. Holo stays stati
 
 ## Suggested order
 
-Done: M1 · M2.1/M2.2 · M2.3 tooltips · M3 cheap-wins · M4 drag · Phase 0 measure. What remains, sequenced for a polished
+Done: M1 · M2.1/M2.2 · M2.3 tooltips · M3 cheap-wins · M4 drag · M4 box-select · Phase 0 measure. What remains, sequenced for a polished
 (not-MVP) first release. The order is driven by four real dependency edges, not by milestone
 number — everything else is reorderable by demand.
 
@@ -126,9 +130,16 @@ number — everything else is reorderable by demand.
   2000²–4000² (drop). It's an *expected* size (overlay still hit-tests against the true runtime scale).
   Self-tuning and **subsumes the special `Image` case** (source-res > display-res → sub-pixel → auto-drop).
   See `architecture.md` §8.
-- **M4 Multi-select / box-select** — the `Vector{InteractionEvent}` contract extension. Builds
-  on the M2 typed bond (`Bonds.transform_value`) + v1 manifest selected-state. Kernel-only
-  (inert in static export); accumulate selection client-side since Pluto throttling is lossy.
+- [x] **M4 Multi-select / box-select** — *Done.* `AbstractSelector <: AbstractInteractable`
+  interface (`selects(sel)`, `compatible_kinds(sel)`) + `ROIInteractable(…; selects=:id)` as the
+  first concrete selector. Design-D bond contract: clicks / bounds-only ROI stay single
+  `InteractionEvent`; a `selects`-ROI returns `Vector{InteractionEvent}` — points target → N
+  events, grid target → 1-element region descriptor `(; i0,i1,j0,j1,xmin,xmax,ymin,ymax)` for
+  server-side stats (browser never needs `values[]` for selection), empty box →
+  `InteractionEvent[]` (never `nothing`). Wire: only new manifest field is `selects` string on
+  the ROI layer; `transform_value` keys on the `{ items: [...] }` JS envelope shape.
+  `targetKind`/`arity` were dropped as redundant. Shipped with `gallery/gallery.jl` recipes
+  (box-select scatter; image ROI per-channel stats).
 
 ### Phase 2 — Surface coverage (parallel; each now carries a real payload)
 No new JS primitive in this phase — every surface reuses v1's `:rects`/`:polygons` tests; the
