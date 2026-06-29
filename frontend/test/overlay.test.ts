@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from "vitest"
 import { mount } from "../src/overlay"
-import type { Manifest } from "../src/types"
+import type { HitLayer, Manifest } from "../src/types"
 
 // build a light-DOM host (img + script) like the Julia widget emits, with layout mocked
 function setup() {
@@ -195,5 +195,55 @@ describe("mount", () => {
         expect(box.getAttribute("width")).toBe("1000")   // |1200 - 200|
         expect(box.getAttribute("height")).toBe("600")   // |800 - 200|
         window.dispatchEvent(new MouseEvent("mouseup", { clientX: 700, clientY: 500, bubbles: true }))
+    })
+})
+
+// M2.3 tooltip glue in showTip: tipStyle application + the template / auto-table / suppress branches.
+// (template.test.ts covers the escape/format logic in isolation; this locks the mount-level wiring.)
+describe("tooltips (mount/showTip)", () => {
+    // one circles layer at image-px (600,400) r=20 — hovered at client (300,200) since scale = 2
+    const tipManifest = (extra: Partial<HitLayer>, tipStyle?: Record<string, string>): Manifest => ({
+        width: 1200, height: 800, scaling: 2, transforms: {},
+        layers: [{ id: "pts", kind: "circles", geometry: [600, 400, 20], payloads: [{ name: "Tokyo" }], axis: "ax1", events: ["click", "hover"], ...extra }],
+        ...(tipStyle ? { tipStyle } : {}),
+    })
+    const hoverMarker = (shadow: ShadowRoot) =>
+        (shadow.querySelector(".surface") as HTMLElement)
+            .dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
+
+    it("applies tipStyle custom properties to the shadow host", () => {
+        const { host, script } = setup()
+        mount(script, tipManifest({}, { "--holo-tip-bg": "rgb(1,2,3)" }))
+        expect((host.lastElementChild as HTMLElement).style.getPropertyValue("--holo-tip-bg")).toBe("rgb(1,2,3)")
+    })
+
+    it("renders a template tooltip as HTML on hover (markup live, data escaped)", () => {
+        const { host, script } = setup()
+        mount(script, tipManifest({ template: ["<b>", { f: "name" }, "</b>"], payloads: [{ name: "<x>" }] }))
+        const shadow = shadowOf(host)
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        hoverMarker(shadow)
+        expect(tip.style.display).toBe("block")
+        expect(tip.innerHTML).toBe("<b>&lt;x&gt;</b>")   // the <b> stays live; the payload value is escaped
+    })
+
+    it("renders the auto-table default when no template is set", () => {
+        const { host, script } = setup()
+        mount(script, tipManifest({}))
+        const shadow = shadowOf(host)
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        hoverMarker(shadow)
+        expect(tip.style.display).toBe("block")
+        expect(tip.innerHTML).toContain("holo-tip-row")
+        expect(tip.innerHTML).toContain("Tokyo")
+    })
+
+    it("suppresses the tooltip when tooltip === false", () => {
+        const { host, script } = setup()
+        mount(script, tipManifest({ tooltip: false }))
+        const shadow = shadowOf(host)
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        hoverMarker(shadow)
+        expect(tip.style.display).toBe("none")
     })
 })

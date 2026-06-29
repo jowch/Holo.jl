@@ -13,7 +13,42 @@ struct InteractionEvent
     payload::Any
 end
 
+# ---- tooltip styling: tooltip_* kwargs -> CSS custom-property dict (figure-level) ------------
+# Accepts a CSS string or any Makie-convertible color. Only set knobs are emitted; everything else
+# falls through to the overlay's built-in NYT defaults (incl. the dark-mode media query).
+function _css_color(c)
+    c isa AbstractString && return c
+    rgba = Makie.RGBAf(Makie.to_color(c))
+    r, g, b = round(Int, 255 * rgba.r), round(Int, 255 * rgba.g), round(Int, 255 * rgba.b)
+    return rgba.alpha >= 1 ? "rgb($r,$g,$b)" : "rgba($r,$g,$b,$(round(rgba.alpha; digits = 3)))"
+end
+
+function tip_style_dict(;
+        tooltip_bg = nothing, tooltip_color = nothing, tooltip_accent = nothing,
+        tooltip_font = nothing, tooltip_font_size = nothing, tooltip_radius = nothing,
+        tooltip_caret = true,
+    )
+    d = Dict{String, String}()
+    tooltip_bg === nothing || (d["--holo-tip-bg"] = _css_color(tooltip_bg))
+    tooltip_color === nothing || (d["--holo-tip-color"] = _css_color(tooltip_color))
+    tooltip_accent === nothing || (d["--holo-tip-accent"] = _css_color(tooltip_accent))
+    tooltip_font === nothing || (d["--holo-tip-font"] = String(tooltip_font))
+    tooltip_font_size === nothing || (d["--holo-tip-font-size"] = "$(tooltip_font_size)px")
+    tooltip_radius === nothing || (d["--holo-tip-radius"] = "$(tooltip_radius)px")
+    tooltip_caret === false && (d["--holo-tip-caret"] = "none")
+    return d
+end
+
 # ---- manifest assembly (pure; no published_to_js, no Pluto) -----------------
+
+# union of NamedTuple field names across a payload vector (empty if none are NamedTuples)
+function _payload_keys(payloads)
+    ks = Set{Symbol}()
+    for pl in payloads
+        pl isa NamedTuple && union!(ks, keys(pl))
+    end
+    return ks
+end
 
 function _layer_dict(i, L::HitLayer)
     hs = hoverstyle(i, 1)
@@ -21,10 +56,17 @@ function _layer_dict(i, L::HitLayer)
         "id" => string(L.id), "kind" => string(L.kind), "axis" => string(L.axis),
         "geometry" => L.geometry, "payloads" => L.payloads,
         "events" => [string(e) for e in L.events],
-        "style" => Dict("stroke" => hs.stroke, "width" => hs.width)
+        "style" => Dict("stroke" => hs.stroke, "width" => hs.width),
     )
-    tips = [tooltip(i, k, pl) for (k, pl) in enumerate(L.payloads)]
-    all(isnothing, tips) || (d["tooltips"] = tips)
+    spec = tooltip_spec(i)
+    spec === true && throw(ArgumentError("tooltip = true is not meaningful — omit `tooltip` for the auto name/value table (the default), pass holo\"…\" for a template, or `false` to suppress."))
+    if spec isa Markup
+        ks = _payload_keys(L.payloads)
+        isempty(ks) || check_fields(spec, ks)      # build-time field check (skip if no NamedTuple payloads)
+        d["template"] = markup_segments(spec)
+    elseif spec === false
+        d["tooltip"] = false
+    end
     return d
 end
 
@@ -45,7 +87,7 @@ tests call this directly; the Pluto-only `published_to_js` step happens later in
 `Symbol` a click returns in `InteractionEvent.layer`. The overlay re-derives highlights from
 it each render, so threading a bond value back keeps a selection flicker-free across re-renders.
 """
-function build_manifest(interactables, ctx::InteractionContext; selected = nothing)
+function build_manifest(interactables, ctx::InteractionContext; selected = nothing, tip_style = nothing)
     layers = Any[]
     for i in interactables
         msg = validate(i, ctx)
@@ -57,11 +99,13 @@ function build_manifest(interactables, ctx::InteractionContext; selected = nothi
             push!(layers, d)
         end
     end
-    return Dict{String, Any}(
+    m = Dict{String, Any}(
         "width" => ctx.width, "height" => ctx.height, "scaling" => ctx.scaling,
         "layers" => layers,
-        "transforms" => Dict(string(id) => _transform_dict(t) for (id, t) in ctx.transforms)
+        "transforms" => Dict(string(id) => _transform_dict(t) for (id, t) in ctx.transforms),
     )
+    (tip_style === nothing || isempty(tip_style)) || (m["tipStyle"] = tip_style)
+    return m
 end
 
 # ---- the widget -------------------------------------------------------------
@@ -87,15 +131,21 @@ refs), so instead the one mutation we introduce — forcing an opaque background
 restored. `update_state_before_display!` is also run, but that is exactly the step Makie performs
 at display/save time, so it is benign (not corruption).
 """
-function holo(fig, interactables::AbstractVector; backend::AbstractBackend = CairoBackend(), selected = nothing)
+function holo(
+        fig, interactables::AbstractVector; backend::AbstractBackend = CairoBackend(), selected = nothing,
+        tooltip_bg = nothing, tooltip_color = nothing, tooltip_accent = nothing,
+        tooltip_font = nothing, tooltip_font_size = nothing, tooltip_radius = nothing, tooltip_caret = true,
+    )
     bg0 = fig.scene.backgroundcolor[]
     try
-        # opaque background (dark-mode/transparent-bg footgun); restored in finally
         fig.scene.backgroundcolor[] = RGBAf(Makie.red(bg0), Makie.green(bg0), Makie.blue(bg0), 1)
         Makie.update_state_before_display!(fig)        # finalize once; render + context share it
         ppu = _ppu(backend, fig)
         ctx = context(backend, fig, ppu)
-        manifest = build_manifest(interactables, ctx; selected)  # validates (fail loud) before rendering
+        tip_style = tip_style_dict(;
+            tooltip_bg, tooltip_color, tooltip_accent, tooltip_font, tooltip_font_size, tooltip_radius, tooltip_caret,
+        )
+        manifest = build_manifest(interactables, ctx; selected, tip_style)
         result = render(backend, fig, ppu)
         display_css = round(Int, min(size(fig.scene)[1], backend.max_width))
         return HoloWidget(base64encode(result.payload), manifest, display_css)

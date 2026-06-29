@@ -23,7 +23,9 @@ abstract type AbstractInteractable end
 function hitlayers end
 validate(::AbstractInteractable, ::InteractionContext) = nothing
 events(::AbstractInteractable) = (:click, :hover)
-tooltip(::AbstractInteractable, ::Int, payload) = nothing
+# Per-LAYER tooltip spec (applies to every element of the interactable's layers):
+#   nothing → auto name/value table (default) · Markup → template · false → suppress.
+tooltip_spec(::AbstractInteractable) = nothing
 hoverstyle(::AbstractInteractable, ::Int) = (; stroke = "#ff3b30", width = 3)
 
 # validate is per-capability (architecture.md §3). Element interactables project in Julia via
@@ -51,7 +53,7 @@ _q(x) = isfinite(x) ? round(Int, x) : Float32(x)
 
 # ============================ PointInteractable ============================
 struct PointInteractable <: AbstractInteractable
-    ax; points::Vector{Point2f}; id::Symbol; payloads::Vector{Any}; radius::Float64
+    ax; points::Vector{Point2f}; id::Symbol; payloads::Vector{Any}; radius::Float64; tooltip::Union{Nothing, Markup, Bool}
 end
 function PointInteractable(
         ax, points; id = :points,
@@ -59,12 +61,13 @@ function PointInteractable(
             (; index = k - 1, x = Float64(p[1]), y = Float64(p[2]))
                 for (k, p) in enumerate(points)
         ],
-        radius = 9
+        radius = 9, tooltip = nothing
     )
     pts = [Point2f(p[1], p[2]) for p in points]
     length(payloads) == length(pts) || throw(ArgumentError("payloads must match points"))
-    return PointInteractable(ax, pts, id, collect(Any, payloads), Float64(radius))
+    return PointInteractable(ax, pts, id, collect(Any, payloads), Float64(radius), tooltip)
 end
+tooltip_spec(i::PointInteractable) = i.tooltip
 function hitlayers(i::PointInteractable, ctx)
     g = Real[]
     for p in i.points
@@ -75,17 +78,18 @@ end
 
 # ============================ SegmentInteractable ==========================
 struct SegmentInteractable <: AbstractInteractable
-    ax; vertices::Vector{Point2f}; mode::Symbol; id::Symbol; payloads::Vector{Any}; tol::Float64
+    ax; vertices::Vector{Point2f}; mode::Symbol; id::Symbol; payloads::Vector{Any}; tol::Float64; tooltip::Union{Nothing, Markup, Bool}
 end
 function SegmentInteractable(
         ax, vertices; mode = :polyline, id = :segments,
-        payloads = nothing, tol = 6
+        payloads = nothing, tol = 6, tooltip = nothing
     )
     vs = [Point2f(v[1], v[2]) for v in vertices]
     nseg = mode === :polyline ? max(0, length(vs) - 1) : length(vs) ÷ 2
     pl = payloads === nothing ? Any[(; segment_index = k - 1) for k in 1:nseg] : collect(Any, payloads)
-    return SegmentInteractable(ax, vs, mode, id, pl, Float64(tol))
+    return SegmentInteractable(ax, vs, mode, id, pl, Float64(tol), tooltip)
 end
+tooltip_spec(i::SegmentInteractable) = i.tooltip
 function hitlayers(i::SegmentInteractable, ctx)
     g = Real[]
     for v in i.vertices
@@ -98,18 +102,19 @@ end
 # ============================ RectInteractable =============================
 # list: rects of (xc,yc,w,h) in DATA space. grid: (xedges, yedges, values) in DATA space.
 struct RectInteractable <: AbstractInteractable
-    ax; layout::Symbol; data::Any; id::Symbol; payloads::Vector{Any}
+    ax; layout::Symbol; data::Any; id::Symbol; payloads::Vector{Any}; tooltip::Union{Nothing, Markup, Bool}
 end
-function RectInteractable(ax; rects = nothing, grid = nothing, id = :rects, payloads = nothing)
+function RectInteractable(ax; rects = nothing, grid = nothing, id = :rects, payloads = nothing, tooltip = nothing)
     return if grid !== nothing
         xe, ye, vals = grid
-        RectInteractable(ax, :grid, (collect(Float64, xe), collect(Float64, ye), vals), id, Any[])
+        RectInteractable(ax, :grid, (collect(Float64, xe), collect(Float64, ye), vals), id, Any[], tooltip)
     else
         rs = [(Float64(r[1]), Float64(r[2]), Float64(r[3]), Float64(r[4])) for r in rects]
         pl = payloads === nothing ? Any[(; index = k - 1) for k in 1:length(rs)] : collect(Any, payloads)
-        RectInteractable(ax, :list, rs, id, pl)
+        RectInteractable(ax, :list, rs, id, pl, tooltip)
     end
 end
+tooltip_spec(i::RectInteractable) = i.tooltip
 function hitlayers(i::RectInteractable, ctx)
     if i.layout === :list
         g = Real[]
@@ -150,13 +155,14 @@ end
 
 # ============================ PolygonInteractable ==========================
 struct PolygonInteractable <: AbstractInteractable
-    ax; rings::Vector; id::Symbol; payloads::Vector{Any}
+    ax; rings::Vector; id::Symbol; payloads::Vector{Any}; tooltip::Union{Nothing, Markup, Bool}
 end
-function PolygonInteractable(ax, rings; id = :polygons, payloads = nothing)
+function PolygonInteractable(ax, rings; id = :polygons, payloads = nothing, tooltip = nothing)
     rs = [[Point2f(p[1], p[2]) for p in ring] for ring in rings]
     pl = payloads === nothing ? Any[(; index = k - 1) for k in 1:length(rs)] : collect(Any, payloads)
-    return PolygonInteractable(ax, rs, id, pl)
+    return PolygonInteractable(ax, rs, id, pl, tooltip)
 end
+tooltip_spec(i::PolygonInteractable) = i.tooltip
 function hitlayers(i::PolygonInteractable, ctx)
     geom = Vector{Real}[]
     for ring in i.rings
@@ -258,17 +264,17 @@ end
 # ============================ custom: RegionInteractable (Tier A) =========
 # Declarative mixed regions in DATA space. Grouped into one layer per kind.
 struct RegionInteractable <: AbstractInteractable
-    ax; regions::Vector; payloads::Vector{Any}; id::Symbol; tip::Function; evs::Tuple
+    ax; regions::Vector; payloads::Vector{Any}; id::Symbol; tooltip::Union{Nothing, Markup, Bool}; evs::Tuple
 end
 function RegionInteractable(
         ax; regions, payloads, id = :region,
-        tooltip = (pl -> nothing), events = (:click, :hover)
+        tooltip = nothing, events = (:click, :hover)
     )
     length(regions) == length(payloads) || throw(ArgumentError("regions/payloads length mismatch"))
     return RegionInteractable(ax, collect(regions), collect(Any, payloads), id, tooltip, events)
 end
 events(i::RegionInteractable) = i.evs
-tooltip(i::RegionInteractable, ::Int, pl) = i.tip(pl)
+tooltip_spec(i::RegionInteractable) = i.tooltip
 function hitlayers(i::RegionInteractable, ctx)
     circ = Real[]; cpl = Any[]; rect = Real[]; rpl = Any[]; polys = Vector{Real}[]; ppl = Any[]
     for (reg, pl) in zip(i.regions, i.payloads)

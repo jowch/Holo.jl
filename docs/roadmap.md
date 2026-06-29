@@ -34,7 +34,7 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 
 - [x] **Plot-introspection constructors**: `PointInteractable(ax, scatter)`, `RectInteractable(ax, heatmap)`, `SegmentInteractable(ax, lines)`, etc. — pull geometry from live Makie plot objects via `plot.converted[]`. *Done (`src/introspect.jl`): Scatter/Lines/LineSegments/Heatmap/Image/BarPlot/Poly delegate to the explicit constructors with identical hitlayers (tested). Gotchas handled: markersize→radius (pixel space), heatmap `EndPoints`→edge expansion, bar dodge/stack/auto-width read from the laid-out child rects. `ax` is passed (a plot has no axis back-reference); single-arg sugar arrives with M2.2's scene walk.*
 - [x] **`holo(fig)` auto-extraction**: walk the scene graph, emit a concrete `Vector{AbstractInteractable}` (the same one a user could write). Unknown plot type → skip + warn. Sugar over M2.1, not a separate path. *Done (`src/introspect.jl`): `auto_interactables(fig)` walks each `Axis`'s `scene.plots`, maps each supported plot via the M2.1 constructors, dedupes layer ids (`:scatter`, `:scatter_2`, …), and skips unsupported types with a warning. `holo(fig)` is the zero-config overlay; both exported.*
-- [ ] **Richer tooltips**: per-element HTML/template tooltips (beyond payload JSON), still pre-serialized (no round-trip).
+- [x] **Richer tooltips (M2.3)** — `holo"…"` template macro, auto name/value table default, and figure-level `tooltip_*` theming. *Done (PR #10): see Phase 1 / `docs/tooltips.md`.*
 
 ## M3 — Surface coverage (v2 from the survey)
 *Goal: more plot types, same primitives. Add per real demand.*
@@ -56,7 +56,7 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 ## M5 — Scale & polish
 - [ ] **Spatial acceleration** (quadtree/grid) for large-N hit-testing — only when the documented O(n) ceiling is actually hit (`log()` the cap until then). *Phase 0 reframe:* hit-test is ~0 ms; the wall is manifest **payload size** (~290 ms serialize+transfer at 4.78 MB), so wire-encoding (int-pixel coords / capping `values[]`) outranks a quadtree (see Phase 4).
 - [x] **Perf benchmarking**: the unmeasured Q5 envelope — base64 size + click latency knee; confirm MsgPack fast-path engages. *Done (`bench/payload_envelope.jl` → `docs/perf-findings.md`): single plots 50–400 KB, manifest O(N) elements, heatmaps O(cells), animation = frames × PNG (the hard ceiling, 5.5–22 MB). MsgPack confirmed (generic maps, not the TypedArray fast-path). Full click round-trip measured live (headless Pluto + Chromium): ~65 ms median — render-bound, browser overhead negligible. Editor-lag knee (editor stutter, distinct from latency) deferred.*
-- [ ] **Theming**: respect Pluto light/dark for highlight/tooltip styling (shadow-DOM scoped).
+- [ ] **Theming**: respect Pluto light/dark for highlight/tooltip styling (shadow-DOM scoped). *(Tooltip styling already landed in M2.3 — shadow-DOM `--holo-tip-*` + `prefers-color-scheme` dark mode; what remains is following Pluto's explicit light/dark toggle and the marker-highlight styling.)*
 - [ ] **GLMakie-static backend**: GPU offscreen → PNG, same `AbstractBackend` contract (for envs with a GPU).
 - [ ] **Register in General** once the API stabilizes (CHANGELOG → 0.1.0 tag → Registrator/TagBot).
 
@@ -69,7 +69,7 @@ renderer — that's **WGLMakie's** domain, a different product. Holo stays stati
 
 ## Suggested order
 
-Done: M1 · M2.1/M2.2 · M3 cheap-wins · M4 drag · Phase 0 measure. What remains, sequenced for a polished
+Done: M1 · M2.1/M2.2 · M2.3 tooltips · M3 cheap-wins · M4 drag · Phase 0 measure. What remains, sequenced for a polished
 (not-MVP) first release. The order is driven by four real dependency edges, not by milestone
 number — everything else is reorderable by demand.
 
@@ -78,10 +78,10 @@ number — everything else is reorderable by demand.
   multi-select return shape all inflate the base64/manifest payload, whose ceiling is an
   *undocumented empirical unknown* (`research-findings.md` Q5, `design.md` §10). Measure it
   first so the rest is built against a known knee.
-- **Richer tooltips → all surface payloads.** M3 cheap-wins already deferred their good
-  payloads (`{i,j,value}`, `value`, `equation`) to it; every surface added after ships a real
-  tooltip instead of payload JSON. Rides the existing `tooltip(i,idx,payload)::Union{Nothing,String}`
-  seam + `HitStyle` field — additive, not a rework.
+- **Richer tooltips → all surface payloads.** ✅ *Landed (M2.3, PR #10).* Every surface added after
+  ships a real tooltip (a `holo"…"` template or the auto-table default) instead of payload JSON. The
+  per-element `tooltip()` seam was replaced by a per-layer `tooltip_spec`; M3's deferred payloads
+  (`{i,j,value}`, `value`, `equation`) now surface through it.
 - **Multi-select → the bond contract.** `Vector{InteractionEvent}` is the forward-compatible
   extension v1 was shaped for (`architecture.md`:261). Land the contract change before stacking
   more surfaces on it. Preserve the "never `Nothing`" invariant (empty vector, not nothing).
@@ -103,11 +103,13 @@ number — everything else is reorderable by demand.
   PNG — it degrades gracefully, nothing breaks.
 
 ### Phase 1 — Foundations that unblock the rest
-- **M2.3 Richer tooltips** — pre-serialized per-element HTML/template; extends the existing
-  tooltip seam. (Watch: per-element HTML edges toward the "rich UI chrome" framework-revisit
-  trigger in `frontend-delivery.md`, and inflates payload.) **Measured budget** (`perf-findings.md`):
-  keep per-element HTML under ~200 B at N≈1000 (+196 KB, 14→210 KB, sub-300-KB band); at N≈10000 rich
-  per-element HTML pushes the manifest into MB territory; 50000 × 200 B ≈ 10.2 MB → gate it.
+- [x] **M2.3 Richer tooltips** — *Done (PR #10; `docs/tooltips.md`).* Shipped as a **per-layer
+  `holo"…"` template** interpolated browser-side from the already-shipped `payloads[]` — not the
+  per-element-HTML approach first sketched here — so rich tooltips add **zero** new per-element wire
+  bytes and the old per-element `tooltips[]` term was dropped (the budget concern is sidestepped, not
+  just bounded). Plus an auto name/value table default, `tooltip_*` theming → `--holo-tip-*`,
+  escape-by-default data, d3-format numbers, and two-phase validation. (d3-format is the first JS
+  runtime dep; bundle delta in `perf-findings.md`.)
 - [x] **Bound the grid `values[]` payload (robustness fix).** *Done (`src/interactables.jl`:
   `GRID_VALUES_MIN_SCREEN_PX`, gated on `InteractionContext.display_scale`; overlay tolerates an
   absent `values[]`). Day-one bug in shipped `holo(fig)`, shipped independently of M2.3.* The `:grid` manifest shipped the full
