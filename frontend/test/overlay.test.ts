@@ -225,7 +225,8 @@ describe("mount", () => {
         window.dispatchEvent(new MouseEvent("mouseup", { clientX: 400, clientY: 200, bubbles: true }))
     })
 
-    const boxSelectManifest: Manifest = {
+    // Factory so each test gets a fresh geometry object — drag mutates geometry in-place.
+    const boxSelectManifest = (): Manifest => ({
         width: 1200, height: 800, scaling: 2,
         transforms: { ax1: { xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
             viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false } },
@@ -236,11 +237,11 @@ describe("mount", () => {
             { id: "roi", kind: "roi", axis: "ax1", events: ["drag"], payloads: [],
                 selects: "pts", geometry: { x: 200, y: 200, w: 400, h: 400, handle: 16 } },
         ],
-    }
+    })
 
     it("box-select over points emits a Vector envelope of contained points + highlights them", () => {
         const { host, script } = setup()
-        mount(script, boxSelectManifest)
+        mount(script, boxSelectManifest())
         const shadow = shadowOf(host)
         const surface = shadow.querySelector(".surface") as HTMLElement
         let committed: { items: { layer: string; index: number }[] } | null = null
@@ -258,7 +259,7 @@ describe("mount", () => {
 
     it("box-select with nothing enclosed emits an empty items envelope", () => {
         const { host, script } = setup()
-        mount(script, boxSelectManifest)
+        mount(script, boxSelectManifest())
         const shadow = shadowOf(host)
         const surface = shadow.querySelector(".surface") as HTMLElement
         const box = shadow.querySelectorAll("rect")[0] as SVGRectElement
@@ -274,7 +275,8 @@ describe("mount", () => {
         expect(committed!.items).toEqual([])
     })
 
-    const gridSelectManifest: Manifest = {
+    // Factory so each test gets a fresh geometry object — drag mutates geometry in-place.
+    const gridSelectManifest = (): Manifest => ({
         width: 1200, height: 800, scaling: 2,
         transforms: { ax1: { xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
             viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false } },
@@ -284,11 +286,11 @@ describe("mount", () => {
             { id: "roi", kind: "roi", axis: "ax1", events: ["drag"], payloads: [],
                 selects: "img", geometry: { x: 100, y: 100, w: 300, h: 300, handle: 16 } },
         ],
-    }
+    })
 
     it("box-select over a grid emits a single region (cell indices + data bounds)", () => {
         const { host, script } = setup()
-        mount(script, gridSelectManifest)
+        mount(script, gridSelectManifest())
         const surface = shadowOf(host).querySelector(".surface") as HTMLElement
         let committed: { items: { layer: string; index: number; payload: Record<string, number> }[] } | null = null
         host.addEventListener("input", () => {

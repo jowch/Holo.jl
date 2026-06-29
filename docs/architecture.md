@@ -280,7 +280,7 @@ selector (a `ROIInteractable` with `selects=:layer_id` set) or not:
   presence or absence of `selects`, not by a per-event flag.
 - **Selector ROIs** (`ROIInteractable(…; selects=:layer_id)`) implement
   `AbstractSelector <: AbstractInteractable` and return `Vector{InteractionEvent}`:
-  - **Points / segments / rects target** → N point events, one per element whose geometry falls
+  - **Points (`:circles`) target** → N point events, one per element whose geometry falls
     within the dragged box.
   - **Grid target** (`:grid` kind) → a 1-element vector holding a **region descriptor**
     `(; i0, i1, j0, j1, xmin, xmax, ymin, ymax)` — 0-based inclusive cell indices plus
