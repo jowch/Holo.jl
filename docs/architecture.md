@@ -344,20 +344,24 @@ routine input ships tens of MB of redundant numbers on top of the PNG that alrea
 user's matrix already lives in their Julia session. Today `values[]` ships unconditionally (it powers the
 no-round-trip `(i,j)=value` hover).
 
-**The cap criterion is *display*-pixel resolution, not an arbitrary cell count.** The figure size and
-projection are known at manifest-build, so each cell's *on-screen* size is known. Key subtlety: the DPI
-policy renders the PNG at **2× the display width** (`px_per_unit = 2·min(scene, max_width)/scene`, image
-shown at `width:100%` → 0.5 on-screen scale), so a cell's **display** px = (projected `xedges`/`yedges`
-spacing, in image px) × `display_css/image_width` ≈ image-px spacing **÷ 2** — *not* the raw image-px
-spacing. The cursor lives in display px, so that is what governs targetability. **Ship `values[]` only when
-cells are targetable in display px** (`min(cell_display_px) ≥ τ`, τ ≈ 1–2 px); below that the user *cannot*
-put the cursor over an individual cell, so the per-cell value is unusable and is dropped. Self-tuning: for
-a 600-wide figure (~600 display px) a 50² heatmap is ~12 px/cell (keep), 200² is ~3 px (keep), **1000² is
-~0.6 px (drop)**, 2000²–4000² are 0.3–0.15 px (drop) — and it **subsumes the special `Image` case** (images
-are source-res > display-res → sub-pixel → auto-dropped), so no separate rule is needed. When dropped, the
-payload falls back to `{i,j}` (the click still localizes the region) and a one-time `@warn` fires
-(fail-loud). Measured size benefit: 499× smaller at 1000² (`perf-findings.md`). M2.3 owns the `{i,j,value}`
-payload shape, but the cap is decoupled and can ship independently.
+**The cap criterion: compute the cell's *expected on-screen* size on the fly, and drop `values[]` when it's
+sub-pixel.** A Pluto output cell is only so wide — the display is **bounded by the column** (`max_width`,
+700 px default), so the on-screen size is known at manifest-build. Everything needed is already in hand:
+`display_css = min(scene_width, max_width)` (the column-bounded display width), the axis viewport in image
+px (we project the edges anyway), and the output image width. So
+`cell_screen_px = (viewport_image_px / ncols) × (display_css / image_width)`. Under today's DPI policy the
+PNG is rendered at 2× the display width (`px_per_unit = 2·min(scene, max_width)/scene`), so that ratio is
+0.5 and it reduces to `cell_image_px / 2` — but compute the ratio rather than hardcode ÷2, so it tracks the
+policy / wide-mode `max_width`. **Ship `values[]` only when `min(cell_screen_px) ≥ τ`** (τ ≈ 1–2 px); below
+that the user *cannot* put the cursor over an individual cell, so the per-cell value is useless and is
+dropped. This is an *expected* size (it assumes the default column; the overlay still hit-tests against the
+true runtime scale via `getBoundingClientRect`, so the estimate only gates ship/drop). Self-tuning: for a
+600-wide figure a 50² heatmap is ~12 px/cell (keep), 200² is ~3 px (keep), **1000² is ~0.6 px (drop)**,
+2000²–4000² are 0.3–0.15 px (drop) — and it **subsumes the special `Image` case** (images are source-res >
+display-res → sub-pixel → auto-dropped), so no separate rule is needed. When dropped, the payload falls back
+to `{i,j}` (the click still localizes the region) and a one-time `@warn` fires (fail-loud). Measured size
+benefit: 499× smaller at 1000² (`perf-findings.md`). M2.3 owns the `{i,j,value}` payload shape, but the cap
+is decoupled and can ship independently.
 
 ## 9. Wire encoding & precision
 
