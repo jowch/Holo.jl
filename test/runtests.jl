@@ -137,6 +137,11 @@ end
         @test validate(ThresholdInteractable(axs; orientation = :horizontal, value = 1.0), ctxs) isa String
         @test validate(ThresholdInteractable(axs; orientation = :vertical, value = 1.0), ctxs) === nothing  # x is identity
         @test_throws ArgumentError ThresholdInteractable(ax; orientation = :diagonal, value = 1.0)
+        # end-to-end: the :threshold layer serializes through build_manifest (Dict geometry + drag event)
+        mt = build_manifest([th], ctx)["layers"][1]
+        @test mt["kind"] == "threshold" && mt["events"] == ["drag"]
+        @test mt["geometry"]["orientation"] == "h" && haskey(mt["geometry"], "pos") && haskey(mt["geometry"], "span")
+        @test isempty(mt["payloads"]) && !haskey(mt, "tooltips")   # computed client-side, no payloads/tooltips
     end
 
     @testset "build_manifest + widget + bond" begin
