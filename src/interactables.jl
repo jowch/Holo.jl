@@ -190,6 +190,39 @@ function hitlayers(i::ThresholdInteractable, ctx)
     return [HitLayer(i.id, :threshold, geom, Any[], axis_id(ctx, i.ax), events(i))]
 end
 
+# ============================ ROIInteractable ==============================
+# A draggable + resizable rectangle (Tier 0). Moves/resizes locally in JS; on mouse-up the two
+# opposite pixel corners are inverted to data-space bounds via the AxisTransform and round-tripped
+# to @bind. Lives entirely in the overlay — the base render never sees it.
+struct ROIInteractable <: AbstractInteractable
+    ax; bounds::NTuple{4, Float64}; id::Symbol   # (xmin, xmax, ymin, ymax) data space
+end
+function ROIInteractable(ax; bounds, id = :roi)
+    length(bounds) == 4 || throw(ArgumentError("ROIInteractable: bounds must be (xmin, xmax, ymin, ymax)"))
+    xmin, xmax, ymin, ymax = Float64.(Tuple(bounds))
+    (xmin < xmax && ymin < ymax) ||
+        throw(ArgumentError("ROIInteractable: need xmin < xmax and ymin < ymax, got $(bounds)"))
+    return ROIInteractable(ax, (xmin, xmax, ymin, ymax), id)
+end
+events(::ROIInteractable) = (:drag,)
+function validate(i::ROIInteractable, ctx::InteractionContext)
+    t = ctx.transforms[axis_id(ctx, i.ax)]
+    (t.xscale in _JS_INVERTIBLE && t.yscale in _JS_INVERTIBLE) ||
+        return "ROIInteractable: drag needs client-side invertible x and y scales " *
+        "(x=$(t.xscale), y=$(t.yscale); supported: identity/log10/log)."
+    return nothing
+end
+function hitlayers(i::ROIInteractable, ctx)
+    xmin, xmax, ymin, ymax = i.bounds
+    a = _proj(ctx, i.ax, (xmin, ymin)); b = _proj(ctx, i.ax, (xmax, ymax))  # y flips → normalize below
+    geom = Dict(
+        "x" => Float32(min(a[1], b[1])), "y" => Float32(min(a[2], b[2])),
+        "w" => Float32(abs(b[1] - a[1])), "h" => Float32(abs(b[2] - a[2])),
+        "handle" => Float32(8 * ctx.scaling),
+    )
+    return [HitLayer(i.id, :roi, geom, Any[], axis_id(ctx, i.ax), events(i))]
+end
+
 # ============================ custom: RegionInteractable (Tier A) =========
 # Declarative mixed regions in DATA space. Grouped into one layer per kind.
 struct RegionInteractable <: AbstractInteractable

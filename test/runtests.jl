@@ -144,6 +144,30 @@ end
         @test isempty(mt["payloads"]) && !haskey(mt, "tooltips")   # computed client-side, no payloads/tooltips
     end
 
+    @testset "ROIInteractable (M4 drag cut 2)" begin
+        r = ROIInteractable(ax; bounds = (1.0, 3.0, 2.0, 8.0))
+        @test events(r) == (:drag,)
+        @test validate(r, ctx) === nothing
+        L = only(hitlayers(r, ctx))
+        @test L.kind === :roi
+        a = data_to_image_px(ctx, ax, (1.0, 2.0)); b = data_to_image_px(ctx, ax, (3.0, 8.0))
+        @test L.geometry["x"] ≈ min(a[1], b[1])
+        @test L.geometry["y"] ≈ min(a[2], b[2])
+        @test L.geometry["w"] ≈ abs(b[1] - a[1])
+        @test L.geometry["h"] ≈ abs(b[2] - a[2])
+        @test L.geometry["handle"] ≈ 8 * ctx.scaling
+        # fail loud: a non-invertible scale on EITHER axis
+        fs = Figure(); axs = Axis(fs[1, 1]; yscale = sqrt); scatter!(axs, [1.0, 2.0], [1.0, 2.0])
+        _, _, ctxs = ctx_for(fs)
+        @test validate(ROIInteractable(axs; bounds = (1.0, 2.0, 1.0, 2.0)), ctxs) isa String
+        @test_throws ArgumentError ROIInteractable(ax; bounds = (3.0, 1.0, 2.0, 8.0))   # xmin >= xmax
+        # end-to-end: the :roi layer serializes through build_manifest
+        mr = build_manifest([r], ctx)["layers"][1]
+        @test mr["kind"] == "roi" && mr["events"] == ["drag"]
+        @test all(k -> haskey(mr["geometry"], k), ("x", "y", "w", "h", "handle"))
+        @test isempty(mr["payloads"]) && !haskey(mr, "tooltips")
+    end
+
     @testset "build_manifest + widget + bond" begin
         m = build_manifest([PointInteractable(ax, pts; id = :scatter), AxisInteractable(ax)], ctx)
         @test [L["kind"] for L in m["layers"]] == ["circles", "axis"]
