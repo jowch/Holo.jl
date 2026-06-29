@@ -4,7 +4,8 @@
 > A measurement spike, not a feature — it **bounds the scope** of every payload-heavy roadmap
 > item after it (M2.3 tooltips, M4 animation, SVG output, multi-select return shape).
 >
-> Reproduce (numbers below from 2026-06-28, CairoMakie 0.15, Julia 1.12):
+> Reproduce (numbers below re-run 2026-06-29 after int-pixel geometry quantization, CairoMakie 0.15,
+> Julia 1.12):
 > - **base64-PNG / manifest / render numbers** — `julia --project=. bench/payload_envelope.jl`
 >   (normal envelope) and `julia --project=. bench/stress.jl` (the 10× extremes). Both `seed!(0)`,
 >   so PNG/manifest sizes reproduce *exactly* (render-ms is wall-clock, so it varies). These are the
@@ -32,29 +33,32 @@ base64 PNG decoded size (KB) and manifest MsgPack size (KB), default 700px colum
 
 | Plot | PNG | manifest | note |
 |------|----:|---------:|------|
-| line, 10 pts | 51 | 0.6 | ~50 KB antialiasing/text floor for any plot |
-| scatter, 100 | 35 | 5 | |
-| scatter, 1 000 | 188 | 46 | typical interactive plot |
-| scatter, 10 000 | 717 | 459 | manifest approaches PNG; both O(N) |
+| line, 10 pts | 51 | 0.5 | ~50 KB antialiasing/text floor for any plot |
+| scatter, 100 | 35 | 4 | |
+| scatter, 1 000 | 188 | 38 | typical interactive plot |
+| scatter, 10 000 | 717 | 379 | manifest approaches PNG; both O(N) |
 | heatmap, 50×50 | 30 | 13 | |
-| heatmap, 200×200 | 190 | 198 | grid edges are compact, but `values[]` is O(cells) |
+| heatmap, 200×200 | 190 | 197 | grid edges are compact, but `values[]` is O(cells) |
 
-(Geometry is `Vector{Float32}` — the msgpack sizer counts it at 5 B/float, not 9; an earlier
-Float64 assumption ran the manifest column ~25–45 % high.)
+(Element geometry ships as `Vector{Int}` — quantized to integer pixels (architecture.md §9), so the
+msgpack sizer counts each coord at 1–3 B, not Float32's flat 5. This trimmed the geometry term ~17 %
+overall: scatter-1000 46→38 KB, scatter-10000 459→379 KB. Heatmaps barely move — their `values[]`
+are *data* and stay Float32. The remaining per-element cost is now dominated by the payload's
+Float64 `x`/`y`, not geometry.)
 
 **The knee.** A realistic single interactive plot is **50–400 KB total** — at/just above the
 "10–100 KB+ plausible" band from Q5, not below the "<10 KB" anecdote. Editor lag is not expected
 here. It becomes a real risk only at the extremes below.
 
 ### What scales the manifest
-- **Per-element count** is linear: ~46 bytes/element (3 Float32 geometry coords + a small payload).
-  10 000 elements → ~459 KB.
+- **Per-element count** is linear: ~38 bytes/element (3 Int geometry coords at 1–3 B each + a small
+  payload whose `x`/`y` stay Float64). 10 000 elements → ~379 KB.
 - **Heatmaps carry the full value matrix** (`:grid` geometry's `values[]`, O(cells)): 200×200 ≈
   198 KB. By design — that value already feeds the deferred `{i,j,value}` tooltip, so M2.3 adds
   no extra cost for heatmaps.
 - **px_per_unit (display width)** scales the PNG ~quadratically with width but **does not** touch
   the manifest (geometry is pixel coords; the count is unchanged): scatter-1000 PNG 90 KB @300px
-  → 187 KB @700px, manifest 46 KB both.
+  → 187 KB @700px, manifest ~38 KB both.
 
 ### Render latency (Julia half of the click→re-render round-trip)
 `@elapsed holo(fig)`, warmed, best-of-3. The click message is tiny and Pluto auto-throttles stale
@@ -103,36 +107,49 @@ Pushing past the normal envelope (live round-trips + a pure-Julia sweep to 10× 
 | scatter 10 000 | 768 KB | 459 KB | 335 ms | ~280 ms | **~55 ms** |
 | heatmap 1000×1000 | 2.13 MB | **4.78 MB** | **553 ms** | ~260 ms | **~290 ms** |
 
+> These two rows are **pre-change live snapshots** (dated, not regenerated). The wire format has since
+> shrunk both manifests: scatter-10000 is now ~379 KB (int-pixel geometry, this PR), and the 1000²
+> heatmap ships ~6 KB (its sub-pixel `values[]` is dropped by the PR #8 cap), so that exact heatmap is
+> now **render-bound** (~120 ms render), not the 553 ms payload-bound case shown. The 553 ms remains a
+> valid datapoint for *what a 4.78 MB manifest costs* — it just no longer occurs by default.
+
 (PNG sizes here are the live browser-measured transferred bytes; manifest sizes are from the bench.
 The render floor is bench `holo(fig)` — it excludes the `published_to_js` msgpack serialization
 of the manifest, which happens at `show` time and is part of the non-render overhead.)
 
 Below ~1 MB total, the round-trip is **render-bound** and browser/transfer overhead is a near-constant
-~15–55 ms. Above a few MB it flips to **payload-bound**: the heatmap's 553 ms is mostly *not* render —
-it's `published_to_js` msgpack-serializing the 4.78 MB manifest + shipping ~7 MB over the wire + paint.
-Nothing crashed; it degrades gracefully into the half-second range. The crossover sits around **~1–10 MB total**.
+~15–55 ms. Above a few MB it flips to **payload-bound**: the 553 ms above is mostly *not* render — it's
+`published_to_js` msgpack-serializing a 4.78 MB manifest + shipping ~7 MB over the wire + paint. Nothing
+crashed; it degrades gracefully into the half-second range. The crossover sits around **~1–10 MB total**.
+Post-wire-shrink (int-pixel geometry + the `values[]` cap), the case that *reaches* that regime by
+default is **high-N scatter** (200 000 pts → 7.72 MB manifest), not heatmaps — the cap keeps even a 1 M-cell
+heatmap render-bound.
 
 **The manifest is the high-N wall, not the PNG** (pure-Julia sweep):
 
 | Case | PNG | manifest | render |
 |------|----:|---------:|-------:|
-| scatter 50 000 | 791 KB | 2.27 MB | ~930 ms |
-| scatter 100 000 | 303 KB | 4.61 MB | ~1.5 s |
-| scatter 200 000 | 71 KB | **9.28 MB** | ~3.0 s |
-| heatmap 1000×1000 | 2.26 MB | 4.78 MB | ~260 ms |
-| scatter 50 000 + 200 B tooltip/elem | 47 KB | **10.6 MB** | ~1.3 s |
+| scatter 50 000 | 791 KB | 1.88 MB | ~940 ms |
+| scatter 100 000 | 303 KB | 3.83 MB | ~1.6 s |
+| scatter 200 000 | 71 KB | **7.72 MB** | ~3.0 s |
+| heatmap 300×300 (cells visible) | 388 KB | 441 KB | ~50 ms |
+| heatmap 1000×1000 (cells sub-pixel) | 2.26 MB | **6 KB** | ~120 ms |
+| scatter 50 000 + 200 B tooltip/elem | 47 KB | **10.2 MB** | ~1.35 s |
 
 - **PNG is non-monotonic in N** — past saturation, dense random scatter compresses to a near-solid mass
-  (200 000 pts → only 71 KB), while the **manifest grows strictly O(N) to 9.3 MB**. At high element
-  counts the manifest, not the image, is the ceiling.
-- **Heatmap render stays cheap (~260 ms even at 1 M cells)** — Cairo blits the raster — but the manifest
-  carries the full value matrix (O(cells)), so 1000² = 4.78 MB. Payload, not render, is the cost.
+  (200 000 pts → only 71 KB), while the **manifest grows strictly O(N) to 7.7 MB** (int-pixel geometry,
+  this PR; was 9.28 MB at Float32). At high element counts the manifest, not the image, is the ceiling.
+- **Heatmap render stays cheap (~120 ms even at 1 M cells)** — Cairo blits the raster. The manifest
+  carries the value matrix (O(cells)) **only while cells are targetable**: at 300² (visible) it's 441 KB,
+  but at 1000² the cells go sub-pixel and the values cap (PR #8) drops the matrix → 6 KB. So a giant
+  heatmap is no longer the payload wall it was; high-N *scatter* is.
 - **Raw canvas pixels are *not* a payload driver for sparse content**: a 3200×2000 figure with 2 000
   points produced a *smaller* PNG (132 KB) than a 600×400 one — density drives PNG size, not resolution.
 - **What actually shrinks the multi-MB manifest** (de-speculated by `bench/encoding_experiment.jl`, real
-  MsgPack bytes — see the encoding experiment below): **int-pixel geometry** (−58%, no structural change)
-  and **capping heatmap `values[]`** (−499×). The TypedArray binary fast-path, which I first guessed was
-  the lever, buys only ~5% over int-quantization and is *not* worth the manifest-shape change.
+  MsgPack bytes — see the encoding experiment below): **int-pixel geometry** (−58% on the geometry term,
+  no structural change) and **capping heatmap `values[]`** (−499×). **Both now shipped** — the values cap
+  in PR #8, int-pixel quantization here. The TypedArray binary fast-path, which I first guessed was the
+  lever, buys only ~5% over int-quantization and is *not* worth the manifest-shape change.
 
 ### Encoding experiment (de-speculation)
 `bench/encoding_experiment.jl` MsgPack-encodes a real 50k-circle geometry and a 1000² heatmap `values[]`
@@ -149,10 +166,11 @@ under each scheme — replacing theoretical byte math with measured wire bytes:
 | with `values[]` (uncapped) | 4.78 MB |
 | capped → `{i,j}` only | 9.8 KB (**499× smaller**) |
 
-The cap **shipped** in `52f174c` (PR #8): `:grid` omits `values[]` when cells render sub-pixel on
-screen (`GRID_VALUES_MIN_SCREEN_PX`, architecture.md §8). The measured numbers above are unchanged —
-the cap just selects the "capped" row at build time — so the envelope stays valid; only the wire
-*presence* of `values[]` became conditional.
+Both wins **shipped**: the `values[]` cap in `52f174c` (PR #8), and **int-pixel geometry quantization
+in `7f0e633`** (this PR — element geometry vectors are `Int`, `architecture.md §9`). The
+experiment's −58%/2.10-B-per-coord is the *geometry-term* saving; on a whole realistic manifest (where
+the payload's Float64 `x`/`y` dilute it) it lands ~17 % — see the envelope table. AxisTransform stays
+Float64. The measured experiment numbers above are unchanged — they just describe what now ships.
 
 **Conclusion:** the cheap, non-structural wins (int-pixel coords + `values[]` cap) capture essentially all
 of it; the structural typed-array fast-path does not earn its cost. `Float16` is a non-starter (no MsgPack
@@ -161,11 +179,11 @@ float16; lossy >2048px). Keep `AxisTransform` lims `Float64` (drag inversion) �
 ## Scope bounds for downstream phases
 
 - **M2.3 Richer tooltips** — manifest grows by `Σ(tooltip bytes)`. Measured: 1 000 elements ×
-  200-byte HTML each = +196 KB (22 → 218 KB). **Budget: keep per-element tooltip HTML under
+  200-byte HTML each = +196 KB (14 → 210 KB). **Budget: keep per-element tooltip HTML under
   ~200 bytes at N≈1 000** to stay in the sub-300-KB band. Rich per-element HTML at N≈10 000 will
   push the manifest into MB territory — gate it (truncate, or hand-roll only on hover via a
   template) before shipping unbounded HTML. (Stress confirms: 50 000 elements × 200 B each =
-  **10.6 MB manifest** → a payload-bound ~0.5 s+ round-trip.)
+  **10.2 MB manifest** → a payload-bound ~0.5 s+ round-trip.)
 - **M4 Animation / scrubbing** — frames are pre-baked PNGs: **total = frames × per-frame PNG**.
   Measured: a 187-KB plot × 30 frames = **5.5 MB**, × 120 = **22 MB**. This is the hard ceiling
   of the roadmap. Animation **must** shrink per-frame cost (smaller canvas / lower px_per_unit /

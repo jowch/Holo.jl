@@ -111,7 +111,8 @@ architecture well, since the image is a static DOM node and clicks are the only 
    layouts, and after `update_state_before_display!`.
 4. **Payload/latency envelope (Q5): RESOLVED — `perf-findings.md`.** Realistic plot 50–400 KB;
    round-trip 65 ms (tiny) → 335 ms (scatter-10k) → 553 ms (heatmap-1000², 2.13 MB PNG + 4.78 MB
-   manifest); render-bound below ~1 MB, payload-bound above a few MB. The MsgPack TypedArray fast-path
+   manifest — that heatmap is since `values[]`-capped to KB, so high-N scatter is now the payload-bound
+   case); render-bound below ~1 MB, payload-bound above a few MB. The MsgPack TypedArray fast-path
    was found *not* to engage (generic maps) — the opposite of "confirm fast-path engages". The
    editor-lag *knee* itself remains deliberately unmeasured (only round-trip latency was).
 5. **SVG viability threshold (Q2):** primitive count at which SVG file size / editor perf

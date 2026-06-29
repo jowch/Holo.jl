@@ -24,8 +24,8 @@ mp(x::AbstractString) = _str(ncodeunits(x))
 mp(x::Symbol) = _str(ncodeunits(String(x)))
 mp(::Nothing) = 1
 mp(x::Bool) = 1
-mp(x::Integer) = _int(Int(x))
-mp(x::Float32) = 5                              # msgpack float32 (HitLayer.geometry is Float32[])
+mp(x::Integer) = _int(Int(x))                   # element geometry is Int[] now (quantized, 1–3 B/coord)
+mp(x::Float32) = 5                              # msgpack float32 (grid values[] + threshold/roi geom)
 mp(x::AbstractFloat) = 9                              # float64 (axis transform lims/viewport)
 mp(x::AbstractDict) = _hdr(length(x)) + sum(k -> mp(k) + mp(x[k]), keys(x); init = 0)
 mp(x::NamedTuple) = _hdr(length(x)) + sum(p -> _str(ncodeunits(String(p[1]))) + mp(p[2]), pairs(x); init = 0)

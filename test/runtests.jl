@@ -65,6 +65,17 @@ end
         end
     end
 
+    @testset "geometry quantized to integer pixels" begin
+        # per-element geometry ships as Int (1–3 B/coord in MsgPack vs Float32's 5) — architecture.md §9.
+        L = only(hitlayers(PointInteractable(ax, pts), ctx))
+        @test eltype(L.geometry) == Int
+        q = data_to_image_px(ctx, ax, pts[1])
+        @test L.geometry[1] == round(Int, q[1]) && L.geometry[2] == round(Int, q[2])  # within ≤0.5px of the projection
+        # AxisTransform stays Float64 — the drag path inverts pixel→data through it (must not quantize)
+        @test ctx.transforms[:ax1].viewport[3] isa Float64
+        @test eltype(only(hitlayers(SegmentInteractable(ax, pts), ctx)).geometry) == Int
+    end
+
     @testset "validate is per-capability" begin
         fl = Figure(); axl = Axis(fl[1, 1]; xscale = sqrt)   # sqrt: not JS-invertible
         scatter!(axl, [1.0, 2.0, 3.0], [1.0, 2.0, 3.0])
