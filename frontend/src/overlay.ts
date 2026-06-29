@@ -134,7 +134,12 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
             hdl.setAttribute("fill", st.stroke)
             svg.appendChild(hdl); handles.push(hdl)
         }
-        const box: ROIBox = { rect, handles, g: { x: rg.x, y: rg.y, w: rg.w, h: rg.h }, handle: rg.handle, t: manifest.transforms[layer.axis] }
+        // Alias box.g to the manifest ROIGeometry so that drag mutations (box.g.x = …) are
+        // immediately visible to hitLayer, which reads layer.geometry directly. Without this
+        // alias, hit-testing uses stale original bounds after the box is moved or resized.
+        // The manifest is rebuilt fresh on every Pluto re-render, so this mutation is scoped
+        // to the current mount session — exactly the "box stays where you left it" behavior.
+        const box: ROIBox = { rect, handles, g: rg, handle: rg.handle, t: manifest.transforms[layer.axis] }
         setROI(box)
         roiBoxes.set(layer.id, box)
     }

@@ -119,17 +119,19 @@ describe("mount", () => {
         expect(afterClick.layer).toBe("thr")
     })
 
-    const roiManifest: Manifest = {
+    // Factory so each test gets a fresh geometry object — the alias fix (box.g = rg) mutates
+    // layer.geometry in-place, which would pollute a shared const across tests.
+    const roiManifest = (): Manifest => ({
         width: 1200, height: 800, scaling: 2,
         transforms: { ax1: { xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
             viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false } },
         layers: [{ id: "roi", kind: "roi", axis: "ax1", events: ["drag"], payloads: [],
             geometry: { x: 200, y: 200, w: 400, h: 400, handle: 16 } }],
-    }
+    })
 
     it("draws an ROI box + 4 handles and commits inverted bounds after a move", () => {
         const { host, script } = setup()
-        mount(script, roiManifest)
+        mount(script, roiManifest())
         const shadow = shadowOf(host)
         const surface = shadow.querySelector(".surface") as HTMLElement
         const rects = shadow.querySelectorAll("rect")
@@ -153,7 +155,7 @@ describe("mount", () => {
 
     it("resizes an ROI box from a corner with the opposite corner fixed", () => {
         const { host, script } = setup()
-        mount(script, roiManifest)
+        mount(script, roiManifest())
         const shadow = shadowOf(host)
         const surface = shadow.querySelector(".surface") as HTMLElement
         const box = shadow.querySelectorAll("rect")[0] as SVGRectElement
@@ -178,7 +180,7 @@ describe("mount", () => {
 
     it("resize flips past the anchor and clamps to the viewport", () => {
         const { host, script } = setup()
-        mount(script, roiManifest)
+        mount(script, roiManifest())
         const surface = shadowOf(host).querySelector(".surface") as HTMLElement
         const box = shadowOf(host).querySelectorAll("rect")[0] as SVGRectElement
         // grab BR corner image (600,600)==client (300,300); anchor = TL (200,200)
@@ -195,6 +197,32 @@ describe("mount", () => {
         expect(box.getAttribute("width")).toBe("1000")   // |1200 - 200|
         expect(box.getAttribute("height")).toBe("600")   // |800 - 200|
         window.dispatchEvent(new MouseEvent("mouseup", { clientX: 700, clientY: 500, bubbles: true }))
+    })
+
+    it("re-grab works at the moved box position (hit-test tracks live geometry)", () => {
+        // Regression for: after drag, box.g (live state) diverged from layer.geometry (static manifest
+        // copy), so hitLayer hit-tested the original footprint and missed the moved box on re-grab.
+        // Fix: box.g is now an alias for the manifest ROIGeometry, keeping them in sync.
+        const { host, script } = setup()
+        mount(script, roiManifest())
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const box = shadow.querySelectorAll("rect")[0] as SVGRectElement
+        // roiManifest: box at image [200,600]×[200,600], scaling=2 so client×2=image
+        // First drag: grab interior at client(200,200)=image(400,400); move to client(300,200)=image(600,400)
+        // ax = 400-200 = 200; new box.g.x = 600-200 = 400 → box now spans image x [400,800]
+        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 200, clientY: 200, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(box.getAttribute("x")).toBe("400")
+        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 300, clientY: 200, bubbles: true }))
+        // Second grab: client(350,200)=image(700,400) is INSIDE the moved box [400,800]×[200,600]
+        // but OUTSIDE the original [200,600]×[200,600] — so hit only lands if live geometry is used
+        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 350, clientY: 200, bubbles: true }))
+        // Move to client(400,200)=image(800,400); ax=700-400=300; new box.g.x=max(0,min(800,800-300))=500
+        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 400, clientY: 200, bubbles: true }))
+        // Second drag registered → box moved again (x went from 400 to 500)
+        expect(box.getAttribute("x")).toBe("500")
+        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 400, clientY: 200, bubbles: true }))
     })
 
     const boxSelectManifest: Manifest = {
