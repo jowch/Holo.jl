@@ -237,7 +237,9 @@ FunctionInteractable(ax, f; id, events=(:click,:hover))   # f(ctx)::Vector{HitLa
 
 **Tier C — full struct.** Implement `hitlayers` (+ optional `validate`/`hoverstyle`). A user
 struct is *indistinguishable* from a built-in — same manifest path, same overlay, same `@bind`. Tooltip
-content is set via the `tooltip` kwarg when calling `holo()` (see `docs/tooltips.md`). Example:
+content comes from the per-layer `Holo.tooltip_spec(interactable)` seam (built-in interactables expose it
+as a `tooltip=` constructor kwarg; a custom struct overrides `Holo.tooltip_spec`). The `tooltip_*` kwargs
+on `holo()` are styling only. See `docs/tooltips.md`. Example:
 
 ```julia
 struct CityInteractable <: AbstractInteractable
@@ -249,7 +251,8 @@ function Holo.hitlayers(c::CityInteractable, ctx)
     end
     [HitLayer(:cities, :circles, coords, [(; name=n) for n in c.names], :main, (:click,:hover))]
 end
-# tooltip content: pass `tooltip = holo"$(name)"` (or nothing/false) to holo() — see docs/tooltips.md
+# tooltip content: add a `tooltip` field to CityInteractable and override
+# `Holo.tooltip_spec(c::CityInteractable) = c.tooltip` — see docs/tooltips.md
 ```
 
 **Linkage = shared payloads through Pluto reactivity.** Two interactables writing the same payload field

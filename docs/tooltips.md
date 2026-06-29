@@ -152,7 +152,7 @@ Three layers of control; most users never leave the first.
 ### Layer 1 — zero-config default
 
 The built-in CSS produces an NYT-clean card: light background, dark text, rounded
-corners, a drop shadow, and a 12 px caret pointing toward the hovered data point. A
+corners, a drop shadow, and a small CSS triangle (caret) pointing toward the hovered data point. A
 `prefers-color-scheme: dark` media query inverts the card automatically. No author
 action required.
 
@@ -172,7 +172,7 @@ holo(fig, interactables...;
 )
 ```
 
-`nothing` (the default for every kwarg) means "use the built-in." Julia emits a
+`nothing` is the default for every styling kwarg and means "use the built-in default." (`tooltip_caret` is the exception: it defaults to `true` and takes a `Bool` — pass `false` to drop the caret.) Julia emits a
 `--holo-tip-*` CSS custom property **only** for kwargs the user explicitly sets. Unset
 kwargs resolve to the locked-in defaults via `var(--holo-tip-*, <default>)` fallbacks
 in the overlay CSS, leaving the dark-mode variant untouched. An explicitly set kwarg
@@ -206,14 +206,19 @@ near a figure boundary, keeping the card inside the viewport.
 
 ### `--holo-tip-*` custom property reference
 
-| Property | Light default | Dark default | Controls |
+| Custom property | Light default | Dark default | Julia kwarg |
 |---|---|---|---|
-| `--holo-tip-bg` | `#fff` | `#1e1e1e` | Card background |
-| `--holo-tip-color` | `#111` | `#eee` | Primary text |
-| `--holo-tip-accent` | `#007AFF` | `#58a6ff` | Accent / emphasis |
-| `--holo-tip-font` | `system-ui, -apple-system, sans-serif` | *(same)* | Font family |
-| `--holo-tip-font-size` | `13px` | *(same)* | Font size |
-| `--holo-tip-radius` | `6px` | *(same)* | Border radius |
+| `--holo-tip-bg` | `#ffffff` | `#1e1e1e` | `tooltip_bg` |
+| `--holo-tip-color` | `#1a1a1a` | `#e8e8e8` | `tooltip_color` |
+| `--holo-tip-accent` | `#6b7280` | *(same)* | `tooltip_accent` |
+| `--holo-tip-font` | `system-ui, -apple-system, sans-serif` | *(same)* | `tooltip_font` |
+| `--holo-tip-font-size` | `11px` | *(same)* | `tooltip_font_size` |
+| `--holo-tip-radius` | `4px` | *(same)* | `tooltip_radius` |
+| `--holo-tip-caret` | `block` (the caret's `display`) | *(same)* | `tooltip_caret` (`false` → `none`) |
+| `--holo-tip-padding` | `8px 12px` | *(same)* | — (CSS only) |
+| `--holo-tip-border` | `rgba(0,0,0,0.1)` | `rgba(255,255,255,0.15)` | — (CSS only) |
+| `--holo-tip-shadow` | `0 2px 4px rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.08)` | `0 2px 4px rgba(0,0,0,0.4), 0 8px 16px rgba(0,0,0,0.3)` | — (CSS only) |
+| `--holo-tip-maxwidth` | `320px` | *(same)* | — (CSS only) |
 
 ## 6. Wire format
 
