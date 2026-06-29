@@ -512,4 +512,32 @@ end
             @test [L["kind"] for L in w.manifest["layers"]] == ["polyline", "segments"]
         end
     end
+
+    @testset "markup parse + validation" begin
+        m = holo"<b>$(name)</b> — $(pop:,) people ($(share:.1%))"
+        @test m isa Holo.Markup
+        @test m.fields == [:name, :pop, :share]
+        @test count(s -> s isa Holo.Field, m.segments) == 3
+        @test m.segments[2] == Holo.Field(:name, nothing)
+        @test any(s -> s isa Holo.Field && s.spec == ",", m.segments)
+
+        # macro-time structural errors
+        for bad in ["<b>\$(name</b>", "x = \$5", "<b>\$()</b>", "\$(pop + 1)", "\$(pop:.2z)"]
+            @test_throws Holo.TemplateValidationError Holo.parse_template(bad)
+        end
+
+        # spec accept / reject
+        for ok in [",", ".2f", ",.0f", ".1%", "\$,.2f", ".3s", "+.1e", "~g"]
+            @test Holo._valid_spec(ok)
+        end
+        @test !Holo._valid_spec(".2z")
+
+        # showerror renders a caret
+        e = try
+            Holo.parse_template("\$(pop:.2z)")
+        catch err
+            err
+        end
+        @test occursin("^", sprint(showerror, e))
+    end
 end

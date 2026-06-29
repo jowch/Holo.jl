@@ -18,6 +18,7 @@ function __init__()
 end
 
 include("backend.jl")
+include("markup.jl")
 include("interactables.jl")
 include("introspect.jl")
 include("render.jl")
@@ -27,5 +28,6 @@ export AbstractInteractable, HitLayer, InteractionContext, AxisTransform
 export PointInteractable, SegmentInteractable, RectInteractable, PolygonInteractable,
     AxisInteractable, RegionInteractable, FunctionInteractable, ThresholdInteractable, ROIInteractable
 export holo, auto_interactables, InteractionEvent, data_to_image_px, hitlayers
+export Markup, @holo_str
 
 end # module Holo
