@@ -88,4 +88,34 @@ describe("mount", () => {
         // image (600,600): fy = 1 - 600/800 = 0.25; ylims [0,100] → 25
         expect(committed!.payload).toBeCloseTo(25)
     })
+
+    it("synthesized click after drag does not overwrite threshold commit (justDragged guard)", () => {
+        // Both a threshold layer and a click-enabled circles layer whose center sits at the drag-release point.
+        // Release point: client (300,300) → image (600,600). Circle centered at (600,600) r=30 will be hit by click.
+        const mixedManifest: Manifest = {
+            width: 1200, height: 800, scaling: 2,
+            transforms: { ax1: { xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
+                viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false } },
+            layers: [
+                { id: "thr", kind: "threshold", axis: "ax1", events: ["drag"], payloads: [],
+                    geometry: { orientation: "h", pos: 400, span: [0, 1200] } },
+                { id: "pts", kind: "circles", geometry: [600, 600, 30], payloads: [{ i: 0 }], axis: "ax1", events: ["click", "hover"] },
+            ],
+        }
+        const { host, script } = setup()
+        mount(script, mixedManifest)
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        // drag the threshold: mousedown on line (clientY=200 → image y=400 = threshold pos), release at clientY=300
+        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 300, clientY: 200, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 300, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 300, clientY: 300, bubbles: true }))
+        const afterDrag = (host as unknown as { value: { layer: string; index: number; payload: number } }).value
+        expect(afterDrag).toMatchObject({ layer: "thr", index: 0 })
+        // synthesized click at the release point — browser fires this after mouseup; circle is at (600,600) and would be hit
+        surface.dispatchEvent(new MouseEvent("click", { clientX: 300, clientY: 300, bubbles: true }))
+        const afterClick = (host as unknown as { value: { layer: string; index: number; payload: number } }).value
+        // guard must have blocked the click — threshold commit must survive
+        expect(afterClick.layer).toBe("thr")
+    })
 })

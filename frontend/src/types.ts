@@ -48,7 +48,7 @@ export interface HitLayer {
     geometry: number[] | number[][] | GridGeometry | ThresholdGeometry | null
     payloads: unknown[]
     axis: string
-    events: string[] // "click" | "hover"
+    events: string[] // "click" | "hover" | "drag"
     style?: LayerStyle
     tooltips?: (string | null)[]
     selected?: number[] // element indices to draw pre-highlighted on mount

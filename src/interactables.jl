@@ -10,7 +10,7 @@ a hit to an element index + payload. Compact by design (a heatmap ships edges, n
 """
 struct HitLayer
     id::Symbol
-    kind::Symbol          # :circles|:polyline|:segments|:rects|:grid|:polygons|:axis
+    kind::Symbol          # :circles|:polyline|:segments|:rects|:grid|:polygons|:axis|:threshold
     geometry::Any
     payloads::Vector{Any}
     axis::Symbol

@@ -80,6 +80,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
 
     interface Drag { id: string; line: SVGLineElement; tg: ThresholdGeometry; t: AxisTransform }
     let drag: Drag | null = null
+    let justDragged = false
     const clampX = (t: AxisTransform, x: number) => Math.max(t.viewport[0], Math.min(t.viewport[0] + t.viewport[2], x))
     const clampY = (t: AxisTransform, y: number) => Math.max(t.viewport[1], Math.min(t.viewport[1] + t.viewport[3], y))
 
@@ -147,6 +148,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     }
     const onLeave = () => { clearHi(); tip.style.display = "none" }
     const onDown = (e: MouseEvent) => {
+        justDragged = false
         const p = imgPx(e)
         const hit = hitTest(manifest, p.x, p.y, "drag")
         if (!hit || hit.layer.kind !== "threshold") return
@@ -172,9 +174,11 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         ;(host as unknown as { value: unknown }).value = { layer: drag.id, index: 0, payload: drag.tg.orientation === "h" ? v.y : v.x }
         host.dispatchEvent(new CustomEvent("input"))
         tip.style.display = "none"; surface.classList.remove("grabbing")
+        justDragged = true
         drag = null
     }
     const onClick = (e: MouseEvent) => {
+        if (justDragged) { justDragged = false; return }
         const p = imgPx(e)
         const hit = hitTest(manifest, p.x, p.y, "click")
         if (!hit) return // miss = no-op, no round-trip
