@@ -381,8 +381,13 @@ end
         end
 
         @testset "empty data -> empty layer (no pairs)" begin
+            # Build the empty Errorbars from a typed Vec4f[] (the post-conversion type Makie
+            # expects). Empty *untyped* vectors (Float64[], Float64[], Float64[]) fail Makie's
+            # convert_arguments before Julia 1.12 — the empty broadcast infers Vector{Any},
+            # which the converter rejects (upstream, not a Holo bug). The pre-typed form passes
+            # straight through on all supported versions. Verified on Julia 1.10 and 1.12.
             f = Figure(size = (500, 350)); a = Axis(f[1, 1])
-            p = errorbars!(a, Float64[], Float64[], Float64[]); _, _, c = ctx_for(f)
+            p = errorbars!(a, Vec4f[]); _, _, c = ctx_for(f)
             L = only(hitlayers(SegmentInteractable(a, p), c))
             @test isempty(L.geometry) && isempty(L.payloads)
         end
