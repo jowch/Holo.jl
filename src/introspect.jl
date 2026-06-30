@@ -133,6 +133,24 @@ function PolygonInteractable(ax, p::Makie.Contourf; id = :contourf, payloads = n
     return PolygonInteractable(ax, rings; id, payloads = pl)
 end
 
+# ---- Violin -> PolygonInteractable ----
+# Makie lays out one closed ring per violin on a child Poly (KDE already run). The ring's x-extent
+# is centered on the violin's category position → payload (; x). One element per violin.
+function _violin_payloads(rings)
+    return Any[
+        let xs = [Float64(pt[1]) for pt in ring]
+                (; x = (minimum(xs) + maximum(xs)) / 2)
+        end
+            for ring in rings
+    ]
+end
+function PolygonInteractable(ax, p::Makie.Violin; id = :violin, payloads = nothing)
+    poly = _childof(p, Makie.Poly)
+    rings = _conv(poly)[1]                              # Vector{Vector{Point}}, one ring per violin
+    pl = payloads === nothing ? _violin_payloads(rings) : payloads
+    return PolygonInteractable(ax, rings; id, payloads = pl)
+end
+
 # ====================== M3 cheap wins (same primitives) ======================
 # Each delegates to an existing explicit constructor; the only work is reading the right
 # laid-out geometry off the plot (or its children). No new types, no new manifest path.
@@ -358,6 +376,7 @@ function _plotbase(p)
     p isa Makie.Band && return :band
     p isa Makie.Density && return :density
     p isa Makie.Contourf && return :contourf
+    p isa Makie.Violin && return :violin
     p isa Makie.Stem && return :stem
     p isa Makie.ScatterLines && return :scatterlines
     return nothing
@@ -379,6 +398,7 @@ function _construct(ax, p, id)
     p isa Makie.Density && return [PolygonInteractable(ax, p; id)]
     p isa Makie.Poly && return [PolygonInteractable(ax, p; id)]
     p isa Makie.Contourf && return [PolygonInteractable(ax, p; id)]
+    p isa Makie.Violin && return [PolygonInteractable(ax, p; id)]
     p isa Makie.Stem && return _stem_parts(ax, p, id)
     p isa Makie.ScatterLines && return _scatterlines_parts(ax, p, id)
     # unreachable while _plotbase gates callers; loud if the two ever drift (kind added to one, not the other)

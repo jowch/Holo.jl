@@ -642,6 +642,22 @@ end
         @test length(ints) == 1 && ints[1] isa PolygonInteractable
     end
 
+    @testset "Violin extraction" begin
+        using Holo: PolygonInteractable, auto_interactables
+        fig = Figure(); ax = Axis(fig[1, 1])
+        violin!(ax, repeat([1, 2, 3], inner = 80), randn(240))
+        Makie.update_state_before_display!(fig)
+        p = ax.scene.plots[1]
+        pi = PolygonInteractable(ax, p; id = :violin)
+        @test length(pi.rings) == 3                        # one ring per violin
+        @test length(pi.payloads) == 3
+        @test [round(pl.x) for pl in pi.payloads] == [1.0, 2.0, 3.0]   # category positions
+        @test all(pl.x isa Float64 for pl in pi.payloads)
+        @test !haskey(pairs(pi.payloads[1]), :index)
+        ints = auto_interactables(fig)
+        @test length(ints) == 1 && ints[1] isa PolygonInteractable
+    end
+
     @testset "markup parse + validation" begin
         m = holo"<b>$(name)</b> — $(pop:,) people ($(share:.1%))"
         @test m isa Holo.Markup
