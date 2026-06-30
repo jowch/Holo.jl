@@ -790,6 +790,43 @@ end
         @test h2 ≈ 2.0          # band y-height   3-1
     end
 
+    @testset "VSpan/HSpan pixel-space rect bounded to owning axis viewport (multi-axis)" begin
+        # Regression: in a 2×2 figure the vspan on a4 (bottom-right) must not bleed in
+        # PIXEL SPACE into a2 (top-right). The data-space rect is correct (uses finallimits),
+        # but integer quantization (_q) can expand h by up to 0.5px beyond the viewport bounds.
+        # Fix: viewport-clamp in pixel space before emitting geometry (ceil/floor inward).
+        # This test uses the exact 2×2 repro that was live-verified to exhibit the bleed.
+        using Holo: RectInteractable, axis_id
+        f = Figure(size = (760, 520))
+        a2 = Axis(f[1, 2]); waterfall!(a2, 1:4, [3.0, -1.0, 2.0, -0.5])
+        a4 = Axis(f[2, 2])
+        barplot!(a4, 1:3, [2.0, 3.0, 1.0])
+        hspan!(a4, [0.4], [0.8])
+        vspan!(a4, [1.6], [2.0])
+        _, _, ctx = ctx_for(f)          # calls update_state_before_display! + builds context
+
+        t4 = ctx.transforms[axis_id(ctx, a4)]
+        vp_x, vp_y, vp_w, vp_h = t4.viewport   # image-px, top-left origin
+
+        # ── VSpan on a4: the Y-extent fills the full axis ──────────────────────────────
+        vspan_plot = only(filter(p -> p isa Makie.VSpan, a4.scene.plots))
+        L_vs = only(hitlayers(RectInteractable(a4, vspan_plot; id = :vspan), ctx))
+        g = L_vs.geometry   # [cx, cy, w, h] (integer image-px)
+        vs_top = g[2] - g[4] / 2     # top edge in image-px (y-axis: small = toward top)
+        vs_bot = g[2] + g[4] / 2
+        @test vs_top >= vp_y          # vspan top edge must not poke above a4's viewport
+        @test vs_bot <= vp_y + vp_h  # vspan bottom edge must not poke below a4's viewport
+
+        # ── HSpan on a4: the X-extent fills the full axis ──────────────────────────────
+        hspan_plot = only(filter(p -> p isa Makie.HSpan, a4.scene.plots))
+        L_hs = only(hitlayers(RectInteractable(a4, hspan_plot; id = :hspan), ctx))
+        gh = L_hs.geometry
+        hs_left = gh[1] - gh[3] / 2
+        hs_right = gh[1] + gh[3] / 2
+        @test hs_left >= vp_x          # hspan left edge must not poke left of a4's viewport
+        @test hs_right <= vp_x + vp_w  # hspan right edge must not poke right of a4's viewport
+    end
+
     @testset "payload-length validation (Segment/Rect/Polygon)" begin
         using Holo: SegmentInteractable, RectInteractable, PolygonInteractable
         fig = Figure(); ax = Axis(fig[1, 1])

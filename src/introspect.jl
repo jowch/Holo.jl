@@ -230,11 +230,11 @@ function _span_rects(ax, p, full::Symbol)
 end
 function RectInteractable(ax, p::Makie.HSpan; id = :hspan, payloads = nothing)
     pl = payloads === nothing ? _span_payloads(p) : payloads
-    return RectInteractable(ax; rects = _span_rects(ax, p, :x), id, payloads = pl)
+    return RectInteractable(ax; rects = _span_rects(ax, p, :x), id, payloads = pl, clamp_to_viewport = true)
 end
 function RectInteractable(ax, p::Makie.VSpan; id = :vspan, payloads = nothing)
     pl = payloads === nothing ? _span_payloads(p) : payloads
-    return RectInteractable(ax; rects = _span_rects(ax, p, :y), id, payloads = pl)
+    return RectInteractable(ax; rects = _span_rects(ax, p, :y), id, payloads = pl, clamp_to_viewport = true)
 end
 
 # ---- CrossBar -> RectInteractable(:list) ----
