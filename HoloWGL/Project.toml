@@ -8,7 +8,8 @@ version = "0.1.0"
 # CairoMakie/GLMakie/WGLMakie as subpackages of one repo.
 
 # Holo is unregistered (same monorepo). [sources] points to it by relative path, so a plain
-# `Pkg.instantiate()` resolves it — no manual `dev` of Holo needed. (Requires Julia >= 1.11.)
+# `Pkg.instantiate()` resolves it — no manual `dev` of Holo needed. ([sources] needs Julia >= 1.11;
+# the [compat] julia = "1.12" below already satisfies that.)
 [sources]
 Holo = {path = ".."}
 

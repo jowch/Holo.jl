@@ -32,6 +32,11 @@ versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 - Holo's overlay no-ops without an `<img>` base (`overlay.ts` does `querySelector("img")`); our
   base is a `<canvas>`. The widget now lays a transparent SVG `<img class="holo-webgl-sizer">`
   over the canvas (`naturalWidth == out_w`) so the overlay mounts and maps coordinates correctly.
+- `context` left the per-axis `transforms` map empty, so any axis-keyed interactable
+  (Threshold/ROI/Region/box-select) `KeyError`'d at manifest build — only `PointInteractable`
+  (pre-projected geometry) worked. Now populated via `Holo._axis_transform`, typed `AxisTransform`.
+- `scene_payload` left the `NoConnection` serialization screen attached to the user's figure;
+  now removed via `Makie.delete_screen!` in a `finally`.
 
 ### Verified
 - End-to-end in a real Pluto kernel (Playwright-driven): widget renders at full cell width,

@@ -60,6 +60,9 @@ function _plain(x)
         T === UInt32 && return Dict{String, Any}("__t__" => "u32", "d" => Vector{UInt32}(x))
         T === Int32 && return Dict{String, Any}("__t__" => "i32", "d" => Vector{Int32}(x))
         T === UInt8 && return Dict{String, Any}("__t__" => "u8", "d" => Vector{UInt8}(x))
+        # Everything else (Float32/16/64, Int64 indices, N0f8, …) -> Float32: matches WebGL, which is
+        # f32-only, so this is the renderer's own precision. Lossy for Int64 indices / Float64 beyond
+        # ~7 digits — fine for plot coordinates, which is all serialize_scene emits here.
         return Dict{String, Any}("__t__" => "f32", "d" => Vector{Float32}(x))
     elseif x isa AbstractVector
         return Any[_plain(v) for v in x]
@@ -82,7 +85,11 @@ function scene_payload(fig)
     screen = WGLMakie.Screen(scene, config)
     screen.session = session
     Makie.push_screen!(scene, screen)
-    return _plain(WGLMakie.serialize_scene(scene))
+    try
+        return _plain(WGLMakie.serialize_scene(scene))
+    finally
+        Makie.delete_screen!(scene, screen)   # don't leave the NoConnection screen attached to the user's figure
+    end
 end
 
 # The render result for :webgl — a payload to publish (via Holo's published_to_js), not
@@ -121,9 +128,15 @@ function Holo.context(b::WebGLBackend, fig, ppu)
 
     axes = [c for c in fig.content if c isa Makie.Axis]
     ids = IdDict{Any, Symbol}()
-    transforms = Dict{Symbol, Any}()
+    transforms = Dict{Symbol, Holo.AxisTransform}()
     for (k, ax) in enumerate(axes)
-        ids[ax] = Symbol("ax", k)
+        id = Symbol("ax", k)
+        ids[ax] = id
+        # Populate the per-axis transform exactly as CairoBackend does. Without this, every
+        # axis-keyed interactable (Threshold/ROI/Region/box-select) KeyErrors at manifest build
+        # (interactables.jl indexes ctx.transforms[axis_id]). We copy the loop rather than delegate
+        # to Holo.context(CairoBackend(...)) because that rejects Axis3 — which :webgl must render.
+        transforms[id] = Holo._axis_transform(id, ax, scaling, out_h)
     end
     return InteractionContext(project, transforms, ids, out_w, out_h, scaling, display_scale)
 end

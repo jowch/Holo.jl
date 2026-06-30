@@ -81,6 +81,31 @@ end
     @test occursin("window.Holo.mount", html)    # Holo's overlay reused verbatim
 end
 
+@testset "context populates per-axis transforms (axis-keyed interactable)" begin
+    fig = Figure(; size = (400, 300))
+    ax = Axis(fig[1, 1])
+    lines!(ax, 1:5, (1:5) .^ 2)
+    Makie.update_state_before_display!(fig)
+
+    ctx = HoloWGL.Holo.context(WebGLBackend(), fig, 2.0)
+    @test ctx.transforms isa Dict{Symbol, HoloWGL.Holo.AxisTransform}   # not Dict{Symbol,Any}
+    @test haskey(ctx.transforms, :ax1)                                  # was empty -> KeyError
+
+    # an axis-keyed interactable must build its manifest without KeyError now
+    thr = HoloWGL.Holo.ThresholdInteractable(ax; value = 10.0)
+    w = holo_webgl(fig, [thr])
+    @test w isa HoloWGL.WebGLWidget
+    @test !isempty(w.manifest["transforms"])
+end
+
+@testset "scene_payload leaves no screen attached" begin
+    fig = Figure(; size = (300, 200)); ax = Axis(fig[1, 1]); lines!(ax, 1:4, 1:4)
+    Makie.update_state_before_display!(fig)
+    n0 = length(fig.scene.current_screens)
+    HoloWGL.scene_payload(fig)
+    @test length(fig.scene.current_screens) == n0   # the serialization screen is cleaned up
+end
+
 @testset "backend wiring" begin
     b = WebGLBackend()
     @test b isa HoloWGL.Holo.AbstractBackend

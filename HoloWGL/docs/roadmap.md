@@ -37,14 +37,26 @@ The hard questions are answered and the backend works end-to-end in a real Pluto
 
 ## M2 — Delivery & performance
 
-- [ ] **Share the bundle once per notebook**: the ~1 MB WGLMakie bundle + font atlas + three.js
-      currently ship per cell (correct, wasteful). Publish once, reference from each widget.
+**Measured payload envelope** (committed bench `bench/payload_size.jl`; re-run on any wire-format
+change — the profiling standing practice, scoped to HoloWGL since this is a *new* format distinct
+from Holo core's PNG+manifest envelope in `../../docs/perf-findings.md`, which is unchanged):
+
+| | shipped | 2026-06-30 (WGLMakie 0.13.12) |
+|---|---|---|
+| WGLMakie bundle | once per widget | **1.09 MB** |
+| scene JSON — 2D lines (200 pts) | per cell | 0.33 MB |
+| scene JSON — 2D scatter + text (40) | per cell | 0.44 MB |
+| scene JSON — 3D helix (300 pts) | per cell | 0.56 MB |
+
+So a `:webgl` cell ships ~1.1 MB (bundle) + ~0.3–0.6 MB (scene). The bundle dominates and is the
+slimming target:
+
+- [ ] **Share the bundle once per notebook**: the 1.09 MB bundle + font atlas + three.js currently
+      ship per cell (correct, wasteful). Publish once, reference from each widget → each extra cell
+      drops to just its 0.3–0.6 MB scene.
 - [ ] **Payload slimming**: msgpack/gzip for the scene JSON (atlas-dominated).
 - [ ] **Build pipeline**: move `assets/holo-webgl.js` into an esbuild build alongside Holo's
       `overlay.js` if/when the shim grows.
-- [ ] **Re-open the perf envelope**: the `:webgl` payload is a new wire format. Measure it
-      against `../../bench/payload_envelope.jl` and reconcile `../../docs/perf-findings.md`
-      (the single source of size/latency numbers) — same standing practice as Holo's other paths.
 
 ## M3 — Upstream / fold-in & distribution
 
