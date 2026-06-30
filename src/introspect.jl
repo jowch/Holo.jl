@@ -70,7 +70,7 @@ function _bar_payloads(rects, direction)
     return Any[
         let (cx, cy, w, h) = r
                 lo, hi = vert ? (cy - h / 2, cy + h / 2) : (cx - w / 2, cx + w / 2)
-                (; low = lo, high = hi, value = hi - lo)
+                (; low = Float64(lo), high = Float64(hi), value = Float64(hi - lo))
         end
             for r in rects
     ]
@@ -181,7 +181,7 @@ function _hist_payloads(rects, direction)
         let (cx, cy, w, h) = r
                 cnt = vert ? h : w                                                  # bar height = bin count
                 lo, hi = vert ? (cx - w / 2, cx + w / 2) : (cy - h / 2, cy + h / 2)  # category axis = bin range
-                (; count = cnt, low = lo, high = hi)
+                (; count = Float64(cnt), low = Float64(lo), high = Float64(hi))
         end
             for r in rects
     ]

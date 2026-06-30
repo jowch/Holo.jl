@@ -352,8 +352,18 @@ end
             pls = ri.payloads
             @test length(pls) == 3
             @test pls[1] == (; low = 0.0, high = 3.0, value = 3.0)   # bar 1: from-zero, height 3
-            @test pls[2].high == 1.0 && pls[3].high == 2.0
+            @test pls[2] == (; low = 0.0, high = 1.0, value = 1.0)
+            @test pls[3] == (; low = 0.0, high = 2.0, value = 2.0)
             @test !haskey(pairs(pls[1]), :index)                     # no redundant index
+            @test pls[1].value isa Float64                           # semantic values are Float64
+
+            # horizontal bars (direction = :x): the value runs along x
+            figh = Figure(); axh = Axis(figh[1, 1])
+            barplot!(axh, [1, 2], [3.0, 5.0]; direction = :x)
+            Makie.update_state_before_display!(figh)
+            plh = RectInteractable(axh, axh.scene.plots[1]; id = :bars).payloads
+            @test plh[1] == (; low = 0.0, high = 3.0, value = 3.0)
+            @test plh[2] == (; low = 0.0, high = 5.0, value = 5.0)
         end
 
         @testset "poly -> Polygon (single ring and vector of rings)" begin
