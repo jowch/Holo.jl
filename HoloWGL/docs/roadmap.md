@@ -41,7 +41,21 @@ The hard questions are answered and the backend works end-to-end in a real Pluto
       coupling no other test covers. Wired into CI (`.github/workflows/CI.yml` `holowgl` job, Julia
       1.12) so the whole HoloWGL suite — not just this guard — gates on every PR; previously the
       subpackage ran only manually (gap inherited from #12).*
-- [ ] **`@bind` test in CI**: the live click test is manual; script it (headless Pluto + Playwright).
+- [x] **`@bind` test in CI**: the live click test is manual; script it. *Done — **three** layers,
+      cheapest→fullest, all gating in CI. (1) Julia contract (`test/runtests.jl` "@bind round-trip
+      contract"): derives the click payload from the REAL built manifest, runs it through
+      `transform_value`, asserts the typed `InteractionEvent` (single + `items`/selector + never-`Nothing`).
+      (2) Static-page real-browser E2E (`test/e2e/click.mjs`, Playwright/Chromium, in the `holowgl` job):
+      Julia emits the self-contained widget page (`make_page.jl`), Chromium clicks scatter marker 0 and
+      asserts the overlay sets `host.value = {layer,index,payload}` + fires `input` (overlay.ts:273-274) —
+      real overlay JS, shadow-DOM hit-test, the `:webgl` sizer base. **Seam closed:** `verify_capture.jl`
+      feeds the *byte-for-byte* emitted value back through `transform_value`, no synthesized payload between
+      emit and consume. (WebGL canvas init may fail headless; irrelevant — the overlay rides the sizer.)
+      (3) **Through-Pluto E2E** (`test/e2e/{bind_notebook.jl,serve.jl,bind_click.mjs}`, the `holowgl-bind-e2e`
+      job): a live headless Pluto kernel — Chromium opens the notebook, exits safe preview, clicks the
+      marker, and asserts the kernel re-runs the readout cell so the bond round-trips THROUGH Pluto (bond
+      transport + reactive re-render), `BOND=nothing → InteractionEvent(:scatter, 0, …)`. Isolated in its
+      own job (heaviest, most exposed to Pluto-version churn) so it's easy to drop if it ever proves flaky.*
 
 ## M2 — Delivery & performance
 

@@ -153,3 +153,42 @@ end
     # shim:69) — this guards the bundle export so it's still there when tier-2 animation is wired.
     @test occursin("find_plots", bundle)
 end
+
+@testset "@bind round-trip contract (click payload -> InteractionEvent)" begin
+    import JSON3
+    import AbstractPlutoDingetjes as APD
+    IE = HoloWGL.Holo.InteractionEvent
+
+    # CONTRACT-level @bind round-trip (no browser): the live click test is the real-browser E2E
+    # (still manual — roadmap M1); this scripts the deterministic half a unit test can reach. It
+    # derives the synthesized click from the REAL built manifest, so it fails if the manifest the
+    # overlay reads and the bond `transform_value` reconstructs ever drift apart.
+    fig = Figure(; size = (400, 300)); ax = Axis(fig[1, 1])
+    scatter!(ax, 1:5, (1:5) .^ 2)
+    w = holo_webgl(fig)                      # auto-extract -> a single :scatter circles layer
+    layer = only(w.manifest["layers"])
+    @test layer["id"] == "scatter"
+
+    # On a click of element k the overlay posts exactly {layer, index, payload}, where payload is
+    # the manifest's payloads[k] after the bond's JSON wire round-trip. Synthesize that and assert
+    # transform_value rebuilds the typed event (0-based index, as the live M0 click saw).
+    k = 2
+    wire = JSON3.read(JSON3.write(layer["payloads"][k + 1]))   # payloads are 0-based; +1 for Julia
+    js = Dict{String, Any}("layer" => layer["id"], "index" => k, "payload" => wire)
+
+    ev = APD.Bonds.transform_value(w, js)
+    @test ev isa IE
+    @test ev.layer === :scatter
+    @test ev.index == k                      # 0-based; matches live InteractionEvent(:scatter, 0, …)
+    @test ev.payload == wire
+
+    # never-`Nothing` invariant + the initial (pre-click) bond value
+    @test APD.Bonds.initial_value(w) === nothing
+    @test APD.Bonds.transform_value(w, nothing) === nothing
+
+    # multi-select wire shape ({items:[…]}) -> Vector{InteractionEvent} (the selector path)
+    multi = Dict{String, Any}("items" => [js, Dict{String, Any}("layer" => "scatter", "index" => 0)])
+    evs = APD.Bonds.transform_value(w, multi)
+    @test evs isa Vector{IE}
+    @test length(evs) == 2 && evs[1].index == k && evs[2].index == 0
+end

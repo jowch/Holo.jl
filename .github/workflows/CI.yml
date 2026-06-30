@@ -49,6 +49,68 @@ jobs:
           julia --project=HoloWGL -e 'using Pkg; Pkg.instantiate()'
           julia --project=HoloWGL HoloWGL/test/runtests.jl
 
+      # Real-browser @bind round-trip: generate the self-contained widget page (reuses the
+      # WGLMakie env just precompiled above), then click scatter marker 0 in headless Chromium
+      # and assert the overlay emits the right bond value (test/e2e/click.mjs). Covers the
+      # browser half the Julia unit tests can't reach.
+      - name: Generate :webgl E2E page
+        run: julia --project=HoloWGL HoloWGL/test/e2e/make_page.jl "$RUNNER_TEMP/e2e"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Playwright + Chromium
+        working-directory: HoloWGL/test/e2e
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+      - name: Run real-browser @bind E2E
+        working-directory: HoloWGL/test/e2e
+        run: node click.mjs "$RUNNER_TEMP/e2e"
+      # Close the seam: feed the value the browser actually emitted through the real Julia
+      # transform_value (no synthesized payload between emit and consume).
+      - name: Verify browser-emitted value through transform_value
+        run: julia --project=HoloWGL HoloWGL/test/e2e/verify_capture.jl "$RUNNER_TEMP/e2e"
+
+  holowgl-bind-e2e:
+    # THROUGH-Pluto @bind E2E: a live headless Pluto kernel + real Chromium. Clicking a marker
+    # round-trips the bond THROUGH Pluto (bond transport + reactive re-run) — the mile the static
+    # E2E in the `holowgl` job skips. Isolated as its own job (heaviest, and the one most exposed
+    # to Pluto-version churn) so it reads cleanly and is trivial to drop if it ever proves flaky.
+    name: HoloWGL @bind E2E (Pluto)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.12'
+      - uses: julia-actions/cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Playwright + Chromium
+        working-directory: HoloWGL/test/e2e
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+      - name: Through-Pluto @bind round-trip
+        working-directory: HoloWGL/test/e2e
+        run: |
+          julia serve.jl 1234 > pluto.log 2>&1 &
+          SERVER=$!
+          trap 'kill $SERVER 2>/dev/null || true' EXIT   # cleanup runs even when `set -e` aborts on a failing step
+          # Use 127.0.0.1, NOT localhost: on GitHub runners localhost resolves to ::1 (IPv6) first,
+          # but Pluto binds IPv4 127.0.0.1 — the HTML shell loads via fallback yet the SPA's
+          # WebSocket (window.location.host) hits ::1 and never connects, leaving a blank page.
+          up=
+          for i in $(seq 1 120); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:1234 || echo 000)
+            [ "$code" = "200" ] && { up=1; break; }
+            sleep 2
+          done
+          [ -n "$up" ] || { echo "::error::Pluto never came up on :1234"; cat pluto.log; exit 1; }
+          node bind_click.mjs http://127.0.0.1:1234 "$GITHUB_WORKSPACE/HoloWGL/test/e2e/bind_notebook.jl"
+
   examples:
     name: Example notebooks
     runs-on: ubuntu-latest
