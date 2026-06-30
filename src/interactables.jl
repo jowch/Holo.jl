@@ -57,6 +57,15 @@ _proj(ctx, ax, p) = data_to_image_px(ctx, ax, p)
 # measured 1–3 B/coord), never via Pluto's binary typed-array path (which would be 8 B/coord for Int64).
 _q(x) = isfinite(x) ? round(Int, x) : Float32(x)
 
+# Validate a user-supplied payloads vector has exactly one entry per element (fail loud — a
+# mismatch otherwise surfaces as an `undefined` tooltip at hover time). Positional: payloads[k]
+# binds element k; a wrong ORDER is undetectable and is the caller's responsibility.
+function _check_payloads(payloads, n, what)
+    length(payloads) == n ||
+        throw(ArgumentError("$(what): got $(length(payloads)) payloads for $(n) elements"))
+    return collect(Any, payloads)
+end
+
 # ============================ PointInteractable ============================
 struct PointInteractable <: AbstractInteractable
     ax; points::Vector{Point2f}; id::Symbol; payloads::Vector{Any}; radius::Float64; tooltip::Union{Nothing, Markup, Bool}
@@ -92,7 +101,7 @@ function SegmentInteractable(
     )
     vs = [Point2f(v[1], v[2]) for v in vertices]
     nseg = mode === :polyline ? max(0, length(vs) - 1) : length(vs) ÷ 2
-    pl = payloads === nothing ? Any[(; segment_index = k - 1) for k in 1:nseg] : collect(Any, payloads)
+    pl = payloads === nothing ? Any[(; segment_index = k - 1) for k in 1:nseg] : _check_payloads(payloads, nseg, "SegmentInteractable")
     return SegmentInteractable(ax, vs, mode, id, pl, Float64(tol), tooltip)
 end
 tooltip_spec(i::SegmentInteractable) = i.tooltip
@@ -116,7 +125,7 @@ function RectInteractable(ax; rects = nothing, grid = nothing, id = :rects, payl
         RectInteractable(ax, :grid, (collect(Float64, xe), collect(Float64, ye), vals), id, Any[], tooltip)
     else
         rs = [(Float64(r[1]), Float64(r[2]), Float64(r[3]), Float64(r[4])) for r in rects]
-        pl = payloads === nothing ? Any[(; index = k - 1) for k in 1:length(rs)] : collect(Any, payloads)
+        pl = payloads === nothing ? Any[(; index = k - 1) for k in 1:length(rs)] : _check_payloads(payloads, length(rs), "RectInteractable")
         RectInteractable(ax, :list, rs, id, pl, tooltip)
     end
 end
@@ -165,7 +174,7 @@ struct PolygonInteractable <: AbstractInteractable
 end
 function PolygonInteractable(ax, rings; id = :polygons, payloads = nothing, tooltip = nothing)
     rs = [[Point2f(p[1], p[2]) for p in ring] for ring in rings]
-    pl = payloads === nothing ? Any[(; index = k - 1) for k in 1:length(rs)] : collect(Any, payloads)
+    pl = payloads === nothing ? Any[(; index = k - 1) for k in 1:length(rs)] : _check_payloads(payloads, length(rs), "PolygonInteractable")
     return PolygonInteractable(ax, rs, id, pl, tooltip)
 end
 tooltip_spec(i::PolygonInteractable) = i.tooltip

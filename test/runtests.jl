@@ -677,4 +677,23 @@ end
         m_ok = build_manifest([pts_i, roi_linked], ctx)
         @test filter(l -> l["kind"] == "roi", m_ok["layers"]) |> only |> l -> l["selects"] == "pts"
     end
+
+    @testset "payload-length validation (Segment/Rect/Polygon)" begin
+        using Holo: SegmentInteractable, RectInteractable, PolygonInteractable
+        fig = Figure(); ax = Axis(fig[1, 1])
+        # RectInteractable list: 2 rects, wrong + right payload counts
+        rects = [(0.0, 0.0, 1.0, 1.0), (2.0, 2.0, 1.0, 1.0)]
+        @test_throws ArgumentError RectInteractable(ax; rects, payloads = [(; a = 1)])           # too short
+        @test_throws ArgumentError RectInteractable(ax; rects, payloads = [(; a = 1), (; a = 2), (; a = 3)])  # too long
+        @test RectInteractable(ax; rects, payloads = [(; a = 1), (; a = 2)]) isa RectInteractable  # exact
+        # SegmentInteractable :pairs — 2 vertices = 1 segment
+        @test_throws ArgumentError SegmentInteractable(ax, [Point2f(0, 0), Point2f(1, 1)]; mode = :pairs, payloads = [(; a = 1), (; a = 2)])  # too long
+        @test_throws ArgumentError SegmentInteractable(ax, [Point2f(0, 0), Point2f(1, 1), Point2f(2, 2), Point2f(3, 3)]; mode = :pairs, payloads = [(; a = 1)])  # too short: 2 segments, 1 payload
+        @test SegmentInteractable(ax, [Point2f(0, 0), Point2f(1, 1)]; mode = :pairs, payloads = [(; a = 1)]) isa SegmentInteractable  # exact
+        # PolygonInteractable — 1 ring
+        ring = [Point2f(0, 0), Point2f(1, 0), Point2f(1, 1)]
+        @test_throws ArgumentError PolygonInteractable(ax, [ring]; payloads = [(; a = 1), (; a = 2)])      # too long
+        @test_throws ArgumentError PolygonInteractable(ax, [ring, ring]; payloads = [(; a = 1)])          # too short: 2 rings, 1 payload
+        @test PolygonInteractable(ax, [ring]; payloads = [(; a = 1)]) isa PolygonInteractable             # exact
+    end
 end
