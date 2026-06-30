@@ -181,6 +181,7 @@ jobs:
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add assets/overlay.js
             git commit -m "ci: rebuild assets/overlay.js [skip ci]"
+            git pull --rebase origin main   # serialize with the holowgl-frontend commit-back (different file, no conflict)
             git push
           fi
 
@@ -225,6 +226,7 @@ jobs:
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add HoloWGL/assets/holo-webgl.js
             git commit -m "ci: rebuild HoloWGL/assets/holo-webgl.js [skip ci]"
+            git pull --rebase origin main   # serialize with the frontend commit-back (different file, no conflict)
             git push
           fi
 

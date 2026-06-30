@@ -84,8 +84,10 @@ blobs — the exact mechanism `published_to_js` uses) rendering in a headless br
    bottleneck. Numbers + the gzip columns: `docs/perf-findings.md` (re-run `bench/payload_size.jl`).
 5. **Build pipeline** — DONE. `assets/holo-webgl.js` is now built from
    `HoloWGL/frontend/src/holo-webgl.ts` by esbuild, under the same gate as Holo core's
-   `overlay.ts` (lint + typecheck + vitest + build; CI sole author). The vitest suite locks the
-   `rewrap`↔`_plain` 4-rule contract — previously the least-tested JS in the repo.
+   `overlay.ts` (lint + typecheck + vitest + build; CI sole author). The vitest suite covers the JS
+   half of the `rewrap`↔`_plain` 4-rule contract (asserts `rewrap` against the `_plain` tag set; a
+   new Julia-side tag is caught by the E2E, not vitest) — `rewrap` was previously the least-tested
+   JS in the repo.
 
 ## Dev
 ```
