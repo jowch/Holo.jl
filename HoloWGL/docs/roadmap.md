@@ -48,9 +48,10 @@ The hard questions are answered and the backend works end-to-end in a real Pluto
       (2) Static-page real-browser E2E (`test/e2e/click.mjs`, Playwright/Chromium, in the `holowgl` job):
       Julia emits the self-contained widget page (`make_page.jl`), Chromium clicks scatter marker 0 and
       asserts the overlay sets `host.value = {layer,index,payload}` + fires `input` (overlay.ts:273-274) —
-      real overlay JS, shadow-DOM hit-test, the `:webgl` sizer base. **Seam closed:** `verify_capture.jl`
+      real overlay JS, shadow-DOM hit-test, the `:webgl` `<canvas>` base. **Seam closed:** `verify_capture.jl`
       feeds the *byte-for-byte* emitted value back through `transform_value`, no synthesized payload between
-      emit and consume. (WebGL canvas init may fail headless; irrelevant — the overlay rides the sizer.)
+      emit and consume. (WebGL canvas init may fail headless; irrelevant — the overlay hit-tests via
+      `manifest.width` + the canvas rect, not GL pixels.)
       (3) **Through-Pluto E2E** (`test/e2e/{bind_notebook.jl,serve.jl,bind_click.mjs}`, the `holowgl-bind-e2e`
       job): a live headless Pluto kernel — Chromium opens the notebook, exits safe preview, clicks the
       marker, and asserts the kernel re-runs the readout cell so the bond round-trips THROUGH Pluto (bond
@@ -82,8 +83,15 @@ slimming target:
 
 ## M3 — Upstream / fold-in & distribution
 
-- [ ] **Make Holo's `overlay.ts` base-agnostic** (`querySelector("img, canvas")` + `naturalWidth ??
-      width`) and **drop the transparent sizer `<img>`** — the current additive workaround.
+- [x] **Make Holo's `overlay.ts` base-agnostic** and **drop the transparent sizer `<img>`**. *Done:
+      `overlay.ts` now `querySelector("img, canvas")` and takes the image-px scale from
+      **`manifest.width`** (the design.md §6 "renderWidth" approach) ÷ the live `getBoundingClientRect`,
+      instead of the base element's intrinsic `naturalWidth`. So it binds straight to the `:webgl`
+      `<canvas>` — the sizer shim, its `base64`/SVG plumbing, and HoloWGL's `Base64` dep are gone.
+      Zero-delta for the Cairo `<img>` path (`naturalWidth == manifest.width` for the PNG by
+      construction). Live-verified in real browsers on **both** bases (Cairo img + WebGL canvas, static
+      + through-Pluto); new `overlay.test.ts` canvas-base case; the E2E harness reads `out_w` from the
+      overlay's SVG `viewBox` instead of the sizer.*
 - [ ] **Distribution decision**: register `HoloWGL` as a separate package (Makie-style, after Holo
       is registered) *or* fold `src/` into `ext/HoloWGLMakieExt.jl` for zero-install auto-load.
       The subpackage layout supports both.

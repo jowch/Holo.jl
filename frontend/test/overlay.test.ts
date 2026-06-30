@@ -38,6 +38,26 @@ describe("mount", () => {
         expect((host as unknown as { value: { layer: string; index: number } }).value).toMatchObject({ layer: "pts", index: 0 })
     })
 
+    it("mounts on a <canvas> base (no naturalWidth) and scales via manifest.width", () => {
+        // WebGLBackend's base is a <canvas>, which has no naturalWidth — the overlay must take the
+        // image-px scale from manifest.width, not the element's intrinsic size (M3.1, no sizer shim).
+        const host = document.createElement("div")
+        const canvas = document.createElement("canvas") // canvas.width defaults to 300, deliberately != manifest.width
+        canvas.getBoundingClientRect = () =>
+            ({ left: 0, top: 0, width: 600, height: 400, right: 600, bottom: 400, x: 0, y: 0, toJSON() {} }) as DOMRect
+        const script = document.createElement("script")
+        host.append(canvas, script)
+        document.body.append(host)
+        mount(script, manifest)
+        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        let fired = false
+        host.addEventListener("input", () => { fired = true })
+        // same as the img case: manifest.width 1200 / rect 600 = 2 → client (300,200) hits circle (600,400)
+        surface.dispatchEvent(new MouseEvent("click", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(fired).toBe(true)
+        expect((host as unknown as { value: { layer: string; index: number } }).value).toMatchObject({ layer: "pts", index: 0 })
+    })
+
     it("click on empty space is a no-op (no round-trip)", () => {
         const { host, script } = setup()
         mount(script, manifest)

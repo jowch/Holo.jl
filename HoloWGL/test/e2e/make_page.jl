@@ -1,7 +1,7 @@
 # Emit a self-contained :webgl widget page + the expected click/bond for the browser E2E
 # (test/e2e/click.mjs). Run: julia --project=HoloWGL HoloWGL/test/e2e/make_page.jl <outdir>
 #
-# Writes <outdir>/page.html (the real widget HTML — overlay + canvas + sizer, scene/manifest/
+# Writes <outdir>/page.html (the real widget HTML — overlay + canvas, scene/manifest/
 # bundle/shim inlined as JSON, no server / no published_to_js) and <outdir>/expected.json
 # (the host-relative CSS pixel to click marker 0, and the bond value that click must produce).
 # The browser half asserts host.value == {layer, index}; the Julia half (runtests.jl

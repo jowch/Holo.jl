@@ -38,10 +38,10 @@ Drove a real Pluto server with Playwright: clicked a scatter marker, and the bon
 `InteractionEvent(:scatter, 0, Dict("x"=>0,"index"=>0,"y"=>0))` — correct marker, correct payload,
 round-tripped to Julia. The bug it caught: Holo's `overlay.ts` does `host.querySelector("img")`
 and **no-ops without an `<img>`** — our base is a `<canvas>`, so the overlay never mounted.
-Fix (Holo core untouched): the widget lays a transparent SVG `<img class="holo-webgl-sizer">`
-over the canvas with `naturalWidth == out_w`, so the overlay finds its base and maps coordinates
-correctly. Cleaner long-term fix when folding into Holo: make `overlay.ts` base-agnostic
-(accept `img, canvas`) and drop the sizer.
+Interim fix (M0): a transparent SVG `<img class="holo-webgl-sizer">` over the canvas with
+`naturalWidth == out_w`, so the overlay found its base. **Resolved at the source in M3.1:**
+`overlay.ts` is now base-agnostic (`querySelector("img, canvas")`, image-px scale from
+`manifest.width` not the element's intrinsic size) and binds straight to the canvas — sizer dropped.
 
 ## Asset delivery — DONE (no server, works local/remote/export)
 `show` ships the scene, manifest, **and the bundle + shim text** over Pluto's `published_to_js`

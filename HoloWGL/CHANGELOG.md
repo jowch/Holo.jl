@@ -29,9 +29,12 @@ versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 - `published_to_js` rejected `GeometryBasics.Vec` / `SizedVector` left in the payload —
   `Float32.(x)` and `collect(T, x)` preserve StaticArray types. Encode buffers with
   `Vector{T}(x)`; the unit test is now `Base.Array`-strict so this cannot regress through JSON3.
-- Holo's overlay no-ops without an `<img>` base (`overlay.ts` does `querySelector("img")`); our
-  base is a `<canvas>`. The widget now lays a transparent SVG `<img class="holo-webgl-sizer">`
-  over the canvas (`naturalWidth == out_w`) so the overlay mounts and maps coordinates correctly.
+- Holo's overlay was `<img>`-only (`querySelector("img")` + `img.naturalWidth`); our base is a
+  `<canvas>`. Made the shared `overlay.ts` **base-agnostic** — `querySelector("img, canvas")` and the
+  image-px scale taken from `manifest.width` (the design.md §6 "renderWidth" approach) ÷ the live
+  rect, not the element's intrinsic size — so it binds straight to the canvas. No sizer shim, and the
+  `Base64` dep is dropped. Zero-delta for the Cairo `<img>` path (`naturalWidth == manifest.width` by
+  construction); live-verified on both bases (Cairo + WebGL, static + through-Pluto).
 - `context` left the per-axis `transforms` map empty, so any axis-keyed interactable
   (Threshold/ROI/Region/box-select) `KeyError`'d at manifest build — only `PointInteractable`
   (pre-projected geometry) worked. Now populated via `Holo._axis_transform`, typed `AxisTransform`.
