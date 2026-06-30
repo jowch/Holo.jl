@@ -194,12 +194,21 @@ Five types, one per hit primitive, parameterized where surfaces differ only in i
 |---|---|---|---|
 | `PointInteractable` | `:circles` | Scatter, Stem, Spy, ScatterLines·pts | `(; index, x, y)` |
 | `SegmentInteractable` | `:polyline` \| `:segments` | Lines, Stairs, ScatterLines·lines (polyline); LineSegments, Errorbars, Rangebars, HLines, VLines (pairs) | `(; segment_index, p0, p1)` |
-| `RectInteractable` | `:rects` \| `:grid` | BarPlot, Hist, BoxPlot (list); Heatmap, Image (grid) | grid `(; i, j, value)`; list `(; index, …)` |
+| `RectInteractable` | `:rects` \| `:grid` | BarPlot, Hist, Waterfall, CrossBar, HSpan, VSpan, BoxPlot (list); Heatmap, Image (grid) | grid `(; i, j, value)`; BarPlot/Waterfall `(; low, high, value)`; Hist `(; count, low, high)`; CrossBar `(; midpoint, low, high)`; HSpan/VSpan `(; low, high)` |
 | `PolygonInteractable` | `:polygons` | Poly, Band, Pie | `(; index)` |
 | `AxisInteractable` | `:axis` | the Axis area itself (linear + log) | `(; x, y)` inverted client-side |
 
 `SegmentInteractable` carries `mode ∈ {:polyline,:pairs}`; `RectInteractable` carries
 `layout ∈ {:grid,:list}`. Same JS test, different Julia extractor.
+
+**Bar payload schema (Phase 2a).** All `:rects`-list bar/band surfaces use a shared semantic
+payload — `InteractionEvent.index` carries the element index, so payloads contain only
+domain values (no redundant `index` field). **Span viewport-clamp:** HSpan/VSpan hit-rects are
+clipped to the owning axis's pixel viewport so a span cannot bleed into a neighboring axis in a
+multi-axis figure. **Uniform payload-length validation:** `SegmentInteractable`,
+`RectInteractable`, and `PolygonInteractable` all call `_check_payloads` at construction;
+a `payloads=` vector of the wrong length throws `ArgumentError` immediately (fail-loud, same
+guarantee as `PointInteractable` / `RegionInteractable`).
 
 **Declaration is the contract; plot-introspection is v2 sugar.** v1 constructors take explicit
 data-space geometry (`PointInteractable(ax, points; payloads)`), which the survey confirmed is the
@@ -348,7 +357,9 @@ profile shows JS hit-test *specifically* is the bottleneck.
 `selects`-ROI — `Vector{InteractionEvent}` bond, Design-D contract (§5); gallery recipes
 (box-select scatter, image ROI per-channel stats).
 
-**v2:** plot-object introspection constructors; ABLines/Arc, spans, Colorbar/Legend,
+**Phase 2a (shipped):** Hist, Waterfall, CrossBar, HSpan, VSpan — all extracted as `:rects`; shared bar payload schema (semantic, no `index`); span viewport-clamp; uniform `_check_payloads` validation on Segment/Rect/Polygon interactables.
+
+**v2:** plot-object introspection constructors; ABLines/Arc, Colorbar/Legend,
 contourf/violin/voronoi (computational-geometry extraction), text bboxes (font metrics),
 animation frames, SVG-overlay annotations, spatial hit-test acceleration.
 

@@ -5,7 +5,8 @@
 > item after it (M2.3 tooltips, M4 animation, SVG output, multi-select return shape).
 >
 > Reproduce (numbers below re-run 2026-06-29, last reconciled for M2.3 template-tooltip design
-> on PR #10 and confirmed unchanged for M4 box-select (commit `d05318f`) on 2026-06-29;
+> on PR #10 and confirmed unchanged for M4 box-select (commit `d05318f`) on 2026-06-29 and for
+> Phase 2a bars/areas/spans on 2026-06-30;
 > baseline established after int-pixel geometry quantization, CairoMakie 0.15, Julia 1.12):
 > - **base64-PNG / manifest / render numbers** — `julia --project=. bench/payload_envelope.jl`
 >   (normal envelope) and `julia --project=. bench/stress.jl` (the 10× extremes). Both `seed!(0)`,
@@ -183,6 +184,15 @@ of it; the structural typed-array fast-path does not earn its cost. `Float16` is
 float16; lossy >2048px). Keep `AxisTransform` lims `Float64` (drag inversion) — quantize geometry only.
 
 ## Scope bounds for downstream phases
+
+- **Phase 2a bars/areas/spans** *(delivered, 2026-06-30)* — Hist, Waterfall, CrossBar, HSpan,
+  VSpan now auto-extracted as `:rects`. The payload schema grew from `(; index)` to a semantic
+  shape per surface type (a few numbers per element — see `architecture.md` §3 bar payload
+  schema). Bars/spans are inherently low-N (tens to low hundreds of elements for any realistic
+  chart), so the per-element payload growth has negligible envelope impact. Bench re-run
+  (2026-06-30) confirms the §A envelope table numbers are unchanged: scatter-1000 → 38 KB
+  manifest, scatter-10000 → 379 KB manifest. No new manifest terms, no new per-element geometry
+  (`:rects` was already quantized); the only wire change is richer payload fields per bar element.
 
 - **M2.3 Richer tooltips** *(delivered, PR #10)* — the original
   prediction was correct: shipping per-element tooltip strings would grow the manifest by `Σ(tooltip

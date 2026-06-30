@@ -41,7 +41,7 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 
 - [x] **Cheap wins** (existing primitives): Stairs, Errorbars/Rangebars, HLines/VLines, Stem, Spy, ScatterLines (composite → two layers). *Done (`src/introspect.jl`): introspection constructors delegating to the M1 primitives — Stairs→`Segment(:polyline)` (reads the child Lines' expanded staircase, not the raw input pts), Errorbars/Rangebars→`Segment(:pairs)`, HLines/VLines→`Segment(:pairs)` spanning `finallimits`, Spy→`Rect(:list)` of unit cells off the `:data`-markerspace child Scatter, Stem/ScatterLines→two layers (Point+Segment) via their child plots. All wired into `holo(fig)`; unit-tested against the explicit constructors + rendered-geometry. Deferred: richer `{i,j,value}`/`value`/`equation` payloads (→ M2.3 tooltips), fractional HLines/VLines span attrs.*
 - [ ] **Computational-geometry extraction**: Contourf/Tricontourf, Violin, Voronoiplot, BoxPlot notches — produce polygons.
-- [ ] **Bars/areas**: BarPlot/Hist/Waterfall (list rects), HSpan/VSpan, Colorbar/Legend.
+- [x] **Bars/areas** *(Hist/Waterfall/CrossBar/HSpan/VSpan done; Colorbar/Legend remaining)*: Hist, Waterfall, CrossBar, HSpan, VSpan now auto-extracted by `holo(fig)` as `:rects` (same primitive as BarPlot, no new JS path). Shared bar payload schema — semantic, no redundant `index` (element index lives in `InteractionEvent.index`): BarPlot/Waterfall `(; low, high, value)`, Hist `(; count, low, high)`, CrossBar `(; midpoint, low, high)`, HSpan/VSpan `(; low, high)`. Span hit-rects clamped to the owning axis's pixel viewport (prevents cross-axis bleed in multi-axis figures). Uniform fail-loud payload-length validation (`_check_payloads`) added to `SegmentInteractable`/`RectInteractable`/`PolygonInteractable` — a wrong-length `payloads=` now throws `ArgumentError` at construction. *Remaining: Colorbar/Legend.*
 - [ ] **Text bboxes** (Text/Annotation/TextLabel): needs font-metric measurement → the `bbox` geometry primitive (rotated → degenerate polygon).
 - [ ] **SVG output path**: `CairoBackend(vector=true)` is groundwork; actually emit SVG base + overlay for sparse, low-primitive plots (cleaner coords, no raster).
 
@@ -145,9 +145,7 @@ number — everything else is reorderable by demand.
 No new JS primitive in this phase — every surface reuses v1's `:rects`/`:polygons` tests; the
 work is always a Julia-side extractor. (`update_state_before_display!(fig)` is the mandatory
 pre-manifest step for all three.)
-- **Bars/areas** (Waterfall/CrossBar, HSpan/VSpan, Colorbar/Legend) — cheapest: existing
-  rect-`:list`. Colorbar/Legend are the tractable slice; Waterfall's dodge/stack math is the
-  sharp edge.
+- [x] **Bars/areas** *(done except Colorbar/Legend — see M3)*: Hist/Waterfall/CrossBar/HSpan/VSpan auto-extracted as `:rects`; shared bar payload schema (semantic, no `index`); span viewport-clamp; uniform payload-length validation. *Remaining: Colorbar/Legend.*
 - **Computational-geometry extraction** (Contourf/Tricontourf, Violin, Voronoiplot, BoxPlot
   notches → polygons) — hardest M3 item: Tier-4 Makie *recipes*, reach into recipe internals to
   recover polygons. No new primitive (even-odd polygon test), but the extractor is the cost.
