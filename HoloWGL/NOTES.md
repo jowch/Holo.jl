@@ -51,8 +51,9 @@ blobs — the exact mechanism `published_to_js` uses) rendering in a headless br
 
 ## Animation — both tiers PROVEN (client-side, no server)
 - **Tier 1 (Pluto-reactive):** a slider/`@bind` drives a new figure → `holo_webgl` re-renders.
-  Works today, zero new code. Each frame re-ships only the ~0.07–0.14 MB scene (binary wire) — the
-  bundle is deduped across re-runs too (see bundle-sharing below), not just across cells.
+  Works today, zero new code. Each frame re-ships only the scene (small — binary wire;
+  `docs/perf-findings.md`); the bundle is deduped across re-runs too (see bundle-sharing below), not
+  just across cells.
 - **Tier 2 (in-place):** `mountWebGL` returns `WGL`; the driver patches a plot's buffer by
   uuid — `WGL.find_plots([uuid])[0].geometry.attributes.wgl_positions.array.set(frame);
   attr.needsUpdate = true` — smooth, no Julia round-trip. **Verified**: scatter markers
@@ -63,7 +64,7 @@ blobs — the exact mechanism `published_to_js` uses) rendering in a headless br
 2. **Axis3 / live-camera projection** — `context` reuses `Makie.project` (2D Axis, validated).
    3D pan/zoom needs the overlay to read WGLMakie's client-side camera (the `project`/`pick`
    seam). Static 3D renders today; the overlay for 3D is the follow-on.
-3. **Share the bundle once per notebook** — DONE (M2). The ~1MB bundle no longer costs per cell:
+3. **Share the bundle once per notebook** — DONE (M2). The bundle no longer costs per cell:
    `published_to_js` ids are content-addressed (`notebook_id/objectid`, `objectid(::String)` is
    content-based), so the one `Ref`-cached bundle string has a stable id that ships **exactly once
    per notebook** — across cells (Pluto's notebook merge keeps one copy on load) AND across re-runs
@@ -73,13 +74,12 @@ blobs — the exact mechanism `published_to_js` uses) rendering in a headless br
    once on `window.__HoloWGL` (like Holo's `window.Holo`) so it imports the WGLMakie module once, not
    per cell. No deferral — tier-1 reactive re-renders cost just the scene; scene slimming (#4) /
    tier-2 in-place are the only per-frame levers left.
-4. **Payload slimming** — MEASURED → deferred. The real per-cell wire is already 0.07–0.14 MB
-   binary, not the 0.3–0.6 MB the JSON proxy implied: Pluto's MsgPack binary-packs our typed buffers
-   (`Vector{Float32}` etc.) for free. The bench's `gzip-bin` column shows gzip-of-binary cuts another
-   ~3× but needs a JS msgpack decoder (the cheap gzip-of-JSON path, `gzip-json` column, buys only
-   ~25%); the atlas glyph-tiles are observed to repeat across scenes (shareable) but are small and
-   gzip overlaps. Both deferred until tier-1 animation profiling shows the scene is the bottleneck.
-   See docs/roadmap.md M2.
+4. **Payload slimming** — MEASURED → deferred. The real per-cell wire is already small (binary), not
+   the JSON proxy figure: Pluto's MsgPack binary-packs our typed buffers (`Vector{Float32}` etc.) for
+   free. gzip-of-binary cuts further but needs a JS msgpack decoder (the cheap gzip-of-JSON path
+   buys only a fraction); the atlas glyph-tiles are observed to repeat across scenes (shareable) but
+   are small and gzip overlaps. Both deferred until tier-1 animation profiling shows the scene is the
+   bottleneck. Numbers + the gzip columns: `docs/perf-findings.md` (re-run `bench/payload_size.jl`).
 5. **Build pipeline** — `assets/holo-webgl.js` is hand-authored now; wire it into the
    esbuild pipeline alongside `overlay.js` if it grows.
 

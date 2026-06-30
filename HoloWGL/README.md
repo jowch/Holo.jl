@@ -60,6 +60,7 @@ Rule of thumb: **CairoBackend for static 2D; HoloWGL for 3D / animation / heavy 
 
 - **Version-coupled** to WGLMakie's internals (`serialize_scene` shape, `setup_scene_init`
   signature). Pinned to `WGLMakie = "0.13"`; treat a WGLMakie bump as a re-verification.
-- Per-cell payload is ~1 MB (the WGLMakie bundle). Sharing it once per notebook is on the roadmap.
+- The WGLMakie bundle ships **once per notebook** (M2), so each cell's per-cell cost is just its
+  scene; sizes in [docs/perf-findings.md](docs/perf-findings.md).
 
 See [docs/roadmap.md](docs/roadmap.md) and [CHANGELOG.md](CHANGELOG.md). MIT licensed.

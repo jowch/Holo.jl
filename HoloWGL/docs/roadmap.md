@@ -60,59 +60,47 @@ The hard questions are answered and the backend works end-to-end in a real Pluto
 
 ## M2 — Delivery & performance
 
-**Measured payload envelope** (committed bench `bench/payload_size.jl`; re-run on any wire-format
-change — the profiling standing practice, scoped to HoloWGL since this is a *new* format distinct
-from Holo core's PNG+manifest envelope in `../../docs/perf-findings.md`, which is unchanged):
+**Measured payload envelope:** see [`docs/perf-findings.md`](perf-findings.md) — the single source of
+every `:webgl` size number (bundle, per-cell scene, gzip headroom, and the wire-vs-JSON-proxy
+correction). Re-run `bench/payload_size.jl` and reconcile that file on any wire-format change (the
+profiling standing practice; the `:webgl` format is distinct from Holo core's PNG+manifest envelope in
+`../../docs/perf-findings.md`, which is unchanged).
 
-| | shipped | 2026-06-30 (WGLMakie 0.13.12) — **wire** / JSON proxy |
-|---|---|---|
-| WGLMakie bundle | once per notebook (M2) | **1.09 MB** |
-| scene — 2D lines (200 pts) | per cell | **0.07 MB** / 0.33 |
-| scene — 2D scatter + text (40) | per cell | **0.10 MB** / 0.44 |
-| scene — 3D helix (300 pts) | per cell | **0.14 MB** / 0.56 |
+The bundle was the only ~MB term (the per-cell scene is an order smaller — `perf-findings.md`), so
+sharing it was the slimming target:
 
-**Wire vs JSON proxy:** `published_to_js` ships the scene over Pluto's MsgPack, which encodes every
-typed numeric `Vector` (`Float32`/`Int32`/`UInt32`/`UInt8` — exactly what `_plain` emits) as a
-**binary** extension (`sizeof·length`), not JSON float-text. So the real per-cell wire is the binary
-column (**0.07–0.14 MB**), ~4–5× under `JSON3.write` — the proxy the bench reported before M2 (and
-which this doc's earlier "0.3–0.6 MB scene" figure came from). The bench now reports both.
-
-So the first `:webgl` cell ships ~1.1 MB (bundle) + ~0.07–0.14 MB (scene); each **additional** cell —
-and each tier-1 reactive re-render — ships just its **0.07–0.14 MB** scene (M2). The bundle dominated,
-so sharing it was the slimming target:
-
-- [x] **Share the bundle once per notebook**: the 1.09 MB bundle + font atlas + three.js used to
-      ship per cell (correct, wasteful). *Done — no new machinery needed, because both halves were
-      already content-addressable: (1) **Wire** — `published_to_js` ids are `notebook_id/objectid(x)`
-      and `objectid(::String)` is content-based, so the one `Ref`-cached bundle string always gets the
-      same stable id. That id ships the ~1.09 MB **exactly once per notebook**, on two axes: *across
-      cells*, Pluto's notebook merge (`PlutoRunner`'s `cell_published_objects` → `Dynamic.jl`) keeps a
-      single copy on load; *across re-runs of a cell*, Pluto's own dedup nulls it before sending —
-      `run_cell` passes `known_published_objects = collect(keys(cell.published_objects))` (the prior
-      run's ids, `Run.jl`), and `formatted_result_of` sets every already-known key to `nothing`
-      (`format_output.jl`), so a re-run re-ships only its **new ~0.07–0.14 MB scene** (new id), never the
-      stable-id bundle. The kernel re-*publishes* (re-calls `published_to_js`) but that is not a wire
-      re-*send*. (2) **Browser** — each cell still `createObjectURL`'d + `import()`'d that 1 MB, making
-      N WGLMakie module instances; `widget.jl` now caches the bundle/shim blob URLs once on
-      `window.__HoloWGL` (the same idempotent-singleton trick Holo core uses for `window.Holo`), so
-      every extra widget reuses the one module (`??=` short-circuits, so a cache hit never even
-      dereferences the published 1 MB). Each additional cell — and each tier-1 reactive re-render —
-      now costs just its scene, browser-side and on the wire.* The only per-frame lever left is the
-      scene itself (msgpack/gzip below, or tier-2 in-place patching that ships no new scene at all).
-- [x] **Payload slimming**: *measured → deferred (not worth the complexity now).* Re-measuring at
-      the real wire encoding (above) showed the per-cell scene is already **0.07–0.14 MB binary**, not
-      the 0.3–0.6 MB the JSON proxy implied — **≈8–16× below** the (now-shared) 1.09 MB bundle, because
-      Pluto's MsgPack already binary-packs our typed buffers for free. Two compression levers, both
-      deferred: (1) **gzip** — the bench's `gzip-bin` column measures gzip-of-binary at **~3×**
-      (0.07→0.02 MB), but to use it we'd have to bypass `published_to_js`'s object channel and hand-roll
-      a **msgpack decoder in JS** (the cheap path — gzip-of-JSON via `DecompressionStream`, the bench's
-      `gzip-json` column — buys only ~25%, since it starts from float-text); not worth a new JS decoder
-      + failure surface for ~0.05 MB/cell yet. (2) **Atlas sharing** — the glyph-atlas tiles
-      (`glyph_data/atlas_updates/<hash>`) carry content hashes **observed to repeat across scenes** (the
-      digit/label tiles recur in all three bench figures), so they're shareable like the bundle; but
-      each is ~10–20 KB, gzip overlaps the win, and hoisting them to a shared channel is real
-      complexity. **Revisit both only if tier-1 animation profiling (per-frame scene re-ship) shows the
-      scene is the bottleneck** — tier-2 in-place patching already ships no new scene at all.
+- [x] **Share the bundle once per notebook**: the bundle + font atlas + three.js used to ship per
+      cell (correct, wasteful). *Done — no new machinery needed, because both halves were already
+      content-addressable: (1) **Wire** — `published_to_js` ids are `notebook_id/objectid(x)` and
+      `objectid(::String)` is content-based, so the one `Ref`-cached bundle string always gets the same
+      stable id. That id ships the bundle **exactly once per notebook**, on two axes: *across cells*,
+      Pluto's notebook merge (`PlutoRunner`'s `cell_published_objects` → `Dynamic.jl`) keeps a single
+      copy on load; *across re-runs of a cell*, Pluto's own dedup nulls it before sending — `run_cell`
+      passes `known_published_objects = collect(keys(cell.published_objects))` (the prior run's ids,
+      `Run.jl`), and `formatted_result_of` sets every already-known key to `nothing` (`format_output.jl`),
+      so a re-run re-ships only its new-id scene, never the stable-id bundle. The kernel re-*publishes*
+      (re-calls `published_to_js`) but that is not a wire re-*send*. (2) **Browser** — each cell still
+      `createObjectURL`'d + `import()`'d the bundle, making N WGLMakie module instances; `widget.jl`
+      now caches the bundle/shim blob URLs once on `window.__HoloWGL` (the same idempotent-singleton
+      trick Holo core uses for `window.Holo`), so every extra widget reuses the one module (`??=`
+      short-circuits, so a cache hit never even dereferences the published bundle). Each additional
+      cell — and each tier-1 reactive re-render — now costs just its scene (`perf-findings.md`),
+      browser-side and on the wire.* The only per-frame lever left is the scene itself (gzip below, or
+      tier-2 in-place patching that ships no new scene at all).
+- [x] **Payload slimming**: *measured → deferred (not worth the complexity now).* Re-measuring at the
+      real wire encoding showed the per-cell scene is already small (binary) — an order below the bundle
+      — because Pluto's MsgPack binary-packs our typed buffers for free (sizes + gzip headroom in
+      `perf-findings.md`). Two compression levers, both deferred: (1) **gzip** — gzip-of-binary is a
+      modest ceiling (`perf-findings.md`), but using it means bypassing `published_to_js`'s object
+      channel and hand-rolling a **msgpack decoder in JS**; the cheap path (gzip-of-JSON via
+      `DecompressionStream`) buys only a fraction, since it starts from float-text — not worth a new JS
+      decoder + failure surface yet.
+      (2) **Atlas sharing** — the glyph-atlas tiles (`glyph_data/atlas_updates/<hash>`) carry content
+      hashes **observed to repeat across scenes** (the digit/label tiles recur in all three bench
+      figures), so they're shareable like the bundle; but each is small, gzip overlaps the win, and
+      hoisting them to a shared channel is real complexity. **Revisit both only if tier-1 animation
+      profiling (per-frame scene re-ship) shows the scene is the bottleneck** — tier-2 in-place patching
+      already ships no new scene at all.
 - [ ] **Build pipeline**: move `assets/holo-webgl.js` into an esbuild build alongside Holo's
       `overlay.js` if/when the shim grows.
 
