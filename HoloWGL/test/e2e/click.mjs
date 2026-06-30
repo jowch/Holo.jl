@@ -2,13 +2,13 @@
 // (test/e2e/make_page.jl), clicks scatter marker 0 in a real headless Chromium, and asserts the
 // overlay emits the correct bond value — host.value = {layer, index, payload} + an `input` event
 // (the Pluto @bind contract, overlay.ts:273-274). This is the BROWSER half a unit test can't
-// reach (real overlay JS, real shadow-DOM hit-test, real click on the :webgl sizer base); the
+// reach (real overlay JS, real shadow-DOM hit-test, real click on the :webgl <canvas> base); the
 // Julia half (runtests.jl "@bind round-trip contract") asserts transform_value rebuilds the
 // InteractionEvent from that same value. It deliberately stops at bond emission — the
 // click→kernel→re-render mile is generic Pluto machinery, not HoloWGL code.
 //
 // The WebGL canvas may fail to init in headless (no GPU) — that's expected and irrelevant: the
-// overlay mounts on the transparent SVG sizer, independent of the canvas pixels.
+// base-agnostic overlay hit-tests via manifest.width + the canvas rect, independent of GL pixels.
 //
 //   node click.mjs <artifact-dir>   (dir holds page.html + expected.json from make_page.jl)
 
@@ -37,12 +37,12 @@ try {
   const page = await browser.newPage();
   await page.goto(url);
 
-  // Wait for the overlay to mount on the sizer (not the WebGL canvas): host + a loaded sizer
-  // <img> (naturalWidth = manifest out_w) + the overlay's shadow `.surface`.
+  // Wait for the overlay to mount on the <canvas> base: host + canvas + the overlay's shadow
+  // `.surface`. (The overlay is base-agnostic and binds straight to the canvas — no sizer shim.)
   await page.waitForFunction(() => {
     const host = document.querySelector(".ip-host");
-    const img = host?.querySelector("img.holo-webgl-sizer");
-    if (!img || !img.naturalWidth) return false;
+    const canvas = host?.querySelector("canvas.holo-webgl-base");
+    if (!canvas) return false;
     let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
     return !!(sr && sr.querySelector(".surface"));
   }, { timeout: 20000 });

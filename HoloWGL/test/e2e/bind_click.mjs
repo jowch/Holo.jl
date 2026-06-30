@@ -72,11 +72,11 @@ try {
     // Marker 0's image-px position in the manifest, for the notebook's fixed scatter(1:5,(1:5).^2).
     // (The live manifest ships into the overlay's closure via published_to_js — not exposed on the
     // page — so unlike the static E2E we can't read it back; it's pinned to the committed figure.)
-    // The CSS scale (image-px → on-screen CSS-px) IS derived at runtime from the sizer, so the click
-    // tracks whatever width Pluto renders at instead of a hardcoded 0.5.
+    // The CSS scale (image-px → on-screen CSS-px) IS derived at runtime: the overlay's SVG viewBox
+    // is `0 0 manifest.width manifest.height`, so viewBox.width == out_w — no sizer to read anymore.
     const MARKER0 = { x: 113, y: 500 };
-    const sizer = host.querySelector("img.holo-webgl-sizer");
-    const scale = host.clientWidth / sizer.naturalWidth;   // == display_css / out_w
+    const outW = sr.querySelector("svg").viewBox.baseVal.width;
+    const scale = host.clientWidth / outW;   // == display_css / out_w
     const o = { bubbles: true, composed: true, cancelable: true, clientX: b.x + MARKER0.x * scale, clientY: b.y + MARKER0.y * scale, pointerId: 1, pointerType: "mouse", isPrimary: true };
     const before = document.querySelector("#bondout").innerText;
     surface.dispatchEvent(new PointerEvent("pointermove", o));

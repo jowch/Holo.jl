@@ -40,15 +40,20 @@ interface Mounted {
 
 /**
  * Mount the interaction overlay.
- * @param scriptEl  the cell's <script> (its parent is the light-DOM host containing <img>)
+ * @param scriptEl  the cell's <script> (its parent is the light-DOM host containing the <img>/<canvas> base)
  * @param manifest  hit-region manifest (from published_to_js or inlined JSON)
  * @param invalidation  Pluto's cleanup promise (resolves on cell re-render)
  */
 export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: Promise<unknown>): Mounted {
     const host = scriptEl.parentElement as HTMLElement | null
-    const img = host?.querySelector("img") as HTMLImageElement | null
+    // Base-agnostic: an <img> (CairoBackend PNG) or a <canvas> (WebGLBackend). We only need its
+    // on-screen rect; the image-px scale comes from manifest.width (design.md §6), not the
+    // element's intrinsic size — so a <canvas> needs no sizer shim. Invariant: the host holds
+    // exactly one base element (Cairo emits one <img>, WGL one <canvas>); if both were ever
+    // present, document order would pick the first.
+    const base = host?.querySelector("img, canvas") as HTMLElement | null
     const noop: Mounted = { cleanup: () => {} }
-    if (!host || !img) return noop
+    if (!host || !base) return noop
 
     // the @bind target is the host element; start with no selection
     ;(host as unknown as { value: unknown }).value = null
@@ -75,8 +80,8 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     if (manifest.tipStyle) for (const [k, v] of Object.entries(manifest.tipStyle)) shadowHost.style.setProperty(k, v)
 
     const imgPx = (e: MouseEvent) => {
-        const r = img.getBoundingClientRect()
-        const s = img.naturalWidth / r.width // image-px per CSS-px
+        const r = base.getBoundingClientRect()
+        const s = manifest.width / r.width // image-px per CSS-px (manifest renderWidth ÷ live rect; never the base's intrinsic size)
         return { x: (e.clientX - r.left) * s, y: (e.clientY - r.top) * s }
     }
 

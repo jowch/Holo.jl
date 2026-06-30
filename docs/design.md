@@ -16,7 +16,9 @@ A working end-to-end spike (`../spike/`) proved the load-bearing claims in real 
   the highlight was drawn in the JS overlay. The corrected stateless-frontend model (§5) is right
   and sufficient — no `window` cache or `persist_js_state` needed for the basic loop.
 - **CSS-scaled coordinates handled**: image shown at 680px (natural 1200px, scale 1.765); hit-test
-  via `scale = naturalWidth/rect.width` landed exactly on the marker.
+  via `scale = naturalWidth/rect.width` landed exactly on the marker. (The shipping overlay now
+  takes the intrinsic width from `manifest.width/rect.width` instead — equivalent for the PNG
+  (`naturalWidth == manifest.width`) and base-agnostic so a `<canvas>` base works too; see §6 / M3.1.)
 - **Hover stays client-side**; **clicks on empty space are a no-op** (hit-test miss → no dispatch).
 
 Operational note: opening a notebook cold cost ~6 min because Pluto resolves a *per-notebook*
@@ -179,10 +181,11 @@ advanced-widgets, AbstractPlutoDingetjes README. See `research-findings.md` Q1.
 ## 6. Coordinate handling
 
 Because we own the render:
-- Render at fixed resolution, embed `{renderWidth, renderHeight}` in manifest.
-- `ResizeObserver` computes scale once = `canvas.getBoundingClientRect().width /
-  manifest.renderWidth`; re-measures on layout change. Robust to Pluto cell
-  padding/version drift — never hardcode cell width.
+- Render at fixed resolution, embed the output-image dimensions `{width, height}` in the manifest.
+- Compute scale = `base.getBoundingClientRect().width / manifest.width` (the base is the `<img>`
+  or `<canvas>`); re-measured per pointer event. Robust to Pluto cell padding/version drift —
+  never hardcode cell width, and never read the base element's intrinsic size (so a `<canvas>`,
+  which has no `naturalWidth`, works — M3.1).
 - HiDPI: render 2×, CSS 1×, hit regions in render-pixel space, JS divides.
 - Extract viewports **after `Makie.update_state_before_display!(fig)`** (mandatory
   pre-manifest step — verified Q3) — this is when layout is final. Project with

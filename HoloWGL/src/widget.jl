@@ -6,7 +6,6 @@ import Holo
 using Holo: build_manifest, InteractionEvent, auto_interactables
 import AbstractPlutoDingetjes as APD
 using HypertextLiteral: @htl, JavaScript
-using Base64: base64encode
 import JSON3
 
 struct WebGLWidget
@@ -52,22 +51,14 @@ holo_webgl(fig; kwargs...) = holo_webgl(fig, auto_interactables(fig); kwargs...)
 # URLs in the browser so `import()` works without any file:// path or hosted asset.
 function _widget_html(w::WebGLWidget; scene_expr, manifest_expr, bundle_js, shim_js)
     overlay = JavaScript(Holo._OVERLAY_JS[])   # reuse Holo's committed overlay bundle verbatim
-    # Holo's overlay binds to an <img> (querySelector("img") + img.naturalWidth for the
-    # image-px/CSS-px ratio). Our base is a <canvas>, so we lay a TRANSPARENT SVG <img> sizer
-    # over it whose natural size == the manifest's out_w/out_h. The overlay finds it and maps
-    # clicks correctly; pointer-events:none keeps it inert. (Folding into Holo later, the cleaner
-    # fix is making overlay.ts base-agnostic and dropping this.)
-    ow = get(w.manifest, "width", round(Int, w.width * w.px_per_unit))
-    oh = get(w.manifest, "height", round(Int, w.height * w.px_per_unit))
-    sizer = "data:image/svg+xml;base64," *
-        base64encode("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"$ow\" height=\"$oh\"></svg>")
+    # Holo's overlay is base-agnostic (`querySelector("img, canvas")`; image-px scale from
+    # `manifest.width`, not the element's intrinsic size — design.md §6), so it binds directly to
+    # our <canvas>. No transparent SVG sizer shim anymore (M3.1).
     return @htl(
         """
         <div class="ip-host" style="position:relative; display:inline-block; width:100%; max-width:$(w.display_css)px;">
           <canvas class="holo-webgl-base" width="$(w.width)" height="$(w.height)"
                   style="display:block; width:100%; height:auto;"></canvas>
-          <img class="holo-webgl-sizer" src="$(sizer)" alt=""
-               style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block;">
           <script>
             // regular (non-module) script: document.currentScript is set here (modules' is null),
             // so this resolves the canvas in both Pluto and standalone. Blob URLs let import()
