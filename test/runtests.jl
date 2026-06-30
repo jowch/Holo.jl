@@ -955,6 +955,23 @@ end
         @test !haskey(pairs(pi.payloads[1]), :index)
         ints = auto_interactables(fig)
         @test length(ints) == 1 && ints[1] isa PolygonInteractable
+
+        # explicit levels → intervals are the true bands [edge_k, edge_{k+1}] (caught the midpoint-vs-edge bug)
+        fige = Figure(); axe = Axis(fige[1, 1])
+        ze = [sin(i / 3) * cos(j / 3) for i in 1:20, j in 1:20]
+        contourf!(axe, 1:20, 1:20, ze; levels = [0.0, 0.4, 0.8])
+        Makie.update_state_before_display!(fige)
+        pie = PolygonInteractable(axe, axe.scene.plots[1]; id = :contourf)
+        intervals = sort(unique([(round(pl.low, digits = 6), round(pl.high, digits = 6)) for pl in pie.payloads]))
+        @test intervals == [(0.0, 0.4), (0.4, 0.8)]
+
+        # constant (zero-range) data → one fill, a correctly zero-width band, no crash
+        figc = Figure(); axc = Axis(figc[1, 1])
+        contourf!(axc, 1:10, 1:10, fill(1.0, 10, 10); levels = 6)
+        Makie.update_state_before_display!(figc)
+        pic = PolygonInteractable(axc, axc.scene.plots[1]; id = :contourf)
+        @test !isempty(pic.payloads)
+        @test all(pl.low <= pl.high for pl in pic.payloads)
     end
 
     @testset "BoxPlot extraction" begin

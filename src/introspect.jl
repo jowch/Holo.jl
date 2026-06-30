@@ -116,20 +116,27 @@ end
 # ponytail: exterior-only; add compound-polygon (ring-group) support if a real contour use needs it.
 _poly_exterior_rings(polys) = [poly.exterior for poly in polys]
 
-# Payload (; low, high): the child Poly's `color` is one level value per polygon (the band's lower
-# edge). Bracket each to (low, high) via the sorted distinct edges; the top band's high extrapolates
-# one band-width up (uniform spacing for default levels).
-function _contourf_payloads(poly)
+# Payload (; low, high): each contourf polygon fills the band between two consecutive level edges.
+# Makie's `computed_levels` ARE the true edges; the child Poly's per-polygon `color` is the band
+# MIDPOINT ((edge_k + edge_{k+1})/2) — NOT the lower edge. Map each color to its band by nearest
+# midpoint, correct for uniform, non-uniform, and single-band levels alike. Constant/zero-range data
+# collapses the edges, correctly yielding a zero-width band (low == high), no crash.
+function _contourf_payloads(p, poly)
+    edges = sort(Float64.(p.computed_levels[]))
+    length(edges) >= 2 || error("Contourf introspection: <2 computed level edges (Makie internals changed?)")
+    mids = [(edges[k] + edges[k + 1]) / 2 for k in 1:(length(edges) - 1)]
     colors = Float64.(poly.color[])
-    edges = sort(unique(colors))
-    Δ = length(edges) >= 2 ? edges[2] - edges[1] : zero(eltype(edges))
-    nexthi = Dict(edges[i] => (i < length(edges) ? edges[i + 1] : edges[i] + Δ) for i in eachindex(edges))
-    return Any[(; low = c, high = nexthi[c]) for c in colors]
+    return Any[
+        let k = argmin(abs.(mids .- c))
+                (; low = edges[k], high = edges[k + 1])
+        end
+            for c in colors
+    ]
 end
 function PolygonInteractable(ax, p::Makie.Contourf; id = :contourf, payloads = nothing)
     poly = _childof(p, Makie.Poly)
     rings = _poly_exterior_rings(_conv(poly)[1])
-    pl = payloads === nothing ? _contourf_payloads(poly) : payloads
+    pl = payloads === nothing ? _contourf_payloads(p, poly) : payloads
     return PolygonInteractable(ax, rings; id, payloads = pl)
 end
 
