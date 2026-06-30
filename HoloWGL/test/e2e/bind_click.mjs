@@ -69,8 +69,15 @@ try {
     let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
     const surface = sr.querySelector(".surface");
     const b = host.getBoundingClientRect();
-    // marker 0 of the notebook's fixed scatter(1:5,(1:5).^2): image-px (113,500) × 0.5 CSS scale.
-    const o = { bubbles: true, composed: true, cancelable: true, clientX: b.x + 56.5, clientY: b.y + 250, pointerId: 1, pointerType: "mouse", isPrimary: true };
+    // Marker 0's image-px position in the manifest, for the notebook's fixed scatter(1:5,(1:5).^2).
+    // (The live manifest ships into the overlay's closure via published_to_js — not exposed on the
+    // page — so unlike the static E2E we can't read it back; it's pinned to the committed figure.)
+    // The CSS scale (image-px → on-screen CSS-px) IS derived at runtime from the sizer, so the click
+    // tracks whatever width Pluto renders at instead of a hardcoded 0.5.
+    const MARKER0 = { x: 113, y: 500 };
+    const sizer = host.querySelector("img.holo-webgl-sizer");
+    const scale = host.clientWidth / sizer.naturalWidth;   // == display_css / out_w
+    const o = { bubbles: true, composed: true, cancelable: true, clientX: b.x + MARKER0.x * scale, clientY: b.y + MARKER0.y * scale, pointerId: 1, pointerType: "mouse", isPrimary: true };
     const before = document.querySelector("#bondout").innerText;
     surface.dispatchEvent(new PointerEvent("pointermove", o));
     surface.dispatchEvent(new PointerEvent("pointerdown", o));
@@ -87,7 +94,7 @@ try {
   });
 
   if (result.after === result.before) {
-    throw new Error(`bond did not round-trip through Pluto: #bondout stayed "${result.before}" after click`);
+    throw new Error(`bond did not round-trip through Pluto: #bondout stayed "${result.before}" after click — the kernel never re-ran the readout cell (Pluto bond broken), or the click missed marker 0 (figure/MARKER0 drift)`);
   }
   if (!/InteractionEvent\(:scatter, 0/.test(result.after)) {
     throw new Error(`unexpected readout after click: "${result.after}"`);
