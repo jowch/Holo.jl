@@ -10,13 +10,18 @@
 
 // --- the ENTIRE -bonito shim --------------------------------------------------
 function makeBonitoShim() {
-  class ConnStub { send() {} on() { return () => {}; } }
+  // notify() is the comm pushing a value TO Julia; we have no server, so swallow it (same
+  // reason send() is a no-op). Without it WGLMakie throws "comm.notify is not a function".
+  class ConnStub { send() {} notify() {} on() { return () => {}; } }
   ConnStub.send_error = (msg, e) => console.error("[holo-wgl]", msg, (e && e.stack) || e);
   return {
     // MUST be true: WGLMakie gates observable updates on this. comm.send is a no-op, so
     // client-side updates (camera/uniform animation) fire without any server (spike finding).
     can_send_to_julia: () => true,
     throttle_function: (f) => f,
+    // Real Bonito enqueues f on a concurrency-1 lock (serializes object-freeing across
+    // sessions). We have no sessions/server, so run it immediately — same effect, no queue.
+    lock_loading: (f) => f && f(),
     Connection: ConnStub,
     _ConnStub: ConnStub,
   };

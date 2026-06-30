@@ -93,6 +93,14 @@ jobs:
         run: |
           npm install
           npx playwright install --with-deps chromium
+      # Pre-warm: precompile the WGLMakie/Makie/Bonito stack into the depot BEFORE Pluto starts.
+      # bind_notebook.jl activates this same HoloWGL project, so on a warm julia-actions/cache
+      # depot this is a no-op and the notebook's in-kernel instantiate skips the ~10-min cold
+      # precompile (the dominant cost of this job — see the precompile/render split in the
+      # "Pluto server log" step). Cold runs pay it here, in a visible/timed step, not silently
+      # inside the Pluto kernel.
+      - name: Pre-warm HoloWGL env (precompile into the cached depot)
+        run: julia --project=HoloWGL -e 'using Pkg; Pkg.instantiate()'
       - name: Through-Pluto @bind round-trip
         working-directory: HoloWGL/test/e2e
         run: |
@@ -110,6 +118,13 @@ jobs:
           done
           [ -n "$up" ] || { echo "::error::Pluto never came up on :1234"; cat pluto.log; exit 1; }
           node bind_click.mjs http://127.0.0.1:1234 "$GITHUB_WORKSPACE/HoloWGL/test/e2e/bind_notebook.jl"
+      # Always surface the Pluto server log — on success too — so the precompile-vs-first-render
+      # timing is visible (pluto.log is otherwise only dumped when Pluto fails to come up). This
+      # is how we tell whether a slow run is cacheable precompile or non-cacheable render TTFX.
+      - name: Pluto server log (precompile + render timing)
+        if: always()
+        working-directory: HoloWGL/test/e2e
+        run: tail -n 200 pluto.log || true
 
   examples:
     name: Example notebooks

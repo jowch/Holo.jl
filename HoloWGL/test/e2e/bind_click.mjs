@@ -20,8 +20,28 @@ try {
   // "Incorrect locale information provided" from a V8 Intl call and never bootstraps (blank page).
   const context = await browser.newContext({ locale: "en-US", timezoneId: "UTC" });
   const page = await context.newPage();
+  // Shim-leak guard, scoped to the leak SIGNATURE so it can't flake on unrelated browser noise.
+  // A missing window.Bonito.*/comm.* method surfaces as "Bonito.X is not a function" / "comm.X
+  // is not a function" (the lock_loading/notify gaps this PR fixed). We FAIL only on that — not on
+  // arbitrary headless-Chromium/Pluto-SPA errors (ResizeObserver loops, transient WebSocket
+  // teardown), which would otherwise make a ~10-min E2E flaky. Two binary-codec methods are
+  // knowingly left unstubbed (no Bonito server → no binary messages arrive), so they're tolerated.
+  // If a real Bonito binary path is ever wired in, DROP this allowlist — a genuine
+  // decode_binary/fetch_binary "is not a function" would otherwise be masked.
+  const SHIM_LEAK = /\b(?:Bonito|comm)\.\w+ is not a function/;
+  const ALLOWED_PAGEERRORS = [
+    /Bonito\.decode_binary is not a function/,
+    /Bonito\.fetch_binary is not a function/,
+  ];
+  const unexpectedErrors = [];
   // Surface browser-side failures (e.g. a WebSocket that can't reach the kernel) in the CI log.
-  page.on("pageerror", (e) => console.error("PAGEERROR:", e.message));
+  page.on("pageerror", (e) => {
+    const isShim = SHIM_LEAK.test(e.message);
+    const benign = isShim && ALLOWED_PAGEERRORS.some((re) => re.test(e.message));
+    const leak = isShim && !benign;
+    console.error(leak ? "PAGEERROR (shim leak):" : benign ? "PAGEERROR (known-benign):" : "PAGEERROR:", e.message);
+    if (leak) unexpectedErrors.push(e.message);
+  });
   page.on("requestfailed", (r) => console.error("REQFAIL:", r.url(), r.failure()?.errorText));
   // /open?path= loads the notebook and redirects to /edit?id=…. Use domcontentloaded, not "load":
   // the Pluto SPA holds connections open, so the load event can lag past the nav timeout.
@@ -93,6 +113,11 @@ try {
     return { before, after };
   });
 
+  // Check the shim leak FIRST: a leak that also breaks rendering would otherwise surface as the
+  // downstream "bond did not round-trip" symptom, hiding the root cause.
+  if (unexpectedErrors.length) {
+    throw new Error(`shim leak — missing window.Bonito/comm method(s): ${[...new Set(unexpectedErrors)].join(" | ")}`);
+  }
   if (result.after === result.before) {
     throw new Error(`bond did not round-trip through Pluto: #bondout stayed "${result.before}" after click — the kernel never re-ran the readout cell (Pluto bond broken), or the click missed marker 0 (figure/MARKER0 drift)`);
   }
