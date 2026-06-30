@@ -199,19 +199,42 @@ function RectInteractable(ax, p::Makie.Waterfall; id = :waterfall, payloads = no
     return RectInteractable(ax; rects = rs, id, payloads = pl)
 end
 
-# ---- HSpan / VSpan -> RectInteractable(:list); band rects are a direct child ----
+# ---- HSpan / VSpan -> RectInteractable(:list) ----
+# Payload: (low, high) from converted[] — the dimension the user explicitly specified.
 function _span_payloads(p)
     cv = p.converted[]                                   # HSpan (ymin,ymax) / VSpan (xmin,xmax)
     lo, hi = cv[1], cv[2]
     return Any[(; low = Float64(lo[k]), high = Float64(hi[k])) for k in eachindex(lo)]
 end
+# Geometry: build hit-rects explicitly from converted[] (band dim) + ax.finallimits[] (full-axis dim).
+# Do NOT reuse _bar_rects(p) — that reads the child Poly's HyperRectangle, which is designed for
+# BarPlot (laid-out dodge/stack geometry) and can exceed the axis limits in some Makie versions or
+# async contexts, causing the hit-rect to bleed into a neighboring axis's viewport.
+#
+# `full`: the axis direction the span fills completely (:x for HSpan, :y for VSpan).
+# converted[] = (lo_vec, hi_vec) where lo/hi are the band's own-dimension bounds.
+function _span_rects(ax, p, full::Symbol)
+    cv = p.converted[]
+    lo_vec, hi_vec = cv[1], cv[2]
+    fl = ax.finallimits[]
+    fa_lo = fl.origin[full === :x ? 1 : 2]
+    fa_hi = fa_lo + fl.widths[full === :x ? 1 : 2]
+    fa_ctr = (fa_lo + fa_hi) / 2
+    fa_wid = fa_hi - fa_lo
+    return [
+        full === :x ?
+            (fa_ctr, (Float64(lo_vec[k]) + Float64(hi_vec[k])) / 2, fa_wid, Float64(hi_vec[k]) - Float64(lo_vec[k])) :
+            ((Float64(lo_vec[k]) + Float64(hi_vec[k])) / 2, fa_ctr, Float64(hi_vec[k]) - Float64(lo_vec[k]), fa_wid)
+            for k in eachindex(lo_vec)
+    ]
+end
 function RectInteractable(ax, p::Makie.HSpan; id = :hspan, payloads = nothing)
     pl = payloads === nothing ? _span_payloads(p) : payloads
-    return RectInteractable(ax; rects = _bar_rects(p), id, payloads = pl)
+    return RectInteractable(ax; rects = _span_rects(ax, p, :x), id, payloads = pl)
 end
 function RectInteractable(ax, p::Makie.VSpan; id = :vspan, payloads = nothing)
     pl = payloads === nothing ? _span_payloads(p) : payloads
-    return RectInteractable(ax; rects = _bar_rects(p), id, payloads = pl)
+    return RectInteractable(ax; rects = _span_rects(ax, p, :y), id, payloads = pl)
 end
 
 # ---- CrossBar -> RectInteractable(:list) ----

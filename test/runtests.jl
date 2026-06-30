@@ -755,6 +755,41 @@ end
         @test ri2.payloads[2] == (; low = 3.0, high = 4.0)
     end
 
+    @testset "HSpan/VSpan hit-rect bounded to axis limits (anti-bleed)" begin
+        # Regression: span hit-rects must clamp the full-axis dimension to ax.finallimits[],
+        # not rely on the child Poly's HyperRectangle (which can exceed axis limits in some
+        # Makie versions / async Pluto scenarios, causing the rect to bleed into a neighboring
+        # axis's viewport at the same pixel column/row).
+        using Holo: RectInteractable
+        fv = Figure(); axv = Axis(fv[1, 1])
+        xlims!(axv, 0, 10); ylims!(axv, 0, 5)
+        vspan!(axv, [2.0], [3.0])
+        Makie.update_state_before_display!(fv)
+        vp = only(filter(p -> p isa Makie.VSpan, axv.scene.plots))
+        riv = RectInteractable(axv, vp; id = :vspan)
+        # VSpan fills the Y axis: y-extent must equal the axis y-height (5.0), not exceed it.
+        # x-extent is the band's own data range [2, 3].
+        cx, cy, w, h = riv.data[1]
+        @test cx ≈ 2.5          # band x-center  (2+3)/2
+        @test cy ≈ 2.5          # axis y-center   (0+5)/2  ← from finallimits
+        @test w ≈ 1.0           # band x-width    3-2
+        @test h ≈ 5.0           # axis y-height   5-0  ← from finallimits, NOT a larger number
+
+        fh = Figure(); axh = Axis(fh[1, 1])
+        xlims!(axh, 0, 10); ylims!(axh, 0, 5)
+        hspan!(axh, [1.0], [3.0])
+        Makie.update_state_before_display!(fh)
+        hp = only(filter(p -> p isa Makie.HSpan, axh.scene.plots))
+        rih = RectInteractable(axh, hp; id = :hspan)
+        # HSpan fills the X axis: x-extent must equal the axis x-width (10.0), not exceed it.
+        # y-extent is the band's own data range [1, 3].
+        cx2, cy2, w2, h2 = rih.data[1]
+        @test cx2 ≈ 5.0         # axis x-center   (0+10)/2  ← from finallimits
+        @test cy2 ≈ 2.0         # band y-center   (1+3)/2
+        @test w2 ≈ 10.0         # axis x-width    10-0  ← from finallimits, NOT a larger number
+        @test h2 ≈ 2.0          # band y-height   3-1
+    end
+
     @testset "payload-length validation (Segment/Rect/Polygon)" begin
         using Holo: SegmentInteractable, RectInteractable, PolygonInteractable
         fig = Figure(); ax = Axis(fig[1, 1])
