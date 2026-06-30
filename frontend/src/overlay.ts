@@ -101,7 +101,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     }
 
     // --- draggable + resizable ROI boxes (Tier 0) ---
-    interface ROIBox { rect: SVGRectElement; handles: SVGRectElement[]; g: { x: number; y: number; w: number; h: number }; handle: number; t: AxisTransform }
+    interface ROIBox { rect: SVGRectElement; handles: SVGRectElement[]; g: { x: number; y: number; w: number; h: number }; handle: number; t: AxisTransform; target?: HitLayer }
     const setROI = (box: ROIBox) => {
         const { x, y, w, h } = box.g
         box.rect.setAttribute("x", String(x)); box.rect.setAttribute("y", String(y))
@@ -139,7 +139,10 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         // alias, hit-testing uses stale original bounds after the box is moved or resized.
         // The manifest is rebuilt fresh on every Pluto re-render, so this mutation is scoped
         // to the current mount session — exactly the "box stays where you left it" behavior.
-        const box: ROIBox = { rect, handles, g: rg, handle: rg.handle, t: manifest.transforms[layer.axis] }
+        // Resolve a selects-ROI's target layer once at build time (mirrors the cached `t`),
+        // rather than on every mousedown. undefined when this ROI has no `selects` (bounds-only).
+        const target = layer.selects ? (manifest.layers.find((l) => l.id === layer.selects) as HitLayer | undefined) : undefined
+        const box: ROIBox = { rect, handles, g: rg, handle: rg.handle, t: manifest.transforms[layer.axis], target }
         setROI(box)
         roiBoxes.set(layer.id, box)
     }
@@ -199,7 +202,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         } else if (hit.layer.kind === "roi" && hit.roiPart) {
             const box = roiBoxes.get(hit.layer.id)
             if (!box) return
-            const target = hit.layer.selects ? (manifest.layers.find((l) => l.id === hit.layer.selects) as HitLayer | undefined) : undefined
+            const target = box.target   // resolved once when roiBoxes was built
             if (hit.roiPart.move) {
                 drag = { kind: "roi", id: hit.layer.id, box, mode: { move: true }, ax: p.x - box.g.x, ay: p.y - box.g.y, target }
             } else {
@@ -372,6 +375,10 @@ function computeSelection(
         const ci = cellRange(gg.xedges, xlo, xhi), cj = cellRange(gg.yedges, ylo, yhi)
         if (!ci || !cj) return { items: [], hits: [] }
         const [i0, i1] = ci, [j0, j1] = cj
+        // Note: i0..j1 are the covered CELL indices (clamped to the grid by cellRange), while
+        // xmin..ymax are the data-space bounds of the raw drawn BOX (unclamped). For a box that
+        // overhangs the grid these describe different extents — consumers slicing the array use the
+        // cell indices; the box bounds are where the user dragged.
         const a = invertAxis(t, xlo, ylo), b = invertAxis(t, xhi, yhi)
         const ax = a.x as number, bx = b.x as number, ay = a.y as number, by = b.y as number
         const payload = {

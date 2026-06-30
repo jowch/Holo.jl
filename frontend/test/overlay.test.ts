@@ -275,6 +275,37 @@ describe("mount", () => {
         expect(committed!.items).toEqual([])
     })
 
+    it("corner-resize of a selects-ROI recomputes the selection", () => {
+        const { host, script } = setup()
+        mount(script, boxSelectManifest())
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        let committed: { items: { index: number }[] } | null = null
+        host.addEventListener("input", () => { committed = (host as unknown as { value: typeof committed }).value })
+        // grab the BR corner (image 600,600 = client 300,300; anchor = TL 200,200) and drag it out to
+        // image (950,750) = client (475,375), enclosing all three points ([200,950]×[200,750])
+        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 300, clientY: 300, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 475, clientY: 375, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 475, clientY: 375, bubbles: true }))
+        expect(committed!.items.map((e) => e.index)).toEqual([0, 1, 2])
+        expect(shadow.querySelector("g.sel")!.children.length).toBe(3)
+    })
+
+    it("box-select containing a single point emits a one-element envelope", () => {
+        const { host, script } = setup()
+        mount(script, boxSelectManifest())
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        let committed: { items: { index: number }[] } | null = null
+        host.addEventListener("input", () => { committed = (host as unknown as { value: typeof committed }).value })
+        // move the box origin to image (50,50) ([50,450]²) so only the first point (300,300) is inside
+        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 200, clientY: 200, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 125, clientY: 125, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 125, clientY: 125, bubbles: true }))
+        expect(committed!.items.map((e) => e.index)).toEqual([0])
+        expect(shadow.querySelector("g.sel")!.children.length).toBe(1)
+    })
+
     // Factory so each test gets a fresh geometry object — drag mutates geometry in-place.
     const gridSelectManifest = (): Manifest => ({
         width: 1200, height: 800, scaling: 2,
