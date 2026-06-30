@@ -550,6 +550,32 @@ end
         end
     end
 
+    @testset "Hist + Waterfall extraction" begin
+        using Holo: RectInteractable, auto_interactables
+        # Hist: counts + bin edges
+        fig = Figure(); ax = Axis(fig[1, 1])
+        data = [0.5, 0.6, 1.5, 1.6, 1.7, 2.5]
+        hist!(ax, data; bins = 3)
+        Makie.update_state_before_display!(fig)
+        hp = ax.scene.plots[1]
+        ri = RectInteractable(ax, hp; id = :hist)
+        @test length(ri.payloads) == 3
+        @test sum(p.count for p in ri.payloads) == length(data)        # counts sum to N
+        @test all(p.low < p.high for p in ri.payloads)                 # bin edges ordered
+        @test !haskey(pairs(ri.payloads[1]), :index)
+        # auto path picks it up as :hist
+        ints = auto_interactables(fig)
+        @test any(i -> i isa RectInteractable, ints)
+
+        # Waterfall: shared bar schema
+        fig2 = Figure(); ax2 = Axis(fig2[1, 1])
+        waterfall!(ax2, [1, 2, 3], [2.0, -1.0, 3.0])
+        Makie.update_state_before_display!(fig2)
+        ri2 = RectInteractable(ax2, ax2.scene.plots[1]; id = :waterfall)
+        @test length(ri2.payloads) == 3
+        @test haskey(pairs(ri2.payloads[1]), :value)                   # shared bar schema
+    end
+
     @testset "markup parse + validation" begin
         m = holo"<b>$(name)</b> — $(pop:,) people ($(share:.1%))"
         @test m isa Holo.Markup

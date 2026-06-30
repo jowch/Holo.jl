@@ -172,6 +172,33 @@ end
 RectInteractable(ax, p::Makie.Spy; id = :spy, payloads = nothing) =
     RectInteractable(ax; rects = _spy_rects(p), id, payloads)
 
+# ---- Hist / Waterfall -> RectInteractable(:list) (child BarPlot carries laid-out bars) ----
+# Hist: bar height = bin count; bin range = category-axis extent (cx ± w/2 for vertical).
+# Waterfall: reuses _bar_payloads (low, high, value) from the shared bar schema.
+function _hist_payloads(rects, direction)
+    vert = direction === :y
+    return Any[
+        let (cx, cy, w, h) = r
+                cnt = vert ? h : w                                                  # bar height = bin count
+                lo, hi = vert ? (cx - w / 2, cx + w / 2) : (cy - h / 2, cy + h / 2)  # category axis = bin range
+                (; count = cnt, low = lo, high = hi)
+        end
+            for r in rects
+    ]
+end
+function RectInteractable(ax, p::Makie.Hist; id = :hist, payloads = nothing)
+    bar = _childof(p, Makie.BarPlot)
+    rs = _bar_rects(bar)
+    pl = payloads === nothing ? _hist_payloads(rs, bar.direction[]) : payloads
+    return RectInteractable(ax; rects = rs, id, payloads = pl)
+end
+function RectInteractable(ax, p::Makie.Waterfall; id = :waterfall, payloads = nothing)
+    bar = _childof(p, Makie.BarPlot)
+    rs = _bar_rects(bar)
+    pl = payloads === nothing ? _bar_payloads(rs, bar.direction[]) : payloads
+    return RectInteractable(ax; rects = rs, id, payloads = pl)
+end
+
 # ---- Composites: one plot -> two layers (survey: ScatterLines is the model) ----
 # Each half delegates to the existing child-plot constructor; the point layer keeps the base id,
 # the line/segment layer gets a suffix so the two ids stay distinct in the manifest.
@@ -202,6 +229,8 @@ function _plotbase(p)
     p isa Makie.HLines && return :hlines
     p isa Makie.VLines && return :vlines
     p isa Makie.Spy && return :spy
+    p isa Makie.Hist && return :hist
+    p isa Makie.Waterfall && return :waterfall
     p isa Makie.Stem && return :stem
     p isa Makie.ScatterLines && return :scatterlines
     return nothing
@@ -217,6 +246,7 @@ function _construct(ax, p, id)
     ) && return [SegmentInteractable(ax, p; id)]
     (p isa Makie.Heatmap || p isa Makie.Image || p isa Makie.BarPlot || p isa Makie.Spy) &&
         return [RectInteractable(ax, p; id)]
+    (p isa Makie.Hist || p isa Makie.Waterfall) && return [RectInteractable(ax, p; id)]
     p isa Makie.Poly && return [PolygonInteractable(ax, p; id)]
     p isa Makie.Stem && return _stem_parts(ax, p, id)
     p isa Makie.ScatterLines && return _scatterlines_parts(ax, p, id)
