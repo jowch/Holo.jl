@@ -8,9 +8,10 @@
 > its own envelope here.
 >
 > **Reproduce** (re-runnable, prints the live numbers — they can't silently rot):
-> `julia --project=HoloWGL HoloWGL/bench/payload_size.jl`. Last measured **2026-06-30, WGLMakie
-> 0.13.12, Julia 1.12**. Re-run and reconcile this file on any wire-format change (a new geometry
-> layout, a new scene field, an encoding change, an animation/frames slot).
+> `julia --project=HoloWGL HoloWGL/bench/payload_size.jl`. Last measured **2026-06-30** at commit
+> **`f763c6d`** (the M2 envelope correction, PR #20), **WGLMakie 0.13.12, Julia 1.12**. Re-run and
+> reconcile this file on any wire-format change (a new geometry layout, a new scene field, an encoding
+> change, an animation/frames slot) — and note the new commit here.
 
 ## The payload terms
 

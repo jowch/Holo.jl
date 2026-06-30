@@ -30,6 +30,8 @@ versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
   root CLAUDE.md flags).
 
 ### Performance
+*(Living envelope: [`docs/perf-findings.md`](docs/perf-findings.md) is the single source of these
+numbers; the figures below are the point-in-time M2 record.)*
 - **Bundle shared once per notebook (M2).** The ~1.09 MB WGLMakie bundle no longer costs per
   cell. Wire: `published_to_js` ids are content-addressed (`notebook_id/objectid`, and
   `objectid(::String)` is content-based), so the one `Ref`-cached bundle string has a stable id
