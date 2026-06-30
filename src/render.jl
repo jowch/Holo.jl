@@ -58,6 +58,8 @@ function _layer_dict(i, L::HitLayer)
         "events" => [string(e) for e in L.events],
         "style" => Dict("stroke" => hs.stroke, "width" => hs.width),
     )
+    s = selects(i)
+    s === nothing || (d["selects"] = string(s))
     spec = tooltip_spec(i)
     spec === true && throw(ArgumentError("tooltip = true is not meaningful — omit `tooltip` for the auto name/value table (the default), pass holo\"…\" for a template, or `false` to suppress."))
     if spec isa Markup
@@ -68,6 +70,37 @@ function _layer_dict(i, L::HitLayer)
         d["tooltip"] = false
     end
     return d
+end
+
+# Fail loud when a selector's `selects` target is absent or has an incompatible kind.
+function _validate_selectors(interactables, layers)
+    kinds = Dict(l["id"] => l["kind"] for l in layers)
+    layer_ids = Set(Symbol(l["id"]) for l in layers)
+    for i in interactables
+        s = selects(i)
+        s === nothing && continue
+        prefix = string(nameof(typeof(i)))
+        if !haskey(kinds, string(s))
+            sug = _suggest(s, layer_ids)
+            hint = sug === nothing ? "" : " Did you mean `:$sug`?"
+            throw(
+                ArgumentError(
+                    "$prefix: `selects = :$s` names a layer not present in this holo() call.$hint" *
+                        " (available: $(join(sort(string.(collect(layer_ids))), ", ")))",
+                ),
+            )
+        end
+        target_kind = Symbol(kinds[string(s)])
+        if !(target_kind in compatible_kinds(i))
+            throw(
+                ArgumentError(
+                    "$prefix: `selects = :$s` targets a `:$target_kind` layer, " *
+                        "but $prefix only supports $(compatible_kinds(i)).",
+                ),
+            )
+        end
+    end
+    return
 end
 
 _transform_dict(t::AxisTransform) = Dict{String, Any}(
@@ -99,6 +132,7 @@ function build_manifest(interactables, ctx::InteractionContext; selected = nothi
             push!(layers, d)
         end
     end
+    _validate_selectors(interactables, layers)
     m = Dict{String, Any}(
         "width" => ctx.width, "height" => ctx.height, "scaling" => ctx.scaling,
         "layers" => layers,
@@ -194,5 +228,11 @@ end
 APD.Bonds.initial_value(::HoloWidget) = nothing
 function APD.Bonds.transform_value(::HoloWidget, js)
     js === nothing && return nothing
+    if haskey(js, "items")   # a selector's declared multi output (Design D) — always a vector
+        return InteractionEvent[
+            InteractionEvent(Symbol(it["layer"]), Int(it["index"]), get(it, "payload", nothing))
+                for it in js["items"]
+        ]
+    end
     return InteractionEvent(Symbol(js["layer"]), Int(js["index"]), get(js, "payload", nothing))
 end

@@ -5,8 +5,8 @@
 > item after it (M2.3 tooltips, M4 animation, SVG output, multi-select return shape).
 >
 > Reproduce (numbers below re-run 2026-06-29, last reconciled for M2.3 template-tooltip design
-> on PR #10; baseline established after int-pixel geometry quantization,
-> CairoMakie 0.15, Julia 1.12):
+> on PR #10 and confirmed unchanged for M4 box-select (commit `d05318f`) on 2026-06-29;
+> baseline established after int-pixel geometry quantization, CairoMakie 0.15, Julia 1.12):
 > - **base64-PNG / manifest / render numbers** — `julia --project=. bench/payload_envelope.jl`
 >   (normal envelope) and `julia --project=. bench/stress.jl` (the 10× extremes). Both `seed!(0)`,
 >   so PNG/manifest sizes reproduce *exactly* (render-ms is wall-clock, so it varies). These are the
@@ -203,9 +203,15 @@ float16; lossy >2048px). Keep `AxisTransform` lims `Float64` (drag inversion) �
 - **SVG output path** — out of this bench (raster only). The roadmap already gates SVG behind a
   primitive-count viability spike; the PNG floor here (~50 KB even for 10 points) is the number
   SVG must *beat* to be worth it for sparse plots.
-- **Multi-select** — affects only the tiny *return* value (`Vector{InteractionEvent}`), not these
-  payloads. K selected events × ~tens of bytes; never a size concern. The contract change, not
-  the size, is the work.
+- **Multi-select / box-select** *(delivered, M4 commit `d05318f`)* — the M4 wire change is a
+  single small `selects` string per selector ROI layer (added to the outbound manifest); the
+  selection vector or region descriptor is the **inbound** `@bind` return value, not part of the
+  outbound manifest envelope measured here. The §A envelope cases contain no selector layer, so the
+  `selects` string never appears in them — the 2026-06-29 bench re-run therefore confirms §A is
+  unchanged trivially (the term simply isn't exercised there). When a selector *is* present it adds
+  one short string per selector ROI layer to the outbound manifest; on the inbound path a selection
+  is K events × ~tens of bytes (or a fixed-size region descriptor) — never a size concern. The
+  contract change, not the size, was the work.
 
 ## MsgPack fast-path (Q5 sub-claim)
 

@@ -253,6 +253,30 @@ end
         @test ev isa InteractionEvent && ev.layer === :scatter && ev.index == 2
     end
 
+    @testset "transform_value multi-select envelope" begin
+        using Holo: InteractionEvent
+        tv = Holo.APD.Bonds.transform_value
+        w = Holo.HoloWidget("", Dict{String, Any}(), 100)   # transform_value ignores the widget fields
+        @test tv(w, nothing) === nothing
+        # single (click / bounds) — unchanged
+        single = tv(w, Dict("layer" => "pts", "index" => 3, "payload" => Dict("city" => "NYC")))
+        @test single isa InteractionEvent && single.layer === :pts && single.index == 3
+        # multi (box-select over points)
+        multi = tv(
+            w, Dict(
+                "items" => [
+                    Dict("layer" => "pts", "index" => 1, "payload" => Dict("v" => 10)),
+                    Dict("layer" => "pts", "index" => 4, "payload" => Dict("v" => 40)),
+                ]
+            )
+        )
+        @test multi isa Vector{InteractionEvent} && length(multi) == 2
+        @test multi[1].index == 1 && multi[2].index == 4
+        # empty box — empty vector, never nothing
+        empty = tv(w, Dict("items" => []))
+        @test empty isa Vector{InteractionEvent} && isempty(empty)
+    end
+
     @testset "M2.1 plot-introspection constructors" begin
         # An introspected interactable must produce the SAME hitlayers as the explicit one a
         # user would hand-write — introspection is sugar over M1, not a parallel path.
@@ -600,5 +624,57 @@ end
 
         # `tooltip = true` is meaningless (only `false` suppresses) → fail loud
         @test_throws ArgumentError build_manifest([PointInteractable(ax, pts2; tooltip = true)], ctx)
+    end
+
+    @testset "AbstractSelector / ROIInteractable selects" begin
+        using Holo: selects, compatible_kinds, ROIInteractable, AbstractSelector
+        fig = Figure(); ax = Axis(fig[1, 1]); lines!(ax, 1:10, 1:10)
+        roi = ROIInteractable(ax; bounds = (2.0, 8.0, 2.0, 8.0))
+        @test roi isa AbstractSelector
+        @test selects(roi) === nothing
+        @test compatible_kinds(roi) == (:circles, :grid)
+        roi2 = ROIInteractable(ax; bounds = (2.0, 8.0, 2.0, 8.0), selects = :pts)
+        @test selects(roi2) === :pts
+    end
+
+    @testset "selects: manifest field + selector validation (M4 Task 3)" begin
+        pts_i = PointInteractable(ax, [(1.0, 1.0), (5.0, 5.0)]; id = :pts)
+        seg_i = SegmentInteractable(ax, [(1.0, 1.0), (5.0, 5.0)]; id = :segs)
+        roi_bare = ROIInteractable(ax; bounds = (2.0, 8.0, 2.0, 8.0))
+        roi_linked = ROIInteractable(ax; bounds = (2.0, 8.0, 2.0, 8.0), selects = :pts)
+
+        # ROI without selects: no "selects" key in layer dict
+        @test !haskey(build_manifest([roi_bare], ctx)["layers"][1], "selects")
+
+        # ROI with selects = :pts: "selects" => "pts" in layer dict; circles layer gets no "selects"
+        layers_sel = build_manifest([pts_i, roi_linked], ctx)["layers"]
+        roi_d = filter(l -> l["kind"] == "roi", layers_sel) |> only
+        @test roi_d["selects"] == "pts"
+        @test !haskey(filter(l -> l["kind"] == "circles", layers_sel) |> only, "selects")
+
+        # Validation: target layer absent → ArgumentError
+        @test_throws ArgumentError build_manifest(
+            [ROIInteractable(ax; bounds = (2.0, 8.0, 2.0, 8.0), selects = :ghost)], ctx
+        )
+
+        # did-you-mean: :pt is within edit-distance 2 of :pts → suggestion appears in error message
+        err = try
+            build_manifest(
+                [pts_i, ROIInteractable(ax; bounds = (2.0, 8.0, 2.0, 8.0), selects = :pt)], ctx
+            )
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError && occursin("pts", err.msg)
+
+        # Validation: target exists but kind not in compatible_kinds (:polyline ∉ (:circles,:grid)) → error
+        @test_throws ArgumentError build_manifest(
+            [seg_i, ROIInteractable(ax; bounds = (2.0, 8.0, 2.0, 8.0), selects = :segs)], ctx
+        )
+
+        # happy path: valid selects → manifest ROI layer carries "selects"; no error thrown
+        m_ok = build_manifest([pts_i, roi_linked], ctx)
+        @test filter(l -> l["kind"] == "roi", m_ok["layers"]) |> only |> l -> l["selects"] == "pts"
     end
 end

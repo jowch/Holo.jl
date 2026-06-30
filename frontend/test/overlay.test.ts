@@ -119,17 +119,19 @@ describe("mount", () => {
         expect(afterClick.layer).toBe("thr")
     })
 
-    const roiManifest: Manifest = {
+    // Factory so each test gets a fresh geometry object — the alias fix (box.g = rg) mutates
+    // layer.geometry in-place, which would pollute a shared const across tests.
+    const roiManifest = (): Manifest => ({
         width: 1200, height: 800, scaling: 2,
         transforms: { ax1: { xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
             viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false } },
         layers: [{ id: "roi", kind: "roi", axis: "ax1", events: ["drag"], payloads: [],
             geometry: { x: 200, y: 200, w: 400, h: 400, handle: 16 } }],
-    }
+    })
 
     it("draws an ROI box + 4 handles and commits inverted bounds after a move", () => {
         const { host, script } = setup()
-        mount(script, roiManifest)
+        mount(script, roiManifest())
         const shadow = shadowOf(host)
         const surface = shadow.querySelector(".surface") as HTMLElement
         const rects = shadow.querySelectorAll("rect")
@@ -153,7 +155,7 @@ describe("mount", () => {
 
     it("resizes an ROI box from a corner with the opposite corner fixed", () => {
         const { host, script } = setup()
-        mount(script, roiManifest)
+        mount(script, roiManifest())
         const shadow = shadowOf(host)
         const surface = shadow.querySelector(".surface") as HTMLElement
         const box = shadow.querySelectorAll("rect")[0] as SVGRectElement
@@ -178,7 +180,7 @@ describe("mount", () => {
 
     it("resize flips past the anchor and clamps to the viewport", () => {
         const { host, script } = setup()
-        mount(script, roiManifest)
+        mount(script, roiManifest())
         const surface = shadowOf(host).querySelector(".surface") as HTMLElement
         const box = shadowOf(host).querySelectorAll("rect")[0] as SVGRectElement
         // grab BR corner image (600,600)==client (300,300); anchor = TL (200,200)
@@ -195,6 +197,146 @@ describe("mount", () => {
         expect(box.getAttribute("width")).toBe("1000")   // |1200 - 200|
         expect(box.getAttribute("height")).toBe("600")   // |800 - 200|
         window.dispatchEvent(new MouseEvent("mouseup", { clientX: 700, clientY: 500, bubbles: true }))
+    })
+
+    it("re-grab works at the moved box position (hit-test tracks live geometry)", () => {
+        // Regression for: after drag, box.g (live state) diverged from layer.geometry (static manifest
+        // copy), so hitLayer hit-tested the original footprint and missed the moved box on re-grab.
+        // Fix: box.g is now an alias for the manifest ROIGeometry, keeping them in sync.
+        const { host, script } = setup()
+        mount(script, roiManifest())
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const box = shadow.querySelectorAll("rect")[0] as SVGRectElement
+        // roiManifest: box at image [200,600]×[200,600], scaling=2 so client×2=image
+        // First drag: grab interior at client(200,200)=image(400,400); move to client(300,200)=image(600,400)
+        // ax = 400-200 = 200; new box.g.x = 600-200 = 400 → box now spans image x [400,800]
+        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 200, clientY: 200, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(box.getAttribute("x")).toBe("400")
+        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 300, clientY: 200, bubbles: true }))
+        // Second grab: client(350,200)=image(700,400) is INSIDE the moved box [400,800]×[200,600]
+        // but OUTSIDE the original [200,600]×[200,600] — so hit only lands if live geometry is used
+        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 350, clientY: 200, bubbles: true }))
+        // Move to client(400,200)=image(800,400); ax=700-400=300; new box.g.x=max(0,min(800,800-300))=500
+        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 400, clientY: 200, bubbles: true }))
+        // Second drag registered → box moved again (x went from 400 to 500)
+        expect(box.getAttribute("x")).toBe("500")
+        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 400, clientY: 200, bubbles: true }))
+    })
+
+    // Factory so each test gets a fresh geometry object — drag mutates geometry in-place.
+    const boxSelectManifest = (): Manifest => ({
+        width: 1200, height: 800, scaling: 2,
+        transforms: { ax1: { xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
+            viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false } },
+        layers: [
+            // three points (image px); box [200,600]×[200,600] encloses the first two
+            { id: "pts", kind: "circles", geometry: [300, 300, 10, 500, 500, 10, 900, 700, 10],
+                payloads: [{ i: 0 }, { i: 1 }, { i: 2 }], axis: "ax1", events: ["click", "hover"] },
+            { id: "roi", kind: "roi", axis: "ax1", events: ["drag"], payloads: [],
+                selects: "pts", geometry: { x: 200, y: 200, w: 400, h: 400, handle: 16 } },
+        ],
+    })
+
+    it("box-select over points emits a Vector envelope of contained points + highlights them", () => {
+        const { host, script } = setup()
+        mount(script, boxSelectManifest())
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        let committed: { items: { layer: string; index: number }[] } | null = null
+        host.addEventListener("input", () => {
+            committed = (host as unknown as { value: { items: { layer: string; index: number }[] } }).value
+        })
+        // grab the box interior (image 400,400 = client 200,200), release without moving → emit current enclosure
+        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 200, clientY: 200, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 200, clientY: 200, bubbles: true }))
+        expect(committed!.items.map((e) => e.index)).toEqual([0, 1])
+        expect(committed!.items.every((e) => e.layer === "pts")).toBe(true)
+        // two persistent selection highlights drawn
+        expect(shadow.querySelector("g.sel")!.children.length).toBe(2)
+    })
+
+    it("box-select with nothing enclosed emits an empty items envelope", () => {
+        const { host, script } = setup()
+        mount(script, boxSelectManifest())
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const box = shadow.querySelectorAll("rect")[0] as SVGRectElement
+        let committed: { items: unknown[] } | null = null
+        host.addEventListener("input", () => {
+            committed = (host as unknown as { value: { items: unknown[] } }).value
+        })
+        // move the box up so it encloses no point: grab interior, drag origin up-left out of the cluster
+        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 200, clientY: 200, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 350, clientY: 50, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 350, clientY: 50, bubbles: true }))
+        expect(box).toBeTruthy()
+        expect(committed!.items).toEqual([])
+    })
+
+    it("corner-resize of a selects-ROI recomputes the selection", () => {
+        const { host, script } = setup()
+        mount(script, boxSelectManifest())
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        let committed: { items: { index: number }[] } | null = null
+        host.addEventListener("input", () => { committed = (host as unknown as { value: typeof committed }).value })
+        // grab the BR corner (image 600,600 = client 300,300; anchor = TL 200,200) and drag it out to
+        // image (950,750) = client (475,375), enclosing all three points ([200,950]×[200,750])
+        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 300, clientY: 300, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 475, clientY: 375, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 475, clientY: 375, bubbles: true }))
+        expect(committed!.items.map((e) => e.index)).toEqual([0, 1, 2])
+        expect(shadow.querySelector("g.sel")!.children.length).toBe(3)
+    })
+
+    it("box-select containing a single point emits a one-element envelope", () => {
+        const { host, script } = setup()
+        mount(script, boxSelectManifest())
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        let committed: { items: { index: number }[] } | null = null
+        host.addEventListener("input", () => { committed = (host as unknown as { value: typeof committed }).value })
+        // move the box origin to image (50,50) ([50,450]²) so only the first point (300,300) is inside
+        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 200, clientY: 200, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 125, clientY: 125, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 125, clientY: 125, bubbles: true }))
+        expect(committed!.items.map((e) => e.index)).toEqual([0])
+        expect(shadow.querySelector("g.sel")!.children.length).toBe(1)
+    })
+
+    // Factory so each test gets a fresh geometry object — drag mutates geometry in-place.
+    const gridSelectManifest = (): Manifest => ({
+        width: 1200, height: 800, scaling: 2,
+        transforms: { ax1: { xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
+            viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false } },
+        layers: [
+            { id: "img", kind: "grid", axis: "ax1", events: ["hover"], payloads: [],
+                geometry: { xedges: [0, 200, 400, 600], yedges: [0, 200, 400, 600], ncols: 3, nrows: 3 } },
+            { id: "roi", kind: "roi", axis: "ax1", events: ["drag"], payloads: [],
+                selects: "img", geometry: { x: 100, y: 100, w: 300, h: 300, handle: 16 } },
+        ],
+    })
+
+    it("box-select over a grid emits a single region (cell indices + data bounds)", () => {
+        const { host, script } = setup()
+        mount(script, gridSelectManifest())
+        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        let committed: { items: { layer: string; index: number; payload: Record<string, number> }[] } | null = null
+        host.addEventListener("input", () => {
+            committed = (host as unknown as { value: typeof committed }).value
+        })
+        // box is image [100,400]×[100,400]; grab interior (image 250,250 = client 125,125), release
+        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 125, clientY: 125, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 125, clientY: 125, bubbles: true }))
+        expect(committed!.items.length).toBe(1)
+        const r = committed!.items[0].payload
+        expect([r.i0, r.i1, r.j0, r.j1]).toEqual([0, 1, 0, 1])    // cells covered by [100,400]
+        expect(r.xmin).toBeCloseTo(10 * 100 / 1200)
+        expect(r.xmax).toBeCloseTo(10 * 400 / 1200)
+        expect(r.ymin).toBeCloseTo(50)                            // image y 400 → 100*(1-400/800)
+        expect(r.ymax).toBeCloseTo(87.5)                          // image y 100 → 100*(1-100/800)
     })
 })
 

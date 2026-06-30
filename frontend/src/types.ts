@@ -64,6 +64,10 @@ export interface HitLayer {
     template?: TemplateSegment[] // holo"..." parsed once per layer; $() fields fill from payloads[]
     tooltip?: false              // explicit suppress; absent + no template → auto name/value table
     selected?: number[] // element indices to draw pre-highlighted on mount
+    selects?: string   // id of the target layer this ROI selects; absent → bounds-ROI (no multi-select)
+    // Bond shapes:
+    //   selects-ROI mouse-up  → { items: Array<{ layer: string; index: number; payload: unknown }> }
+    //   single-click / bounds-ROI → { layer: string; index: number; payload: unknown }
 }
 
 export interface Manifest {
