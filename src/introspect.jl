@@ -89,6 +89,16 @@ function PolygonInteractable(ax, p::Makie.Poly; id = :poly, payloads = nothing)
     return PolygonInteractable(ax, rings; id, payloads)
 end
 
+# ---- Band -> PolygonInteractable ----
+# A band is one filled region between a lower and an upper curve. converted[] = (lower, upper),
+# each a Vector{Point} over the same x. The ring is the lower curve followed by the reversed
+# upper curve (so the boundary closes). Vertices live directly in data space — no solver replay.
+_band_ring(lower, upper) = vcat(collect(lower), reverse(collect(upper)))
+function PolygonInteractable(ax, p::Makie.Band; id = :band, payloads = nothing)
+    lower, upper = _conv(p)
+    return PolygonInteractable(ax, [_band_ring(lower, upper)]; id, payloads)
+end
+
 # ====================== M3 cheap wins (same primitives) ======================
 # Each delegates to an existing explicit constructor; the only work is reading the right
 # laid-out geometry off the plot (or its children). No new types, no new manifest path.
@@ -296,6 +306,7 @@ function _plotbase(p)
     p isa Makie.CrossBar && return :crossbar
     p isa Makie.HSpan && return :hspan
     p isa Makie.VSpan && return :vspan
+    p isa Makie.Band && return :band
     p isa Makie.Stem && return :stem
     p isa Makie.ScatterLines && return :scatterlines
     return nothing
@@ -313,6 +324,7 @@ function _construct(ax, p, id)
         return [RectInteractable(ax, p; id)]
     (p isa Makie.Hist || p isa Makie.Waterfall || p isa Makie.CrossBar) && return [RectInteractable(ax, p; id)]
     (p isa Makie.HSpan || p isa Makie.VSpan) && return [RectInteractable(ax, p; id)]
+    p isa Makie.Band && return [PolygonInteractable(ax, p; id)]
     p isa Makie.Poly && return [PolygonInteractable(ax, p; id)]
     p isa Makie.Stem && return _stem_parts(ax, p, id)
     p isa Makie.ScatterLines && return _scatterlines_parts(ax, p, id)

@@ -610,6 +610,22 @@ end
         @test only(hitlayers(ints[1], c)).id === :crossbar
     end
 
+    @testset "Band extraction" begin
+        using Holo: PolygonInteractable, auto_interactables
+        fig = Figure(); ax = Axis(fig[1, 1])
+        band!(ax, 1:5, [0.0, 0.1, 0.2, 0.1, 0.0], [1.0, 1.2, 1.4, 1.2, 1.0])
+        Makie.update_state_before_display!(fig)
+        p = ax.scene.plots[1]
+        pi = PolygonInteractable(ax, p; id = :band)
+        @test length(pi.rings) == 1                       # one filled region → one ring
+        @test length(pi.rings[1]) == 10                   # 5 lower + 5 upper, stitched
+        @test pi.payloads[1] == (; index = 0)             # default; no semantic per-element value
+        # auto path picks it up as :band, exactly one layer (no stray :poly from the child)
+        ints = auto_interactables(fig)
+        @test length(ints) == 1
+        @test ints[1] isa PolygonInteractable
+    end
+
     @testset "markup parse + validation" begin
         m = holo"<b>$(name)</b> — $(pop:,) people ($(share:.1%))"
         @test m isa Holo.Markup
