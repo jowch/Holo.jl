@@ -51,8 +51,8 @@ blobs — the exact mechanism `published_to_js` uses) rendering in a headless br
 
 ## Animation — both tiers PROVEN (client-side, no server)
 - **Tier 1 (Pluto-reactive):** a slider/`@bind` drives a new figure → `holo_webgl` re-renders.
-  Works today, zero new code. Each frame re-ships only the ~0.3–0.6 MB scene — the bundle is
-  deduped across re-runs too (see bundle-sharing below), not just across cells.
+  Works today, zero new code. Each frame re-ships only the ~0.07–0.14 MB scene (binary wire) — the
+  bundle is deduped across re-runs too (see bundle-sharing below), not just across cells.
 - **Tier 2 (in-place):** `mountWebGL` returns `WGL`; the driver patches a plot's buffer by
   uuid — `WGL.find_plots([uuid])[0].geometry.attributes.wgl_positions.array.set(frame);
   attr.needsUpdate = true` — smooth, no Julia round-trip. **Verified**: scatter markers
@@ -73,8 +73,12 @@ blobs — the exact mechanism `published_to_js` uses) rendering in a headless br
    once on `window.__HoloWGL` (like Holo's `window.Holo`) so it imports the WGLMakie module once, not
    per cell. No deferral — tier-1 reactive re-renders cost just the scene; scene slimming (#4) /
    tier-2 in-place are the only per-frame levers left.
-4. **Payload slimming** — the scene JSON is atlas-dominated; msgpack/gzip are size levers
-   (optional, not correctness).
+4. **Payload slimming** — MEASURED → deferred. The real per-cell wire is already 0.07–0.14 MB
+   binary, not the 0.3–0.6 MB the JSON proxy implied: Pluto's MsgPack binary-packs our typed buffers
+   (`Vector{Float32}` etc.) for free. gzip-of-binary would cut another ~3× but needs a JS msgpack
+   decoder (the cheap gzip-of-JSON path buys only ~25%); the atlas glyph-tiles repeat across scenes
+   (shareable) but are small and gzip overlaps. Both deferred until tier-1 animation profiling shows
+   the scene is the bottleneck. See roadmap.md M2.
 5. **Build pipeline** — `assets/holo-webgl.js` is hand-authored now; wire it into the
    esbuild pipeline alongside `overlay.js` if it grows.
 
