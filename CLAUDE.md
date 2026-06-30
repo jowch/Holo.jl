@@ -7,8 +7,9 @@ plots in Pluto. Browser layer is TypeScript in `frontend/`, bundled by esbuild t
 ## Commands
 - Julia tests: `julia --project=. test/runtests.jl`
 - Frontend gate: `cd frontend && npm run lint && npm run typecheck && npm test && npm run build` (build → `../assets/overlay.js`)
-- Format (Runic, CI-enforced): `julia -e 'using Runic; exit(Runic.main(["--inplace","src","test","bench"]))'`. **CI's `runic-action` has no `paths:` filter → it checks the WHOLE repo** (incl. `bench/`, `examples/`), and tracks the latest Runic (1.7+); a locally-old Runic can pass a file CI rejects. Format every `.jl` you add, with current Runic.
+- Format (Runic, CI-enforced): `julia -e 'using Runic; exit(Runic.main(["--inplace","src","test","bench","gallery","examples"]))'` — pass every dir with `.jl`, since CI formats the whole repo (PR #11 slipped because `gallery/` was omitted here). **CI's `runic-action` has no `paths:` filter → it checks the WHOLE repo** (incl. `bench/`, `gallery/`, `examples/`), and tracks the latest Runic (1.7+); a locally-old Runic can pass a file CI rejects. Format every `.jl` you add, with current Runic.
 - Registry name-clash check: `grep '^name = "X"$' ~/.julia/registries/General/Registry.toml`
+- **Always verify CI is green before merging.** A merged PR can leave `main` red (PR #11 merged with Runic failing). After a PR's checks finish, `gh run list` / `gh pr checks <n>` must show all green — don't merge on a stale or pending run.
 
 ## Gotchas (verified this session)
 - Bundle injection: inject the esbuild IIFE **unconditionally** — wrapping it in `if(!window.Holo){…}` installs `{}` not `{mount}` (block-scope heisenbug).

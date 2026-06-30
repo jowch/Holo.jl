@@ -59,10 +59,12 @@ scatter_widget = let
     scatter!(sax, xs, ys; color = map(g -> g == "A" ? :steelblue : :darkorange, grp), markersize = 9)
     pts = Point2f.(xs, ys)
     payloads = [(; idx = i - 1, x = xs[i], y = ys[i], group = grp[i]) for i in eachindex(xs)]
-    holo(sf, [
-        PointInteractable(sax, pts; id = :pts, payloads),
-        ROIInteractable(sax; bounds = (3.0, 6.0, 2.0, 7.0), selects = :pts),
-    ])
+    holo(
+        sf, [
+            PointInteractable(sax, pts; id = :pts, payloads),
+            ROIInteractable(sax; bounds = (3.0, 6.0, 2.0, 7.0), selects = :pts),
+        ]
+    )
 end
 
 # ╔═╡ 8cf49d51-22b7-4e5a-9ceb-8ebe483bfd39
@@ -78,10 +80,10 @@ let
         n = length(idx)
         ga = count(i -> grp[i] == "A", idx)
         md"""
-**$(n) points selected** — group A: $(ga), group B: $(n - ga)
+        **$(n) points selected** — group A: $(ga), group B: $(n - ga)
 
-mean x = $(round(sum(xs[idx]) / n; digits = 2)), mean y = $(round(sum(ys[idx]) / n; digits = 2))
-"""
+        mean x = $(round(sum(xs[idx]) / n; digits = 2)), mean y = $(round(sum(ys[idx]) / n; digits = 2))
+        """
     end
 end
 
@@ -104,7 +106,7 @@ img_data = let
     nx, ny = 96, 64
     clamp01(v) = clamp(v, 0.0, 1.0)
     R = clamp01.([0.5 + 0.45 * sin(i / 9) * cos(j / 7) for i in 1:nx, j in 1:ny])
-    G = clamp01.([0.5 + 0.40 * cos(i / 11) for i in 1:nx, j in 1:ny])
+    G = clamp01.([0.5 + 0.4 * cos(i / 11) for i in 1:nx, j in 1:ny])
     B = clamp01.([0.5 + 0.45 * (j / ny) for i in 1:nx, j in 1:ny])
     (; nx, ny, R, G, B)
 end
@@ -118,10 +120,12 @@ image_widget = let
     xe = collect(0.0:1.0:nx)            # cell edges in data space (one boundary per column/row)
     ye = collect(0.0:1.0:ny)
     lum = [0.299 * R[i, j] + 0.587 * G[i, j] + 0.114 * B[i, j] for i in 1:nx, j in 1:ny]
-    holo(imf, [
-        RectInteractable(iax; grid = (xe, ye, lum), id = :img),
-        ROIInteractable(iax; bounds = (10.0, 40.0, 10.0, 40.0), selects = :img),
-    ])
+    holo(
+        imf, [
+            RectInteractable(iax; grid = (xe, ye, lum), id = :img),
+            ROIInteractable(iax; bounds = (10.0, 40.0, 10.0, 40.0), selects = :img),
+        ]
+    )
 end
 
 # ╔═╡ b7a4bbf8-fa6e-4af7-8062-3ac0c6ab0c55
@@ -145,14 +149,14 @@ let
         end
         tbl(s) = "min $(round(s.min; digits = 3)) · p1 $(round(s.p1; digits = 3)) · p50 $(round(s.p50; digits = 3)) · p99 $(round(s.p99; digits = 3)) · max $(round(s.max; digits = 3))"
         md"""
-**R** — $(tbl(sr))
+        **R** — $(tbl(sr))
 
-**G** — $(tbl(sg))
+        **G** — $(tbl(sg))
 
-**B** — $(tbl(sb))
+        **B** — $(tbl(sb))
 
-$(f)
-"""
+        $(f)
+        """
     end
 end
 
