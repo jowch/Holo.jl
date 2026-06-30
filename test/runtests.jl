@@ -610,6 +610,67 @@ end
         @test only(hitlayers(ints[1], c)).id === :crossbar
     end
 
+    @testset "Band extraction" begin
+        using Holo: PolygonInteractable, auto_interactables
+        fig = Figure(); ax = Axis(fig[1, 1])
+        band!(ax, 1:5, [0.0, 0.1, 0.2, 0.1, 0.0], [1.0, 1.2, 1.4, 1.2, 1.0])
+        Makie.update_state_before_display!(fig)
+        p = ax.scene.plots[1]
+        pi = PolygonInteractable(ax, p; id = :band)
+        @test length(pi.rings) == 1                       # one filled region → one ring
+        @test length(pi.rings[1]) == 10                   # 5 lower + 5 upper, stitched
+        @test pi.payloads[1] == (; index = 0)             # default; no semantic per-element value
+        # auto path picks it up as :band, exactly one layer (no stray :poly from the child)
+        ints = auto_interactables(fig)
+        @test length(ints) == 1
+        @test ints[1] isa PolygonInteractable
+        _, _, c = ctx_for(fig)
+        @test only(hitlayers(ints[1], c)).id === :band
+    end
+
+    @testset "Density extraction" begin
+        using Holo: PolygonInteractable, auto_interactables
+        fig = Figure(); ax = Axis(fig[1, 1])
+        density!(ax, randn(300))
+        Makie.update_state_before_display!(fig)
+        p = ax.scene.plots[1]
+        pi = PolygonInteractable(ax, p; id = :density)
+        @test length(pi.rings) == 1                       # the KDE fill is one region
+        @test length(pi.rings[1]) > 50                    # dense outline (Makie's KDE band)
+        @test pi.payloads[1] == (; index = 0)
+        ints = auto_interactables(fig)
+        @test length(ints) == 1 && ints[1] isa PolygonInteractable
+    end
+
+    @testset "Violin extraction" begin
+        using Holo: PolygonInteractable, auto_interactables
+        fig = Figure(); ax = Axis(fig[1, 1])
+        violin!(ax, repeat([1, 2, 3], inner = 80), randn(240))
+        Makie.update_state_before_display!(fig)
+        p = ax.scene.plots[1]
+        pi = PolygonInteractable(ax, p; id = :violin)
+        @test length(pi.rings) == 3                        # one ring per violin
+        @test length(pi.payloads) == 3
+        @test [pl.x for pl in pi.payloads] == [1.0, 2.0, 3.0]   # exact clean categories from converted (no Float32 noise)
+        @test all(pl.x isa Float64 for pl in pi.payloads)
+        @test !haskey(pairs(pi.payloads[1]), :index)
+        ints = auto_interactables(fig)
+        @test length(ints) == 1 && ints[1] isa PolygonInteractable
+    end
+
+    @testset "Voronoiplot extraction" begin
+        using Holo: PolygonInteractable, auto_interactables
+        fig = Figure(); ax = Axis(fig[1, 1])
+        voronoiplot!(ax, [0.1, 0.4, 0.7, 0.3, 0.9, 0.5, 0.2, 0.8], [0.2, 0.6, 0.1, 0.9, 0.4, 0.5, 0.8, 0.3])
+        Makie.update_state_before_display!(fig)
+        p = ax.scene.plots[1]
+        pi = PolygonInteractable(ax, p; id = :voronoiplot)
+        @test length(pi.rings) == 8                        # one cell per generator site
+        @test pi.payloads == Any[(; index = k - 1) for k in 1:8]   # cell order ≠ site order → index only
+        ints = auto_interactables(fig)
+        @test length(ints) == 1 && ints[1] isa PolygonInteractable
+    end
+
     @testset "markup parse + validation" begin
         m = holo"<b>$(name)</b> — $(pop:,) people ($(share:.1%))"
         @test m isa Holo.Markup
@@ -876,6 +937,76 @@ end
         @test_nowarn hitlayers(ri, ctx)   # must not throw
         L = only(hitlayers(ri, ctx))
         @test !isfinite(L.geometry[1])    # NaN center passes through as Float32(NaN) via _q
+    end
+
+    @testset "Contourf extraction" begin
+        using Holo: PolygonInteractable, auto_interactables
+        fig = Figure(); ax = Axis(fig[1, 1])
+        z = [sin(i / 3) * cos(j / 3) for i in 1:20, j in 1:20]
+        contourf!(ax, 1:20, 1:20, z; levels = 6)
+        Makie.update_state_before_display!(fig)
+        p = ax.scene.plots[1]
+        pi = PolygonInteractable(ax, p; id = :contourf)
+        @test length(pi.rings) == length(pi.payloads)            # one element per filled level-piece
+        @test length(pi.rings) > 1
+        @test all(haskey(pairs(pl), :low) && haskey(pairs(pl), :high) for pl in pi.payloads)
+        @test all(pl.low isa Float64 && pl.high isa Float64 for pl in pi.payloads)
+        @test all(pl.low < pl.high for pl in pi.payloads)        # band interval ordered
+        @test !haskey(pairs(pi.payloads[1]), :index)
+        ints = auto_interactables(fig)
+        @test length(ints) == 1 && ints[1] isa PolygonInteractable
+
+        # explicit levels → intervals are the true bands [edge_k, edge_{k+1}] (caught the midpoint-vs-edge bug)
+        fige = Figure(); axe = Axis(fige[1, 1])
+        ze = [sin(i / 3) * cos(j / 3) for i in 1:20, j in 1:20]
+        contourf!(axe, 1:20, 1:20, ze; levels = [0.0, 0.4, 0.8])
+        Makie.update_state_before_display!(fige)
+        pie = PolygonInteractable(axe, axe.scene.plots[1]; id = :contourf)
+        intervals = sort(unique([(round(pl.low, digits = 6), round(pl.high, digits = 6)) for pl in pie.payloads]))
+        @test intervals == [(0.0, 0.4), (0.4, 0.8)]
+
+        # constant (zero-range) data → one fill, a correctly zero-width band, no crash
+        figc = Figure(); axc = Axis(figc[1, 1])
+        contourf!(axc, 1:10, 1:10, fill(1.0, 10, 10); levels = 6)
+        Makie.update_state_before_display!(figc)
+        pic = PolygonInteractable(axc, axc.scene.plots[1]; id = :contourf)
+        @test !isempty(pic.payloads)
+        @test all(pl.low <= pl.high for pl in pic.payloads)
+    end
+
+    @testset "BoxPlot extraction" begin
+        using Holo: RectInteractable, PolygonInteractable, auto_interactables
+        import Statistics
+        cats = repeat([1, 2], inner = 120)
+        vals = [randn(120) .- 1; randn(120) .+ 2]
+
+        # notch off → RectInteractable; stats payload matches Statistics.quantile exactly
+        fig = Figure(); ax = Axis(fig[1, 1])
+        boxplot!(ax, cats, vals); Makie.update_state_before_display!(fig)
+        bi = Holo._boxplot_interactable(ax, ax.scene.plots[1]; id = :boxplot)
+        @test bi isa RectInteractable
+        @test length(bi.payloads) == 2
+        @test all(pl.q1 isa Float64 && pl.median isa Float64 && pl.q3 isa Float64 for pl in bi.payloads)
+        @test all(pl.q1 < pl.median < pl.q3 for pl in bi.payloads)
+        for g in (1, 2)
+            q = Statistics.quantile(vals[cats .== g], [0.25, 0.5, 0.75])
+            @test bi.payloads[g].q1 ≈ q[1]
+            @test bi.payloads[g].median ≈ q[2]
+            @test bi.payloads[g].q3 ≈ q[3]
+        end
+        @test !haskey(pairs(bi.payloads[1]), :index)
+        @test any(i -> i isa RectInteractable, auto_interactables(fig))
+
+        # notch on → PolygonInteractable; same stats payload
+        fig2 = Figure(); ax2 = Axis(fig2[1, 1])
+        boxplot!(ax2, cats, vals; show_notch = true); Makie.update_state_before_display!(fig2)
+        bi2 = Holo._boxplot_interactable(ax2, ax2.scene.plots[1]; id = :boxplot)
+        @test bi2 isa PolygonInteractable
+        @test length(bi2.payloads) == 2
+        @test all(haskey(pairs(pl), :median) for pl in bi2.payloads)
+
+        # fail-loud when the stats node is absent (pass a leaf child that has a 1-tuple converted, not the 4-tuple stats node)
+        @test_throws ErrorException Holo._boxplot_stats_node(ax.scene.plots[1].plots[1])
     end
 
     @testset "holo(fig) auto-extracts spans bounded to viewport" begin

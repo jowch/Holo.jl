@@ -89,6 +89,139 @@ function PolygonInteractable(ax, p::Makie.Poly; id = :poly, payloads = nothing)
     return PolygonInteractable(ax, rings; id, payloads)
 end
 
+# ---- Band -> PolygonInteractable ----
+# A band is one filled region between a lower and an upper curve. converted[] = (lower, upper),
+# each a Vector{Point} over the same x. The ring is the lower curve followed by the reversed
+# upper curve (so the boundary closes). Vertices live directly in data space — no solver replay.
+# Open ring (last vertex ≠ first); the :polygons even-odd hit-test closes it implicitly.
+_band_ring(lower, upper) = vcat(collect(lower), reverse(collect(upper)))
+function PolygonInteractable(ax, p::Makie.Band; id = :band, payloads = nothing)
+    lower, upper = _conv(p)
+    return PolygonInteractable(ax, [_band_ring(lower, upper)]; id, payloads)
+end
+
+# ---- Density -> PolygonInteractable ----
+# density! renders its KDE fill as a descendant Band (Makie already ran the KDE at its own
+# bandwidth — read that band, don't recompute it). Reuse the Band ring builder.
+function PolygonInteractable(ax, p::Makie.Density; id = :density, payloads = nothing)
+    b = _descendant(p, Makie.Band)
+    lower, upper = _conv(b)
+    return PolygonInteractable(ax, [_band_ring(lower, upper)]; id, payloads)
+end
+
+# ---- Contourf -> PolygonInteractable ----
+# Makie lays out one GB.Polygon per filled level-piece on a child Poly (marching-squares already
+# run). Take each polygon's EXTERIOR ring only (holes excluded; `poly.exterior` is a Vector{Point}).
+# Annular bands therefore over-cover their hole at the boundary — a documented v1 limitation.
+# ponytail: exterior-only; add compound-polygon (ring-group) support if a real contour use needs it.
+_poly_exterior_rings(polys) = [poly.exterior for poly in polys]
+
+# Payload (; low, high): each contourf polygon fills the band between two consecutive level edges.
+# Makie's `computed_levels` ARE the true edges; the child Poly's per-polygon `color` is the band
+# MIDPOINT ((edge_k + edge_{k+1})/2) — NOT the lower edge. Map each color to its band by nearest
+# midpoint, correct for uniform, non-uniform, and single-band levels alike. Constant/zero-range data
+# collapses the edges, correctly yielding a zero-width band (low == high), no crash.
+function _contourf_payloads(p, poly)
+    edges = sort(Float64.(p.computed_levels[]))
+    length(edges) >= 2 || error("Contourf introspection: <2 computed level edges (Makie internals changed?)")
+    mids = [(edges[k] + edges[k + 1]) / 2 for k in 1:(length(edges) - 1)]
+    colors = Float64.(poly.color[])
+    return Any[
+        let k = argmin(abs.(mids .- c))
+                (; low = edges[k], high = edges[k + 1])
+        end
+            for c in colors
+    ]
+end
+function PolygonInteractable(ax, p::Makie.Contourf; id = :contourf, payloads = nothing)
+    poly = _childof(p, Makie.Poly)
+    rings = _poly_exterior_rings(_conv(poly)[1])
+    pl = payloads === nothing ? _contourf_payloads(p, poly) : payloads
+    return PolygonInteractable(ax, rings; id, payloads = pl)
+end
+
+# ---- Violin -> PolygonInteractable ----
+# Makie lays out one closed ring per violin on a child Poly (KDE already run). The ring's x-extent
+# is centered on the violin's category position → payload (; x). One element per violin.
+# Payload (; x) = the violin's category position. Read the CLEAN category value from Makie's
+# converted category data; use each ring's geometry-center only to pick WHICH category it is
+# (snap to nearest). Avoids Float32 projection noise and is robust to half-violin (side=:left/:right)
+# offset and ring ordering — geometry locates the ring, converted supplies the exact value.
+function _violin_payloads(p, rings)
+    cats = sort(unique(Float64.(_conv(p)[1])))
+    return Any[
+        let xs = [Float64(pt[1]) for pt in ring]
+                ctr = (minimum(xs) + maximum(xs)) / 2
+                (; x = cats[argmin(abs.(cats .- ctr))])
+        end
+            for ring in rings
+    ]
+end
+function PolygonInteractable(ax, p::Makie.Violin; id = :violin, payloads = nothing)
+    poly = _childof(p, Makie.Poly)
+    rings = _conv(poly)[1]                              # Vector{Vector{Point}}, one ring per violin
+    pl = payloads === nothing ? _violin_payloads(p, rings) : payloads
+    return PolygonInteractable(ax, rings; id, payloads = pl)
+end
+
+# ---- Voronoiplot -> PolygonInteractable ----
+# Makie tessellates and lays out one GB.Polygon per cell on a nested child Poly. Cells come back in
+# tessellation order, NOT input-site order, so there's no cheap cell→generator mapping → default
+# (; index) payload. ponytail: index-only; upgrade to (; x, y) via point-in-cell matching if needed.
+function PolygonInteractable(ax, p::Makie.Voronoiplot; id = :voronoiplot, payloads = nothing)
+    poly = _descendant(p, Makie.Poly)
+    rings = _poly_exterior_rings(_conv(poly)[1])
+    return PolygonInteractable(ax, rings; id, payloads)
+end
+
+# ---- BoxPlot (box body only) -> Rect (un-notched) / Polygon (notched) ----
+# Geometry comes from the box Poly (a HyperRectangle per box, or an 11-pt notched ring per box).
+# Stats come from Makie's COMPUTED-STATS node — the node whose converted is a 4-tuple
+# (centers, medians, q1s, q3s); these equal Statistics.quantile(group, [.5,.25,.75]) exactly, i.e.
+# the numbers Makie drew the box and median line from. Read them; don't recompute or read the
+# median LineSegments. Whiskers/caps/outliers are decorative (not hit-tested) in this arc.
+function _boxplot_stats_node(p)
+    cv = try
+        _conv(p)
+    catch e
+        e isa InterruptException && rethrow()
+        nothing
+    end
+    if cv isa Tuple && length(cv) == 4 && all(x -> x isa AbstractVector && eltype(x) <: Real, cv) &&
+            length(cv[1]) == length(cv[2]) == length(cv[3]) == length(cv[4])
+        return p
+    end
+    for c in p.plots
+        r = try
+            _boxplot_stats_node(c)
+        catch e
+            e isa InterruptException && rethrow()
+            nothing
+        end
+        r !== nothing && return r
+    end
+    return error("BoxPlot introspection: computed-stats node (4-tuple of equal-length numeric vectors) not found (Makie internals changed?)")
+end
+function _boxplot_payloads(statscv)
+    _centers, medians, q1s, q3s = statscv
+    return Any[
+        (; q1 = Float64(q1s[k]), median = Float64(medians[k]), q3 = Float64(q3s[k]))
+            for k in eachindex(medians)
+    ]
+end
+function _boxplot_interactable(ax, p; id = :boxplot, payloads = nothing)
+    node = _boxplot_stats_node(p)
+    boxpoly = _childof(node, Makie.Poly)
+    geom = _conv(boxpoly)[1]
+    pl = payloads === nothing ? _boxplot_payloads(_conv(node)) : payloads
+    if eltype(geom) <: _GB.HyperRectangle
+        rects = [(r.origin[1] + r.widths[1] / 2, r.origin[2] + r.widths[2] / 2, r.widths[1], r.widths[2]) for r in geom]
+        return RectInteractable(ax; rects, id, payloads = pl)
+    else
+        return PolygonInteractable(ax, geom; id, payloads = pl)   # notched: Vector{Vector{Point}}
+    end
+end
+
 # ====================== M3 cheap wins (same primitives) ======================
 # Each delegates to an existing explicit constructor; the only work is reading the right
 # laid-out geometry off the plot (or its children). No new types, no new manifest path.
@@ -98,6 +231,21 @@ _childof(p, T) = (
         c isa T && return c
     end; error("$(typeof(p).name.name): no $T child plot found (Makie internals changed?)")
 )
+
+# Recursive descendant search (whole subtree), fail-loud like _childof. Some recipes nest the
+# plot we need below a wrapper child (e.g. Density wraps a Band; Voronoiplot nests its Poly).
+_descendant_or_nothing(p, T) = p isa T ? p :
+    (
+        for c in p.plots
+            r = _descendant_or_nothing(c, T)
+            r !== nothing && return r
+    end; nothing
+    )
+function _descendant(p, T)
+    d = _descendant_or_nothing(p, T)
+    d === nothing && error("$(typeof(p).name.name): no $T descendant found (Makie internals changed?)")
+    return d
+end
 
 # ---- Stairs -> Segment(:polyline) ----
 # The parent `converted` is the raw input points; the rendered staircase (the actual click target)
@@ -296,8 +444,14 @@ function _plotbase(p)
     p isa Makie.CrossBar && return :crossbar
     p isa Makie.HSpan && return :hspan
     p isa Makie.VSpan && return :vspan
+    p isa Makie.Band && return :band
+    p isa Makie.Density && return :density
+    p isa Makie.Contourf && return :contourf
+    p isa Makie.Violin && return :violin
+    p isa Makie.Voronoiplot && return :voronoiplot
     p isa Makie.Stem && return :stem
     p isa Makie.ScatterLines && return :scatterlines
+    p isa Makie.BoxPlot && return :boxplot
     return nothing
 end
 
@@ -313,9 +467,15 @@ function _construct(ax, p, id)
         return [RectInteractable(ax, p; id)]
     (p isa Makie.Hist || p isa Makie.Waterfall || p isa Makie.CrossBar) && return [RectInteractable(ax, p; id)]
     (p isa Makie.HSpan || p isa Makie.VSpan) && return [RectInteractable(ax, p; id)]
+    p isa Makie.Band && return [PolygonInteractable(ax, p; id)]
+    p isa Makie.Density && return [PolygonInteractable(ax, p; id)]
     p isa Makie.Poly && return [PolygonInteractable(ax, p; id)]
+    p isa Makie.Contourf && return [PolygonInteractable(ax, p; id)]
+    p isa Makie.Violin && return [PolygonInteractable(ax, p; id)]
+    p isa Makie.Voronoiplot && return [PolygonInteractable(ax, p; id)]
     p isa Makie.Stem && return _stem_parts(ax, p, id)
     p isa Makie.ScatterLines && return _scatterlines_parts(ax, p, id)
+    p isa Makie.BoxPlot && return [_boxplot_interactable(ax, p; id)]
     # unreachable while _plotbase gates callers; loud if the two ever drift (kind added to one, not the other)
     return error("auto_interactables: $(typeof(p).name.name) passed _plotbase but has no _construct branch")
 end

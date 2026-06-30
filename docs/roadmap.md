@@ -40,7 +40,8 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 *Goal: more plot types, same primitives. Add per real demand.*
 
 - [x] **Cheap wins** (existing primitives): Stairs, Errorbars/Rangebars, HLines/VLines, Stem, Spy, ScatterLines (composite → two layers). *Done (`src/introspect.jl`): introspection constructors delegating to the M1 primitives — Stairs→`Segment(:polyline)` (reads the child Lines' expanded staircase, not the raw input pts), Errorbars/Rangebars→`Segment(:pairs)`, HLines/VLines→`Segment(:pairs)` spanning `finallimits`, Spy→`Rect(:list)` of unit cells off the `:data`-markerspace child Scatter, Stem/ScatterLines→two layers (Point+Segment) via their child plots. All wired into `holo(fig)`; unit-tested against the explicit constructors + rendered-geometry. Deferred: richer `{i,j,value}`/`value`/`equation` payloads (→ M2.3 tooltips), fractional HLines/VLines span attrs.*
-- [ ] **Computational-geometry extraction**: Contourf/Tricontourf, Violin, Voronoiplot, BoxPlot notches — produce polygons.
+- [x] **Filled-area curves (Band/Density)**: Band and Density auto-extracted by `holo(fig)` as `:polygons` with `(; index)` payload. *Done (`src/introspect.jl`).*
+- [x] **Computational-geometry extraction**: Contourf/Violin/Voronoiplot + BoxPlot box-body shipped; Tricontourf deferred; BoxPlot box-body-only (whiskers/outliers decorative). *Done (`src/introspect.jl`): Contourf → `:polygons` per contour level with `(; low, high)` from Makie's computed level range; Violin → `:polygons` with `(; x)` from the data position; Voronoiplot → `:polygons` with `(; index)`; BoxPlot box-body → `:rects` (un-notched) / `:polygons` (notched) with `(; q1, median, q3)` from Makie's computed-stats node. Principle: hit geometry from rendered shapes; payload values from Makie's computed values.*
 - [x] **Bars/areas** *(Hist/Waterfall/CrossBar/HSpan/VSpan done; Colorbar/Legend remaining)*: Hist, Waterfall, CrossBar, HSpan, VSpan now auto-extracted by `holo(fig)` as `:rects` (same primitive as BarPlot, no new JS path). Shared bar payload schema — semantic, no redundant `index` (element index lives in `InteractionEvent.index`): BarPlot/Waterfall `(; low, high, value)`, Hist `(; value, low, high)`, CrossBar `(; midpoint, low, high)`, HSpan/VSpan `(; low, high)`. Span hit-rects clamped to the owning axis's pixel viewport (prevents cross-axis bleed in multi-axis figures). Uniform fail-loud payload-length validation (`_check_payloads`) added to `SegmentInteractable`/`RectInteractable`/`PolygonInteractable` — a wrong-length `payloads=` now throws `ArgumentError` at construction. *Remaining: Colorbar/Legend.*
 - [ ] **Text bboxes** (Text/Annotation/TextLabel): needs font-metric measurement → the `bbox` geometry primitive (rotated → degenerate polygon).
 - [ ] **SVG output path**: `CairoBackend(vector=true)` is groundwork; actually emit SVG base + overlay for sparse, low-primitive plots (cleaner coords, no raster).
@@ -146,9 +147,12 @@ No new JS primitive in this phase — every surface reuses v1's `:rects`/`:polyg
 work is always a Julia-side extractor. (`update_state_before_display!(fig)` is the mandatory
 pre-manifest step for all three.)
 - [x] **Bars/areas** *(done except Colorbar/Legend — see M3)*: Hist/Waterfall/CrossBar/HSpan/VSpan auto-extracted as `:rects`; shared bar payload schema (semantic, no `index`); span viewport-clamp; uniform payload-length validation. *Remaining: Colorbar/Legend.*
-- **Computational-geometry extraction** (Contourf/Tricontourf, Violin, Voronoiplot, BoxPlot
-  notches → polygons) — hardest M3 item: Tier-4 Makie *recipes*, reach into recipe internals to
-  recover polygons. No new primitive (even-odd polygon test), but the extractor is the cost.
+- [x] **Filled-area curves (Band/Density)**: Band and Density auto-extracted as `:polygons` with `(; index)` payload.
+- [x] **Computational-geometry extraction** (Contourf/Tricontourf, Violin, Voronoiplot, BoxPlot
+  notches → polygons): Contourf/Violin/Voronoiplot + BoxPlot box-body shipped; Tricontourf
+  deferred; BoxPlot box-body-only — whiskers/outliers decorative. All reuse v1's `:polygons`
+  even-odd test; no new JS primitive. Principle: hit geometry from rendered shapes; payload from
+  Makie's computed values.
 - **Text bboxes** (Text/Annotation/TextLabel) — *not* a 7th primitive: rotated text = degenerate
   polygon reusing the polygon test. The genuinely new work is **font-metric measurement**, the
   one thing the coord system was built not to model (`design.md` §6) — do it last in this phase,

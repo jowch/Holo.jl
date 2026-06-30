@@ -6,7 +6,8 @@
 >
 > Reproduce (numbers below re-run 2026-06-29, last reconciled for M2.3 template-tooltip design
 > on PR #10 and confirmed unchanged for M4 box-select (commit `d05318f`) on 2026-06-29 and for
-> Phase 2a bars/areas/spans on 2026-06-30;
+> Phase 2a bars/areas/spans on 2026-06-30 and Phase 2b polygon surfaces (commit `431bd99`) on
+> 2026-06-30;
 > baseline established after int-pixel geometry quantization, CairoMakie 0.15, Julia 1.12):
 > - **base64-PNG / manifest / render numbers** — `julia --project=. bench/payload_envelope.jl`
 >   (normal envelope) and `julia --project=. bench/stress.jl` (the 10× extremes). Both `seed!(0)`,
@@ -193,6 +194,29 @@ float16; lossy >2048px). Keep `AxisTransform` lims `Float64` (drag inversion) �
   (2026-06-30) confirms the §A envelope is unchanged — see §A. No new manifest terms, no new
   per-element geometry (`:rects` was already quantized); the only wire change is richer payload
   fields per bar element.
+
+- **Phase 2b polygon surfaces** *(delivered, commit `431bd99`, 2026-06-30)* — Band, Density,
+  Contourf, Violin, Voronoiplot, BoxPlot now auto-extracted as `:polygons` (plus `:rects` for
+  un-notched BoxPlot bodies). Ring geometry ships as a `Vector{Vector{Real}}` — one subvector per
+  polygon element, flat `[x0,y0,x1,y1,…]` — with vertex coords quantized to integer pixels (the same
+  1–3 B/coord path as scatter; see architecture.md §9). Bench §F (2026-06-30, `bench/payload_envelope.jl`):
+
+  | Surface | elements | total verts | manifest | ~B/elem | ~B/vert |
+  |---------|--------:|------------:|--------:|--------:|--------:|
+  | band, 100 x-pts (1 ring) | 1 | 200 | 1.5 KB | 1 494 | 6 |
+  | violin, 3 groups (~400 verts/ring each) | 3 | 1 206 | 7.3 KB | 2 479 | 6 |
+  | contourf, 50×50, default levels | 20 | 1 780 | 10.5 KB | 537 | 6 |
+
+  The fundamental rate is **~6 B/vertex** (2 coords × ~3 B each at typical 700-px plot widths),
+  consistent across all polygon kinds. Per-element cost is vertex-count-driven: a violin KDE ring
+  (~400 verts) is ~2.5 KB/element — far above scatter's per-element cost (§A) — because the ring
+  boundary is large. But realistic polygon charts have low element counts: a 3-violin plot is 7.3 KB
+  total; a 20-piece contourf is 10.5 KB total — both well under the render-bound / payload-bound
+  crossover (~1 MB). A high-cell voronoiplot (e.g. 1 000 cells, each a few vertices) could reach
+  scatter-scale manifest sizes (scatter per-element × 1 000 → a few hundred KB; cf. §A), but is still
+  render-bound. The §A–E envelope is
+  **unchanged** — bench re-run (2026-06-30) confirms all existing scatter/heatmap numbers are
+  identical; the `:polygons` term is an addition, not a modification of prior geometry kinds.
 
 - **M2.3 Richer tooltips** *(delivered, PR #10)* — the original
   prediction was correct: shipping per-element tooltip strings would grow the manifest by `Σ(tooltip

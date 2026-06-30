@@ -112,4 +112,55 @@ let
         @printf("  %-34s  render+encode ≈ %6.0f ms\n", label, t * 1000)
     end
 end
+
+println("\n=== F. polygon surfaces — :polygons vertex-dense envelope ===")
+# Polygon ring geometry: Vector{Vector{Real}}, one subvector per ring/element, flat [x0,y0,x1,y1,…].
+# Vertices are projected to integer px (1–3 B/coord). The key new term vs scatter: per-element cost
+# scales with ring vertex count, not just a fixed few coords — a violin KDE ring is ~400 pts,
+# a contourf ring may be tens of pts × many rings per level.
+function npolyverts(L)
+    g = L["geometry"]
+    return (g isa AbstractVector && !isempty(g) && first(g) isa AbstractVector) ?
+        sum(length(ring) ÷ 2 for ring in g; init = 0) : 0
+end
+function poly_row(label, w)
+    polylayers = filter(l -> l["kind"] == "polygons", w.manifest["layers"])
+    isempty(polylayers) && (println("  $label — no :polygons layer"); return)
+    n_elems = sum(nhits, polylayers; init = 0)
+    n_verts = sum(npolyverts, polylayers; init = 0)
+    geom_b = sum(mp(l["geometry"]) for l in polylayers; init = 0)
+    total_b = mp(w.manifest)
+    return @printf(
+        "  %-40s  png=%6s KB   manifest=%6s KB   elems=%4d  verts=%6d  ~%5d B/elem  ~%d B/vert\n",
+        label,
+        kb(b64bytes(w)),
+        kb(total_b),
+        n_elems,
+        n_verts,
+        round(Int, total_b / max(n_elems, 1)),
+        round(Int, geom_b / max(n_verts, 1)),
+    )
+end
+let
+    # Band: one ring (lower curve + reversed upper), ~2×N boundary vertices.
+    f = Figure(size = (600, 400)); ax = Axis(f[1, 1])
+    band!(ax, 1:100, cumsum(randn(100)), cumsum(randn(100)) .+ 2)
+    poly_row("band, 100 x-pts (1 ring)", holo(f))
+end
+let
+    # Violin: one closed KDE ring per group — the densest per-element case.
+    # Makie's default npoints=200 → each ring is ~400 boundary vertices.
+    f = Figure(size = (600, 400)); ax = Axis(f[1, 1])
+    violin!(ax, repeat(1:3, 200), randn(600))
+    poly_row("violin, 3 groups (~400 verts/ring)", holo(f))
+end
+let
+    # Contourf: many exterior rings (one per filled polygon piece), O(levels × ring-length).
+    # Default levels ≈ 8; each level may produce several ring pieces over the grid.
+    xs = LinRange(-2, 2, 50)
+    ys = LinRange(-2, 2, 50)
+    f = Figure(size = (600, 400)); ax = Axis(f[1, 1])
+    contourf!(ax, xs, ys, [sin(x) * cos(y) for x in xs, y in ys])
+    poly_row("contourf, 50×50, default levels", holo(f))
+end
 println()

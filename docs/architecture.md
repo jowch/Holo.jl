@@ -195,7 +195,7 @@ Five types, one per hit primitive, parameterized where surfaces differ only in i
 | `PointInteractable` | `:circles` | Scatter, Stem, Spy, ScatterLines·pts | `(; index, x, y)` |
 | `SegmentInteractable` | `:polyline` \| `:segments` | Lines, Stairs, ScatterLines·lines (polyline); LineSegments, Errorbars, Rangebars, HLines, VLines (pairs) | `(; segment_index, p0, p1)` |
 | `RectInteractable` | `:rects` \| `:grid` | BarPlot, Hist, Waterfall, CrossBar, HSpan, VSpan (list); Heatmap, Image (grid) | grid `(; i, j, value)`; BarPlot/Waterfall `(; low, high, value)`; Hist `(; value, low, high)`; CrossBar `(; midpoint, low, high)`; HSpan/VSpan `(; low, high)` |
-| `PolygonInteractable` | `:polygons` | Poly, Band, Pie | `(; index)` |
+| `PolygonInteractable` | `:polygons` | Poly, Band, Pie, Density, Contourf, Violin, Voronoiplot | Band/Density/Voronoiplot `(; index)`; Contourf `(; low, high)`; Violin `(; x)` |
 | `AxisInteractable` | `:axis` | the Axis area itself (linear + log) | `(; x, y)` inverted client-side |
 
 `SegmentInteractable` carries `mode ∈ {:polyline,:pairs}`; `RectInteractable` carries
@@ -209,6 +209,16 @@ multi-axis figure. **Uniform payload-length validation:** `SegmentInteractable`,
 `RectInteractable`, and `PolygonInteractable` all call `_check_payloads` at construction;
 a `payloads=` vector of the wrong length throws `ArgumentError` immediately (fail-loud, same
 guarantee as `PointInteractable` / `RegionInteractable`).
+
+**Polygon payload schema (Phase 2b).** The six auto-extracted polygon surfaces each carry a
+surface-specific semantic payload. Band, Density, and Voronoiplot use `(; index)` — the element
+index is already carried by `InteractionEvent.index`, so the payload holds only the domain key.
+Contourf carries `(; low, high)` — the data-value bounds of the filled contour level, read from
+Makie's computed level range. Violin carries `(; x)` — the category position. BoxPlot's box body
+is auto-extracted as `:rects` (un-notched) / `:polygons` (notched) with `(; q1, median, q3)`
+drawn from Makie's computed-stats node. **Principle:** hit geometry comes from rendered shapes
+(the actual plotted polygons or rects after Makie lays them out); payload values come from
+Makie's computed values (not the raw input data).
 
 **Declaration is the contract; plot-introspection is v2 sugar.** v1 constructors take explicit
 data-space geometry (`PointInteractable(ax, points; payloads)`), which the survey confirmed is the
@@ -359,9 +369,10 @@ profile shows JS hit-test *specifically* is the bottleneck.
 
 **Phase 2a (shipped):** Hist, Waterfall, CrossBar, HSpan, VSpan — all extracted as `:rects`; shared bar payload schema (semantic, no `index`); span viewport-clamp; uniform `_check_payloads` validation on Segment/Rect/Polygon interactables.
 
+**Phase 2b (shipped):** Band, Density, Contourf, Violin, Voronoiplot — extracted as `:polygons`; surface-specific payloads (Band/Density/Voronoiplot `(; index)`, Contourf `(; low, high)`, Violin `(; x)`). BoxPlot box-body auto-extracted as `:rects` (un-notched) / `:polygons` (notched) with `(; q1, median, q3)`. Tricontourf deferred; BoxPlot whiskers/outliers decorative (box-body-only).
+
 **v2:** plot-object introspection constructors; ABLines/Arc, Colorbar/Legend,
-contourf/violin/voronoi (computational-geometry extraction), text bboxes (font metrics),
-animation frames, SVG-overlay annotations, spatial hit-test acceleration.
+text bboxes (font metrics), animation frames, SVG-overlay annotations, spatial hit-test acceleration.
 
 **Never (without a new backend class):** 3D (Surface, MeshScatter, Arrows3D), PolarAxis/Axis3,
 high-frequency live redraw. These are WGLMakie's domain.
