@@ -49,6 +49,24 @@ jobs:
           julia --project=HoloWGL -e 'using Pkg; Pkg.instantiate()'
           julia --project=HoloWGL HoloWGL/test/runtests.jl
 
+      # Real-browser @bind round-trip: generate the self-contained widget page (reuses the
+      # WGLMakie env just precompiled above), then click scatter marker 0 in headless Chromium
+      # and assert the overlay emits the right bond value (test/e2e/click.mjs). Covers the
+      # browser half the Julia unit tests can't reach.
+      - name: Generate :webgl E2E page
+        run: julia --project=HoloWGL HoloWGL/test/e2e/make_page.jl "$RUNNER_TEMP/e2e"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Playwright + Chromium
+        working-directory: HoloWGL/test/e2e
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+      - name: Run real-browser @bind E2E
+        working-directory: HoloWGL/test/e2e
+        run: node click.mjs "$RUNNER_TEMP/e2e"
+
   examples:
     name: Example notebooks
     runs-on: ubuntu-latest

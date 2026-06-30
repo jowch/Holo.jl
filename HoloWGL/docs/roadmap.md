@@ -41,7 +41,18 @@ The hard questions are answered and the backend works end-to-end in a real Pluto
       coupling no other test covers. Wired into CI (`.github/workflows/CI.yml` `holowgl` job, Julia
       1.12) so the whole HoloWGL suite — not just this guard — gates on every PR; previously the
       subpackage ran only manually (gap inherited from #12).*
-- [ ] **`@bind` test in CI**: the live click test is manual; script it (headless Pluto + Playwright).
+- [x] **`@bind` test in CI**: the live click test is manual; script it. *Done — both halves of the
+      round-trip now gate in the `holowgl` CI job. (1) Julia contract (`test/runtests.jl` "@bind
+      round-trip contract"): derives the click payload from the REAL built manifest, runs it through
+      `transform_value`, and asserts the typed `InteractionEvent` (single + `items`/selector + the
+      never-`Nothing` paths). (2) Real-browser E2E (`test/e2e/`, Playwright/Chromium): Julia emits the
+      self-contained widget page (`make_page.jl`), then `click.mjs` clicks scatter marker 0 in headless
+      Chromium and asserts the overlay sets `host.value = {layer,index,payload}` + fires `input` (the
+      `@bind` contract, overlay.ts:273-274) — exercising the real overlay JS, shadow-DOM hit-test, and
+      the `:webgl` sizer base a unit test can't reach. WebGL canvas init may fail headless; irrelevant,
+      the overlay rides the sizer. **Scope:** stops at bond emission — the click→kernel→reactive-rerender
+      mile is generic Pluto machinery (not HoloWGL code), so a full live-Pluto kernel E2E is intentionally
+      out of scope.*
 
 ## M2 — Delivery & performance
 

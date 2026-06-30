@@ -2,3 +2,7 @@
 Manifest.toml
 /.playwright-mcp/
 *.cov
+
+# E2E browser harness (test/e2e): installed by CI via `npm install`, not committed.
+test/e2e/node_modules/
+test/e2e/package-lock.json
