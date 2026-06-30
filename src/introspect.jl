@@ -109,6 +109,30 @@ function PolygonInteractable(ax, p::Makie.Density; id = :density, payloads = not
     return PolygonInteractable(ax, [_band_ring(lower, upper)]; id, payloads)
 end
 
+# ---- Contourf -> PolygonInteractable ----
+# Makie lays out one GB.Polygon per filled level-piece on a child Poly (marching-squares already
+# run). Take each polygon's EXTERIOR ring only (holes excluded; `poly.exterior` is a Vector{Point}).
+# Annular bands therefore over-cover their hole at the boundary — a documented v1 limitation.
+# ponytail: exterior-only; add compound-polygon (ring-group) support if a real contour use needs it.
+_poly_exterior_rings(polys) = [poly.exterior for poly in polys]
+
+# Payload (; low, high): the child Poly's `color` is one level value per polygon (the band's lower
+# edge). Bracket each to (low, high) via the sorted distinct edges; the top band's high extrapolates
+# one band-width up (uniform spacing for default levels).
+function _contourf_payloads(poly)
+    colors = Float64.(poly.color[])
+    edges = sort(unique(colors))
+    Δ = length(edges) >= 2 ? edges[2] - edges[1] : zero(eltype(edges))
+    nexthi = Dict(edges[i] => (i < length(edges) ? edges[i + 1] : edges[i] + Δ) for i in eachindex(edges))
+    return Any[(; low = c, high = nexthi[c]) for c in colors]
+end
+function PolygonInteractable(ax, p::Makie.Contourf; id = :contourf, payloads = nothing)
+    poly = _childof(p, Makie.Poly)
+    rings = _poly_exterior_rings(_conv(poly)[1])
+    pl = payloads === nothing ? _contourf_payloads(poly) : payloads
+    return PolygonInteractable(ax, rings; id, payloads = pl)
+end
+
 # ====================== M3 cheap wins (same primitives) ======================
 # Each delegates to an existing explicit constructor; the only work is reading the right
 # laid-out geometry off the plot (or its children). No new types, no new manifest path.
@@ -333,6 +357,7 @@ function _plotbase(p)
     p isa Makie.VSpan && return :vspan
     p isa Makie.Band && return :band
     p isa Makie.Density && return :density
+    p isa Makie.Contourf && return :contourf
     p isa Makie.Stem && return :stem
     p isa Makie.ScatterLines && return :scatterlines
     return nothing
@@ -353,6 +378,7 @@ function _construct(ax, p, id)
     p isa Makie.Band && return [PolygonInteractable(ax, p; id)]
     p isa Makie.Density && return [PolygonInteractable(ax, p; id)]
     p isa Makie.Poly && return [PolygonInteractable(ax, p; id)]
+    p isa Makie.Contourf && return [PolygonInteractable(ax, p; id)]
     p isa Makie.Stem && return _stem_parts(ax, p, id)
     p isa Makie.ScatterLines && return _scatterlines_parts(ax, p, id)
     # unreachable while _plotbase gates callers; loud if the two ever drift (kind added to one, not the other)

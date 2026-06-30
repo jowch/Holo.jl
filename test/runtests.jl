@@ -910,6 +910,24 @@ end
         @test !isfinite(L.geometry[1])    # NaN center passes through as Float32(NaN) via _q
     end
 
+    @testset "Contourf extraction" begin
+        using Holo: PolygonInteractable, auto_interactables
+        fig = Figure(); ax = Axis(fig[1, 1])
+        z = [sin(i / 3) * cos(j / 3) for i in 1:20, j in 1:20]
+        contourf!(ax, 1:20, 1:20, z; levels = 6)
+        Makie.update_state_before_display!(fig)
+        p = ax.scene.plots[1]
+        pi = PolygonInteractable(ax, p; id = :contourf)
+        @test length(pi.rings) == length(pi.payloads)            # one element per filled level-piece
+        @test length(pi.rings) > 1
+        @test all(haskey(pairs(pl), :low) && haskey(pairs(pl), :high) for pl in pi.payloads)
+        @test all(pl.low isa Float64 && pl.high isa Float64 for pl in pi.payloads)
+        @test all(pl.low < pl.high for pl in pi.payloads)        # band interval ordered
+        @test !haskey(pairs(pi.payloads[1]), :index)
+        ints = auto_interactables(fig)
+        @test length(ints) == 1 && ints[1] isa PolygonInteractable
+    end
+
     @testset "holo(fig) auto-extracts spans bounded to viewport" begin
         # End-to-end guard: calling holo(fig) (the AUTO path, no manual update_state_before_display!)
         # on a 2-axis figure with a vspan must succeed and produce a layer whose pixel rect is
