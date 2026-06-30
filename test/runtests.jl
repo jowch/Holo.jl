@@ -735,6 +735,26 @@ end
         @test filter(l -> l["kind"] == "roi", m_ok["layers"]) |> only |> l -> l["selects"] == "pts"
     end
 
+    @testset "HSpan + VSpan extraction" begin
+        using Holo: RectInteractable, auto_interactables
+        fig = Figure(); ax = Axis(fig[1, 1]); lines!(ax, 0 .. 10, sin)   # give the axis finite limits
+        hspan!(ax, [1.0, 3.0], [2.0, 4.0])
+        Makie.update_state_before_display!(fig)
+        hp = ax.scene.plots[end]                                  # the HSpan
+        ri = RectInteractable(ax, hp; id = :hspan)
+        @test length(ri.payloads) == 2
+        @test ri.payloads[1] == (; low = 1.0, high = 2.0)
+        @test ri.payloads[2] == (; low = 3.0, high = 4.0)
+
+        fig2 = Figure(); ax2 = Axis(fig2[1, 1]); lines!(ax2, 0 .. 10, cos)
+        vspan!(ax2, [1.0, 3.0], [2.0, 4.0])
+        Makie.update_state_before_display!(fig2)
+        ri2 = RectInteractable(ax2, ax2.scene.plots[end]; id = :vspan)
+        @test ri2.payloads[1] == (; low = 1.0, high = 2.0)
+        @test length(ri2.payloads) == 2
+        @test ri2.payloads[2] == (; low = 3.0, high = 4.0)
+    end
+
     @testset "payload-length validation (Segment/Rect/Polygon)" begin
         using Holo: SegmentInteractable, RectInteractable, PolygonInteractable
         fig = Figure(); ax = Axis(fig[1, 1])

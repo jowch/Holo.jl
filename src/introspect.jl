@@ -199,6 +199,21 @@ function RectInteractable(ax, p::Makie.Waterfall; id = :waterfall, payloads = no
     return RectInteractable(ax; rects = rs, id, payloads = pl)
 end
 
+# ---- HSpan / VSpan -> RectInteractable(:list); band rects are a direct child ----
+function _span_payloads(p)
+    cv = p.converted[]                                   # HSpan (ymin,ymax) / VSpan (xmin,xmax)
+    lo, hi = cv[1], cv[2]
+    return Any[(; low = Float64(lo[k]), high = Float64(hi[k])) for k in eachindex(lo)]
+end
+function RectInteractable(ax, p::Makie.HSpan; id = :hspan, payloads = nothing)
+    pl = payloads === nothing ? _span_payloads(p) : payloads
+    return RectInteractable(ax; rects = _bar_rects(p), id, payloads = pl)
+end
+function RectInteractable(ax, p::Makie.VSpan; id = :vspan, payloads = nothing)
+    pl = payloads === nothing ? _span_payloads(p) : payloads
+    return RectInteractable(ax; rects = _bar_rects(p), id, payloads = pl)
+end
+
 # ---- CrossBar -> RectInteractable(:list) ----
 # Box rects are a direct child (depth 1); _bar_rects(p) finds them without _childof.
 # Semantic payload (midpoint, low, high) comes from p.converted[] = (x, midpoint, low, high).
@@ -245,6 +260,8 @@ function _plotbase(p)
     p isa Makie.Hist && return :hist
     p isa Makie.Waterfall && return :waterfall
     p isa Makie.CrossBar && return :crossbar
+    p isa Makie.HSpan && return :hspan
+    p isa Makie.VSpan && return :vspan
     p isa Makie.Stem && return :stem
     p isa Makie.ScatterLines && return :scatterlines
     return nothing
@@ -261,6 +278,7 @@ function _construct(ax, p, id)
     (p isa Makie.Heatmap || p isa Makie.Image || p isa Makie.BarPlot || p isa Makie.Spy) &&
         return [RectInteractable(ax, p; id)]
     (p isa Makie.Hist || p isa Makie.Waterfall || p isa Makie.CrossBar) && return [RectInteractable(ax, p; id)]
+    (p isa Makie.HSpan || p isa Makie.VSpan) && return [RectInteractable(ax, p; id)]
     p isa Makie.Poly && return [PolygonInteractable(ax, p; id)]
     p isa Makie.Stem && return _stem_parts(ax, p, id)
     p isa Makie.ScatterLines && return _scatterlines_parts(ax, p, id)
