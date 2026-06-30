@@ -27,8 +27,8 @@ try {
   // with no button at all), and finish as soon as the widget + readout are present. Manual loop
   // throughout: waitForFunction's explicit timeout is unreliable in this env (silently caps at
   // its 30s default), and a hard "button must appear" gate is exactly what broke CI.
-  const deadline = Date.now() + 600000;   // cold: env cell devs Holo+HoloWGL + precompiles Makie/WGLMakie
-  let ready = false, ranClicked = false;
+  const deadline = Date.now() + 1500000;   // cold: env cell devs Holo+HoloWGL + precompiles Makie/WGLMakie (first CI run ~10min+), under the 40-min job cap
+  let ready = false, ranClicked = false, tick = 0;
   while (Date.now() < deadline) {
     const st = await page.evaluate(() => {
       const runBtn = [...document.querySelectorAll("button, a")].find((b) => /run notebook code/i.test(b.innerText || b.title || ""));
@@ -39,15 +39,20 @@ try {
       if (host) { let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; }); surface = !!(sr && sr.querySelector(".surface")); }
       return {
         clickedRun: !!runBtn,
+        nCells: document.querySelectorAll("pluto-cell").length,
         busy: document.querySelectorAll("pluto-cell.running, pluto-cell.queued").length,
         errored: document.querySelectorAll("pluto-cell.errored").length,
-        surface,
+        host: !!host, surface,
         bondout: !!document.querySelector("#bondout"),
+        buttons: [...document.querySelectorAll("button, a")].map((b) => (b.innerText || b.title || "").trim()).filter(Boolean).slice(0, 8),
+        title: document.title,
       };
     });
     if (st.clickedRun && !ranClicked) { ranClicked = true; console.error("phase: exited safe preview (Run notebook code)"); }
     if (st.errored) throw new Error(`notebook has ${st.errored} errored cell(s)`);
     if (!st.busy && st.surface && st.bondout) { ready = true; break; }
+    if (tick % 30 === 0) console.error(`  …waiting [${tick}s] cells=${st.nCells} busy=${st.busy} runBtn=${st.clickedRun} host=${st.host} surface=${st.surface} bondout=${st.bondout} title=${JSON.stringify(st.title)} buttons=${JSON.stringify(st.buttons)}`);
+    tick++;
     await new Promise((r) => setTimeout(r, 1000));
   }
   if (!ready) throw new Error("timed out waiting for cells to finish / widget to mount");
