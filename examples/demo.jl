@@ -296,6 +296,34 @@ bars_widget = let
     holo(bf)   # auto-detects Hist + Waterfall + CrossBar + BarPlot + HSpan + VSpan
 end
 
+# ╔═╡ 40000000-0000-0000-0000-0000000000a0
+md"""
+## Polygon surfaces (Phase 2b) — auto-extraction
+
+`holo(fig)` auto-detects filled-area curves (`band!`, `density!`), contour fills
+(`contourf!`), violin plots (`violin!`), Voronoi diagrams (`voronoiplot!`), and box
+plots (`boxplot!`) across every `Axis` — no manual `Interactable` wiring needed.
+Hover over the plots below to inspect payloads.
+"""
+
+# ╔═╡ 40000000-0000-0000-0000-0000000000a1
+poly_widget = let
+    pf = Figure(size = (900, 520))
+    band!(Axis(pf[1, 1]; title = "band"), 1:10, (1:10) .- 0.5, (1:10) .+ 1.5)
+    density!(Axis(pf[1, 2]; title = "density"), randn(400))
+    contourf!(
+        Axis(pf[1, 3]; title = "contourf"),
+        1:20,
+        1:20,
+        [sin(i / 3) * cos(j / 3) for i in 1:20, j in 1:20];
+        levels = 6,
+    )
+    violin!(Axis(pf[2, 1]; title = "violin"), repeat([1, 2, 3], inner = 100), randn(300))
+    voronoiplot!(Axis(pf[2, 2]; title = "voronoi"), rand(15), rand(15))
+    boxplot!(Axis(pf[2, 3]; title = "boxplot"), repeat([1, 2], inner = 120), randn(240))
+    holo(pf)   # auto-detects Band + Density + Contourf + Violin + Voronoiplot + BoxPlot
+end
+
 # ╔═╡ Cell order:
 # ╟─40000000-0000-0000-0000-000000000000
 # ╠═40000000-0000-0000-0000-000000000001
@@ -340,3 +368,5 @@ end
 # ╠═40000000-0000-0000-0000-000000000077
 # ╟─40000000-0000-0000-0000-000000000090
 # ╠═40000000-0000-0000-0000-000000000091
+# ╟─40000000-0000-0000-0000-0000000000a0
+# ╠═40000000-0000-0000-0000-0000000000a1
