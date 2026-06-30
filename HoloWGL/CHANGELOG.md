@@ -28,6 +28,12 @@ versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
   gzip headroom, wire-vs-JSON-proxy); `roadmap.md`/`NOTES.md`/the bench now cite it instead of
   restating the envelope (mirrors root Holo's `docs/perf-findings.md`; avoids the cross-file drift
   root CLAUDE.md flags).
+- `HoloWGL/frontend/` — esbuild + vitest + eslint + TypeScript toolchain for the `:webgl` shim
+  (M2 build pipeline), mirroring Holo core's `frontend/`. `assets/holo-webgl.js` is now built from
+  `src/holo-webgl.ts` (was hand-authored), CI sole author + a stale-bundle PR check, same as
+  `overlay.js`. The vitest suite locks the `rewrap`↔`_plain` 4-rule scene contract — previously the
+  only JS in the repo with no test/lint/typecheck gate. Built+minified shim live-verified to render
+  both demo widgets unchanged.
 
 ### Performance
 *(Living envelope: [`docs/perf-findings.md`](docs/perf-findings.md) is the single source of these

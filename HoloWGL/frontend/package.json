@@ -1,0 +1,20 @@
+{
+  "name": "holowgl-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser shim for HoloWGL's :webgl backend. Source of truth for the committed assets/holo-webgl.js bundle (mirrors Holo core's frontend/).",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src test",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "eslint": "^9.12.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.8.0",
+    "vitest": "^2.1.0"
+  }
+}

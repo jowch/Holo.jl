@@ -184,6 +184,50 @@ jobs:
             git push
           fi
 
+  holowgl-frontend:
+    # Same gate as `frontend` but for the HoloWGL :webgl shim, which lives in its own subpackage
+    # frontend (HoloWGL/frontend/). lint + typecheck + vitest (locks the rewrap<->_plain contract)
+    # + build; CI is the sole author of HoloWGL/assets/holo-webgl.js, same model as overlay.js.
+    name: HoloWGL frontend (TS) + shim bundle
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: HoloWGL/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+      # PRs (incl. forks, which can't push): fail if the committed shim bundle is stale.
+      - name: Verify committed shim bundle is up to date
+        if: github.event_name == 'pull_request'
+        working-directory: .
+        run: |
+          if ! git diff --quiet HoloWGL/assets/holo-webgl.js; then
+            echo "::error::HoloWGL/assets/holo-webgl.js is out of date — run 'cd HoloWGL/frontend && npm run build' and commit."
+            git --no-pager diff --stat HoloWGL/assets/holo-webgl.js
+            exit 1
+          fi
+
+      # Push to main: CI owns the shim bundle — commit any rebuild so main is never stale.
+      - name: Commit rebuilt shim bundle
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: .
+        run: |
+          if ! git diff --quiet HoloWGL/assets/holo-webgl.js; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add HoloWGL/assets/holo-webgl.js
+            git commit -m "ci: rebuild HoloWGL/assets/holo-webgl.js [skip ci]"
+            git push
+          fi
+
   format:
     name: Runic formatting
     runs-on: ubuntu-latest
