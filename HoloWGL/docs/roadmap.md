@@ -31,8 +31,16 @@ The hard questions are answered and the backend works end-to-end in a real Pluto
 - [ ] **3D live-camera overlay**: `context` reuses `Makie.project` (correct for *static* 2D/3D).
       Interactive 3D pan/zoom changes the projection at runtime → the overlay must read WGLMakie's
       client-side camera (`project`/`pick`). Static 3D renders today; the live-camera overlay is the gap.
-- [ ] **Version-coupling guard**: a smoke test that fails loudly when a WGLMakie bump changes
-      `serialize_scene`/`setup_scene_init` (the wire format is internal and unstable).
+- [x] **Version-coupling guard**: a smoke test that fails loudly when a WGLMakie bump changes
+      `serialize_scene`/`setup_scene_init` (the wire format is internal and unstable). *Done
+      (`test/runtests.jl` "version-coupling guard"): names each Julia internal the `scene_payload`
+      chain reaches (`Bonito.NoConnection`, `WGLMakie.{ScreenConfig,serialize_scene,Screen}` +
+      `screen.session`, `Makie.{merge_screen_config,push_screen!,delete_screen!}`), asserts the
+      serialized wire shape (scene nesting + per-plot `uuid` for tier-2 `find_plots`), and greps the
+      vendored bundle for the JS exports the shim calls (`setup_scene_init`, `find_plots`) — the one
+      coupling no other test covers. Wired into CI (`.github/workflows/CI.yml` `holowgl` job, Julia
+      1.12) so the whole HoloWGL suite — not just this guard — gates on every PR; previously the
+      subpackage ran only manually (gap inherited from #12).*
 - [ ] **`@bind` test in CI**: the live click test is manual; script it (headless Pluto + Playwright).
 
 ## M2 — Delivery & performance
