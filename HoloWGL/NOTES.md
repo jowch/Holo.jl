@@ -9,7 +9,7 @@ WGLMakie/Bonito out of Holo core's deps. Implements Holo's backend seam
 - `scene_payload(fig)` — NoConnection Session+Screen so the glyph atlas (markers/text) populates.
 - `WebGLBackend <: AbstractBackend`, `mount → :webgl`, `render → WebGLResult`, `context`
   reusing the CairoBackend projection (measured 1–2px aligned on the WGLMakie canvas).
-- `assets/holo-webgl.js` — the ~30-line shim + `mountWebGL(...)`. Imports WGLMakie's own
+- `assets/holo-webgl.js` — the hand-authored Bonito shim + `mountWebGL(...)`. Imports WGLMakie's own
   `WGLMakie.bundled.js` (sourced at runtime from the installed package → always version-matched).
 
 ## Widget integration — DONE additively (Holo core untouched)
