@@ -71,6 +71,44 @@ jobs:
       - name: Verify browser-emitted value through transform_value
         run: julia --project=HoloWGL HoloWGL/test/e2e/verify_capture.jl "$RUNNER_TEMP/e2e"
 
+  holowgl-bind-e2e:
+    # THROUGH-Pluto @bind E2E: a live headless Pluto kernel + real Chromium. Clicking a marker
+    # round-trips the bond THROUGH Pluto (bond transport + reactive re-run) — the mile the static
+    # E2E in the `holowgl` job skips. Isolated as its own job (heaviest, and the one most exposed
+    # to Pluto-version churn) so it reads cleanly and is trivial to drop if it ever proves flaky.
+    name: HoloWGL @bind E2E (Pluto)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.12'
+      - uses: julia-actions/cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Playwright + Chromium
+        working-directory: HoloWGL/test/e2e
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+      - name: Through-Pluto @bind round-trip
+        working-directory: HoloWGL/test/e2e
+        run: |
+          julia serve.jl 1234 > pluto.log 2>&1 &
+          SERVER=$!
+          # Readiness: poll the port (Pluto doesn't reliably flush its banner to the log).
+          for i in $(seq 1 120); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:1234 || echo 000)
+            [ "$code" = "200" ] && break
+            sleep 2
+          done
+          node bind_click.mjs http://localhost:1234 "$GITHUB_WORKSPACE/HoloWGL/test/e2e/bind_notebook.jl"
+          STATUS=$?
+          kill $SERVER 2>/dev/null || true
+          exit $STATUS
+
   examples:
     name: Example notebooks
     runs-on: ubuntu-latest
