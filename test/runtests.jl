@@ -651,7 +651,7 @@ end
         pi = PolygonInteractable(ax, p; id = :violin)
         @test length(pi.rings) == 3                        # one ring per violin
         @test length(pi.payloads) == 3
-        @test [round(pl.x) for pl in pi.payloads] == [1.0, 2.0, 3.0]   # category positions
+        @test [pl.x for pl in pi.payloads] == [1.0, 2.0, 3.0]   # exact clean categories from converted (no Float32 noise)
         @test all(pl.x isa Float64 for pl in pi.payloads)
         @test !haskey(pairs(pi.payloads[1]), :index)
         ints = auto_interactables(fig)

@@ -136,10 +136,16 @@ end
 # ---- Violin -> PolygonInteractable ----
 # Makie lays out one closed ring per violin on a child Poly (KDE already run). The ring's x-extent
 # is centered on the violin's category position → payload (; x). One element per violin.
-function _violin_payloads(rings)
+# Payload (; x) = the violin's category position. Read the CLEAN category value from Makie's
+# converted category data; use each ring's geometry-center only to pick WHICH category it is
+# (snap to nearest). Avoids Float32 projection noise and is robust to half-violin (side=:left/:right)
+# offset and ring ordering — geometry locates the ring, converted supplies the exact value.
+function _violin_payloads(p, rings)
+    cats = sort(unique(Float64.(_conv(p)[1])))
     return Any[
         let xs = [Float64(pt[1]) for pt in ring]
-                (; x = (minimum(xs) + maximum(xs)) / 2)
+                ctr = (minimum(xs) + maximum(xs)) / 2
+                (; x = cats[argmin(abs.(cats .- ctr))])
         end
             for ring in rings
     ]
@@ -147,7 +153,7 @@ end
 function PolygonInteractable(ax, p::Makie.Violin; id = :violin, payloads = nothing)
     poly = _childof(p, Makie.Poly)
     rings = _conv(poly)[1]                              # Vector{Vector{Point}}, one ring per violin
-    pl = payloads === nothing ? _violin_payloads(rings) : payloads
+    pl = payloads === nothing ? _violin_payloads(p, rings) : payloads
     return PolygonInteractable(ax, rings; id, payloads = pl)
 end
 
@@ -170,7 +176,8 @@ end
 function _boxplot_stats_node(p)
     cv = try
         _conv(p)
-    catch
+    catch e
+        e isa InterruptException && rethrow()
         nothing
     end
     if cv isa Tuple && length(cv) == 4 && all(x -> x isa AbstractVector && eltype(x) <: Real, cv) &&
@@ -180,7 +187,8 @@ function _boxplot_stats_node(p)
     for c in p.plots
         r = try
             _boxplot_stats_node(c)
-        catch
+        catch e
+            e isa InterruptException && rethrow()
             nothing
         end
         r !== nothing && return r
