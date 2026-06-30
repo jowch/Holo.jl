@@ -38,7 +38,9 @@ The hard questions are answered and the backend works end-to-end in a real Pluto
       `screen.session`, `Makie.{merge_screen_config,push_screen!,delete_screen!}`), asserts the
       serialized wire shape (scene nesting + per-plot `uuid` for tier-2 `find_plots`), and greps the
       vendored bundle for the JS exports the shim calls (`setup_scene_init`, `find_plots`) — the one
-      coupling no other test covers.*
+      coupling no other test covers. Wired into CI (`.github/workflows/CI.yml` `holowgl` job, Julia
+      1.12) so the whole HoloWGL suite — not just this guard — gates on every PR; previously the
+      subpackage ran only manually (gap inherited from #12).*
 - [ ] **`@bind` test in CI**: the live click test is manual; script it (headless Pluto + Playwright).
 
 ## M2 — Delivery & performance

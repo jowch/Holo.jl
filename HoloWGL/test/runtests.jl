@@ -116,7 +116,7 @@ end
 
 @testset "version-coupling guard (WGLMakie/Bonito internals)" begin
     # HoloWGL rides UNSTABLE WGLMakie/Bonito internals: the session-free `serialize_scene`, the
-    # `Screen` + `NoConnection` atlas-population dance (HoloWGL.jl:81), and the JS bundle's
+    # `Screen` + `NoConnection` atlas-population dance (HoloWGL.jl:83-91), and the JS bundle's
     # `setup_scene_init` export the shim calls (assets/holo-webgl.js:55). A WGLMakie bump can move
     # any of these and break the widget IN THE BROWSER with no Julia error — the other testsets
     # would still pass. Each check below names one coupling point so a bump fails loudly *here*,
@@ -148,6 +148,8 @@ end
 
     # The vendored JS bundle still EXPORTS the symbols the shim calls (assets/holo-webgl.js):
     bundle = read(HoloWGL.wglmakie_bundle_path(), String)
-    @test occursin("setup_scene_init", bundle)   # WGL.setup_scene_init(...) — mount entry point
-    @test occursin("find_plots", bundle)          # WGL.find_plots([uuid]) — tier-2 data animation
+    @test occursin("setup_scene_init", bundle)   # WGL.setup_scene_init(...) — LIVE mount call (shim:55)
+    # find_plots: forward-looking. The shim only names it in a comment today (the tier-2 plan,
+    # shim:69) — this guards the bundle export so it's still there when tier-2 animation is wired.
+    @test occursin("find_plots", bundle)
 end

@@ -30,6 +30,25 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
 
+  holowgl:
+    # The :webgl subpackage isn't covered by the root `julia` job (julia-runtest tests Holo
+    # only). Run its suite — incl. the WGLMakie/Bonito version-coupling guard — so a dependency
+    # bump that moves the wire format fails the gate here instead of only on a manual local run.
+    # Pinned to 1.12 (HoloWGL's compat floor + the [sources] Holo path-dep needs Julia >= 1.11),
+    # so it's deliberately outside the root 1.10/1 matrix.
+    name: HoloWGL (Julia 1.12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.12'
+      - uses: julia-actions/cache@v2
+      - name: Instantiate + test HoloWGL
+        run: |
+          julia --project=HoloWGL -e 'using Pkg; Pkg.instantiate()'
+          julia --project=HoloWGL HoloWGL/test/runtests.jl
+
   examples:
     name: Example notebooks
     runs-on: ubuntu-latest
