@@ -576,6 +576,24 @@ end
         @test haskey(pairs(ri2.payloads[1]), :value)                   # shared bar schema
     end
 
+    @testset "CrossBar extraction" begin
+        using Holo: RectInteractable, auto_interactables
+        fig = Figure(); ax = Axis(fig[1, 1])
+        crossbar!(ax, [1, 2], [5.0, 6.0], [3.0, 4.0], [7.0, 8.0])
+        Makie.update_state_before_display!(fig)
+        p = ax.scene.plots[1]
+        ri = RectInteractable(ax, p; id = :crossbar)
+        @test length(ri.payloads) == 2
+        @test ri.payloads[1] == (; midpoint = 5.0, low = 3.0, high = 7.0)
+        @test ri.payloads[2] == (; midpoint = 6.0, low = 4.0, high = 8.0)
+        @test !haskey(pairs(ri.payloads[1]), :index)
+        # auto path: _plotbase returns :crossbar, _construct returns RectInteractable
+        _, _, c = ctx_for(fig)
+        ints = auto_interactables(fig)
+        @test length(ints) == 1 && ints[1] isa RectInteractable
+        @test only(hitlayers(ints[1], c)).id === :crossbar
+    end
+
     @testset "markup parse + validation" begin
         m = holo"<b>$(name)</b> — $(pop:,) people ($(share:.1%))"
         @test m isa Holo.Markup
