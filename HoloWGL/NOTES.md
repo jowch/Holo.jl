@@ -75,10 +75,11 @@ blobs — the exact mechanism `published_to_js` uses) rendering in a headless br
    tier-2 in-place are the only per-frame levers left.
 4. **Payload slimming** — MEASURED → deferred. The real per-cell wire is already 0.07–0.14 MB
    binary, not the 0.3–0.6 MB the JSON proxy implied: Pluto's MsgPack binary-packs our typed buffers
-   (`Vector{Float32}` etc.) for free. gzip-of-binary would cut another ~3× but needs a JS msgpack
-   decoder (the cheap gzip-of-JSON path buys only ~25%); the atlas glyph-tiles repeat across scenes
-   (shareable) but are small and gzip overlaps. Both deferred until tier-1 animation profiling shows
-   the scene is the bottleneck. See roadmap.md M2.
+   (`Vector{Float32}` etc.) for free. The bench's `gzip-bin` column shows gzip-of-binary cuts another
+   ~3× but needs a JS msgpack decoder (the cheap gzip-of-JSON path, `gzip-json` column, buys only
+   ~25%); the atlas glyph-tiles are observed to repeat across scenes (shareable) but are small and
+   gzip overlaps. Both deferred until tier-1 animation profiling shows the scene is the bottleneck.
+   See docs/roadmap.md M2.
 5. **Build pipeline** — `assets/holo-webgl.js` is hand-authored now; wire it into the
    esbuild pipeline alongside `overlay.js` if it grows.
 

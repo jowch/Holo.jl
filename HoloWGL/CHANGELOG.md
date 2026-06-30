@@ -40,10 +40,11 @@ versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 - **Payload envelope corrected; scene slimming measured → deferred (M2).** The bench reported
   `JSON3.write` size, but `published_to_js` ships the scene over Pluto's MsgPack, which binary-packs
   our typed `Vector`s (`Float32`/`Int32`/`UInt32`/`UInt8`) — so the real per-cell wire is **0.07–0.14
-  MB**, ~4–5× under the JSON proxy. The bench now reports both. Compression was measured and deferred:
-  gzip-of-binary cuts ~3× more but needs a JS msgpack decoder (gzip-of-JSON, the cheap path, buys only
-  ~25%), and the atlas glyph-tiles repeat across scenes (shareable) but are small and gzip overlaps —
-  revisit only if tier-1 animation profiling shows the scene is the bottleneck.
+  MB**, ~4–5× under the JSON proxy. The bench now reports both, plus two `gzip` columns. Compression
+  was measured and deferred: gzip-of-binary (the bench's `gzip-bin` column) cuts ~3× more but needs a
+  JS msgpack decoder (gzip-of-JSON, the cheap path, buys only ~25%), and the atlas glyph-tiles are
+  observed to repeat across scenes (shareable) but are small and gzip overlaps — revisit only if
+  tier-1 animation profiling shows the scene is the bottleneck.
 
 ### Fixed (caught by live-Pluto verification, masked by headless/JSON3 testing)
 - `published_to_js` rejected `GeometryBasics.Vec` / `SizedVector` left in the payload —

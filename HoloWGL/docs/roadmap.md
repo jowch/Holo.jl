@@ -101,18 +101,18 @@ so sharing it was the slimming target:
       scene itself (msgpack/gzip below, or tier-2 in-place patching that ships no new scene at all).
 - [x] **Payload slimming**: *measured → deferred (not worth the complexity now).* Re-measuring at
       the real wire encoding (above) showed the per-cell scene is already **0.07–0.14 MB binary**, not
-      the 0.3–0.6 MB the JSON proxy implied — an order of magnitude below the (now-shared) bundle,
-      because Pluto's MsgPack already binary-packs our typed buffers for free. Two compression levers
-      were measured and both deferred: (1) **gzip** — gzip-of-binary cuts another ~3× (0.07→0.02 MB),
-      but to get it we'd have to bypass `published_to_js`'s object channel and hand-roll a **msgpack
-      decoder in JS** (the cheap path — gzip-of-JSON via `DecompressionStream` — buys only ~25%, since
-      it starts from float-text); not worth a new JS decoder + failure surface for ~0.05 MB/cell yet.
-      (2) **Atlas sharing** — the glyph-atlas tiles (`glyph_data/atlas_updates/<hash>`) carry content
-      hashes that **repeat across scenes** (the digit/label tiles recur in all three bench figures), so
-      they're shareable like the bundle; but each is ~10–20 KB, gzip overlaps the win, and hoisting
-      them to a shared channel is real complexity. **Revisit both only if tier-1 animation profiling
-      (per-frame scene re-ship) shows the scene is the bottleneck** — tier-2 in-place patching already
-      ships no new scene at all.
+      the 0.3–0.6 MB the JSON proxy implied — **≈8–16× below** the (now-shared) 1.09 MB bundle, because
+      Pluto's MsgPack already binary-packs our typed buffers for free. Two compression levers, both
+      deferred: (1) **gzip** — the bench's `gzip-bin` column measures gzip-of-binary at **~3×**
+      (0.07→0.02 MB), but to use it we'd have to bypass `published_to_js`'s object channel and hand-roll
+      a **msgpack decoder in JS** (the cheap path — gzip-of-JSON via `DecompressionStream`, the bench's
+      `gzip-json` column — buys only ~25%, since it starts from float-text); not worth a new JS decoder
+      + failure surface for ~0.05 MB/cell yet. (2) **Atlas sharing** — the glyph-atlas tiles
+      (`glyph_data/atlas_updates/<hash>`) carry content hashes **observed to repeat across scenes** (the
+      digit/label tiles recur in all three bench figures), so they're shareable like the bundle; but
+      each is ~10–20 KB, gzip overlaps the win, and hoisting them to a shared channel is real
+      complexity. **Revisit both only if tier-1 animation profiling (per-frame scene re-ship) shows the
+      scene is the bottleneck** — tier-2 in-place patching already ships no new scene at all.
 - [ ] **Build pipeline**: move `assets/holo-webgl.js` into an esbuild build alongside Holo's
       `overlay.js` if/when the shim grows.
 
