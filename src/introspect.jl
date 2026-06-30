@@ -100,6 +100,15 @@ function PolygonInteractable(ax, p::Makie.Band; id = :band, payloads = nothing)
     return PolygonInteractable(ax, [_band_ring(lower, upper)]; id, payloads)
 end
 
+# ---- Density -> PolygonInteractable ----
+# density! renders its KDE fill as a descendant Band (Makie already ran the KDE at its own
+# bandwidth — read that band, don't recompute it). Reuse the Band ring builder.
+function PolygonInteractable(ax, p::Makie.Density; id = :density, payloads = nothing)
+    b = _descendant(p, Makie.Band)
+    lower, upper = _conv(b)
+    return PolygonInteractable(ax, [_band_ring(lower, upper)]; id, payloads)
+end
+
 # ====================== M3 cheap wins (same primitives) ======================
 # Each delegates to an existing explicit constructor; the only work is reading the right
 # laid-out geometry off the plot (or its children). No new types, no new manifest path.
@@ -109,6 +118,21 @@ _childof(p, T) = (
         c isa T && return c
     end; error("$(typeof(p).name.name): no $T child plot found (Makie internals changed?)")
 )
+
+# Recursive descendant search (whole subtree), fail-loud like _childof. Some recipes nest the
+# plot we need below a wrapper child (e.g. Density wraps a Band; Voronoiplot nests its Poly).
+_descendant_or_nothing(p, T) = p isa T ? p :
+    (
+        for c in p.plots
+            r = _descendant_or_nothing(c, T)
+            r !== nothing && return r
+    end; nothing
+    )
+function _descendant(p, T)
+    d = _descendant_or_nothing(p, T)
+    d === nothing && error("$(typeof(p).name.name): no $T descendant found (Makie internals changed?)")
+    return d
+end
 
 # ---- Stairs -> Segment(:polyline) ----
 # The parent `converted` is the raw input points; the rendered staircase (the actual click target)
@@ -308,6 +332,7 @@ function _plotbase(p)
     p isa Makie.HSpan && return :hspan
     p isa Makie.VSpan && return :vspan
     p isa Makie.Band && return :band
+    p isa Makie.Density && return :density
     p isa Makie.Stem && return :stem
     p isa Makie.ScatterLines && return :scatterlines
     return nothing
@@ -326,6 +351,7 @@ function _construct(ax, p, id)
     (p isa Makie.Hist || p isa Makie.Waterfall || p isa Makie.CrossBar) && return [RectInteractable(ax, p; id)]
     (p isa Makie.HSpan || p isa Makie.VSpan) && return [RectInteractable(ax, p; id)]
     p isa Makie.Band && return [PolygonInteractable(ax, p; id)]
+    p isa Makie.Density && return [PolygonInteractable(ax, p; id)]
     p isa Makie.Poly && return [PolygonInteractable(ax, p; id)]
     p isa Makie.Stem && return _stem_parts(ax, p, id)
     p isa Makie.ScatterLines && return _scatterlines_parts(ax, p, id)

@@ -628,6 +628,20 @@ end
         @test only(hitlayers(ints[1], c)).id === :band
     end
 
+    @testset "Density extraction" begin
+        using Holo: PolygonInteractable, auto_interactables
+        fig = Figure(); ax = Axis(fig[1, 1])
+        density!(ax, randn(300))
+        Makie.update_state_before_display!(fig)
+        p = ax.scene.plots[1]
+        pi = PolygonInteractable(ax, p; id = :density)
+        @test length(pi.rings) == 1                       # the KDE fill is one region
+        @test length(pi.rings[1]) > 50                    # dense outline (Makie's KDE band)
+        @test pi.payloads[1] == (; index = 0)
+        ints = auto_interactables(fig)
+        @test length(ints) == 1 && ints[1] isa PolygonInteractable
+    end
+
     @testset "markup parse + validation" begin
         m = holo"<b>$(name)</b> — $(pop:,) people ($(share:.1%))"
         @test m isa Holo.Markup
