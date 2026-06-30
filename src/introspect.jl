@@ -151,6 +151,16 @@ function PolygonInteractable(ax, p::Makie.Violin; id = :violin, payloads = nothi
     return PolygonInteractable(ax, rings; id, payloads = pl)
 end
 
+# ---- Voronoiplot -> PolygonInteractable ----
+# Makie tessellates and lays out one GB.Polygon per cell on a nested child Poly. Cells come back in
+# tessellation order, NOT input-site order, so there's no cheap cell→generator mapping → default
+# (; index) payload. ponytail: index-only; upgrade to (; x, y) via point-in-cell matching if needed.
+function PolygonInteractable(ax, p::Makie.Voronoiplot; id = :voronoiplot, payloads = nothing)
+    poly = _descendant(p, Makie.Poly)
+    rings = _poly_exterior_rings(_conv(poly)[1])
+    return PolygonInteractable(ax, rings; id, payloads)
+end
+
 # ====================== M3 cheap wins (same primitives) ======================
 # Each delegates to an existing explicit constructor; the only work is reading the right
 # laid-out geometry off the plot (or its children). No new types, no new manifest path.
@@ -377,6 +387,7 @@ function _plotbase(p)
     p isa Makie.Density && return :density
     p isa Makie.Contourf && return :contourf
     p isa Makie.Violin && return :violin
+    p isa Makie.Voronoiplot && return :voronoiplot
     p isa Makie.Stem && return :stem
     p isa Makie.ScatterLines && return :scatterlines
     return nothing
@@ -399,6 +410,7 @@ function _construct(ax, p, id)
     p isa Makie.Poly && return [PolygonInteractable(ax, p; id)]
     p isa Makie.Contourf && return [PolygonInteractable(ax, p; id)]
     p isa Makie.Violin && return [PolygonInteractable(ax, p; id)]
+    p isa Makie.Voronoiplot && return [PolygonInteractable(ax, p; id)]
     p isa Makie.Stem && return _stem_parts(ax, p, id)
     p isa Makie.ScatterLines && return _scatterlines_parts(ax, p, id)
     # unreachable while _plotbase gates callers; loud if the two ever drift (kind added to one, not the other)

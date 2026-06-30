@@ -658,6 +658,19 @@ end
         @test length(ints) == 1 && ints[1] isa PolygonInteractable
     end
 
+    @testset "Voronoiplot extraction" begin
+        using Holo: PolygonInteractable, auto_interactables
+        fig = Figure(); ax = Axis(fig[1, 1])
+        voronoiplot!(ax, [0.1, 0.4, 0.7, 0.3, 0.9, 0.5, 0.2, 0.8], [0.2, 0.6, 0.1, 0.9, 0.4, 0.5, 0.8, 0.3])
+        Makie.update_state_before_display!(fig)
+        p = ax.scene.plots[1]
+        pi = PolygonInteractable(ax, p; id = :voronoiplot)
+        @test length(pi.rings) == 8                        # one cell per generator site
+        @test pi.payloads == Any[(; index = k - 1) for k in 1:8]   # cell order ≠ site order → index only
+        ints = auto_interactables(fig)
+        @test length(ints) == 1 && ints[1] isa PolygonInteractable
+    end
+
     @testset "markup parse + validation" begin
         m = holo"<b>$(name)</b> — $(pop:,) people ($(share:.1%))"
         @test m isa Holo.Markup
