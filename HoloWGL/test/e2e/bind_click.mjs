@@ -22,38 +22,32 @@ try {
   await page.goto(`${base}/open?path=${encodeURIComponent(notebook)}`, { waitUntil: "domcontentloaded", timeout: 60000 });
   console.error("phase: notebook opened");
 
-  // Exit Pluto's safe preview so the kernel runs the cells. Poll for the button and click it
-  // (manual loops throughout — waitForFunction's explicit timeout is unreliable in this env,
-  // silently capping at its 30s default).
-  const clickRun = () => page.evaluate(() => {
-    const el = [...document.querySelectorAll("button, a")].find((b) => /run notebook code/i.test(b.innerText || b.title || ""));
-    if (!el) return false;
-    el.click();
-    return true;
-  });
-  const btnDeadline = Date.now() + 90000;
-  let clicked = false;
-  while (Date.now() < btnDeadline) {
-    if (await clickRun()) { clicked = true; break; }
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  if (!clicked) throw new Error("safe-preview 'Run notebook code' button never appeared");
-  console.error("phase: clicked Run notebook code — waiting for cells (cold precompile: minutes)");
-
-  // Cells run — the env cell devs Holo+HoloWGL and precompiles the Makie/WGLMakie stack (cold:
-  // minutes). Manual poll loop (waitForFunction silently caps at its 30s default here). Ready =
-  // widget mounted, readout present, nothing running/errored.
-  const deadline = Date.now() + 600000;
-  let ready = false;
+  // One poll loop drives both: exit safe preview AND wait for the widget. Click "Run notebook
+  // code" WHENEVER it appears (best-effort — Pluto may render the toolbar slowly, or auto-run
+  // with no button at all), and finish as soon as the widget + readout are present. Manual loop
+  // throughout: waitForFunction's explicit timeout is unreliable in this env (silently caps at
+  // its 30s default), and a hard "button must appear" gate is exactly what broke CI.
+  const deadline = Date.now() + 600000;   // cold: env cell devs Holo+HoloWGL + precompiles Makie/WGLMakie
+  let ready = false, ranClicked = false;
   while (Date.now() < deadline) {
-    const st = await page.evaluate(() => ({
-      busy: document.querySelectorAll("pluto-cell.running, pluto-cell.queued").length,
-      errored: document.querySelectorAll("pluto-cell.errored").length,
-      host: !!document.querySelector(".ip-host"),
-      bondout: !!document.querySelector("#bondout"),
-    }));
+    const st = await page.evaluate(() => {
+      const runBtn = [...document.querySelectorAll("button, a")].find((b) => /run notebook code/i.test(b.innerText || b.title || ""));
+      if (runBtn) runBtn.click();
+      // overlay fully mounted = its shadow `.surface` exists (guards against clicking mid-mount)
+      const host = document.querySelector(".ip-host");
+      let surface = false;
+      if (host) { let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; }); surface = !!(sr && sr.querySelector(".surface")); }
+      return {
+        clickedRun: !!runBtn,
+        busy: document.querySelectorAll("pluto-cell.running, pluto-cell.queued").length,
+        errored: document.querySelectorAll("pluto-cell.errored").length,
+        surface,
+        bondout: !!document.querySelector("#bondout"),
+      };
+    });
+    if (st.clickedRun && !ranClicked) { ranClicked = true; console.error("phase: exited safe preview (Run notebook code)"); }
     if (st.errored) throw new Error(`notebook has ${st.errored} errored cell(s)`);
-    if (!st.busy && st.host && st.bondout) { ready = true; break; }
+    if (!st.busy && st.surface && st.bondout) { ready = true; break; }
     await new Promise((r) => setTimeout(r, 1000));
   }
   if (!ready) throw new Error("timed out waiting for cells to finish / widget to mount");
