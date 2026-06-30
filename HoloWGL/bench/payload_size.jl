@@ -11,12 +11,14 @@
 using HoloWGL
 import JSON3
 
-println("WGLMakie bundle (shipped once per widget): ",
-    round(filesize(HoloWGL.wglmakie_bundle_path()) / 1e6; digits = 2), " MB")
+println(
+    "WGLMakie bundle (shipped once per widget): ",
+    round(filesize(HoloWGL.wglmakie_bundle_path()) / 1.0e6; digits = 2), " MB"
+)
 
 function payload_mb(fig)
     Makie.update_state_before_display!(fig)
-    return length(JSON3.write(HoloWGL.scene_payload(fig))) / 1e6
+    return length(JSON3.write(HoloWGL.scene_payload(fig))) / 1.0e6
 end
 
 cases = [
