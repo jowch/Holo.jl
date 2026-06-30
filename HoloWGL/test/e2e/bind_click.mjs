@@ -16,7 +16,10 @@ if (!base || !notebook) { console.error("usage: node bind_click.mjs <base-url> <
 const browser = await chromium.launch({ headless: true });
 let failed = null;
 try {
-  const page = await browser.newPage();
+  // Explicit locale/timezone: GitHub runners have a minimal locale, so Pluto's frontend hits
+  // "Incorrect locale information provided" from a V8 Intl call and never bootstraps (blank page).
+  const context = await browser.newContext({ locale: "en-US", timezoneId: "UTC" });
+  const page = await context.newPage();
   // Surface browser-side failures (e.g. a WebSocket that can't reach the kernel) in the CI log.
   page.on("pageerror", (e) => console.error("PAGEERROR:", e.message));
   page.on("requestfailed", (r) => console.error("REQFAIL:", r.url(), r.failure()?.errorText));
