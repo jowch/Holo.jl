@@ -957,6 +957,41 @@ end
         @test length(ints) == 1 && ints[1] isa PolygonInteractable
     end
 
+    @testset "BoxPlot extraction" begin
+        using Holo: RectInteractable, PolygonInteractable, auto_interactables
+        import Statistics
+        cats = repeat([1, 2], inner = 120)
+        vals = [randn(120) .- 1; randn(120) .+ 2]
+
+        # notch off → RectInteractable; stats payload matches Statistics.quantile exactly
+        fig = Figure(); ax = Axis(fig[1, 1])
+        boxplot!(ax, cats, vals); Makie.update_state_before_display!(fig)
+        bi = Holo._boxplot_interactable(ax, ax.scene.plots[1]; id = :boxplot)
+        @test bi isa RectInteractable
+        @test length(bi.payloads) == 2
+        @test all(pl.q1 isa Float64 && pl.median isa Float64 && pl.q3 isa Float64 for pl in bi.payloads)
+        @test all(pl.q1 < pl.median < pl.q3 for pl in bi.payloads)
+        for g in (1, 2)
+            q = Statistics.quantile(vals[cats .== g], [0.25, 0.5, 0.75])
+            @test bi.payloads[g].q1 ≈ q[1]
+            @test bi.payloads[g].median ≈ q[2]
+            @test bi.payloads[g].q3 ≈ q[3]
+        end
+        @test !haskey(pairs(bi.payloads[1]), :index)
+        @test any(i -> i isa RectInteractable, auto_interactables(fig))
+
+        # notch on → PolygonInteractable; same stats payload
+        fig2 = Figure(); ax2 = Axis(fig2[1, 1])
+        boxplot!(ax2, cats, vals; show_notch = true); Makie.update_state_before_display!(fig2)
+        bi2 = Holo._boxplot_interactable(ax2, ax2.scene.plots[1]; id = :boxplot)
+        @test bi2 isa PolygonInteractable
+        @test length(bi2.payloads) == 2
+        @test all(haskey(pairs(pl), :median) for pl in bi2.payloads)
+
+        # fail-loud when the stats node is absent (pass a leaf child that has a 1-tuple converted, not the 4-tuple stats node)
+        @test_throws ErrorException Holo._boxplot_stats_node(ax.scene.plots[1].plots[1])
+    end
+
     @testset "holo(fig) auto-extracts spans bounded to viewport" begin
         # End-to-end guard: calling holo(fig) (the AUTO path, no manual update_state_before_display!)
         # on a 2-axis figure with a vspan must succeed and produce a layer whose pixel rect is

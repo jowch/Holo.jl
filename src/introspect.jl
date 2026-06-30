@@ -161,6 +161,52 @@ function PolygonInteractable(ax, p::Makie.Voronoiplot; id = :voronoiplot, payloa
     return PolygonInteractable(ax, rings; id, payloads)
 end
 
+# ---- BoxPlot (box body only) -> Rect (un-notched) / Polygon (notched) ----
+# Geometry comes from the box Poly (a HyperRectangle per box, or an 11-pt notched ring per box).
+# Stats come from Makie's COMPUTED-STATS node — the node whose converted is a 4-tuple
+# (centers, medians, q1s, q3s); these equal Statistics.quantile(group, [.5,.25,.75]) exactly, i.e.
+# the numbers Makie drew the box and median line from. Read them; don't recompute or read the
+# median LineSegments. Whiskers/caps/outliers are decorative (not hit-tested) in this arc.
+function _boxplot_stats_node(p)
+    cv = try
+        _conv(p)
+    catch
+        nothing
+    end
+    if cv isa Tuple && length(cv) == 4 && all(x -> x isa AbstractVector && eltype(x) <: Real, cv) &&
+            length(cv[1]) == length(cv[2]) == length(cv[3]) == length(cv[4])
+        return p
+    end
+    for c in p.plots
+        r = try
+            _boxplot_stats_node(c)
+        catch
+            nothing
+        end
+        r !== nothing && return r
+    end
+    return error("BoxPlot introspection: computed-stats node (4-tuple of equal-length numeric vectors) not found (Makie internals changed?)")
+end
+function _boxplot_payloads(statscv)
+    _centers, medians, q1s, q3s = statscv
+    return Any[
+        (; q1 = Float64(q1s[k]), median = Float64(medians[k]), q3 = Float64(q3s[k]))
+            for k in eachindex(medians)
+    ]
+end
+function _boxplot_interactable(ax, p; id = :boxplot, payloads = nothing)
+    node = _boxplot_stats_node(p)
+    boxpoly = _childof(node, Makie.Poly)
+    geom = _conv(boxpoly)[1]
+    pl = payloads === nothing ? _boxplot_payloads(_conv(node)) : payloads
+    if eltype(geom) <: _GB.HyperRectangle
+        rects = [(r.origin[1] + r.widths[1] / 2, r.origin[2] + r.widths[2] / 2, r.widths[1], r.widths[2]) for r in geom]
+        return RectInteractable(ax; rects, id, payloads = pl)
+    else
+        return PolygonInteractable(ax, geom; id, payloads = pl)   # notched: Vector{Vector{Point}}
+    end
+end
+
 # ====================== M3 cheap wins (same primitives) ======================
 # Each delegates to an existing explicit constructor; the only work is reading the right
 # laid-out geometry off the plot (or its children). No new types, no new manifest path.
@@ -390,6 +436,7 @@ function _plotbase(p)
     p isa Makie.Voronoiplot && return :voronoiplot
     p isa Makie.Stem && return :stem
     p isa Makie.ScatterLines && return :scatterlines
+    p isa Makie.BoxPlot && return :boxplot
     return nothing
 end
 
@@ -413,6 +460,7 @@ function _construct(ax, p, id)
     p isa Makie.Voronoiplot && return [PolygonInteractable(ax, p; id)]
     p isa Makie.Stem && return _stem_parts(ax, p, id)
     p isa Makie.ScatterLines && return _scatterlines_parts(ax, p, id)
+    p isa Makie.BoxPlot && return [_boxplot_interactable(ax, p; id)]
     # unreachable while _plotbase gates callers; loud if the two ever drift (kind added to one, not the other)
     return error("auto_interactables: $(typeof(p).name.name) passed _plotbase but has no _construct branch")
 end
