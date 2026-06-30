@@ -24,6 +24,10 @@ versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 - `@reexport using WGLMakie` so `using HoloWGL` provides the full Makie plotting API plus
   `holo_webgl` (no separate `using WGLMakie`, no `Figure` ambiguity).
 - MIT `LICENSE`, `README.md`, `docs/roadmap.md`, `NOTES.md`, and a smoke-test suite.
+- `docs/perf-findings.md` — the single source of every `:webgl` size number (bundle, per-cell scene,
+  gzip headroom, wire-vs-JSON-proxy); `roadmap.md`/`NOTES.md`/the bench now cite it instead of
+  restating the envelope (mirrors root Holo's `docs/perf-findings.md`; avoids the cross-file drift
+  root CLAUDE.md flags).
 
 ### Performance
 - **Bundle shared once per notebook (M2).** The ~1.09 MB WGLMakie bundle no longer costs per
