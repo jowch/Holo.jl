@@ -624,6 +624,8 @@ end
         ints = auto_interactables(fig)
         @test length(ints) == 1
         @test ints[1] isa PolygonInteractable
+        _, _, c = ctx_for(fig)
+        @test only(hitlayers(ints[1], c)).id === :band
     end
 
     @testset "markup parse + validation" begin

@@ -93,6 +93,7 @@ end
 # A band is one filled region between a lower and an upper curve. converted[] = (lower, upper),
 # each a Vector{Point} over the same x. The ring is the lower curve followed by the reversed
 # upper curve (so the boundary closes). Vertices live directly in data space — no solver replay.
+# Open ring (last vertex ≠ first); the :polygons even-odd hit-test closes it implicitly.
 _band_ring(lower, upper) = vcat(collect(lower), reverse(collect(upper)))
 function PolygonInteractable(ax, p::Makie.Band; id = :band, payloads = nothing)
     lower, upper = _conv(p)
