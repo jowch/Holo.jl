@@ -47,8 +47,10 @@ interface Mounted {
 export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: Promise<unknown>): Mounted {
     const host = scriptEl.parentElement as HTMLElement | null
     // Base-agnostic: an <img> (CairoBackend PNG) or a <canvas> (WebGLBackend). We only need its
-    // on-screen rect; the image-px scale comes from manifest.width (design.md §6 "renderWidth"),
-    // not the element's intrinsic size — so a <canvas> needs no sizer shim.
+    // on-screen rect; the image-px scale comes from manifest.width (design.md §6), not the
+    // element's intrinsic size — so a <canvas> needs no sizer shim. Invariant: the host holds
+    // exactly one base element (Cairo emits one <img>, WGL one <canvas>); if both were ever
+    // present, document order would pick the first.
     const base = host?.querySelector("img, canvas") as HTMLElement | null
     const noop: Mounted = { cleanup: () => {} }
     if (!host || !base) return noop
