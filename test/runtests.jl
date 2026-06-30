@@ -570,20 +570,26 @@ end
         hp = ax.scene.plots[1]
         ri = RectInteractable(ax, hp; id = :hist)
         @test length(ri.payloads) == 3
-        @test sum(p.count for p in ri.payloads) == length(data)        # counts sum to N
+        @test sum(p.value for p in ri.payloads) == length(data)        # values sum to N (default normalization=:none)
         @test all(p.low < p.high for p in ri.payloads)                 # bin edges ordered
         @test !haskey(pairs(ri.payloads[1]), :index)
+        @test !haskey(pairs(ri.payloads[1]), :count)                   # field is :value, not :count
         # auto path picks it up as :hist
         ints = auto_interactables(fig)
         @test any(i -> i isa RectInteractable, ints)
 
-        # Waterfall: shared bar schema
+        # Waterfall: signed delta — value must reflect direction (Fix 2)
         fig2 = Figure(); ax2 = Axis(fig2[1, 1])
         waterfall!(ax2, [1, 2, 3], [2.0, -1.0, 3.0])
         Makie.update_state_before_display!(fig2)
         ri2 = RectInteractable(ax2, ax2.scene.plots[1]; id = :waterfall)
         @test length(ri2.payloads) == 3
         @test haskey(pairs(ri2.payloads[1]), :value)                   # shared bar schema
+        @test ri2.payloads[1].value == 2.0                             # up-step: positive
+        @test ri2.payloads[2].value == -1.0                            # down-step: negative (signed delta)
+        @test ri2.payloads[3].value == 3.0                             # up-step: positive
+        # |value| ≈ bar height (low..high span)
+        @test abs(ri2.payloads[2].value) ≈ ri2.payloads[2].high - ri2.payloads[2].low
     end
 
     @testset "CrossBar extraction" begin
@@ -854,5 +860,46 @@ end
         @test_throws ArgumentError PolygonInteractable(ax, [ring]; payloads = [(; a = 1), (; a = 2)])      # too long
         @test_throws ArgumentError PolygonInteractable(ax, [ring, ring]; payloads = [(; a = 1)])          # too short: 2 rings, 1 payload
         @test PolygonInteractable(ax, [ring]; payloads = [(; a = 1)]) isa PolygonInteractable             # exact
+    end
+
+    @testset "clamp path is non-finite-safe" begin
+        # A RectInteractable with clamp_to_viewport=true whose projected rect is non-finite
+        # must NOT throw — it must fall back to the _q path instead of passing NaN/Inf to
+        # ceil/floor (which throw). Deterministic repro: a rect whose center is NaN.
+        using Holo: RectInteractable
+        fig = Figure(size = (500, 350)); ax = Axis(fig[1, 1])
+        scatter!(ax, [1.0], [1.0])   # force a layout so viewport is non-empty
+        _, _, ctx = ctx_for(fig)
+        # Inject a rect with a NaN center directly (clamp_to_viewport=true, so the clamp path
+        # would be taken — the fix makes it fall back to _q instead).
+        ri = RectInteractable(ax; rects = [(NaN, 0.0, 1.0, 1.0)], clamp_to_viewport = true)
+        @test_nowarn hitlayers(ri, ctx)   # must not throw
+        L = only(hitlayers(ri, ctx))
+        @test !isfinite(L.geometry[1])    # NaN center passes through as Float32(NaN) via _q
+    end
+
+    @testset "holo(fig) auto-extracts spans bounded to viewport" begin
+        # End-to-end guard: calling holo(fig) (the AUTO path, no manual update_state_before_display!)
+        # on a 2-axis figure with a vspan must succeed and produce a layer whose pixel rect is
+        # bounded within the owning axis's viewport.
+        # Note: the viewport clamp masks finallimits-staleness, so this test guards the full
+        # pipeline end-to-end but cannot isolate the update_state_before_display! ordering
+        # line specifically — that's expected.
+        fig = Figure(size = (700, 400))
+        ax1 = Axis(fig[1, 1]); scatter!(ax1, [1.0, 2.0, 3.0], [1.0, 2.0, 3.0])
+        ax2 = Axis(fig[1, 2])
+        vspan!(ax2, [1.0], [2.0])
+        # AUTO path: holo(fig) calls update_state_before_display! internally
+        w = holo(fig)
+        vspan_layer = only(filter(L -> L["id"] == "vspan", w.manifest["layers"]))
+        ax_id = vspan_layer["axis"]                          # e.g. "ax2"
+        vp = w.manifest["transforms"][ax_id]["viewport"]    # [vp_x, vp_y, vp_w, vp_h] in image-px
+        vp_x, vp_y, vp_w, vp_h = vp[1], vp[2], vp[3], vp[4]
+        geom = vspan_layer["geometry"]                       # flat [cx, cy, w, h] for the one span
+        cx_px, cy_px, w_px, h_px = geom[1], geom[2], geom[3], geom[4]
+        @test isfinite(cx_px) && isfinite(cy_px)            # layer is present and projected
+        @test w_px > 0 && h_px > 0                          # has nonzero size
+        @test cx_px - w_px / 2 >= vp_x                     # left edge within viewport
+        @test cx_px + w_px / 2 <= vp_x + vp_w             # right edge within viewport
     end
 end

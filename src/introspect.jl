@@ -173,17 +173,28 @@ RectInteractable(ax, p::Makie.Spy; id = :spy, payloads = nothing) =
     RectInteractable(ax; rects = _spy_rects(p), id, payloads)
 
 # ---- Hist / Waterfall -> RectInteractable(:list) (child BarPlot carries laid-out bars) ----
-# Hist: bar height = bin count; bin range = category-axis extent (cx ± w/2 for vertical).
-# Waterfall: reuses _bar_payloads (low, high, value) from the shared bar schema.
+# Hist: bar height = bin value (height = bin count only for default normalization=:none;
+# with :pdf/:density/:probability the height is a density/fraction — so we call it `value`).
+# Bin range = category-axis extent (cx ± w/2 for vertical).
+# Waterfall: signed delta read from p.converted[][1] (Vector{Point2}, element k = (x_k, delta_k)).
 function _hist_payloads(rects, direction)
     vert = direction === :y
     return Any[
         let (cx, cy, w, h) = r
-                cnt = vert ? h : w                                                  # bar height = bin count
+                cnt = vert ? h : w                                                  # bar height = bin value
                 lo, hi = vert ? (cx - w / 2, cx + w / 2) : (cy - h / 2, cy + h / 2)  # category axis = bin range
-                (; count = Float64(cnt), low = Float64(lo), high = Float64(hi))
+                (; value = Float64(cnt), low = Float64(lo), high = Float64(hi))
         end
             for r in rects
+    ]
+end
+function _waterfall_payloads(p, rects)
+    deltas = p.converted[][1]                      # Point2 per bar: (x, signed delta)
+    return Any[
+        let (cx, cy, w, h) = rects[k]
+                (; low = Float64(cy - h / 2), high = Float64(cy + h / 2), value = Float64(deltas[k][2]))
+        end
+            for k in eachindex(rects)
     ]
 end
 function RectInteractable(ax, p::Makie.Hist; id = :hist, payloads = nothing)
@@ -195,7 +206,7 @@ end
 function RectInteractable(ax, p::Makie.Waterfall; id = :waterfall, payloads = nothing)
     bar = _childof(p, Makie.BarPlot)
     rs = _bar_rects(bar)
-    pl = payloads === nothing ? _bar_payloads(rs, bar.direction[]) : payloads
+    pl = payloads === nothing ? _waterfall_payloads(p, rs) : payloads
     return RectInteractable(ax; rects = rs, id, payloads = pl)
 end
 

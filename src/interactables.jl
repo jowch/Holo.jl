@@ -145,12 +145,14 @@ function hitlayers(i::RectInteractable, ctx)
             a = _proj(ctx, i.ax, (xc - w / 2, yc - h / 2)); b = _proj(ctx, i.ax, (xc + w / 2, yc + h / 2))
             cx = (a[1] + b[1]) / 2; cy = (a[2] + b[2]) / 2
             ww = abs(b[1] - a[1]); hh = abs(b[2] - a[2])
-            if vp === nothing
+            if vp === nothing || !all(isfinite, (cx, cy, ww, hh))
                 append!(g, (_q(cx), _q(cy), _q(ww), _q(hh)))
             else
                 # Clamp pixel edges inward to the axis viewport (ceil near, floor far) so that
                 # integer rounding never expands the rect outside the viewport. This is the
                 # span-only fix: bars/grids use the unclamped path (clamp_to_viewport=false).
+                # Non-finite projected coords (e.g. log-axis out-of-domain bounds) fall back to
+                # the _q path above — ceil/floor on NaN/Inf throws.
                 vp_x, vp_y, vp_w, vp_h = vp
                 x_lo = ceil(Int, max(cx - ww / 2, vp_x))
                 x_hi = floor(Int, min(cx + ww / 2, vp_x + vp_w))

@@ -194,7 +194,7 @@ Five types, one per hit primitive, parameterized where surfaces differ only in i
 |---|---|---|---|
 | `PointInteractable` | `:circles` | Scatter, Stem, Spy, ScatterLines·pts | `(; index, x, y)` |
 | `SegmentInteractable` | `:polyline` \| `:segments` | Lines, Stairs, ScatterLines·lines (polyline); LineSegments, Errorbars, Rangebars, HLines, VLines (pairs) | `(; segment_index, p0, p1)` |
-| `RectInteractable` | `:rects` \| `:grid` | BarPlot, Hist, Waterfall, CrossBar, HSpan, VSpan (list); Heatmap, Image (grid) | grid `(; i, j, value)`; BarPlot/Waterfall `(; low, high, value)`; Hist `(; count, low, high)`; CrossBar `(; midpoint, low, high)`; HSpan/VSpan `(; low, high)` |
+| `RectInteractable` | `:rects` \| `:grid` | BarPlot, Hist, Waterfall, CrossBar, HSpan, VSpan (list); Heatmap, Image (grid) | grid `(; i, j, value)`; BarPlot/Waterfall `(; low, high, value)`; Hist `(; value, low, high)`; CrossBar `(; midpoint, low, high)`; HSpan/VSpan `(; low, high)` |
 | `PolygonInteractable` | `:polygons` | Poly, Band, Pie | `(; index)` |
 | `AxisInteractable` | `:axis` | the Axis area itself (linear + log) | `(; x, y)` inverted client-side |
 
