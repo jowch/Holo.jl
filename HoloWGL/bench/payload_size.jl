@@ -6,13 +6,13 @@
 #   julia --project=HoloWGL HoloWGL/bench/payload_size.jl
 #
 # Measured 2026-06-30 (WGLMakie 0.13.12), recorded in docs/roadmap.md:
-#   bundle 1.09 MB (once per widget) · 2D lines 0.33 MB · 2D scatter+text 0.44 MB · 3D helix 0.56 MB
+#   bundle 1.09 MB (once per notebook, M2) · 2D lines 0.33 MB · 2D scatter+text 0.44 MB · 3D helix 0.56 MB
 
 using HoloWGL
 import JSON3
 
 println(
-    "WGLMakie bundle (shipped once per widget): ",
+    "WGLMakie bundle (shipped once per notebook, M2): ",
     round(filesize(HoloWGL.wglmakie_bundle_path()) / 1.0e6; digits = 2), " MB"
 )
 

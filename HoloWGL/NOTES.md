@@ -62,8 +62,13 @@ blobs — the exact mechanism `published_to_js` uses) rendering in a headless br
 2. **Axis3 / live-camera projection** — `context` reuses `Makie.project` (2D Axis, validated).
    3D pan/zoom needs the overlay to read WGLMakie's client-side camera (the `project`/`pick`
    seam). Static 3D renders today; the overlay for 3D is the follow-on.
-3. **Share the bundle once per notebook** — currently ~1MB ships per cell (correct, just
-   wasteful). Publish the bundle/atlas/three.js once and reference it from each widget.
+3. **Share the bundle once per notebook** — DONE (M2). The ~1MB bundle no longer costs per cell:
+   `published_to_js` ids are content-addressed (`notebook_id/objectid`, `objectid(::String)` is
+   content-based), so the one `Ref`-cached bundle string shares a single id and Pluto's notebook
+   merge ships it once across cells on load; the browser caches the bundle/shim blob URLs once on
+   `window.__HoloWGL` (like Holo's `window.Holo`) so it imports the WGLMakie module once, not per
+   cell. Deferred: a single cell's *re-run* still re-publishes its 1MB (Pluto re-sends that cell's
+   objects) — would need a separate one-time publishing cell.
 4. **Payload slimming** — the scene JSON is atlas-dominated; msgpack/gzip are size levers
    (optional, not correctness).
 5. **Build pipeline** — `assets/holo-webgl.js` is hand-authored now; wire it into the

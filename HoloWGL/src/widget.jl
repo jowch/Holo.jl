@@ -65,8 +65,17 @@ function _widget_html(w::WebGLWidget; scene_expr, manifest_expr, bundle_js, shim
             // load the WGLMakie bundle + shim with no server / no file:// path.
             const _s = document.currentScript;
             const _canvas = _s.parentElement.querySelector("canvas.holo-webgl-base");
+            // M2 bundle-sharing: install the ~1MB WGLMakie bundle + shim blob URLs ONCE per
+            // notebook on window (the same idempotent-singleton trick Holo uses for window.Holo).
+            // `??=` short-circuits, so on a cache hit the published 1MB bundle ref is never even
+            // dereferenced — every extra widget reuses the one module (ES imports are URL-cached),
+            // instead of re-blobbing + re-importing ~1MB per cell. (The wire already ships the
+            // bundle once: published_to_js ids are content-addressed, so N cells publishing the
+            // same cached string share one id and Pluto's notebook merge keeps a single copy.)
+            const _H = (window.__HoloWGL ??= {});
             const _blob = (t) => URL.createObjectURL(new Blob([t], { type: "text/javascript" }));
-            const _bundleUrl = _blob($(bundle_js)), _shimUrl = _blob($(shim_js));
+            const _bundleUrl = (_H.bundleUrl ??= _blob($(bundle_js)));
+            const _shimUrl = (_H.shimUrl ??= _blob($(shim_js)));
             import(_shimUrl).then(({ mountWebGL }) =>
               mountWebGL({ canvas: _canvas, wglBundleUrl: _bundleUrl,
                            scene: $(scene_expr), width: $(w.width), height: $(w.height),
@@ -92,7 +101,10 @@ _shim_text() = (isempty(_SHIM_TEXT[]) && (_SHIM_TEXT[] = read(SHIM_JS, String));
 function Base.show(io::IO, m::MIME"text/html", w::WebGLWidget)
     # Everything ships over Pluto's published_to_js data channel — scene + manifest + the
     # bundle/shim text — so there is no server and no file:// path (works remote + export).
-    # ponytail: 1MB/cell for now; NOTES.md #5 = share the bundle once per notebook.
+    # The bundle is shared once per notebook (M2): published_to_js ids are content-addressed
+    # (notebook_id/objectid), so every cell publishing this one cached string gets the same id
+    # and Pluto's notebook merge ships the ~1MB once; the browser then caches the blob URL on
+    # window.__HoloWGL (see _widget_html) so it imports the WGLMakie module once, not per cell.
     pub = APD.Display.published_to_js
     html = _widget_html(
         w;

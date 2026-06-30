@@ -78,6 +78,7 @@ end
     @test occursin("canvas", html)
     @test occursin("mountWebGL", html)
     @test occursin("createObjectURL", html)      # blob delivery (no server / no file://)
+    @test occursin("window.__HoloWGL", html)     # M2: bundle/shim blob URLs cached once per notebook
     @test occursin("window.Holo.mount", html)    # Holo's overlay reused verbatim
 end
 
