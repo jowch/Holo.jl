@@ -1,0 +1,79 @@
+# HoloWGL — `:webgl` backend (browser GPU)
+
+Separate package, same repo (mirrors Makie's CairoMakie/GLMakie subpackages). Keeps
+WGLMakie/Bonito out of Holo core's deps. Implements Holo's backend seam
+(`AbstractBackend` / `render` / `context` / `mount`).
+
+## What's wired (lifted from the validated spikes)
+- `_plain` — the 4-rule encoder (`{__obs__}` / `{__t__}` / `{array,size}` / symbol+closure).
+- `scene_payload(fig)` — NoConnection Session+Screen so the glyph atlas (markers/text) populates.
+- `WebGLBackend <: AbstractBackend`, `mount → :webgl`, `render → WebGLResult`, `context`
+  reusing the CairoBackend projection (measured 1–2px aligned on the WGLMakie canvas).
+- `assets/holo-webgl.js` — the ~30-line shim + `mountWebGL(...)`. Imports WGLMakie's own
+  `WGLMakie.bundled.js` (sourced at runtime from the installed package → always version-matched).
+
+## Widget integration — DONE additively (Holo core untouched)
+`holo_webgl(fig, interactables)` (src/widget.jl) is a drop-in for `Holo.holo`, returning a
+`WebGLWidget`. Its `show` reuses Holo's overlay bundle (`Holo._OVERLAY_JS`), `build_manifest`,
+`context` (the 1–2px-aligned projection), and the `@bind` contract verbatim — only the base
+layer differs (`<canvas>` + `mountWebGL` instead of `<img>`). No change to Holo core was
+needed; the `:webgl` path lives entirely in this package. **Verified end-to-end**: a real
+`holo_webgl` widget renders the canvas base + mounts the overlay in a headless browser.
+
+Gotcha fixed: the widget scripts use `document.currentScript` in **regular** (non-module)
+scripts + dynamic `import()`, because ES-module scripts have `document.currentScript === null`.
+Works in both Pluto and standalone.
+
+## Live-Pluto verified (the export path) — and it caught two real bugs
+Ran the notebook headless in a real Pluto kernel + exported to HTML + rendered it. The widget
+displays through the genuine `published_to_js` channel. Two bugs that headless (JSON3) masked:
+- **Ergonomics:** `using HoloWGL` gave no plotting API + `Figure` was ambiguous (Holo's
+  CairoMakie vs WGLMakie). Fixed: `@reexport using WGLMakie` → `using HoloWGL` is self-contained.
+- **`published_to_js` strictness:** `_plain` left `GeometryBasics.Vec`/`SizedVector` in the
+  payload; JSON3 serialized them but `published_to_js` rejects non-`Base.Vector`. Fixed:
+  `Vector{T}(x)` (NOT `Float32.(x)`/`collect`, which preserve StaticArray types). The unit test
+  is now `Base.Array`-strict so this can't regress through JSON3 again.
+## Live `@bind` round-trip — VERIFIED (and caught a third bug)
+Drove a real Pluto server with Playwright: clicked a scatter marker, and the bond updated to
+`InteractionEvent(:scatter, 0, Dict("x"=>0,"index"=>0,"y"=>0))` — correct marker, correct payload,
+round-tripped to Julia. The bug it caught: Holo's `overlay.ts` does `host.querySelector("img")`
+and **no-ops without an `<img>`** — our base is a `<canvas>`, so the overlay never mounted.
+Fix (Holo core untouched): the widget lays a transparent SVG `<img class="holo-webgl-sizer">`
+over the canvas with `naturalWidth == out_w`, so the overlay finds its base and maps coordinates
+correctly. Cleaner long-term fix when folding into Holo: make `overlay.ts` base-agnostic
+(accept `img, canvas`) and drop the sizer.
+
+## Asset delivery — DONE (no server, works local/remote/export)
+`show` ships the scene, manifest, **and the bundle + shim text** over Pluto's `published_to_js`
+data channel; the browser builds **blob URLs** from the text and `import()`s them. No server,
+no `file://`. **Verified end-to-end** with a fully self-contained HTML (everything inlined as
+blobs — the exact mechanism `published_to_js` uses) rendering in a headless browser.
+
+## Animation — both tiers PROVEN (client-side, no server)
+- **Tier 1 (Pluto-reactive):** a slider/`@bind` drives a new figure → `holo_webgl` re-renders.
+  Works today, zero new code. Heavier per frame (full payload — see bundle-sharing below).
+- **Tier 2 (in-place):** `mountWebGL` returns `WGL`; the driver patches a plot's buffer by
+  uuid — `WGL.find_plots([uuid])[0].geometry.attributes.wgl_positions.array.set(frame);
+  attr.needsUpdate = true` — smooth, no Julia round-trip. **Verified**: scatter markers
+  shifted in place (12k px changed). Camera/uniform animation works via observable `.notify`.
+  Remaining glue: a Julia accessor for the target plot's uuid + a tidy `updatePlotData` helper.
+
+## TODO (implementation, all de-risked)
+2. **Axis3 / live-camera projection** — `context` reuses `Makie.project` (2D Axis, validated).
+   3D pan/zoom needs the overlay to read WGLMakie's client-side camera (the `project`/`pick`
+   seam). Static 3D renders today; the overlay for 3D is the follow-on.
+3. **Share the bundle once per notebook** — currently ~1MB ships per cell (correct, just
+   wasteful). Publish the bundle/atlas/three.js once and reference it from each widget.
+4. **Payload slimming** — the scene JSON is atlas-dominated; msgpack/gzip are size levers
+   (optional, not correctness).
+5. **Build pipeline** — `assets/holo-webgl.js` is hand-authored now; wire it into the
+   esbuild pipeline alongside `overlay.js` if it grows.
+
+## Dev
+```
+pkg> activate .            # or the examples/test env
+pkg> dev . HoloWGL         # dev both Holo (root) and HoloWGL together
+pkg> test HoloWGL
+```
+Register from the subdir (like GLMakie from the Makie monorepo) when ready, or collapse
+into `ext/HoloWGLMakieExt.jl` if zero-install auto-load UX is preferred later.
