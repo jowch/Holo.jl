@@ -343,6 +343,19 @@ end
             @test length(only(hitlayers(RectInteractable(ad, pd), cd)).payloads) == 4
         end
 
+        @testset "BarPlot shared bar payloads" begin
+            using Holo: RectInteractable
+            fig = Figure(); ax = Axis(fig[1, 1])
+            barplot!(ax, [1, 2, 3], [3.0, 1.0, 2.0])
+            Makie.update_state_before_display!(fig)
+            ri = RectInteractable(ax, ax.scene.plots[1]; id = :bars)
+            pls = ri.payloads
+            @test length(pls) == 3
+            @test pls[1] == (; low = 0.0, high = 3.0, value = 3.0)   # bar 1: from-zero, height 3
+            @test pls[2].high == 1.0 && pls[3].high == 2.0
+            @test !haskey(pairs(pls[1]), :index)                     # no redundant index
+        end
+
         @testset "poly -> Polygon (single ring and vector of rings)" begin
             f = Figure(size = (500, 350)); a = Axis(f[1, 1])
             single = poly!(a, Point2f[(0, 0), (1, 0), (1, 1), (0, 1)])

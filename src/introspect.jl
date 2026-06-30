@@ -63,8 +63,23 @@ function _bar_rects(p)
     end
     error("BarPlot introspection: no laid-out rectangles found in child plots (Makie internals changed?)")
 end
-RectInteractable(ax, p::Makie.BarPlot; id = :bars, payloads = nothing) =
-    RectInteractable(ax; rects = _bar_rects(p), id, payloads)
+# Per laid-out bar rect (cx,cy,w,h): value-axis extent + magnitude, keyed by bar `direction`
+# (:y → value runs along y, the default; :x → along x). No `index` (that's InteractionEvent.index).
+function _bar_payloads(rects, direction)
+    vert = direction === :y
+    return Any[
+        let (cx, cy, w, h) = r
+                lo, hi = vert ? (cy - h / 2, cy + h / 2) : (cx - w / 2, cx + w / 2)
+                (; low = lo, high = hi, value = hi - lo)
+        end
+            for r in rects
+    ]
+end
+function RectInteractable(ax, p::Makie.BarPlot; id = :bars, payloads = nothing)
+    rs = _bar_rects(p)
+    pl = payloads === nothing ? _bar_payloads(rs, p.direction[]) : payloads
+    return RectInteractable(ax; rects = rs, id, payloads = pl)
+end
 
 # ---- Poly -> PolygonInteractable ----
 # converted[1] is a single ring (Vector{Point}) or a vector of rings (Vector{Vector{Point}}).
