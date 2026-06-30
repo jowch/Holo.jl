@@ -57,6 +57,15 @@ _proj(ctx, ax, p) = data_to_image_px(ctx, ax, p)
 # measured 1–3 B/coord), never via Pluto's binary typed-array path (which would be 8 B/coord for Int64).
 _q(x) = isfinite(x) ? round(Int, x) : Float32(x)
 
+# Validate a user-supplied payloads vector has exactly one entry per element (fail loud — a
+# mismatch otherwise surfaces as an `undefined` tooltip at hover time). Positional: payloads[k]
+# binds element k; a wrong ORDER is undetectable and is the caller's responsibility.
+function _check_payloads(payloads, n, what)
+    length(payloads) == n ||
+        throw(ArgumentError("$(what): got $(length(payloads)) payloads for $(n) elements"))
+    return collect(Any, payloads)
+end
+
 # ============================ PointInteractable ============================
 struct PointInteractable <: AbstractInteractable
     ax; points::Vector{Point2f}; id::Symbol; payloads::Vector{Any}; radius::Float64; tooltip::Union{Nothing, Markup, Bool}
@@ -92,7 +101,7 @@ function SegmentInteractable(
     )
     vs = [Point2f(v[1], v[2]) for v in vertices]
     nseg = mode === :polyline ? max(0, length(vs) - 1) : length(vs) ÷ 2
-    pl = payloads === nothing ? Any[(; segment_index = k - 1) for k in 1:nseg] : collect(Any, payloads)
+    pl = payloads === nothing ? Any[(; segment_index = k - 1) for k in 1:nseg] : _check_payloads(payloads, nseg, "SegmentInteractable")
     return SegmentInteractable(ax, vs, mode, id, pl, Float64(tol), tooltip)
 end
 tooltip_spec(i::SegmentInteractable) = i.tooltip
@@ -109,25 +118,49 @@ end
 # list: rects of (xc,yc,w,h) in DATA space. grid: (xedges, yedges, values) in DATA space.
 struct RectInteractable <: AbstractInteractable
     ax; layout::Symbol; data::Any; id::Symbol; payloads::Vector{Any}; tooltip::Union{Nothing, Markup, Bool}
+    # When true (spans only): clamp the projected pixel rect to the owning axis viewport using
+    # inward rounding (ceil for near edge, floor for far edge) so that integer quantization
+    # never expands the rect beyond the viewport bounds. See architecture.md §3 + phase2a fix.
+    clamp_to_viewport::Bool
 end
-function RectInteractable(ax; rects = nothing, grid = nothing, id = :rects, payloads = nothing, tooltip = nothing)
+function RectInteractable(
+        ax; rects = nothing, grid = nothing, id = :rects, payloads = nothing,
+        tooltip = nothing, clamp_to_viewport = false
+    )
     return if grid !== nothing
         xe, ye, vals = grid
-        RectInteractable(ax, :grid, (collect(Float64, xe), collect(Float64, ye), vals), id, Any[], tooltip)
+        RectInteractable(ax, :grid, (collect(Float64, xe), collect(Float64, ye), vals), id, Any[], tooltip, false)
     else
         rs = [(Float64(r[1]), Float64(r[2]), Float64(r[3]), Float64(r[4])) for r in rects]
-        pl = payloads === nothing ? Any[(; index = k - 1) for k in 1:length(rs)] : collect(Any, payloads)
-        RectInteractable(ax, :list, rs, id, pl, tooltip)
+        pl = payloads === nothing ? Any[(; index = k - 1) for k in 1:length(rs)] : _check_payloads(payloads, length(rs), "RectInteractable")
+        RectInteractable(ax, :list, rs, id, pl, tooltip, clamp_to_viewport)
     end
 end
 tooltip_spec(i::RectInteractable) = i.tooltip
 function hitlayers(i::RectInteractable, ctx)
     if i.layout === :list
         g = Real[]
+        vp = i.clamp_to_viewport ? ctx.transforms[axis_id(ctx, i.ax)].viewport : nothing
         for (xc, yc, w, h) in i.data
             a = _proj(ctx, i.ax, (xc - w / 2, yc - h / 2)); b = _proj(ctx, i.ax, (xc + w / 2, yc + h / 2))
             cx = (a[1] + b[1]) / 2; cy = (a[2] + b[2]) / 2
-            append!(g, (_q(cx), _q(cy), _q(abs(b[1] - a[1])), _q(abs(b[2] - a[2]))))
+            ww = abs(b[1] - a[1]); hh = abs(b[2] - a[2])
+            if vp === nothing || !all(isfinite, (cx, cy, ww, hh))
+                append!(g, (_q(cx), _q(cy), _q(ww), _q(hh)))
+            else
+                # Clamp pixel edges inward to the axis viewport (ceil near, floor far) so that
+                # integer rounding never expands the rect outside the viewport. This is the
+                # span-only fix: bars/grids use the unclamped path (clamp_to_viewport=false).
+                # Non-finite projected coords (e.g. log-axis out-of-domain bounds) fall back to
+                # the _q path above — ceil/floor on NaN/Inf throws.
+                vp_x, vp_y, vp_w, vp_h = vp
+                x_lo = ceil(Int, max(cx - ww / 2, vp_x))
+                x_hi = floor(Int, min(cx + ww / 2, vp_x + vp_w))
+                y_lo = ceil(Int, max(cy - hh / 2, vp_y))
+                y_hi = floor(Int, min(cy + hh / 2, vp_y + vp_h))
+                px_w = max(0, x_hi - x_lo); px_h = max(0, y_hi - y_lo)
+                append!(g, (round(Int, (x_lo + x_hi) / 2), round(Int, (y_lo + y_hi) / 2), px_w, px_h))
+            end
         end
         return [HitLayer(i.id, :rects, g, i.payloads, axis_id(ctx, i.ax), events(i))]
     else
@@ -165,7 +198,7 @@ struct PolygonInteractable <: AbstractInteractable
 end
 function PolygonInteractable(ax, rings; id = :polygons, payloads = nothing, tooltip = nothing)
     rs = [[Point2f(p[1], p[2]) for p in ring] for ring in rings]
-    pl = payloads === nothing ? Any[(; index = k - 1) for k in 1:length(rs)] : collect(Any, payloads)
+    pl = payloads === nothing ? Any[(; index = k - 1) for k in 1:length(rs)] : _check_payloads(payloads, length(rs), "PolygonInteractable")
     return PolygonInteractable(ax, rs, id, pl, tooltip)
 end
 tooltip_spec(i::PolygonInteractable) = i.tooltip

@@ -197,6 +197,10 @@ the zero-config path. Equivalent to `holo(fig, auto_interactables(fig))`; unsupp
 types are skipped with a warning. For control over ids/payloads, build the vector yourself.
 """
 function holo(fig; kwargs...)
+    # Finalize layout BEFORE auto-extraction: introspection that reads post-layout axis state
+    # (e.g. `_span_rects`/hlines/vlines read `ax.finallimits[]`) would otherwise see stale limits,
+    # since `holo(fig, ints)` only finalizes after `auto_interactables` has already built them.
+    Makie.update_state_before_display!(fig)
     ints = auto_interactables(fig)
     isempty(ints) && @warn "holo(fig): no introspectable plots found — overlaying nothing (static image only)"
     return holo(fig, ints; kwargs...)

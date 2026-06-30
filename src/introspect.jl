@@ -63,8 +63,23 @@ function _bar_rects(p)
     end
     error("BarPlot introspection: no laid-out rectangles found in child plots (Makie internals changed?)")
 end
-RectInteractable(ax, p::Makie.BarPlot; id = :bars, payloads = nothing) =
-    RectInteractable(ax; rects = _bar_rects(p), id, payloads)
+# Per laid-out bar rect (cx,cy,w,h): value-axis extent + magnitude, keyed by bar `direction`
+# (:y → value runs along y, the default; :x → along x). No `index` (that's InteractionEvent.index).
+function _bar_payloads(rects, direction)
+    vert = direction === :y
+    return Any[
+        let (cx, cy, w, h) = r
+                lo, hi = vert ? (cy - h / 2, cy + h / 2) : (cx - w / 2, cx + w / 2)
+                (; low = Float64(lo), high = Float64(hi), value = Float64(hi - lo))
+        end
+            for r in rects
+    ]
+end
+function RectInteractable(ax, p::Makie.BarPlot; id = :bars, payloads = nothing)
+    rs = _bar_rects(p)
+    pl = payloads === nothing ? _bar_payloads(rs, p.direction[]) : payloads
+    return RectInteractable(ax; rects = rs, id, payloads = pl)
+end
 
 # ---- Poly -> PolygonInteractable ----
 # converted[1] is a single ring (Vector{Point}) or a vector of rings (Vector{Vector{Point}}).
@@ -157,6 +172,95 @@ end
 RectInteractable(ax, p::Makie.Spy; id = :spy, payloads = nothing) =
     RectInteractable(ax; rects = _spy_rects(p), id, payloads)
 
+# ---- Hist / Waterfall -> RectInteractable(:list) (child BarPlot carries laid-out bars) ----
+# Hist: bar height = bin value (height = bin count only for default normalization=:none;
+# with :pdf/:density/:probability the height is a density/fraction — so we call it `value`).
+# Bin range = category-axis extent (cx ± w/2 for vertical).
+# Waterfall: signed delta read from p.converted[][1] (Vector{Point2}, element k = (x_k, delta_k)).
+function _hist_payloads(rects, direction)
+    vert = direction === :y
+    return Any[
+        let (cx, cy, w, h) = r
+                cnt = vert ? h : w                                                  # bar height = bin value
+                lo, hi = vert ? (cx - w / 2, cx + w / 2) : (cy - h / 2, cy + h / 2)  # category axis = bin range
+                (; value = Float64(cnt), low = Float64(lo), high = Float64(hi))
+        end
+            for r in rects
+    ]
+end
+function _waterfall_payloads(p, rects)
+    deltas = p.converted[][1]                      # Point2 per bar: (x, signed delta)
+    return Any[
+        let (cx, cy, w, h) = rects[k]
+                (; low = Float64(cy - h / 2), high = Float64(cy + h / 2), value = Float64(deltas[k][2]))
+        end
+            for k in eachindex(rects)
+    ]
+end
+function RectInteractable(ax, p::Makie.Hist; id = :hist, payloads = nothing)
+    bar = _childof(p, Makie.BarPlot)
+    rs = _bar_rects(bar)
+    pl = payloads === nothing ? _hist_payloads(rs, bar.direction[]) : payloads
+    return RectInteractable(ax; rects = rs, id, payloads = pl)
+end
+function RectInteractable(ax, p::Makie.Waterfall; id = :waterfall, payloads = nothing)
+    bar = _childof(p, Makie.BarPlot)
+    rs = _bar_rects(bar)
+    pl = payloads === nothing ? _waterfall_payloads(p, rs) : payloads
+    return RectInteractable(ax; rects = rs, id, payloads = pl)
+end
+
+# ---- HSpan / VSpan -> RectInteractable(:list) ----
+# Payload: (low, high) from converted[] — the dimension the user explicitly specified.
+function _span_payloads(p)
+    cv = p.converted[]                                   # HSpan (ymin,ymax) / VSpan (xmin,xmax)
+    lo, hi = cv[1], cv[2]
+    return Any[(; low = Float64(lo[k]), high = Float64(hi[k])) for k in eachindex(lo)]
+end
+# Geometry: build hit-rects explicitly from converted[] (band dim) + ax.finallimits[] (full-axis dim).
+# Do NOT reuse _bar_rects(p) — that reads the child Poly's HyperRectangle, which is designed for
+# BarPlot (laid-out dodge/stack geometry) and can exceed the axis limits in some Makie versions or
+# async contexts, causing the hit-rect to bleed into a neighboring axis's viewport.
+#
+# `full`: the axis direction the span fills completely (:x for HSpan, :y for VSpan).
+# converted[] = (lo_vec, hi_vec) where lo/hi are the band's own-dimension bounds.
+function _span_rects(ax, p, full::Symbol)
+    cv = p.converted[]
+    lo_vec, hi_vec = cv[1], cv[2]
+    fl = ax.finallimits[]
+    fa_lo = fl.origin[full === :x ? 1 : 2]
+    fa_hi = fa_lo + fl.widths[full === :x ? 1 : 2]
+    fa_ctr = (fa_lo + fa_hi) / 2
+    fa_wid = fa_hi - fa_lo
+    return [
+        full === :x ?
+            (fa_ctr, (Float64(lo_vec[k]) + Float64(hi_vec[k])) / 2, fa_wid, Float64(hi_vec[k]) - Float64(lo_vec[k])) :
+            ((Float64(lo_vec[k]) + Float64(hi_vec[k])) / 2, fa_ctr, Float64(hi_vec[k]) - Float64(lo_vec[k]), fa_wid)
+            for k in eachindex(lo_vec)
+    ]
+end
+function RectInteractable(ax, p::Makie.HSpan; id = :hspan, payloads = nothing)
+    pl = payloads === nothing ? _span_payloads(p) : payloads
+    return RectInteractable(ax; rects = _span_rects(ax, p, :x), id, payloads = pl, clamp_to_viewport = true)
+end
+function RectInteractable(ax, p::Makie.VSpan; id = :vspan, payloads = nothing)
+    pl = payloads === nothing ? _span_payloads(p) : payloads
+    return RectInteractable(ax; rects = _span_rects(ax, p, :y), id, payloads = pl, clamp_to_viewport = true)
+end
+
+# ---- CrossBar -> RectInteractable(:list) ----
+# Box rects are a direct child (depth 1); _bar_rects(p) finds them without _childof.
+# Semantic payload (midpoint, low, high) comes from p.converted[] = (x, midpoint, low, high).
+function _crossbar_payloads(p)
+    _, midpts, lows, highs = p.converted[]
+    return Any[(; midpoint = Float64(midpts[i]), low = Float64(lows[i]), high = Float64(highs[i])) for i in eachindex(midpts)]
+end
+function RectInteractable(ax, p::Makie.CrossBar; id = :crossbar, payloads = nothing)
+    rs = _bar_rects(p)
+    pl = payloads === nothing ? _crossbar_payloads(p) : payloads
+    return RectInteractable(ax; rects = rs, id, payloads = pl)
+end
+
 # ---- Composites: one plot -> two layers (survey: ScatterLines is the model) ----
 # Each half delegates to the existing child-plot constructor; the point layer keeps the base id,
 # the line/segment layer gets a suffix so the two ids stay distinct in the manifest.
@@ -187,6 +291,11 @@ function _plotbase(p)
     p isa Makie.HLines && return :hlines
     p isa Makie.VLines && return :vlines
     p isa Makie.Spy && return :spy
+    p isa Makie.Hist && return :hist
+    p isa Makie.Waterfall && return :waterfall
+    p isa Makie.CrossBar && return :crossbar
+    p isa Makie.HSpan && return :hspan
+    p isa Makie.VSpan && return :vspan
     p isa Makie.Stem && return :stem
     p isa Makie.ScatterLines && return :scatterlines
     return nothing
@@ -202,6 +311,8 @@ function _construct(ax, p, id)
     ) && return [SegmentInteractable(ax, p; id)]
     (p isa Makie.Heatmap || p isa Makie.Image || p isa Makie.BarPlot || p isa Makie.Spy) &&
         return [RectInteractable(ax, p; id)]
+    (p isa Makie.Hist || p isa Makie.Waterfall || p isa Makie.CrossBar) && return [RectInteractable(ax, p; id)]
+    (p isa Makie.HSpan || p isa Makie.VSpan) && return [RectInteractable(ax, p; id)]
     p isa Makie.Poly && return [PolygonInteractable(ax, p; id)]
     p isa Makie.Stem && return _stem_parts(ax, p, id)
     p isa Makie.ScatterLines && return _scatterlines_parts(ax, p, id)

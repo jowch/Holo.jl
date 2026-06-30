@@ -343,6 +343,29 @@ end
             @test length(only(hitlayers(RectInteractable(ad, pd), cd)).payloads) == 4
         end
 
+        @testset "BarPlot shared bar payloads" begin
+            using Holo: RectInteractable
+            fig = Figure(); ax = Axis(fig[1, 1])
+            barplot!(ax, [1, 2, 3], [3.0, 1.0, 2.0])
+            Makie.update_state_before_display!(fig)
+            ri = RectInteractable(ax, ax.scene.plots[1]; id = :bars)
+            pls = ri.payloads
+            @test length(pls) == 3
+            @test pls[1] == (; low = 0.0, high = 3.0, value = 3.0)   # bar 1: from-zero, height 3
+            @test pls[2] == (; low = 0.0, high = 1.0, value = 1.0)
+            @test pls[3] == (; low = 0.0, high = 2.0, value = 2.0)
+            @test !haskey(pairs(pls[1]), :index)                     # no redundant index
+            @test pls[1].value isa Float64                           # semantic values are Float64
+
+            # horizontal bars (direction = :x): the value runs along x
+            figh = Figure(); axh = Axis(figh[1, 1])
+            barplot!(axh, [1, 2], [3.0, 5.0]; direction = :x)
+            Makie.update_state_before_display!(figh)
+            plh = RectInteractable(axh, axh.scene.plots[1]; id = :bars).payloads
+            @test plh[1] == (; low = 0.0, high = 3.0, value = 3.0)
+            @test plh[2] == (; low = 0.0, high = 5.0, value = 5.0)
+        end
+
         @testset "poly -> Polygon (single ring and vector of rings)" begin
             f = Figure(size = (500, 350)); a = Axis(f[1, 1])
             single = poly!(a, Point2f[(0, 0), (1, 0), (1, 1), (0, 1)])
@@ -537,6 +560,56 @@ end
         end
     end
 
+    @testset "Hist + Waterfall extraction" begin
+        using Holo: RectInteractable, auto_interactables
+        # Hist: counts + bin edges
+        fig = Figure(); ax = Axis(fig[1, 1])
+        data = [0.5, 0.6, 1.5, 1.6, 1.7, 2.5]
+        hist!(ax, data; bins = 3)
+        Makie.update_state_before_display!(fig)
+        hp = ax.scene.plots[1]
+        ri = RectInteractable(ax, hp; id = :hist)
+        @test length(ri.payloads) == 3
+        @test sum(p.value for p in ri.payloads) == length(data)        # values sum to N (default normalization=:none)
+        @test all(p.low < p.high for p in ri.payloads)                 # bin edges ordered
+        @test !haskey(pairs(ri.payloads[1]), :index)
+        @test !haskey(pairs(ri.payloads[1]), :count)                   # field is :value, not :count
+        # auto path picks it up as :hist
+        ints = auto_interactables(fig)
+        @test any(i -> i isa RectInteractable, ints)
+
+        # Waterfall: signed delta — value must reflect direction (Fix 2)
+        fig2 = Figure(); ax2 = Axis(fig2[1, 1])
+        waterfall!(ax2, [1, 2, 3], [2.0, -1.0, 3.0])
+        Makie.update_state_before_display!(fig2)
+        ri2 = RectInteractable(ax2, ax2.scene.plots[1]; id = :waterfall)
+        @test length(ri2.payloads) == 3
+        @test haskey(pairs(ri2.payloads[1]), :value)                   # shared bar schema
+        @test ri2.payloads[1].value == 2.0                             # up-step: positive
+        @test ri2.payloads[2].value == -1.0                            # down-step: negative (signed delta)
+        @test ri2.payloads[3].value == 3.0                             # up-step: positive
+        # |value| ≈ bar height (low..high span)
+        @test abs(ri2.payloads[2].value) ≈ ri2.payloads[2].high - ri2.payloads[2].low
+    end
+
+    @testset "CrossBar extraction" begin
+        using Holo: RectInteractable, auto_interactables
+        fig = Figure(); ax = Axis(fig[1, 1])
+        crossbar!(ax, [1, 2], [5.0, 6.0], [3.0, 4.0], [7.0, 8.0])
+        Makie.update_state_before_display!(fig)
+        p = ax.scene.plots[1]
+        ri = RectInteractable(ax, p; id = :crossbar)
+        @test length(ri.payloads) == 2
+        @test ri.payloads[1] == (; midpoint = 5.0, low = 3.0, high = 7.0)
+        @test ri.payloads[2] == (; midpoint = 6.0, low = 4.0, high = 8.0)
+        @test !haskey(pairs(ri.payloads[1]), :index)
+        # auto path: _plotbase returns :crossbar, _construct returns RectInteractable
+        _, _, c = ctx_for(fig)
+        ints = auto_interactables(fig)
+        @test length(ints) == 1 && ints[1] isa RectInteractable
+        @test only(hitlayers(ints[1], c)).id === :crossbar
+    end
+
     @testset "markup parse + validation" begin
         m = holo"<b>$(name)</b> — $(pop:,) people ($(share:.1%))"
         @test m isa Holo.Markup
@@ -676,5 +749,157 @@ end
         # happy path: valid selects → manifest ROI layer carries "selects"; no error thrown
         m_ok = build_manifest([pts_i, roi_linked], ctx)
         @test filter(l -> l["kind"] == "roi", m_ok["layers"]) |> only |> l -> l["selects"] == "pts"
+    end
+
+    @testset "HSpan + VSpan extraction" begin
+        using Holo: RectInteractable, auto_interactables
+        fig = Figure(); ax = Axis(fig[1, 1]); lines!(ax, 0 .. 10, sin)   # give the axis finite limits
+        hspan!(ax, [1.0, 3.0], [2.0, 4.0])
+        Makie.update_state_before_display!(fig)
+        hp = ax.scene.plots[end]                                  # the HSpan
+        ri = RectInteractable(ax, hp; id = :hspan)
+        @test length(ri.payloads) == 2
+        @test ri.payloads[1] == (; low = 1.0, high = 2.0)
+        @test ri.payloads[2] == (; low = 3.0, high = 4.0)
+
+        fig2 = Figure(); ax2 = Axis(fig2[1, 1]); lines!(ax2, 0 .. 10, cos)
+        vspan!(ax2, [1.0, 3.0], [2.0, 4.0])
+        Makie.update_state_before_display!(fig2)
+        ri2 = RectInteractable(ax2, ax2.scene.plots[end]; id = :vspan)
+        @test ri2.payloads[1] == (; low = 1.0, high = 2.0)
+        @test length(ri2.payloads) == 2
+        @test ri2.payloads[2] == (; low = 3.0, high = 4.0)
+    end
+
+    @testset "HSpan/VSpan hit-rect bounded to axis limits (anti-bleed)" begin
+        # Regression: span hit-rects must clamp the full-axis dimension to ax.finallimits[],
+        # not rely on the child Poly's HyperRectangle (which can exceed axis limits in some
+        # Makie versions / async Pluto scenarios, causing the rect to bleed into a neighboring
+        # axis's viewport at the same pixel column/row).
+        using Holo: RectInteractable
+        fv = Figure(); axv = Axis(fv[1, 1])
+        xlims!(axv, 0, 10); ylims!(axv, 0, 5)
+        vspan!(axv, [2.0], [3.0])
+        Makie.update_state_before_display!(fv)
+        vp = only(filter(p -> p isa Makie.VSpan, axv.scene.plots))
+        riv = RectInteractable(axv, vp; id = :vspan)
+        # VSpan fills the Y axis: y-extent must equal the axis y-height (5.0), not exceed it.
+        # x-extent is the band's own data range [2, 3].
+        cx, cy, w, h = riv.data[1]
+        @test cx ≈ 2.5          # band x-center  (2+3)/2
+        @test cy ≈ 2.5          # axis y-center   (0+5)/2  ← from finallimits
+        @test w ≈ 1.0           # band x-width    3-2
+        @test h ≈ 5.0           # axis y-height   5-0  ← from finallimits, NOT a larger number
+
+        fh = Figure(); axh = Axis(fh[1, 1])
+        xlims!(axh, 0, 10); ylims!(axh, 0, 5)
+        hspan!(axh, [1.0], [3.0])
+        Makie.update_state_before_display!(fh)
+        hp = only(filter(p -> p isa Makie.HSpan, axh.scene.plots))
+        rih = RectInteractable(axh, hp; id = :hspan)
+        # HSpan fills the X axis: x-extent must equal the axis x-width (10.0), not exceed it.
+        # y-extent is the band's own data range [1, 3].
+        cx2, cy2, w2, h2 = rih.data[1]
+        @test cx2 ≈ 5.0         # axis x-center   (0+10)/2  ← from finallimits
+        @test cy2 ≈ 2.0         # band y-center   (1+3)/2
+        @test w2 ≈ 10.0         # axis x-width    10-0  ← from finallimits, NOT a larger number
+        @test h2 ≈ 2.0          # band y-height   3-1
+    end
+
+    @testset "VSpan/HSpan pixel-space rect bounded to owning axis viewport (multi-axis)" begin
+        # Regression: in a 2×2 figure the vspan on a4 (bottom-right) must not bleed in
+        # PIXEL SPACE into a2 (top-right). The data-space rect is correct (uses finallimits),
+        # but integer quantization (_q) can expand h by up to 0.5px beyond the viewport bounds.
+        # Fix: viewport-clamp in pixel space before emitting geometry (ceil/floor inward).
+        # This test uses the exact 2×2 repro that was live-verified to exhibit the bleed.
+        using Holo: RectInteractable, axis_id
+        f = Figure(size = (760, 520))
+        a2 = Axis(f[1, 2]); waterfall!(a2, 1:4, [3.0, -1.0, 2.0, -0.5])
+        a4 = Axis(f[2, 2])
+        barplot!(a4, 1:3, [2.0, 3.0, 1.0])
+        hspan!(a4, [0.4], [0.8])
+        vspan!(a4, [1.6], [2.0])
+        _, _, ctx = ctx_for(f)          # calls update_state_before_display! + builds context
+
+        t4 = ctx.transforms[axis_id(ctx, a4)]
+        vp_x, vp_y, vp_w, vp_h = t4.viewport   # image-px, top-left origin
+
+        # ── VSpan on a4: the Y-extent fills the full axis ──────────────────────────────
+        vspan_plot = only(filter(p -> p isa Makie.VSpan, a4.scene.plots))
+        L_vs = only(hitlayers(RectInteractable(a4, vspan_plot; id = :vspan), ctx))
+        g = L_vs.geometry   # [cx, cy, w, h] (integer image-px)
+        vs_top = g[2] - g[4] / 2     # top edge in image-px (y-axis: small = toward top)
+        vs_bot = g[2] + g[4] / 2
+        @test vs_top >= vp_y          # vspan top edge must not poke above a4's viewport
+        @test vs_bot <= vp_y + vp_h  # vspan bottom edge must not poke below a4's viewport
+
+        # ── HSpan on a4: the X-extent fills the full axis ──────────────────────────────
+        hspan_plot = only(filter(p -> p isa Makie.HSpan, a4.scene.plots))
+        L_hs = only(hitlayers(RectInteractable(a4, hspan_plot; id = :hspan), ctx))
+        gh = L_hs.geometry
+        hs_left = gh[1] - gh[3] / 2
+        hs_right = gh[1] + gh[3] / 2
+        @test hs_left >= vp_x          # hspan left edge must not poke left of a4's viewport
+        @test hs_right <= vp_x + vp_w  # hspan right edge must not poke right of a4's viewport
+    end
+
+    @testset "payload-length validation (Segment/Rect/Polygon)" begin
+        using Holo: SegmentInteractable, RectInteractable, PolygonInteractable
+        fig = Figure(); ax = Axis(fig[1, 1])
+        # RectInteractable list: 2 rects, wrong + right payload counts
+        rects = [(0.0, 0.0, 1.0, 1.0), (2.0, 2.0, 1.0, 1.0)]
+        @test_throws ArgumentError RectInteractable(ax; rects, payloads = [(; a = 1)])           # too short
+        @test_throws ArgumentError RectInteractable(ax; rects, payloads = [(; a = 1), (; a = 2), (; a = 3)])  # too long
+        @test RectInteractable(ax; rects, payloads = [(; a = 1), (; a = 2)]) isa RectInteractable  # exact
+        # SegmentInteractable :pairs — 2 vertices = 1 segment
+        @test_throws ArgumentError SegmentInteractable(ax, [Point2f(0, 0), Point2f(1, 1)]; mode = :pairs, payloads = [(; a = 1), (; a = 2)])  # too long
+        @test_throws ArgumentError SegmentInteractable(ax, [Point2f(0, 0), Point2f(1, 1), Point2f(2, 2), Point2f(3, 3)]; mode = :pairs, payloads = [(; a = 1)])  # too short: 2 segments, 1 payload
+        @test SegmentInteractable(ax, [Point2f(0, 0), Point2f(1, 1)]; mode = :pairs, payloads = [(; a = 1)]) isa SegmentInteractable  # exact
+        # PolygonInteractable — 1 ring
+        ring = [Point2f(0, 0), Point2f(1, 0), Point2f(1, 1)]
+        @test_throws ArgumentError PolygonInteractable(ax, [ring]; payloads = [(; a = 1), (; a = 2)])      # too long
+        @test_throws ArgumentError PolygonInteractable(ax, [ring, ring]; payloads = [(; a = 1)])          # too short: 2 rings, 1 payload
+        @test PolygonInteractable(ax, [ring]; payloads = [(; a = 1)]) isa PolygonInteractable             # exact
+    end
+
+    @testset "clamp path is non-finite-safe" begin
+        # A RectInteractable with clamp_to_viewport=true whose projected rect is non-finite
+        # must NOT throw — it must fall back to the _q path instead of passing NaN/Inf to
+        # ceil/floor (which throw). Deterministic repro: a rect whose center is NaN.
+        using Holo: RectInteractable
+        fig = Figure(size = (500, 350)); ax = Axis(fig[1, 1])
+        scatter!(ax, [1.0], [1.0])   # force a layout so viewport is non-empty
+        _, _, ctx = ctx_for(fig)
+        # Inject a rect with a NaN center directly (clamp_to_viewport=true, so the clamp path
+        # would be taken — the fix makes it fall back to _q instead).
+        ri = RectInteractable(ax; rects = [(NaN, 0.0, 1.0, 1.0)], clamp_to_viewport = true)
+        @test_nowarn hitlayers(ri, ctx)   # must not throw
+        L = only(hitlayers(ri, ctx))
+        @test !isfinite(L.geometry[1])    # NaN center passes through as Float32(NaN) via _q
+    end
+
+    @testset "holo(fig) auto-extracts spans bounded to viewport" begin
+        # End-to-end guard: calling holo(fig) (the AUTO path, no manual update_state_before_display!)
+        # on a 2-axis figure with a vspan must succeed and produce a layer whose pixel rect is
+        # bounded within the owning axis's viewport.
+        # Note: the viewport clamp masks finallimits-staleness, so this test guards the full
+        # pipeline end-to-end but cannot isolate the update_state_before_display! ordering
+        # line specifically — that's expected.
+        fig = Figure(size = (700, 400))
+        ax1 = Axis(fig[1, 1]); scatter!(ax1, [1.0, 2.0, 3.0], [1.0, 2.0, 3.0])
+        ax2 = Axis(fig[1, 2])
+        vspan!(ax2, [1.0], [2.0])
+        # AUTO path: holo(fig) calls update_state_before_display! internally
+        w = holo(fig)
+        vspan_layer = only(filter(L -> L["id"] == "vspan", w.manifest["layers"]))
+        ax_id = vspan_layer["axis"]                          # e.g. "ax2"
+        vp = w.manifest["transforms"][ax_id]["viewport"]    # [vp_x, vp_y, vp_w, vp_h] in image-px
+        vp_x, vp_y, vp_w, vp_h = vp[1], vp[2], vp[3], vp[4]
+        geom = vspan_layer["geometry"]                       # flat [cx, cy, w, h] for the one span
+        cx_px, cy_px, w_px, h_px = geom[1], geom[2], geom[3], geom[4]
+        @test isfinite(cx_px) && isfinite(cy_px)            # layer is present and projected
+        @test w_px > 0 && h_px > 0                          # has nonzero size
+        @test cx_px - w_px / 2 >= vp_x                     # left edge within viewport
+        @test cx_px + w_px / 2 <= vp_x + vp_w             # right edge within viewport
     end
 end
