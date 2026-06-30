@@ -98,13 +98,15 @@ jobs:
         run: |
           julia serve.jl 1234 > pluto.log 2>&1 &
           SERVER=$!
-          # Readiness: poll the port (Pluto doesn't reliably flush its banner to the log).
+          # Use 127.0.0.1, NOT localhost: on GitHub runners localhost resolves to ::1 (IPv6) first,
+          # but Pluto binds IPv4 127.0.0.1 — the HTML shell loads via fallback yet the SPA's
+          # WebSocket (window.location.host) hits ::1 and never connects, leaving a blank page.
           for i in $(seq 1 120); do
-            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:1234 || echo 000)
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:1234 || echo 000)
             [ "$code" = "200" ] && break
             sleep 2
           done
-          node bind_click.mjs http://localhost:1234 "$GITHUB_WORKSPACE/HoloWGL/test/e2e/bind_notebook.jl"
+          node bind_click.mjs http://127.0.0.1:1234 "$GITHUB_WORKSPACE/HoloWGL/test/e2e/bind_notebook.jl"
           STATUS=$?
           kill $SERVER 2>/dev/null || true
           exit $STATUS

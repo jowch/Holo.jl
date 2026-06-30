@@ -17,6 +17,9 @@ const browser = await chromium.launch({ headless: true });
 let failed = null;
 try {
   const page = await browser.newPage();
+  // Surface browser-side failures (e.g. a WebSocket that can't reach the kernel) in the CI log.
+  page.on("pageerror", (e) => console.error("PAGEERROR:", e.message));
+  page.on("requestfailed", (r) => console.error("REQFAIL:", r.url(), r.failure()?.errorText));
   // /open?path= loads the notebook and redirects to /edit?id=…. Use domcontentloaded, not "load":
   // the Pluto SPA holds connections open, so the load event can lag past the nav timeout.
   await page.goto(`${base}/open?path=${encodeURIComponent(notebook)}`, { waitUntil: "domcontentloaded", timeout: 60000 });
