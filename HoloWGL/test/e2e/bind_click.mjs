@@ -20,8 +20,22 @@ try {
   // "Incorrect locale information provided" from a V8 Intl call and never bootstraps (blank page).
   const context = await browser.newContext({ locale: "en-US", timezoneId: "UTC" });
   const page = await context.newPage();
+  // Known-benign page errors: the version-matched WGLMakie bundle calls a few window.Bonito.*
+  // binary-codec helpers our server-less shim (assets/holo-webgl.js) intentionally omits — no
+  // binary messages ever arrive without a Bonito server. They fire post-mount and affect neither
+  // the render nor the bond (verified: the round-trip still passes). Anything NOT on this list is
+  // a real regression, so we fail on it below — making this a genuine "no console errors" guard.
+  const ALLOWED_PAGEERRORS = [
+    /Bonito\.decode_binary is not a function/,
+    /Bonito\.fetch_binary is not a function/,
+  ];
+  const unexpectedErrors = [];
   // Surface browser-side failures (e.g. a WebSocket that can't reach the kernel) in the CI log.
-  page.on("pageerror", (e) => console.error("PAGEERROR:", e.message));
+  page.on("pageerror", (e) => {
+    const benign = ALLOWED_PAGEERRORS.some((re) => re.test(e.message));
+    console.error(benign ? "PAGEERROR (known-benign):" : "PAGEERROR:", e.message);
+    if (!benign) unexpectedErrors.push(e.message);
+  });
   page.on("requestfailed", (r) => console.error("REQFAIL:", r.url(), r.failure()?.errorText));
   // /open?path= loads the notebook and redirects to /edit?id=…. Use domcontentloaded, not "load":
   // the Pluto SPA holds connections open, so the load event can lag past the nav timeout.
@@ -98,6 +112,9 @@ try {
   }
   if (!/InteractionEvent\(:scatter, 0/.test(result.after)) {
     throw new Error(`unexpected readout after click: "${result.after}"`);
+  }
+  if (unexpectedErrors.length) {
+    throw new Error(`unexpected browser page error(s) — shim leak or regression: ${[...new Set(unexpectedErrors)].join(" | ")}`);
   }
   console.log("THROUGH-PLUTO E2E OK —", result.before, "->", result.after);
 } catch (e) {

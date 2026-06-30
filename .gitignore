@@ -1,5 +1,8 @@
 # Julia
 /Manifest.toml
+# HoloWGL has no committed Manifest by design (re-resolves to latest so the version-coupling
+# guard catches drift); the e2e pre-warm + bind_notebook.jl regenerate it transiently.
+/HoloWGL/Manifest.toml
 *.jl.cov
 *.jl.*.cov
 *.jl.mem

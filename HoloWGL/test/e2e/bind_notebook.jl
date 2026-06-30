@@ -17,17 +17,14 @@ macro bind(def, element)
 end
 
 # ╔═╡ c0000000-0000-0000-0000-000000000001
-# Self-contained env: dev BOTH local packages by checkout-relative path (Holo at the repo root,
-# HoloWGL one level in). Pkg.develop disables Pluto's own pkg management (both are unregistered).
+# Activate HoloWGL's OWN project (HoloWGL/) rather than a fresh temp env: it's the same stable,
+# CI-cached project the static e2e + `holowgl` job use, and its [sources] resolves Holo by path
+# (no manual Pkg.develop). The job pre-warms this project before launching Pluto, so on a warm
+# depot cache instantiate is a no-op — the ~10-min cold WGLMakie precompile only happens once.
+# Activating any project disables Pluto's own pkg management (HoloWGL is unregistered).
 begin
     import Pkg
-    Pkg.activate(; temp = true)
-    Pkg.develop(
-        [
-            Pkg.PackageSpec(path = normpath(joinpath(@__DIR__, "..", "..", ".."))),   # Holo (repo root)
-            Pkg.PackageSpec(path = normpath(joinpath(@__DIR__, "..", ".."))),         # HoloWGL
-        ]
-    )
+    Pkg.activate(normpath(joinpath(@__DIR__, "..", "..")))   # test/e2e -> HoloWGL/
     Pkg.instantiate()
     using HoloWGL
 end
