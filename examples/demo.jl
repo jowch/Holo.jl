@@ -276,6 +276,26 @@ end
 # ╔═╡ 40000000-0000-0000-0000-000000000077
 @bind _rt_ignore holo(rt_fig_r, rt_int_r; selected = Dict(:scatter => picked))
 
+# ╔═╡ 40000000-0000-0000-0000-000000000090
+md"""
+## Bars / areas / spans (Phase 2a) — auto-extraction
+
+`holo(fig)` auto-detects histogram bins (`hist!`), waterfall bars (`waterfall!`),
+crossbar ranges (`crossbar!`), bar plots (`barplot!`), and horizontal/vertical
+spans (`hspan!`/`vspan!`) across every `Axis` — no manual `Interactable` wiring
+needed. Hover over the bars, bands, or ranges below.
+"""
+
+# ╔═╡ 40000000-0000-0000-0000-000000000091
+bars_widget = let
+    bf = Figure(size = (760, 520))
+    a1 = Axis(bf[1, 1], title = "hist"); hist!(a1, randn(300); bins = 12, color = :steelblue)
+    a2 = Axis(bf[1, 2], title = "waterfall"); waterfall!(a2, 1:4, [3.0, -1.0, 2.0, -0.5])
+    a3 = Axis(bf[2, 1], title = "crossbar"); crossbar!(a3, [1, 2, 3], [5.0, 6.0, 4.0], [3.0, 4.0, 2.0], [7.0, 8.0, 6.0])
+    a4 = Axis(bf[2, 2], title = "bars + spans"); barplot!(a4, 1:3, [2.0, 3.0, 1.0]); hspan!(a4, [0.4], [0.8]; color = (:orange, 0.2)); vspan!(a4, [1.6], [2.0]; color = (:green, 0.2))
+    holo(bf)   # auto-detects Hist + Waterfall + CrossBar + BarPlot + HSpan + VSpan
+end
+
 # ╔═╡ Cell order:
 # ╟─40000000-0000-0000-0000-000000000000
 # ╠═40000000-0000-0000-0000-000000000001
@@ -318,3 +338,5 @@ end
 # ╠═40000000-0000-0000-0000-000000000075
 # ╠═40000000-0000-0000-0000-000000000076
 # ╠═40000000-0000-0000-0000-000000000077
+# ╟─40000000-0000-0000-0000-000000000090
+# ╠═40000000-0000-0000-0000-000000000091
