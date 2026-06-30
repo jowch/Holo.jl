@@ -194,15 +194,15 @@ Five types, one per hit primitive, parameterized where surfaces differ only in i
 |---|---|---|---|
 | `PointInteractable` | `:circles` | Scatter, Stem, Spy, ScatterLines·pts | `(; index, x, y)` |
 | `SegmentInteractable` | `:polyline` \| `:segments` | Lines, Stairs, ScatterLines·lines (polyline); LineSegments, Errorbars, Rangebars, HLines, VLines (pairs) | `(; segment_index, p0, p1)` |
-| `RectInteractable` | `:rects` \| `:grid` | BarPlot, Hist, Waterfall, CrossBar, HSpan, VSpan, BoxPlot (list); Heatmap, Image (grid) | grid `(; i, j, value)`; BarPlot/Waterfall `(; low, high, value)`; Hist `(; count, low, high)`; CrossBar `(; midpoint, low, high)`; HSpan/VSpan `(; low, high)` |
+| `RectInteractable` | `:rects` \| `:grid` | BarPlot, Hist, Waterfall, CrossBar, HSpan, VSpan (list); Heatmap, Image (grid) | grid `(; i, j, value)`; BarPlot/Waterfall `(; low, high, value)`; Hist `(; count, low, high)`; CrossBar `(; midpoint, low, high)`; HSpan/VSpan `(; low, high)` |
 | `PolygonInteractable` | `:polygons` | Poly, Band, Pie | `(; index)` |
 | `AxisInteractable` | `:axis` | the Axis area itself (linear + log) | `(; x, y)` inverted client-side |
 
 `SegmentInteractable` carries `mode ∈ {:polyline,:pairs}`; `RectInteractable` carries
 `layout ∈ {:grid,:list}`. Same JS test, different Julia extractor.
 
-**Bar payload schema (Phase 2a).** All `:rects`-list bar/band surfaces use a shared semantic
-payload — `InteractionEvent.index` carries the element index, so payloads contain only
+**Bar payload schema (Phase 2a).** All `:rects`-list bar/span surfaces (BarPlot, Waterfall,
+Hist, CrossBar, HSpan, VSpan) use a shared semantic payload — `InteractionEvent.index` carries the element index, so payloads contain only
 domain values (no redundant `index` field). **Span viewport-clamp:** HSpan/VSpan hit-rects are
 clipped to the owning axis's pixel viewport so a span cannot bleed into a neighboring axis in a
 multi-axis figure. **Uniform payload-length validation:** `SegmentInteractable`,
