@@ -1,0 +1,90 @@
+using Test
+using HoloWGL
+using WGLMakie
+import Makie
+
+# Smoke tests for the serialization bridge (no browser). The browser render is covered by
+# the spikes; these guard the Julia-side encoder + the version-coupled serialize_scene path.
+
+@testset "scene_payload encoding" begin
+    fig = Figure(; size = (400, 300))
+    ax = Axis(fig[1, 1])
+    lines!(ax, 1:10, (1:10) .^ 2)
+    scatter!(ax, 1:10, (1:10) .^ 2)
+    Makie.update_state_before_display!(fig)
+
+    payload = HoloWGL.scene_payload(fig)
+
+    @test payload isa Dict{String, Any}
+    @test haskey(payload, "plots") || haskey(payload, "children")
+
+    # STRICT: mirror published_to_js — only Dict, Base.Array, and scalars. A StaticArray/Vec
+    # is NOT a Base.Array, so a leftover Vec falls through to `false` (it slips past JSON3 but
+    # published_to_js rejects it — the real-Pluto bug this guards against).
+    function ok(x)
+        if x isa AbstractDict
+            return all(ok, values(x))
+        elseif x isa Base.Array
+            return all(ok, x)
+        else
+            return x isa Union{Real, AbstractString, Bool, Nothing}
+        end
+    end
+    @test ok(payload)
+
+    # observables were tagged, not left live
+    found_obs = Ref(false); found_buf = Ref(false)
+    walk(x) = x isa Dict ? (
+            haskey(x, "__obs__") && (found_obs[] = true);
+            haskey(x, "__t__") && (found_buf[] = true); foreach(walk, values(x))
+        ) :
+        x isa AbstractVector ? foreach(walk, x) : nothing
+    walk(payload)
+    @test found_obs[]   # {__obs__}
+    @test found_buf[]   # {__t__}
+end
+
+@testset "Axis3 serializes (what CairoBackend rejects)" begin
+    fig = Figure(; size = (400, 300))
+    ax = Axis3(fig[1, 1])
+    lines!(ax, cos.(0:0.1:6), sin.(0:0.1:6), 0:0.1:6)
+    Makie.update_state_before_display!(fig)
+    @test HoloWGL.scene_payload(fig) isa Dict{String, Any}
+end
+
+@testset "holo_webgl widget" begin
+    import HoloWGL: _widget_html
+    using HypertextLiteral: JavaScript
+    import JSON3
+    fig = Figure(; size = (400, 300))
+    ax = Axis(fig[1, 1])
+    scatter!(ax, 1:5, rand(5))
+    w = holo_webgl(fig, [])                      # empty interactables -> still a valid base widget
+    @test w isa HoloWGL.WebGLWidget
+    @test w.scene isa Dict{String, Any}
+    @test (w.width, w.height) == (400, 300)
+
+    # self-contained HTML (inline JSON instead of published_to_js) — the integration points
+    html = sprint(
+        show, MIME"text/html"(),
+        _widget_html(
+            w;
+            scene_expr = JavaScript(JSON3.write(w.scene)),
+            manifest_expr = JavaScript(JSON3.write(w.manifest)),
+            bundle_js = JavaScript(JSON3.write("/*bundle*/")),
+            shim_js = JavaScript(JSON3.write("/*shim*/")),
+        ),
+    )
+    @test occursin("canvas", html)
+    @test occursin("mountWebGL", html)
+    @test occursin("createObjectURL", html)      # blob delivery (no server / no file://)
+    @test occursin("window.Holo.mount", html)    # Holo's overlay reused verbatim
+end
+
+@testset "backend wiring" begin
+    b = WebGLBackend()
+    @test b isa HoloWGL.Holo.AbstractBackend
+    @test HoloWGL.Holo.mount(b) === :webgl
+    @test isfile(HoloWGL.SHIM_JS)
+    @test isfile(HoloWGL.wglmakie_bundle_path())   # the version-matched renderer is on disk
+end

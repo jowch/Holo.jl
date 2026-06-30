@@ -1,0 +1,4 @@
+# Subpackage env is resolved per-checkout; commit only Project.toml.
+Manifest.toml
+/.playwright-mcp/
+*.cov
