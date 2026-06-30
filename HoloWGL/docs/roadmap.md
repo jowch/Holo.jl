@@ -107,7 +107,9 @@ sharing it was the slimming target:
       built by esbuild to the committed `assets/holo-webgl.js` under the same gate as `overlay.ts`:
       lint + typecheck + vitest + build, CI sole author (stale committed bundle fails PR CI). The
       vitest suite covers the JS half of the `rewrap`↔`_plain` 4-rule contract (asserts `rewrap`
-      against the `_plain` tag set; a new Julia-side tag is caught by the E2E, not vitest) — the shim
+      against the `_plain` tag set; it can't catch a renamed/new `_plain` tag on the Julia side —
+      and neither can the overlay E2E, which renders independently of the canvas, so only the live
+      render check does) — the shim
       was previously the only JS in the repo with no test/lint/typecheck. Live-verified: the
       built+minified shim renders both demo widgets (2D scatter + 3D helix) in real Pluto, identical
       to the hand-authored shim.*

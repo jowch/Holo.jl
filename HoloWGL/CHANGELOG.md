@@ -32,8 +32,10 @@ versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
   (M2 build pipeline), mirroring Holo core's `frontend/`. `assets/holo-webgl.js` is now built from
   `src/holo-webgl.ts` (was hand-authored), CI sole author + a stale-bundle PR check, same as
   `overlay.js`. The vitest suite covers the JS half of the `rewrap`↔`_plain` 4-rule scene contract
-  (asserts `rewrap` against the `_plain` tag set; a new Julia-side tag is caught by the E2E, not
-  vitest) — the shim was previously the only JS in the repo with no test/lint/typecheck gate.
+  (asserts `rewrap` against the `_plain` tag set; it can't catch a renamed/new `_plain` tag on the
+  Julia side — and neither can the overlay E2E, which renders independently of the canvas, so only
+  the live render check does) — the shim was previously the only JS in the repo with no
+  test/lint/typecheck gate.
   Built+minified shim live-verified to render both demo widgets unchanged.
 
 ### Performance

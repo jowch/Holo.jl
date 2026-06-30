@@ -85,9 +85,10 @@ blobs — the exact mechanism `published_to_js` uses) rendering in a headless br
 5. **Build pipeline** — DONE. `assets/holo-webgl.js` is now built from
    `HoloWGL/frontend/src/holo-webgl.ts` by esbuild, under the same gate as Holo core's
    `overlay.ts` (lint + typecheck + vitest + build; CI sole author). The vitest suite covers the JS
-   half of the `rewrap`↔`_plain` 4-rule contract (asserts `rewrap` against the `_plain` tag set; a
-   new Julia-side tag is caught by the E2E, not vitest) — `rewrap` was previously the least-tested
-   JS in the repo.
+   half of the `rewrap`↔`_plain` 4-rule contract (asserts `rewrap` against the `_plain` tag set; it
+   can't catch a renamed/new `_plain` tag on the Julia side — and neither can the overlay E2E, which
+   renders independently of the canvas, so only the live render check does) — `rewrap` was
+   previously the least-tested JS in the repo.
 
 ## Dev
 ```
