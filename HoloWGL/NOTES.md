@@ -51,7 +51,8 @@ blobs — the exact mechanism `published_to_js` uses) rendering in a headless br
 
 ## Animation — both tiers PROVEN (client-side, no server)
 - **Tier 1 (Pluto-reactive):** a slider/`@bind` drives a new figure → `holo_webgl` re-renders.
-  Works today, zero new code. Heavier per frame (full payload — see bundle-sharing below).
+  Works today, zero new code. Each frame re-ships only the ~0.3–0.6 MB scene — the bundle is
+  deduped across re-runs too (see bundle-sharing below), not just across cells.
 - **Tier 2 (in-place):** `mountWebGL` returns `WGL`; the driver patches a plot's buffer by
   uuid — `WGL.find_plots([uuid])[0].geometry.attributes.wgl_positions.array.set(frame);
   attr.needsUpdate = true` — smooth, no Julia round-trip. **Verified**: scatter markers
@@ -62,8 +63,16 @@ blobs — the exact mechanism `published_to_js` uses) rendering in a headless br
 2. **Axis3 / live-camera projection** — `context` reuses `Makie.project` (2D Axis, validated).
    3D pan/zoom needs the overlay to read WGLMakie's client-side camera (the `project`/`pick`
    seam). Static 3D renders today; the overlay for 3D is the follow-on.
-3. **Share the bundle once per notebook** — currently ~1MB ships per cell (correct, just
-   wasteful). Publish the bundle/atlas/three.js once and reference it from each widget.
+3. **Share the bundle once per notebook** — DONE (M2). The ~1MB bundle no longer costs per cell:
+   `published_to_js` ids are content-addressed (`notebook_id/objectid`, `objectid(::String)` is
+   content-based), so the one `Ref`-cached bundle string has a stable id that ships **exactly once
+   per notebook** — across cells (Pluto's notebook merge keeps one copy on load) AND across re-runs
+   of a cell (Pluto nulls already-known ids before sending: `known_published_objects` from the prior
+   run + `format_output.jl`, so a re-run re-ships only its new scene, never the stable-id bundle; the
+   kernel re-*publishes* but does not re-*send*). The browser then caches the bundle/shim blob URLs
+   once on `window.__HoloWGL` (like Holo's `window.Holo`) so it imports the WGLMakie module once, not
+   per cell. No deferral — tier-1 reactive re-renders cost just the scene; scene slimming (#4) /
+   tier-2 in-place are the only per-frame levers left.
 4. **Payload slimming** — the scene JSON is atlas-dominated; msgpack/gzip are size levers
    (optional, not correctness).
 5. **Build pipeline** — `assets/holo-webgl.js` is hand-authored now; wire it into the

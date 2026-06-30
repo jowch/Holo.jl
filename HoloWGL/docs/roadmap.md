@@ -66,17 +66,32 @@ from Holo core's PNG+manifest envelope in `../../docs/perf-findings.md`, which i
 
 | | shipped | 2026-06-30 (WGLMakie 0.13.12) |
 |---|---|---|
-| WGLMakie bundle | once per widget | **1.09 MB** |
+| WGLMakie bundle | once per notebook (M2) | **1.09 MB** |
 | scene JSON — 2D lines (200 pts) | per cell | 0.33 MB |
 | scene JSON — 2D scatter + text (40) | per cell | 0.44 MB |
 | scene JSON — 3D helix (300 pts) | per cell | 0.56 MB |
 
-So a `:webgl` cell ships ~1.1 MB (bundle) + ~0.3–0.6 MB (scene). The bundle dominates and is the
-slimming target:
+So the first `:webgl` cell ships ~1.1 MB (bundle) + ~0.3–0.6 MB (scene); each **additional** cell
+ships just its 0.3–0.6 MB scene (M2). The bundle dominated, so sharing it was the slimming target:
 
-- [ ] **Share the bundle once per notebook**: the 1.09 MB bundle + font atlas + three.js currently
-      ship per cell (correct, wasteful). Publish once, reference from each widget → each extra cell
-      drops to just its 0.3–0.6 MB scene.
+- [x] **Share the bundle once per notebook**: the 1.09 MB bundle + font atlas + three.js used to
+      ship per cell (correct, wasteful). *Done — no new machinery needed, because both halves were
+      already content-addressable: (1) **Wire** — `published_to_js` ids are `notebook_id/objectid(x)`
+      and `objectid(::String)` is content-based, so the one `Ref`-cached bundle string always gets the
+      same stable id. That id ships the ~1.09 MB **exactly once per notebook**, on two axes: *across
+      cells*, Pluto's notebook merge (`PlutoRunner`'s `cell_published_objects` → `Dynamic.jl`) keeps a
+      single copy on load; *across re-runs of a cell*, Pluto's own dedup nulls it before sending —
+      `run_cell` passes `known_published_objects = collect(keys(cell.published_objects))` (the prior
+      run's ids, `Run.jl`), and `formatted_result_of` sets every already-known key to `nothing`
+      (`format_output.jl`), so a re-run re-ships only its **new ~0.3–0.6 MB scene** (new id), never the
+      stable-id bundle. The kernel re-*publishes* (re-calls `published_to_js`) but that is not a wire
+      re-*send*. (2) **Browser** — each cell still `createObjectURL`'d + `import()`'d that 1 MB, making
+      N WGLMakie module instances; `widget.jl` now caches the bundle/shim blob URLs once on
+      `window.__HoloWGL` (the same idempotent-singleton trick Holo core uses for `window.Holo`), so
+      every extra widget reuses the one module (`??=` short-circuits, so a cache hit never even
+      dereferences the published 1 MB). Each additional cell — and each tier-1 reactive re-render —
+      now costs just its scene, browser-side and on the wire.* The only per-frame lever left is the
+      scene itself (msgpack/gzip below, or tier-2 in-place patching that ships no new scene at all).
 - [ ] **Payload slimming**: msgpack/gzip for the scene JSON (atlas-dominated).
 - [ ] **Build pipeline**: move `assets/holo-webgl.js` into an esbuild build alongside Holo's
       `overlay.js` if/when the shim grows.

@@ -25,6 +25,19 @@ versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
   `holo_webgl` (no separate `using WGLMakie`, no `Figure` ambiguity).
 - MIT `LICENSE`, `README.md`, `docs/roadmap.md`, `NOTES.md`, and a smoke-test suite.
 
+### Performance
+- **Bundle shared once per notebook (M2).** The ~1.09 MB WGLMakie bundle no longer costs per
+  cell. Wire: `published_to_js` ids are content-addressed (`notebook_id/objectid`, and
+  `objectid(::String)` is content-based), so the one `Ref`-cached bundle string has a stable id
+  that crosses the wire **exactly once per notebook** — across cells (Pluto's notebook merge keeps
+  one copy on load) and across re-runs of a cell (Pluto nulls already-known ids before sending:
+  `known_published_objects` from the prior run + `format_output.jl`, so a re-run re-ships only its
+  new scene, never the stable-id bundle — the kernel re-*publishes* but does not re-*send*). Browser:
+  the bundle/shim blob URLs are now cached once on `window.__HoloWGL` (the idempotent-singleton
+  trick Holo core uses for `window.Holo`), so the WGLMakie module imports once instead of per cell
+  (`??=` short-circuits — a cache hit never dereferences the published 1 MB). Each additional
+  `:webgl` cell, and each tier-1 reactive re-render, now costs just its 0.3–0.6 MB scene.
+
 ### Fixed (caught by live-Pluto verification, masked by headless/JSON3 testing)
 - `published_to_js` rejected `GeometryBasics.Vec` / `SizedVector` left in the payload —
   `Float32.(x)` and `collect(T, x)` preserve StaticArray types. Encode buffers with
