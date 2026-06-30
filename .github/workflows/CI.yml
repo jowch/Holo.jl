@@ -66,6 +66,10 @@ jobs:
       - name: Run real-browser @bind E2E
         working-directory: HoloWGL/test/e2e
         run: node click.mjs "$RUNNER_TEMP/e2e"
+      # Close the seam: feed the value the browser actually emitted through the real Julia
+      # transform_value (no synthesized payload between emit and consume).
+      - name: Verify browser-emitted value through transform_value
+        run: julia --project=HoloWGL HoloWGL/test/e2e/verify_capture.jl "$RUNNER_TEMP/e2e"
 
   examples:
     name: Example notebooks

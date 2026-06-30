@@ -14,7 +14,7 @@
 
 import { chromium } from "playwright";
 import { createServer } from "node:http";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const dir = process.argv[2];
@@ -66,6 +66,9 @@ try {
   }, expected);
 
   if (!got) throw new Error("no bond value emitted on click (host.value never set / no input event)");
+  // Persist the REAL emitted host.value so verify_capture.jl can feed it through the actual
+  // Julia transform_value — closing the emit→consume seam empirically (not at a synthesized shape).
+  writeFileSync(join(dir, "captured.json"), JSON.stringify(got));
   if (got.layer !== expected.layer || got.index !== expected.index) {
     throw new Error(`bond mismatch: got ${JSON.stringify(got)}, expected layer=${expected.layer} index=${expected.index}`);
   }

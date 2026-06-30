@@ -50,9 +50,12 @@ The hard questions are answered and the backend works end-to-end in a real Pluto
       Chromium and asserts the overlay sets `host.value = {layer,index,payload}` + fires `input` (the
       `@bind` contract, overlay.ts:273-274) — exercising the real overlay JS, shadow-DOM hit-test, and
       the `:webgl` sizer base a unit test can't reach. WebGL canvas init may fail headless; irrelevant,
-      the overlay rides the sizer. **Scope:** stops at bond emission — the click→kernel→reactive-rerender
-      mile is generic Pluto machinery (not HoloWGL code), so a full live-Pluto kernel E2E is intentionally
-      out of scope.*
+      the overlay rides the sizer. **Seam closed:** `click.mjs` persists the *real* emitted `host.value`
+      and `verify_capture.jl` feeds it through the actual `transform_value` → `InteractionEvent`, so
+      emit→consume is stitched by the byte-for-byte browser value, not a synthesized payload. **Scope:**
+      stops at bond emission — the click→kernel→reactive-rerender mile is generic Pluto machinery (not
+      HoloWGL code), so a full live-Pluto kernel E2E is intentionally out of scope (tracked as a Holo-core
+      issue, since the shared overlay means one core test would cover both backends).*
 
 ## M2 — Delivery & performance
 
