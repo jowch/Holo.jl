@@ -24,7 +24,7 @@ The hard questions are answered and the backend works end-to-end in a real Pluto
   mount, and a clicked marker round-tripping `InteractionEvent` back to Julia.
 - ✅ Additive: **Holo core untouched**. 17/17 tests, Runic-clean.
 
-## M1 — Ergonomics & robustness (near-term)
+## M1 — Ergonomics & robustness
 
 - [ ] **Tier-2 data-animation API**: a Julia accessor for a plot's uuid + a tidy
       `updatePlotData(uuid, attr, frame)` JS helper (today it's a manual `find_plots` patch).
