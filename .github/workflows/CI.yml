@@ -53,15 +53,15 @@ jobs:
     # The :webgl extension isn't covered by the `julia` job (GROUP=Core loads CairoMakie
     # only). Run its suite — incl. the WGLMakie/Bonito version-coupling guard and the
     # both-loaded rejection — so a dependency bump that moves the wire format fails the
-    # gate here instead of only on a manual local run. Pinned per the compat floor Task 4
-    # verified (adjust the version below to match whatever that task settled on).
+    # gate here instead of only on a manual local run. Pinned to 1.10, the compat floor
+    # Task 4 verified.
     name: WGLMakie extension
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
-          version: '1.12'
+          version: '1.10'
       - uses: julia-actions/cache@v2
       - name: Instantiate + test WGLMakie extension
         run: |
@@ -98,7 +98,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
-          version: '1.12'
+          version: '1.10'
       - uses: julia-actions/cache@v2
       - uses: actions/setup-node@v4
         with:
