@@ -7,7 +7,8 @@
 > Reproduce (numbers below re-run 2026-06-29, last reconciled for M2.3 template-tooltip design
 > on PR #10 and confirmed unchanged for M4 box-select (commit `d05318f`) on 2026-06-29 and for
 > Phase 2a bars/areas/spans on 2026-06-30 and Phase 2b polygon surfaces (commit `431bd99`) on
-> 2026-06-30 and colorbar readout `valueaxis` field (PR #27) on 2026-06-30;
+> 2026-06-30 and colorbar readout `valueaxis` field (PR #27) on 2026-06-30 and text labels
+> (`TextInteractable`, this arc) on 2026-07-01;
 > baseline established after int-pixel geometry quantization, CairoMakie 0.15, Julia 1.12):
 > - **base64-PNG / manifest / render numbers** — `julia --project=. bench/payload_envelope.jl`
 >   (normal envelope) and `julia --project=. bench/stress.jl` (the 10× extremes). Both `seed!(0)`,
@@ -217,6 +218,27 @@ float16; lossy >2048px). Keep `AxisTransform` lims `Float64` (drag inversion) �
   render-bound. The §A–E envelope is
   **unchanged** — bench re-run (2026-06-30) confirms all existing scatter/heatmap numbers are
   identical; the `:polygons` term is an addition, not a modification of prior geometry kinds.
+
+- **Text labels** *(delivered, this arc, 2026-07-01)* — `text!` and `annotation!` labels
+  auto-extracted as `:rects` click-to-pick buttons (`TextInteractable`); no new geometry kind (rides
+  the same primitive as bars/heatmap cells). The only new wire term is the payload's `text` string —
+  `(; text, index, x, y)` replaces `(; index, x, y)`. Bench §G (2026-07-01, `bench/payload_envelope.jl`):
+
+  | Case | labels | manifest | ~B/label | geometry | payload |
+  |------|-------:|---------:|---------:|---------:|--------:|
+  | scatter+labels (picker, 5 short labels) | 5 | 0.8 KB | 51 | 8 B (4-int `:rects` box) | 43 B |
+  | text-only (100 labels, ~4-char strings) | 100 | 4.9 KB | 47 | 8 B (4-int `:rects` box) | 39 B |
+
+  Per-label cost is **tiny and render-bound**: the `:rects` box is the usual 4 quantized ints
+  (~8 B), and the payload is one short string (`text`) plus three numbers (`index`, `x`, `y` —
+  `y` and `x` stay Float64 like every other point-anchored payload, `index` is a small int) — a few
+  tens of bytes total, in the same range as a bar-chart element (see Phase 2a above), not a
+  polygon-ring element (see Phase 2b above, ~hundreds–thousands of B/elem). Text is also inherently
+  low-N: unlike scatter points, labels need screen-space room to stay legible, so realistic figures
+  carry tens, not thousands, of them — a 100-label figure (already a dense label grid, not a
+  realistic chart) is still under 5 KB. The §A–G envelope is **unchanged** — bench re-run
+  (2026-07-01) confirms all existing scatter/heatmap/polygon numbers are identical; the text term is
+  an addition, not a modification of prior geometry kinds.
 
 - **M2.3 Richer tooltips** *(delivered, PR #10)* — the original
   prediction was correct: shipping per-element tooltip strings would grow the manifest by `Σ(tooltip

@@ -1,6 +1,14 @@
 # Makie Surface & Interaction-API Survey
 
 > Raw output of the survey workflow (2026-06-26). The digested design lives in architecture.md.
+>
+> **Reconciliation note (Phase 2 text labels, 2026-07-01):** this survey's every "Text/Annotation
+> need font-metric measurement → a new `bbox` primitive" call turned out wrong — `Makie.string_boundingboxes`
+> already returns each string's pixel-space box, so `TextInteractable` shipped on plain `:rects`
+> (a rotated label's box just expands to stay axis-aligned). No `bbox` primitive was built; see
+> `architecture.md` §3/§4 and `roadmap.md` for what actually shipped. Left the historical survey
+> text below as-is (it's this file's stated raw-output contract) and annotated the specific claims
+> inline.
 
 ## Synthesis
 
@@ -38,7 +46,9 @@ struct AxisInteractable    <: AbstractInteractable  # no regions; rides the axis
 - PolygonInteractable (v1): Poly, Band, Pie
 - PolygonInteractable (v2): Contourf, Tricontourf, Voronoiplot, Triplot, Violin
 - AxisInteractable (v1): Axis (linear + log/symlog/pseudolog, single or multi)
-- **skip (v2+):** MeshScatter, Text, TextLabel, Annotation (rotated-text bbox); Arrows2D/Arrows3D (mesh hulls); Surface (3D mesh); Density (continuous band — fold into Poly-band in v2); RainClouds (composite); Bracket (Bézier); GridLines/Spines/Ticks/LineAxis/Titles/Labels (decorative); PolarAxis, Axis3D (tier 4).
+- **skip (v2+):** MeshScatter, Text, TextLabel, Annotation (rotated-text bbox — **reconciled:** Text
+  and Annotation shipped in Phase 2 as `TextInteractable`/`:rects`, *not* a bbox primitive; `TextLabel`
+  is the piece still deferred, see the reconciliation note above); Arrows2D/Arrows3D (mesh hulls); Surface (3D mesh); Density (continuous band — fold into Poly-band in v2); RainClouds (composite); Bracket (Bézier); GridLines/Spines/Ticks/LineAxis/Titles/Labels (decorative); PolarAxis, Axis3D (tier 4).
 
 ScatterLines is the one surface that **emits two interactables** from one plot (a `PointInteractable` and a `SegmentInteractable` sharing a payload namespace); precedence is points-first within markersize px, then segment. This is the model for any composite recipe.
 
@@ -50,7 +60,7 @@ The closed set is exactly six, and it is closed because every retained surface's
 2. **segment / polyline** — a vertex list + `mode`. Polyline shares vertices (segment i = v[i],v[i+1], NaN = gap); pairs are disjoint (v[2i],v[2i+1]). One JS distance-to-segment test serves both.
 3. **rect** (axis-aligned, data-space) `{cx,cy,w,h}` — bars, heatmap cells. Grid form ships `(x_edges, y_edges)` + matrix dims, not N rects, so the *geometry* is compact with O(1) inversion — but it also ships the full **source-resolution** `values[]` matrix to power the `(i,j)=value` readout, which is O(source-cells): a 1000² heatmap is ~4.78 MB, *not* constant-size (a 2000²–4000² `image!` reaches tens of MB). Committed fix: ship `values[]` only when the cell's *expected on-screen* size (display bounded by the Pluto column) is targetable (≥~1–2 px), else drop → payload `{i,j}` + `@warn`. Subsumes `Image` (sub-pixel → auto-drop). See `architecture.md` §8.
 4. **polygon** — vertex ring, even-odd fill rule for holes. Pie wedges, Poly, Band quads.
-5. **bbox** (pixel-space, may carry rotation θ) — reserved for v2 rotated text/markers; distinct from rect because it lives in pixel space post-projection and can be rotated. A θ=0 bbox is a rect; a θ≠0 bbox is a degenerate 4-vertex polygon. We keep it nominally separate so the cheap axis-aligned path stays cheap, but the JS test for it = the polygon test.
+5. **bbox** (pixel-space, may carry rotation θ) — reserved for v2 rotated text/markers; distinct from rect because it lives in pixel space post-projection and can be rotated. A θ=0 bbox is a rect; a θ≠0 bbox is a degenerate 4-vertex polygon. We keep it nominally separate so the cheap axis-aligned path stays cheap, but the JS test for it = the polygon test. **Reconciled (Phase 2 text labels):** this primitive was never built for text — `TextInteractable` rides plain `:rects` instead, with rotated labels getting an axis-aligned *expanded* box rather than a rotated one. Still hypothetically open for rotated markers, but no consumer has needed it.
 6. **axis-transform** — per-axis `{limits, scale, viewport, reversed, float32_offset}` shipped once, enabling continuous data↔pixel inversion in JS for AxisInteractable and for any hover that wants live coordinates. *(Precision note: despite `float32_offset`, the limits/viewport must stay `Float64` — the M4 drag inverts pixel→data through them and error amplifies; geometry is quantizable, this transform channel is not. `architecture.md` §9.)*
 
 **What does not fit, and the disposition:**
@@ -58,7 +68,14 @@ The closed set is exactly six, and it is closed because every retained surface's
 - **Continuous surfaces (Axis, Density):** no discrete region exists. Handled by the axis-transform channel (AxisInteractable), not by emitting regions. Density's *band* in v2 becomes a single polygon; its continuous readout is just AxisInteractable.
 - **Curves (Arc, Bracket Béziers, contour arcs):** approximated as polylines at render resolution (`resolution`/`vertex_per_deg`), which is exactly how Makie already rasterizes them. No new primitive.
 - **3D meshes (Surface, MeshScatter, Arrows3D):** require projected convex hull or screen-space bbox + depth; **skip**. If ever needed, the projected silhouette is a polygon — still no new primitive, but tier 3–4 projection rules it out.
-- **Rotated/aligned text bboxes (Text, Annotation, …):** need font-metric measurement to get bounds; deferred to v2 via the `bbox` primitive (with rotation). The geometry primitive exists; the *extractor* is the hard part.
+- **Rotated/aligned text bboxes (Text, Annotation, …):** ~~need font-metric measurement to get
+  bounds; deferred to v2 via the `bbox` primitive (with rotation). The geometry primitive exists;
+  the *extractor* is the hard part.~~ **Reconciled (Phase 2 text labels):** wrong on both counts —
+  no font-metric measurement was needed (`Makie.string_boundingboxes(p)` already returns each
+  string's box) and no `bbox` primitive was built (`TextInteractable` rides plain `:rects`, rotated
+  labels get an axis-aligned expanded box). The actual work was wiring the extractor to an existing
+  Makie function, not measuring anything. `TextLabel` (a `Block`) remains deferred — different
+  reason: it needs the figure-block walk, not font metrics.
 
 No surface in the survey requires a seventh primitive. The set is genuinely closed for the v1+v2 retained universe.
 
@@ -180,7 +197,7 @@ FunctionInteractable(ax, f; id, events=(:click,:hover))
 - **PolygonInteractable:** Poly, Band, Pie — vertices live directly in data space; the tier-2 label on Poly is *extraction* complexity (multiple meshes/holes), not projection, and even-odd point-in-polygon handles it.
 - **AxisInteractable:** the whole-axis coordinate readout, linear and log.
 
-**v2 (deferred):** ABLines, Arc (axis-limit/curve), Waterfall, CrossBar, HSpan, VSpan, Colorbar, Legend (rect-list, low demand), Contourf/Tricontourf/Voronoiplot/Triplot/Violin/Density (computational-geometry or KDE extraction, tier 2–3), and all text-bbox surfaces (need font metrics).
+**v2 (deferred):** ABLines, Arc (axis-limit/curve), Waterfall, CrossBar, HSpan, VSpan, Colorbar, Legend (rect-list, low demand), Contourf/Tricontourf/Voronoiplot/Triplot/Violin/Density (computational-geometry or KDE extraction, tier 2–3), and ~~all text-bbox surfaces (need font metrics)~~ — **reconciled:** Text and Annotation shipped in Phase 2 (`TextInteractable`/`:rects`, no font metrics needed after all); only `TextLabel` (a `Block`) remains deferred.
 
 **Never (tier 3–4 / not invertible client-side):** MeshScatter, Arrows3D, Surface, RainClouds, PolarAxis, Axis3D, decorations. PolarAxis is the boundary case — non-Cartesian inversion in JS — and stays out until/unless we ship the transform serializer for it.
 
