@@ -1090,3 +1090,30 @@ end
     @test th.xscale === :identity
     @test th.viewport[3] > th.viewport[4]             # a horizontal bar: width > height
 end
+
+@testset "ColorbarInteractable" begin
+    using Holo: ColorbarInteractable, hitlayers, validate
+    fig = Figure(); ax = Axis(fig[1, 1]); hm = heatmap!(ax, rand(10, 10))
+    cb = Colorbar(fig[1, 2], hm)
+    Makie.update_state_before_display!(fig)
+    _, _, ctx = ctx_for(fig)
+    ci = ColorbarInteractable(cb; id = :colorbar)
+    @test validate(ci, ctx) === nothing                     # identity scale is invertible
+    ls = hitlayers(ci, ctx)
+    @test length(ls) == 1
+    L = ls[1]
+    @test L.kind === :axis
+    @test L.id === :colorbar
+    @test L.geometry isa AbstractVector && length(L.geometry) == 4   # bbox rect [x,y,w,h] (bounded)
+    @test L.axis == Holo.axis_id(ctx, cb)                   # references the colorbar transform
+    @test isempty(L.payloads)                               # value computed client-side
+
+    # non-invertible scale fails loud (colorscale on the heatmap propagates to cb.scale[])
+    fig2 = Figure(); ax2 = Axis(fig2[1, 1])
+    hm2 = heatmap!(ax2, rand(10, 10); colorscale = Makie.pseudolog10)
+    cb2 = Colorbar(fig2[1, 2], hm2)
+    Makie.update_state_before_display!(fig2)
+    _, _, ctx2 = ctx_for(fig2)
+    ci2 = ColorbarInteractable(cb2; id = :colorbar)
+    @test validate(ci2, ctx2) isa String                    # rejected with a message
+end
