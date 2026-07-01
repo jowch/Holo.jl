@@ -151,11 +151,45 @@ struct HoloWidget
     display_css::Int
 end
 
+# Exactly one rendering backend per session, resolved from which package extension is
+# active — never guessed from figure content. See
+# .superpowers/specs/2026-06-30-holo-backend-selection-design.md for why: Makie's
+# `current_backend()` is a bare global `Ref` that any loaded backend's `__init__` flips
+# unconditionally, so backend choice has to stay tied to the user's own `using` line, not
+# to per-call content sniffing. `explicit` is the caller's own `backend=` override, if
+# given — the both-loaded check still fires even then, since a stray second `using` line
+# elsewhere in the session is a problem regardless of what any one call pins.
+function _resolve_backend(explicit; max_width)
+    cairo_ext = Base.get_extension(@__MODULE__, :HoloCairoMakieExt)
+    wgl_ext = Base.get_extension(@__MODULE__, :HoloWGLMakieExt)
+    if cairo_ext !== nothing && wgl_ext !== nothing
+        throw(
+            ArgumentError(
+                "Holo supports exactly one rendering backend per session, but both CairoMakie " *
+                    "and WGLMakie are loaded. Restart the session with only one `using` line " *
+                    "(`using CairoMakie` for static 2D, `using WGLMakie` for 3D/animation/large " *
+                    "data) — mixing them in one session isn't supported.",
+            ),
+        )
+    end
+    explicit !== nothing && return explicit
+    cairo_ext !== nothing && return cairo_ext.CairoBackend(; max_width)
+    wgl_ext !== nothing && return wgl_ext.WebGLBackend(; max_width)
+    throw(
+        ArgumentError(
+            "holo(fig) needs a rendering backend loaded: `using CairoMakie` for static 2D, or " *
+                "`using WGLMakie` for 3D/animation/large data — then call `holo` again.",
+        ),
+    )
+end
+
 """
-    holo(fig, interactables; backend=CairoBackend(), selected=nothing)
+    holo(fig, interactables; selected=nothing)
 
 Render `fig` and overlay JS hit-testing for the declared `interactables`. Use as a Pluto
 `@bind` source; the bond value is `nothing` until a click, then an [`InteractionEvent`](@ref).
+Requires exactly one rendering backend loaded: `using CairoMakie` for static 2D, or
+`using WGLMakie` for 3D/animation/large data.
 
 `selected` (a `layer_id => indices` map) pre-highlights elements on mount. Feed a bond value
 back into it — `Dict(ev.layer => [ev.index])` — to keep clicked elements highlighted across
@@ -167,10 +201,12 @@ restored. `update_state_before_display!` is also run, but that is exactly the st
 at display/save time, so it is benign (not corruption).
 """
 function holo(
-        fig, interactables::AbstractVector; backend::AbstractBackend = CairoBackend(), selected = nothing,
+        fig, interactables::AbstractVector; backend::Union{Nothing, AbstractBackend} = nothing,
+        max_width = 700, selected = nothing,
         tooltip_bg = nothing, tooltip_color = nothing, tooltip_accent = nothing,
         tooltip_font = nothing, tooltip_font_size = nothing, tooltip_radius = nothing, tooltip_caret = true,
     )
+    backend = _resolve_backend(backend; max_width)
     bg0 = fig.scene.backgroundcolor[]
     try
         fig.scene.backgroundcolor[] = RGBAf(Makie.red(bg0), Makie.green(bg0), Makie.blue(bg0), 1)
@@ -183,7 +219,7 @@ function holo(
         manifest = build_manifest(interactables, ctx; selected, tip_style)
         result = render(backend, fig, ppu)
         display_css = round(Int, min(size(fig.scene)[1], backend.max_width))
-        return HoloWidget(base64encode(result.payload), manifest, display_css)
+        return make_widget(backend, result, manifest, display_css)
     finally
         fig.scene.backgroundcolor[] = bg0
     end
@@ -191,7 +227,7 @@ end
 holo(fig, i::AbstractInteractable; kwargs...) = holo(fig, [i]; kwargs...)
 
 """
-    holo(fig; backend=CairoBackend(), selected=nothing)
+    holo(fig; selected=nothing)
 
 Auto-extract interactables from `fig` (see [`auto_interactables`](@ref)) and overlay them —
 the zero-config path. Equivalent to `holo(fig, auto_interactables(fig))`; unsupported plot
