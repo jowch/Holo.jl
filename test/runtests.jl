@@ -1067,6 +1067,7 @@ end
     t = ctx.transforms[tid]
     @test t.valueaxis === :y                          # vertical colorbar → value on y
     @test t.ylims == (Float64(cb.limits[][1]), Float64(cb.limits[][2]))
+    @test t.yscale === :identity                      # default heatmap colorbar is identity
     # the colorbar viewport (image px) sits to the right of the axis viewport and has the bar's aspect
     axt = ctx.transforms[axis_id(ctx, ax)]
     @test t.viewport[1] > axt.viewport[1]             # colorbar is right of the axis
@@ -1075,4 +1076,17 @@ end
     m = build_manifest([], ctx)
     @test haskey(m["transforms"], string(tid))
     @test m["transforms"][string(tid)]["valueaxis"] == "y"
+
+    # horizontal colorbar → value runs along x
+    figh = Figure()
+    axh = Axis(figh[1, 1])
+    hmh = heatmap!(axh, rand(10, 10))
+    cbh = Colorbar(figh[2, 1], hmh; vertical = false)
+    Makie.update_state_before_display!(figh)
+    _, _, ctxh = ctx_for(figh)
+    th = ctxh.transforms[axis_id(ctxh, cbh)]
+    @test th.valueaxis === :x
+    @test th.xlims == (Float64(cbh.limits[][1]), Float64(cbh.limits[][2]))
+    @test th.xscale === :identity
+    @test th.viewport[3] > th.viewport[4]             # a horizontal bar: width > height
 end
