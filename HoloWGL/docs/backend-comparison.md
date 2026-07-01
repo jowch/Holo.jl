@@ -5,7 +5,8 @@
 > `<canvas>` on the client GPU, same overlay on top). The open question was whether `:webgl` is just
 > a *heavier* `:cairo` (pay 1.09 MB, get the same thing) or a **co-equal entry point** a user would
 > pick on its own. The measurements say co-equal: they occupy **different regimes**, and `:webgl`
-> owns a capability zone `:cairo` cannot enter at all.
+> owns a **3D-rendering** capability zone `:cairo` cannot enter (live view manipulation is *not* such a
+> zone — it's gated off today and deferred; see §1†).
 >
 > **Numbers reproduce** via `julia --project=HoloWGL HoloWGL/bench/vs_cairo.jl` (WebGL measured live,
 > both sides `Random.seed!(0)`; Cairo measured in a root-env subprocess — one command, nothing
@@ -21,7 +22,8 @@
 
 UX diverges on capability before it diverges on speed. `:cairo` ships a **static image**: the only
 live interactions are the overlay's hit-test (hover/click) and a full server re-render when an
-`@bind` changes the figure. `:webgl` ships a **live scene**: the client GPU owns view manipulation.
+`@bind` changes the figure. `:webgl` ships a **live scene** (the base is a live GPU canvas) — but the
+camera is gated off today (§1†), so its client-side edge is *rendering*, not view manipulation.
 
 | interaction | `:cairo` | `:webgl` |
 |---|---|---|
@@ -39,19 +41,26 @@ manipulation. Live pan/zoom/rotate is **not a feature of either backend right no
 > **(†) Live view manipulation is currently off — and turning it on is a cross-backend design
 > question, not a quick win.** `:cairo` can never pan/zoom (a PNG is dead pixels). `:webgl` *could* —
 > the base is a live GPU canvas — but the widget deliberately **gates the camera off**: the shim sets
-> `can_send_to_julia:()=>true` (needed so tier-2 animation's observable updates fire), and WGLMakie's
-> `use_orbit_cam = ()=>!can_send_to_julia()` therefore **disables 3D OrbitControls**; 2D `Axis`
-> zoom/pan is Julia-side in WGLMakie and dead under the server-free (`NoConnection`) model. *Verified
-> against the pinned bundle.* So there is **no live camera to drift against today** — the overlay
-> misalignment is *latent*, not observed.
+> `can_send_to_julia:()=>true` (needed for the client-side camera/uniform *observable* animation path,
+> which WGLMakie's `update_cam` early-returns on when the flag is false), and WGLMakie's
+> `use_orbit_cam = ()=>!(Bonito.can_send_to_julia && Bonito.can_send_to_julia())` therefore **disables
+> 3D OrbitControls**; 2D `Axis` zoom/pan is Julia-side in WGLMakie and dead under the server-free
+> (`NoConnection`) model. *Verified against the pinned bundle.* So there is **no live camera to drift
+> against today** — the overlay misalignment is *latent*, not observed.
 >
-> Enabling it is a **large, staged feature** (client-side re-projection + Holo-core `z`/`Axis3`
-> plumbing + a shared-`overlay.ts` pointer-events change + optional GPU-pick for occlusion) that would
-> exist **only in `:webgl`**. That asymmetry is the deciding factor: a headline capability that one
-> backend has and the other structurally cannot is at odds with the **co-equal-entry-points** framing
-> this doc argues for — it splits the user's mental model across backends. **Status: investigated →
-> deferred.** The investigation + a staged design are parked in `.superpowers/` (local); the roadmap
-> records the deferral. Not scheduled; revisit only on an explicit product decision.
+> Enabling it is a **large, staged feature** — the parked design's stages are **S1** a 2D CSS-transform
+> magnifier, **S2** 3D-rotate via client-side re-projection, **S3** true data-space 2D zoom (+ `Axis3`
+> support in Holo core), **S4** GPU-pick for occlusion — gated on a blocking spike (can a
+> `PointInteractable` even be authored over an `Axis3` scatter, given Holo's interactable stack is 2D
+> throughout?). It would exist **only in `:webgl`**, and *that* is the deciding factor — but note not
+> all backend asymmetry is equal. 3D *rendering* is an **inherent support gap** (Cairo can't draw
+> `Axis3` at all, so `:webgl` is simply "the capable backend"); live pan/zoom/rotate is a
+> **discretionary** headline *interaction* tier we would *choose* to give only `:webgl`, deliberately
+> making it "the interactive one" and splitting the user's mental model across backends. That
+> discretionary split is what pulls against the **co-equal-entry-points** framing. **Status:
+> investigated → deferred** (not rejected, not scheduled; revisit only on an explicit product
+> decision). Fuller detail in `.superpowers/holowgl-live-camera-overlay-design.md` (local process doc);
+> the roadmap records the deferral.
 
 ## 2. Wire + server cost — the measurable half
 
@@ -123,21 +132,24 @@ which is exactly what makes them **co-equal**, not light-vs-heavy.
 the user's GPU anyway). Three facts, GL-independent:
 
 - **Camera interaction is gated off today — verified.** The shim hardcodes `can_send_to_julia:()=>true`
-  (`HoloWGL/frontend/src/holo-webgl.ts`); WGLMakie's `use_orbit_cam = ()=>!can_send_to_julia()`
-  (pinned bundle) therefore **disables 3D OrbitControls**, and 2D `Axis` zoom/pan is Julia-side and dead
-  under the server-free (`NoConnection`) model. So a `:webgl` plot renders live but **does not pan, zoom,
-  or rotate** as shipped. (The flag is true *on purpose* — it's what lets tier-2 animation's observable
-  updates fire client-side.)
+  (`HoloWGL/frontend/src/holo-webgl.ts`); WGLMakie's
+  `use_orbit_cam = ()=>!(Bonito.can_send_to_julia && Bonito.can_send_to_julia())` (pinned bundle)
+  therefore **disables 3D OrbitControls**, and 2D `Axis` zoom/pan is Julia-side and dead under the
+  server-free (`NoConnection`) model. So a `:webgl` plot renders live but **does not pan, zoom, or
+  rotate** as shipped. (The flag is true *on purpose* — it's what lets the client-side camera/uniform
+  *observable* animation path fire; `update_cam` early-returns when it's false. Note this is **not**
+  roadmap tier-2 animation, which patches GL buffers via `find_plots` with no observable.)
 - **If enabled, the wire/latency would be free but the overlay would drift.** Because the scene ships
   through `Bonito.Session(Bonito.NoConnection())` (`src/HoloWGL.jl:84`) with no transport back to the
   kernel, a client-side camera move would cost **zero round-trip by construction**. But the overlay's
   hit-regions are a static `Makie.project` snapshot (`src/HoloWGL.jl:113-125`; its own comment: "STATIC
   camera overlay… Axis3 / live-camera need client-side projection — TODO"), so they would **not** track
   the moving plot. Both facts are latent until the camera is turned on.
-- **Turning it on is large and backend-asymmetric.** The staged shape (client re-projection → Holo-core
-  `z`/`Axis3` plumbing → shared-`overlay.ts` pointer-events change → optional GPU-pick for occlusion) is
-  laid out in `.superpowers/holowgl-live-camera-overlay-design.md` (local process doc). It lands **only
-  in `:webgl`**.
+- **Turning it on is large and backend-asymmetric.** The staged shape — **S1** 2D magnifier → **S2**
+  3D-rotate via client re-projection → **S3** data-space 2D zoom (+ Holo-core `z`/`Axis3` plumbing +
+  shared-`overlay.ts` pointer-events change) → **S4** GPU-pick for occlusion — lands **only in
+  `:webgl`** (fuller detail in `.superpowers/holowgl-live-camera-overlay-design.md`, a local process
+  doc).
 
 **Decision — investigated → deferred.** Should Holo offer live pan/zoom/rotate at all, given it would be
 a headline capability that only one backend can ever have? The asymmetry pulls against the
