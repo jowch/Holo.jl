@@ -25,8 +25,8 @@ live interactions are the overlay's hit-test (hover/click) and a full server re-
 
 | interaction | `:cairo` | `:webgl` |
 |---|---|---|
-| pan / zoom | **impossible** (static PNG) | client GPU — **no server round-trip** |
-| rotate a 3D plot | **impossible** (`Axis3` rejected at render) | client GPU — no round-trip |
+| pan / zoom | **impossible** (static PNG) | client GPU, **no server round-trip** — but overlay lags (†) |
+| rotate a 3D plot | **impossible** (`Axis3` rejected at render) | client GPU, no round-trip — overlay lags (†) |
 | hover tooltip | overlay hit-test (client) | overlay hit-test (client) — same |
 | click → `@bind` | client hit-test + bind | client hit-test + bind — same |
 | data update (`@bind` drives the data) | **full** server render + encode + PNG re-ship | server serialize + client redraw |
@@ -36,6 +36,17 @@ The **blank cells are the finding.** A symmetric latency table would print a num
 row and hide that `:cairo` cannot pan or zoom at all. So "wire crossover" (below) and "UX value" are
 different axes: a 100-point scatter never crosses over on bytes — but if the user wants to *zoom into
 it*, `:webgl` is the only backend that does.
+
+> **(†) The overlay does not follow the camera — an honest caveat on the pan/zoom win.** The plot
+> transforms client-side with zero round-trip, but Holo's hit-region overlay is a **static
+> `Makie.project` snapshot** baked into the manifest at render time (`src/HoloWGL.jl:113-125`), so it
+> does **not** track a live pan/zoom/rotate. On a plot *with* an interaction overlay, after the user
+> pans/zooms the hover/click targets drift off the moved marks until the cell re-renders. This is the
+> tracked **M1 live-camera-overlay gap** (`roadmap.md`), and it is **broad, not 3D-only**: the widget
+> serializes with WGLMakie's default interactions (no `deregister_interaction!` / zoom locks — see
+> `scene_payload`), so 2D scroll-zoom / drag-pan drift the same way 3D rotate does. Zero round-trip is
+> real; overlay tracking is the open work. (Verified from the source; a headless-browser check is
+> environment-blocked — see §6.)
 
 ## 2. Wire + server cost — the measurable half
 
@@ -86,9 +97,10 @@ Two terms move independently under stress, and both are UX terms:
 
 `:cairo`'s time-to-first-pixel is excellent: a PNG decodes natively and instantly. `:webgl`'s first
 cell pays a **one-time** tax — download the 1.09 MB bundle, compile it, initialize three.js, upload to
-the GPU, first draw — before anything shows. That tax buys **unlimited zero-latency interaction
-afterward** (§1) and amortizes across the notebook (every later `:webgl` cell reuses the cached bundle
-— M2). So the honest framing: `:cairo` wins the first 100 ms; `:webgl` wins every interaction after it.
+the GPU, first draw — before anything shows. That tax buys **zero-latency view interaction afterward**
+(§1 — modulo the overlay-tracking caveat) and amortizes across the notebook (every later `:webgl` cell
+reuses the cached bundle — M2). So the honest framing: `:cairo` wins the first 100 ms; `:webgl` wins
+every view manipulation after it.
 
 ## 5. Anti-finding — dense rasters are Cairo's home turf
 
@@ -97,17 +109,25 @@ and 500² = **11.8 MB** as a `:webgl` scene, versus a 0.4–1.0 MB Cairo PNG. Fo
 content, `:cairo` is both smaller on the wire and simpler. "Choose the right backend" cuts both ways —
 which is exactly what makes them **co-equal**, not light-vs-heavy.
 
-## 6. What's asserted here vs. still to live-verify
+## 6. How the client-side claims were verified
 
-§2 is benched and reconciled. §1's capability rows are **architectural** (a static PNG has no pan/zoom;
-`Axis3` is rejected in code) — but two client-side UX claims still deserve a real Pluto + browser check
-per CLAUDE.md's live-verification mandate, and are **not yet run**:
+§2 is benched and reconciled. §1's capability rows are **architectural** — verified from the source,
+not from a headless browser (which runs software GL, so a canvas paint / frame-time there would be
+pessimistic and not the user's GPU anyway). The two client-side claims resolve in code, GL-independent:
 
-- **Round-trip proof:** panning/zooming a `:webgl` canvas fires **zero** network requests (client-local),
-  while a `:cairo` `@bind` update fires a full PNG round-trip. (Count requests, not FPS — headless
-  Chromium is software GL, so any frame-time it reports is pessimistic and not the user's GPU.)
-- **Overlay alignment under transform:** does the Holo hit-region overlay stay aligned with the plot
-  when the `:webgl` canvas is panned/zoomed? If the regions don't track the canvas transform, that's a
-  real UX bug the wire benches can't see.
+- **Zero round-trip — confirmed.** `scene_payload` serializes the scene through a
+  `Bonito.Session(Bonito.NoConnection())` (`src/HoloWGL.jl:84`) and ships it as static data via
+  `published_to_js`; there is **no websocket/transport** from the client scene back to the kernel. So
+  client-side WGLMakie camera moves (pan/zoom/rotate) have nowhere to send a request — zero round-trip
+  **by construction**. (The one live socket in-page is Pluto's own bond channel, used only by
+  `@bind` on click — not by view manipulation.)
+- **Overlay alignment — confirmed *negative* (the M1 gap).** The overlay's hit-regions are a static
+  `Makie.project` snapshot computed once at render (`src/HoloWGL.jl:113-125`, whose own comment reads
+  "STATIC-camera overlay… Axis3 / live-camera need client-side projection — TODO"). They do **not**
+  track a live camera, so they drift under pan/zoom/rotate until re-render — see the (†) caveat in §1.
+  This is not a new bug to file; it is the already-tracked M1 live-camera-overlay item, and it is
+  **broad** (2D zoom/pan + 3D rotate) because the widget keeps WGLMakie's default interactions.
 
-These are tracked as the next step for this comparison (see `roadmap.md`).
+Net: the pan/zoom **wire/latency** win is real (zero round-trip); the **overlay tracking** under that
+transform is the open M1 work. A live-GL browser confirmation is environment-blocked here and, since
+both facts are architectural, would corroborate rather than decide. Tracked in `roadmap.md`.

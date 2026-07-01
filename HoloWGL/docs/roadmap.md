@@ -28,9 +28,12 @@ The hard questions are answered and the backend works end-to-end in a real Pluto
 
 - [ ] **Tier-2 data-animation API**: a Julia accessor for a plot's uuid + a tidy
       `updatePlotData(uuid, attr, frame)` JS helper (today it's a manual `find_plots` patch).
-- [ ] **3D live-camera overlay**: `context` reuses `Makie.project` (correct for *static* 2D/3D).
-      Interactive 3D pan/zoom changes the projection at runtime → the overlay must read WGLMakie's
-      client-side camera (`project`/`pick`). Static 3D renders today; the live-camera overlay is the gap.
+- [ ] **Live-camera overlay** (not 3D-only): `context` reuses `Makie.project`, correct only for the
+      *static* camera baked into the manifest at render. The widget keeps WGLMakie's default
+      interactions, so a live camera change — **2D scroll-zoom / drag-pan as well as 3D rotate** —
+      moves the plot client-side (zero round-trip) but leaves the overlay hit-regions behind; they
+      drift until re-render. Fix: read WGLMakie's client-side camera (`project`/`pick`) so the overlay
+      tracks the transform. (Quantified as the pan/zoom caveat in `docs/backend-comparison.md` §1/§6.)
 - [x] **Version-coupling guard**: a smoke test that fails loudly when a WGLMakie bump changes
       `serialize_scene`/`setup_scene_init` (the wire format is internal and unstable). *Done
       (`test/runtests.jl` "version-coupling guard"): names each Julia internal the `scene_payload`
@@ -74,11 +77,17 @@ small–mid 2D (smaller payload, no bundle, instant first paint); `:webgl` wins 
 3D + client-side pan/zoom/rotate (impossible on a static PNG). They are **co-equal entry points**,
 not light-vs-heavy.
 
-- [ ] **Live-verify the capability claims** (§6 of the comparison — the one part not yet benched):
-      in a real Pluto + browser, confirm (1) pan/zoom on a `:webgl` canvas fires **zero** network
-      round-trips while a `:cairo` `@bind` fires a full PNG round-trip (count requests, not FPS —
-      headless is software GL), and (2) the overlay hit-regions stay aligned when the canvas is
-      panned/zoomed (this overlaps the M1 3D live-camera overlay gap).
+- [x] **Resolve the capability claims** (§6 of the comparison). *Done — from the source, not a
+      headless browser (software GL there would corroborate, not decide). (1) **Zero round-trip:
+      confirmed** — `scene_payload` serializes through `Bonito.NoConnection()` (`src/HoloWGL.jl:84`)
+      and ships static data via `published_to_js`; client-side camera moves have no transport to the
+      kernel, so pan/zoom/rotate cost zero round-trips by construction (the only in-page socket is
+      Pluto's own bond channel, used by `@bind` on click). (2) **Overlay alignment: confirmed
+      negative** — the overlay is a static `Makie.project` snapshot (`src/HoloWGL.jl:113-125`) that
+      doesn't track the live camera, so it drifts under pan/zoom/rotate until re-render. That is the
+      Live-camera overlay item above (broad, not 3D-only), now quantified as the pan/zoom caveat in
+      `docs/backend-comparison.md` §1/§6. No GL-dependent regression test committed — the architectural
+      facts + the existing `@bind` E2E cover the reliable ground.*
 
 The bundle was the only ~MB term (the per-cell scene is an order smaller — `perf-findings.md`), so
 sharing it was the slimming target:
