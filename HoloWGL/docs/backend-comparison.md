@@ -7,11 +7,15 @@
 > pick on its own. The measurements say co-equal: they occupy **different regimes**, and `:webgl`
 > owns a capability zone `:cairo` cannot enter at all.
 >
-> **Numbers reproduce** via `julia --project=HoloWGL HoloWGL/bench/vs_cairo.jl` (WebGL measured live;
-> Cairo measured in a root-env subprocess — one command, nothing hand-stamped). The size figures
-> reconcile with the two envelopes (`../../docs/perf-findings.md` for Cairo, `perf-findings.md` for
-> `:webgl`) and root `bench/stress.jl`; re-run all on any wire-format change. Last run **2026-06-30**,
-> WGLMakie 0.13.12 / CairoMakie 0.15 / Julia 1.12.
+> **Numbers reproduce** via `julia --project=HoloWGL HoloWGL/bench/vs_cairo.jl` (WebGL measured live,
+> both sides `Random.seed!(0)`; Cairo measured in a root-env subprocess — one command, nothing
+> hand-stamped). The **size** figures are byte-reproducible and reconcile with root's
+> `bench/payload_envelope.jl` (`markersize=6`, same as here) for the shared cases — scatter-1k 187/38
+> KB, scatter-10k 724/379 KB. The **scatter-100k** row is this bench's own point; root
+> `bench/stress.jl` sweeps 100k too but at `markersize=4` (≈303 KB PNG / ~1.6 s), so it is *not* a
+> corroborating source for the `markersize=6` numbers here — the marker size drives both the PNG and
+> the raster time. **Timings (ms) are wall-clock** (`~` throughout) and vary run-to-run; only sizes
+> are exact. Last run **2026-06-30**, WGLMakie 0.13.12 / CairoMakie 0.15 / Julia 1.12.
 
 ## 1. Capability matrix — the headline is what each backend *can do*, not how fast
 
@@ -35,20 +39,21 @@ it*, `:webgl` is the only backend that does.
 
 ## 2. Wire + server cost — the measurable half
 
-Per-figure, identical seeded data. **Cairo/render** = PNG (decoded) + manifest, re-shipped *every*
-render. **WebGL scene** = the per-render MsgPack-binary scene; the **1.09 MB WGLMakie bundle** ships
-**once per notebook** (M2) on top of the first cell only. **ms** = server work to turn a fresh figure
-into a shippable payload.
+Per-figure, identical seeded data (`Random.seed!(0)` on both sides). **Cairo/render** = PNG (decoded)
++ manifest, re-shipped *every* render. **WebGL scene** = the per-render MsgPack-binary scene; the
+**1.09 MB WGLMakie bundle** ships **once per notebook** (M2) on top of the first cell only. **ms** =
+server work to turn a fresh figure into a shippable payload. Sizes are exact and reproducible; **ms
+are wall-clock and approximate** (`~`). Units: **KB = bytes/1024, MB = bytes/1 000 000** throughout.
 
-| figure | Cairo /render | Cairo ms | WebGL scene | WebGL ms | wire crossover N* |
+| figure | Cairo /render | Cairo ~ms | WebGL scene | WebGL ~ms | wire crossover N* |
 |---|--:|--:|--:|--:|--:|
-| line, 10 | 51 KB (51+1) | 47 | 103 KB | 26 | never |
-| scatter, 1 000 | 225 KB (187+38) | 72 | 87 KB | 31 | **7.7** |
-| scatter, 10 000 | 1 103 KB (724+379) | 277 | 158 KB | 27 | **1.1** |
-| scatter, 100 000 | 3 973 KB (53+**3 920**) | **2 219** | 861 KB | 34 | **0.3** |
-| heatmap, 200² | 386 KB (190+197) | 47 | 1 956 KB | 32 | never |
-| heatmap, 500² | 1 012 KB (1 009+3) | 71 | 11 843 KB | 45 | never |
-| 3D helix, 300 | **unsupported** | — | 141 KB | 28 | WebGL-only |
+| line, 10 | 51 KB (51+1) | ~48 | 118 KB | ~25 | never |
+| scatter, 1 000 | 225 KB (187+38) | ~75 | 87 KB | ~31 | **7.7** |
+| scatter, 10 000 | 1 103 KB (724+379) | ~300 | 158 KB | ~26 | **1.1** |
+| scatter, 100 000 | 3 973 KB (53+**3 920**) | **~2 280** | 861 KB | ~32 | **0.3** |
+| heatmap, 200² | 386 KB (190+197) | ~49 | 1 956 KB | ~30 | never |
+| heatmap, 500² | 1 012 KB (1 009+3) | ~71 | 11 843 KB | ~45 | never |
+| 3D helix, 300 | **unsupported** | — | 141 KB | ~30 | WebGL-only |
 
 *Renders after which cumulative `:webgl` (bundle + N·scene) < cumulative `:cairo` (N·(PNG+manifest)).
 `:cairo` has no bundle but re-rasterizes and re-ships everything each render; `:webgl` ships the bundle
@@ -56,10 +61,10 @@ once, then only its compact scene.
 
 Two terms move independently under stress, and both are UX terms:
 
-- **Cairo's server time scales with the data** because it rasterizes server-side: **47 → 72 → 277 →
-  2 219 ms** across scatter 10 → 100k. At 100k points every `@bind` update is a **~2.2-second** stall.
-  **WebGL is flat at ~26–34 ms** regardless of N — it only *serializes*; the GPU draw is offloaded to
-  the client. That flat line is the win, not a measurement gap.
+- **Cairo's server time scales with the data** because it rasterizes server-side: **~48 → ~75 → ~300 →
+  ~2 280 ms** from line-10 to scatter-100k. At 100k points every `@bind` update is a **~2.3-second**
+  stall. **WebGL is flat at ~25–32 ms** regardless of N — it only *serializes*; the GPU draw is
+  offloaded to the client. That flat line is the win, not a measurement gap.
 - **Cairo's manifest — not its PNG — is the interactivity cost, and it's O(N).** At 100k the PNG
   *collapses* to 53 KB (overplotting saturates the pixels) while the manifest balloons to **3.9 MB**,
   re-shipped every render (it carries the hover/click hit-regions). The PNG plateaus; the *interactive*
@@ -71,7 +76,7 @@ Two terms move independently under stress, and both are UX terms:
    is smaller *and* there is no 1.09 MB bundle. A rasterizer is the right tool for a static picture.
 2. **Large, animated, or repeatedly-updated 2D → `:webgl`.** scatter-10k crosses over after ~**1**
    re-render; scatter-100k wins **outright on the first cell** (Cairo's 3.97 MB/render vs 1.09 MB
-   bundle + 0.86 MB scene) *and* is ~65× cheaper in server time (34 ms vs 2 219 ms). This is the
+   bundle + 0.86 MB scene) *and* is ~70× cheaper in server time (~32 ms vs ~2 280 ms). This is the
    slider / animation / live-data case, where Cairo's re-rasterize-every-frame model is the bottleneck.
 3. **3D, or client-side view manipulation → `:webgl` only.** `:cairo` rejects `Axis3` outright, and a
    PNG cannot be panned, zoomed, or rotated. There is no crossover to compute — the capability simply

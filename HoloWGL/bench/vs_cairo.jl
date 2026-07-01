@@ -19,6 +19,8 @@
 # the measurable payload/latency terms only.
 
 using HoloWGL, Printf, Random
+Random.seed!(0)   # mirror the Cairo subprocess seed so both sides build the SAME figures reproducibly
+# (matters at small N: an unseeded rand() shifts tick-label glyph content → the scene size drifts).
 
 # Comparison figure set as data so both envs build identical figures. kind ∈ line|scatter|heat|helix.
 const CASES = [

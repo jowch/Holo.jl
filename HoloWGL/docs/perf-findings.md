@@ -42,7 +42,8 @@ the 1.09 MB bundle.
 
 ### Stress + server cost (the terms the head-to-head turns on)
 
-Two `:webgl` facts under stress (measured by `bench/vs_cairo.jl`, same seed as the envelope):
+Two `:webgl` facts under stress (measured **2026-06-30 by `bench/vs_cairo.jl`**, `Random.seed!(0)` —
+sizes exact, ms wall-clock/approximate; units MB = bytes/1 000 000):
 
 | scene | wire | serialize ms |
 |---|---|---|
@@ -51,9 +52,12 @@ Two `:webgl` facts under stress (measured by `bench/vs_cairo.jl`, same seed as t
 | heatmap 500² | 11.8 MB | ~45 |
 
 - **Serialize time is ~flat (~30 ms) regardless of N** — `scene_payload` only *serializes*; the GPU
-  draw is offloaded to the client. (Contrast Cairo, which rasterizes server-side: its render+encode
-  climbs to ~2.2 s at 100k points — `../../docs/perf-findings.md` / `bench/stress.jl`.) This flat line
-  is the per-update UX win, not a measurement gap.
+  draw is offloaded to the client. Contrast Cairo, which rasterizes server-side: `bench/vs_cairo.jl`
+  measures its render+encode climbing to **~2.3 s at 100k points** (`markersize=6`, matching root
+  `bench/payload_envelope.jl`). Root `bench/stress.jl` sweeps 100k too but at `markersize=4`, where it
+  records **~1.6 s** (`../../docs/perf-findings.md`) — the marker size drives the raster cost, so the
+  two are consistent, not contradictory. This flat WebGL line is the per-update UX win, not a
+  measurement gap.
 - **Dense rasters blow up the scene**: a heatmap ships as a value grid, so 500² = 11.8 MB vs a ~1 MB
   Cairo PNG. `:webgl` is *not* universally lighter — rasters are Cairo's home turf.
 
