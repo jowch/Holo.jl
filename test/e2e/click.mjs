@@ -5,7 +5,7 @@
 // reach (real overlay JS, real shadow-DOM hit-test, real click on the :webgl <canvas> base); the
 // Julia half (runtests.jl "@bind round-trip contract") asserts transform_value rebuilds the
 // InteractionEvent from that same value. It deliberately stops at bond emission — the
-// click→kernel→re-render mile is generic Pluto machinery, not HoloWGL code.
+// click→kernel→re-render mile is generic Pluto machinery, not Holo code.
 //
 // The WebGL canvas may fail to init in headless (no GPU) — that's expected and irrelevant: the
 // base-agnostic overlay hit-tests via manifest.width + the canvas rect, independent of GL pixels.
