@@ -12,9 +12,11 @@ Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 
 [weakdeps]
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
 
 [extensions]
 HoloCairoMakieExt = "CairoMakie"
+HoloWGLMakieExt = "WGLMakie"
 
 [compat]
 AbstractPlutoDingetjes = "1"
@@ -22,12 +24,14 @@ CairoMakie = "0.15"
 FileIO = "1"
 HypertextLiteral = "0.9, 1"
 Makie = "0.24"
+WGLMakie = "0.13"
 julia = "1.10"
 
 [extras]
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["CairoMakie", "Statistics", "Test"]
+test = ["CairoMakie", "WGLMakie", "Statistics", "Test"]
