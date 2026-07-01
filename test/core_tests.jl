@@ -187,6 +187,18 @@ end
         @test L.kind === :rects && length(L.geometry) == 4   # one box × (cx,cy,w,h)
     end
 
+    @testset "TextInteractable: one box per string (count invariant)" begin
+        # Locks the `length(boxes) == length(payloads)` assumption `hitlayers` guards on: an empty
+        # string still emits a (degenerate) box, and a multi-line string is ONE box, not one per line
+        # — so both drift-guards stay satisfied if a future Makie ever splits strings into per-run boxes.
+        f = Figure(size = (600, 400)); ax = Axis(f[1, 1])
+        t = text!(ax, [1.0, 2.0], [1.0, 2.0]; text = ["", "multi\nline"])
+        _, _, ctx = ctx_for(f)
+        ti = TextInteractable(ax, t)
+        @test length(ti.payloads) == 2
+        @test length(only(hitlayers(ti, ctx)).geometry) == 8   # 2 strings × (cx,cy,w,h) — one box each
+    end
+
     @testset "Segment + Axis + custom" begin
         @test only(hitlayers(SegmentInteractable(ax, pts; mode = :polyline), ctx)).kind === :polyline
         @test only(hitlayers(AxisInteractable(ax), ctx)).geometry === nothing
