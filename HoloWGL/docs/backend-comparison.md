@@ -25,28 +25,33 @@ live interactions are the overlay's hit-test (hover/click) and a full server re-
 
 | interaction | `:cairo` | `:webgl` |
 |---|---|---|
-| pan / zoom | **impossible** (static PNG) | client GPU, **no server round-trip** — but overlay lags (†) |
-| rotate a 3D plot | **impossible** (`Axis3` rejected at render) | client GPU, no round-trip — overlay lags (†) |
+| pan / zoom | **impossible** (static PNG) | **not enabled today** (†) |
+| rotate a 3D plot | **impossible** (`Axis3` rejected at render) | **not enabled today** (†) |
 | hover tooltip | overlay hit-test (client) | overlay hit-test (client) — same |
 | click → `@bind` | client hit-test + bind | client hit-test + bind — same |
 | data update (`@bind` drives the data) | **full** server render + encode + PNG re-ship | server serialize + client redraw |
 | animation, N frames | N × full PNG | N × scene (tier-1) → in-place patch (tier-2, roadmap) |
 
-The **blank cells are the finding.** A symmetric latency table would print a number in the pan/zoom
-row and hide that `:cairo` cannot pan or zoom at all. So "wire crossover" (below) and "UX value" are
-different axes: a 100-point scatter never crosses over on bytes — but if the user wants to *zoom into
-it*, `:webgl` is the only backend that does.
+The rows that **match** are the current story: both backends do hover/click/`@bind` the same way, and
+`:webgl`'s edge today is **rendering** (live 3D that Cairo rejects; cheap re-renders) — *not* live view
+manipulation. Live pan/zoom/rotate is **not a feature of either backend right now** (†).
 
-> **(†) The overlay does not follow the camera — an honest caveat on the pan/zoom win.** The plot
-> transforms client-side with zero round-trip, but Holo's hit-region overlay is a **static
-> `Makie.project` snapshot** baked into the manifest at render time (`src/HoloWGL.jl:113-125`), so it
-> does **not** track a live pan/zoom/rotate. On a plot *with* an interaction overlay, after the user
-> pans/zooms the hover/click targets drift off the moved marks until the cell re-renders. This is the
-> tracked **M1 live-camera-overlay gap** (`roadmap.md`), and it is **broad, not 3D-only**: the widget
-> serializes with WGLMakie's default interactions (no `deregister_interaction!` / zoom locks — see
-> `scene_payload`), so 2D scroll-zoom / drag-pan drift the same way 3D rotate does. Zero round-trip is
-> real; overlay tracking is the open work. (Verified from the source; a headless-browser check is
-> environment-blocked — see §6.)
+> **(†) Live view manipulation is currently off — and turning it on is a cross-backend design
+> question, not a quick win.** `:cairo` can never pan/zoom (a PNG is dead pixels). `:webgl` *could* —
+> the base is a live GPU canvas — but the widget deliberately **gates the camera off**: the shim sets
+> `can_send_to_julia:()=>true` (needed so tier-2 animation's observable updates fire), and WGLMakie's
+> `use_orbit_cam = ()=>!can_send_to_julia()` therefore **disables 3D OrbitControls**; 2D `Axis`
+> zoom/pan is Julia-side in WGLMakie and dead under the server-free (`NoConnection`) model. *Verified
+> against the pinned bundle.* So there is **no live camera to drift against today** — the overlay
+> misalignment is *latent*, not observed.
+>
+> Enabling it is a **large, staged feature** (client-side re-projection + Holo-core `z`/`Axis3`
+> plumbing + a shared-`overlay.ts` pointer-events change + optional GPU-pick for occlusion) that would
+> exist **only in `:webgl`**. That asymmetry is itself the open question: a headline capability that one
+> backend has and the other structurally cannot is at odds with the **co-equal-entry-points** framing
+> this doc argues for — it splits the user's mental model across backends. **Status: under review, not
+> committed.** The investigation + a staged option set live in `.superpowers/` (local); the roadmap
+> tracks the open decision.
 
 ## 2. Wire + server cost — the measurable half
 
@@ -89,18 +94,20 @@ Two terms move independently under stress, and both are UX terms:
    re-render; scatter-100k wins **outright on the first cell** (Cairo's 3.97 MB/render vs 1.09 MB
    bundle + 0.86 MB scene) *and* is ~70× cheaper in server time (~32 ms vs ~2 280 ms). This is the
    slider / animation / live-data case, where Cairo's re-rasterize-every-frame model is the bottleneck.
-3. **3D, or client-side view manipulation → `:webgl` only.** `:cairo` rejects `Axis3` outright, and a
-   PNG cannot be panned, zoomed, or rotated. There is no crossover to compute — the capability simply
-   does not exist on `:cairo`.
+3. **3D *rendering* → `:webgl` only.** `:cairo` rejects `Axis3` outright, so only `:webgl` can *draw* a
+   3D plot at all. Note this is about rendering, **not** interaction: live view manipulation
+   (pan/zoom/rotate) is not enabled in either backend today, and enabling it only in `:webgl` is the
+   open cross-backend design question in the (†) note above — not a shipped `:webgl` advantage.
 
 ## 4. First paint — Cairo's genuine UX win, and the tax it trades
 
 `:cairo`'s time-to-first-pixel is excellent: a PNG decodes natively and instantly. `:webgl`'s first
 cell pays a **one-time** tax — download the 1.09 MB bundle, compile it, initialize three.js, upload to
-the GPU, first draw — before anything shows. That tax buys **zero-latency view interaction afterward**
-(§1 — modulo the overlay-tracking caveat) and amortizes across the notebook (every later `:webgl` cell
-reuses the cached bundle — M2). So the honest framing: `:cairo` wins the first 100 ms; `:webgl` wins
-every view manipulation after it.
+the GPU, first draw — before anything shows. Today that tax buys **cheap re-renders** (flat ~30 ms
+server serialize + client redraw; §2) and live 3D *rendering*, and it amortizes across the notebook
+(every later `:webgl` cell reuses the cached bundle — M2). It does **not** yet buy live view
+manipulation — that's gated off (§1†/§6). So the honest framing: `:cairo` wins the first 100 ms;
+`:webgl` wins repeated/animated re-renders and 3D display after it.
 
 ## 5. Anti-finding — dense rasters are Cairo's home turf
 
@@ -109,25 +116,29 @@ and 500² = **11.8 MB** as a `:webgl` scene, versus a 0.4–1.0 MB Cairo PNG. Fo
 content, `:cairo` is both smaller on the wire and simpler. "Choose the right backend" cuts both ways —
 which is exactly what makes them **co-equal**, not light-vs-heavy.
 
-## 6. How the client-side claims were verified
+## 6. What the source actually says about live interaction
 
-§2 is benched and reconciled. §1's capability rows are **architectural** — verified from the source,
-not from a headless browser (which runs software GL, so a canvas paint / frame-time there would be
-pessimistic and not the user's GPU anyway). The two client-side claims resolve in code, GL-independent:
+§2 is benched and reconciled. §1's interaction rows are **architectural** — verified from the source
+(a headless browser runs software GL, so a canvas paint / frame-time there would be pessimistic and not
+the user's GPU anyway). Three facts, GL-independent:
 
-- **Zero round-trip — confirmed.** `scene_payload` serializes the scene through a
-  `Bonito.Session(Bonito.NoConnection())` (`src/HoloWGL.jl:84`) and ships it as static data via
-  `published_to_js`; there is **no websocket/transport** from the client scene back to the kernel. So
-  client-side WGLMakie camera moves (pan/zoom/rotate) have nowhere to send a request — zero round-trip
-  **by construction**. (The one live socket in-page is Pluto's own bond channel, used only by
-  `@bind` on click — not by view manipulation.)
-- **Overlay alignment — confirmed *negative* (the M1 gap).** The overlay's hit-regions are a static
-  `Makie.project` snapshot computed once at render (`src/HoloWGL.jl:113-125`, whose own comment reads
-  "STATIC-camera overlay… Axis3 / live-camera need client-side projection — TODO"). They do **not**
-  track a live camera, so they drift under pan/zoom/rotate until re-render — see the (†) caveat in §1.
-  This is not a new bug to file; it is the already-tracked M1 live-camera-overlay item, and it is
-  **broad** (2D zoom/pan + 3D rotate) because the widget keeps WGLMakie's default interactions.
+- **Camera interaction is gated off today — verified.** The shim hardcodes `can_send_to_julia:()=>true`
+  (`HoloWGL/frontend/src/holo-webgl.ts`); WGLMakie's `use_orbit_cam = ()=>!can_send_to_julia()`
+  (pinned bundle) therefore **disables 3D OrbitControls**, and 2D `Axis` zoom/pan is Julia-side and dead
+  under the server-free (`NoConnection`) model. So a `:webgl` plot renders live but **does not pan, zoom,
+  or rotate** as shipped. (The flag is true *on purpose* — it's what lets tier-2 animation's observable
+  updates fire client-side.)
+- **If enabled, the wire/latency would be free but the overlay would drift.** Because the scene ships
+  through `Bonito.Session(Bonito.NoConnection())` (`src/HoloWGL.jl:84`) with no transport back to the
+  kernel, a client-side camera move would cost **zero round-trip by construction**. But the overlay's
+  hit-regions are a static `Makie.project` snapshot (`src/HoloWGL.jl:113-125`; its own comment: "STATIC
+  camera overlay… Axis3 / live-camera need client-side projection — TODO"), so they would **not** track
+  the moving plot. Both facts are latent until the camera is turned on.
+- **Turning it on is large and backend-asymmetric.** The staged shape (client re-projection → Holo-core
+  `z`/`Axis3` plumbing → shared-`overlay.ts` pointer-events change → optional GPU-pick for occlusion) is
+  laid out in `.superpowers/holowgl-live-camera-overlay-design.md` (local process doc). It lands **only
+  in `:webgl`**.
 
-Net: the pan/zoom **wire/latency** win is real (zero round-trip); the **overlay tracking** under that
-transform is the open M1 work. A live-GL browser confirmation is environment-blocked here and, since
-both facts are architectural, would corroborate rather than decide. Tracked in `roadmap.md`.
+**Open question (under review, not committed):** should Holo offer live pan/zoom/rotate at all, given it
+would be a headline capability that only one backend can ever have? That asymmetry pulls against the
+co-equal-entry-points framing of this doc. Tracked in `roadmap.md`.
