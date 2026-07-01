@@ -82,7 +82,7 @@ println("\n=== C. px_per_unit (display width) sweep — scatter 1000 ===")
 for maxw in (300, 700)
     f = Figure(size = (600, 400)); ax = Axis(f[1, 1])
     scatter!(ax, rand(1000), rand(1000); markersize = 6)
-    row("max_width=$maxw", holo(f; backend = CairoBackend(max_width = maxw)))
+    row("max_width=$maxw", holo(f; max_width = maxw))
 end
 
 println("\n=== D. projected animation cost (Tier-1) = frames × per-frame PNG ===")

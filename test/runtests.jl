@@ -5,9 +5,13 @@ using CairoMakie
 import Makie
 using Test
 
+# CairoBackend now lives in the extension (weak CairoMakie dep) — reach it via
+# Base.get_extension rather than a bare name, same pattern the extension itself uses.
+const _CairoExt = Base.get_extension(Holo, :HoloCairoMakieExt)
+
 # finalize + context the way holo does internally
 function ctx_for(fig; max_width = 700)
-    bk = CairoBackend(; max_width)
+    bk = _CairoExt.CairoBackend(; max_width)
     Makie.update_state_before_display!(fig)
     ppu = IP._ppu(bk, fig)
     return bk, ppu, IP.context(bk, fig, ppu)
