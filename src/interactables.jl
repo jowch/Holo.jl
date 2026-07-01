@@ -230,6 +230,31 @@ end
 hitlayers(i::AxisInteractable, ctx) =
     [HitLayer(i.id, :axis, nothing, Any[], axis_id(ctx, i.ax), events(i))]
 
+# ============================ ColorbarInteractable =========================
+# A Colorbar is a 1-D scale. Like AxisInteractable it rides the axis-transform channel (JS inverts
+# pixels->value), but its hit region is BOUNDED to the colorbar's bbox (shipped as the :axis layer's
+# geometry) so the readout fires only over the bar, and its transform carries a valueaxis so the
+# payload is a scalar (; value). Reuses AxisInteractable's scale-invertibility rule.
+struct ColorbarInteractable <: AbstractInteractable
+    cb
+    id::Symbol
+end
+ColorbarInteractable(cb; id = :colorbar) = ColorbarInteractable(cb, id)
+function validate(i::ColorbarInteractable, ctx::InteractionContext)
+    t = ctx.transforms[axis_id(ctx, i.cb)]
+    va = t.valueaxis
+    sc = va === :y ? t.yscale : t.xscale
+    sc in _JS_INVERTIBLE ||
+        return "ColorbarInteractable: scale $(sc) is not invertible client-side; supported: identity/log10/log."
+    return nothing
+end
+function hitlayers(i::ColorbarInteractable, ctx)
+    aid = axis_id(ctx, i.cb)
+    vp = ctx.transforms[aid].viewport
+    bbox = Real[vp[1], vp[2], vp[3], vp[4]]
+    return [HitLayer(i.id, :axis, bbox, Any[], aid, events(i))]
+end
+
 # ============================ ThresholdInteractable ========================
 # A draggable horizontal/vertical line (Tier 0). Drags locally in JS; on mouse-up the
 # pixel is inverted to a data-space scalar via the shipped AxisTransform and round-tripped

@@ -32,6 +32,7 @@ struct AxisTransform
     yreversed::Bool
     xcats::Union{Nothing, Vector{String}}   # categorical tick map (v1; nothing if not categorical)
     ycats::Union{Nothing, Vector{String}}
+    valueaxis::Union{Nothing, Symbol}       # nothing = 2-D {x,y} readout; :x/:y = 1-D colorbar value readout
 end
 
 """
@@ -135,6 +136,11 @@ function context(b::CairoBackend, fig, ppu)
         id = Symbol("ax", k); ids[ax] = id
         transforms[id] = _axis_transform(id, ax, scaling, out_h)
     end
+    cbs = [c for c in fig.content if c isa Makie.Colorbar]
+    for (k, cb) in enumerate(cbs)
+        id = Symbol("cb", k); ids[cb] = id
+        transforms[id] = _colorbar_transform(id, cb, scaling, out_h)
+    end
     return InteractionContext(project, transforms, ids, out_w, out_h, scaling, display_scale)
 end
 
@@ -147,6 +153,26 @@ function _axis_transform(id, ax, scaling, out_h)
         (fo[1], fo[1] + fw[1]), (fo[2], fo[2] + fw[2]),
         _scalesym(ax.xscale[]), _scalesym(ax.yscale[]),
         vpx, ax.xreversed[], ax.yreversed[],
-        _cats(ax.dim1_conversion[]), _cats(ax.dim2_conversion[])
+        _cats(ax.dim1_conversion[]), _cats(ax.dim2_conversion[]), nothing
     )
+end
+
+# A Colorbar is a 1-D scale: its value runs along the long axis (y if vertical, x if horizontal).
+# Build an AxisTransform whose value axis carries cb.limits/scale over the colorbar's pixel bbox;
+# the other axis is degenerate (never read). Geometry from the laid-out block, converted with the
+# same ×scaling + y-flip as an axis viewport.
+function _colorbar_transform(id, cb, scaling, out_h)
+    bb = cb.layoutobservables.computedbbox[]
+    o = bb.origin; wv = bb.widths
+    vpx = (o[1] * scaling, out_h - (o[2] + wv[2]) * scaling, wv[1] * scaling, wv[2] * scaling)
+    lims = cb.limits[]
+    isnothing(lims) && error("Colorbar introspection: nothing limits (Makie internals changed?)")
+    lo, hi = Float64(lims[1]), Float64(lims[2])
+    sc = _scalesym(cb.scale[])
+    vertical = cb.vertical[]
+    if vertical
+        return AxisTransform(id, (0.0, 1.0), (lo, hi), :identity, sc, vpx, false, false, nothing, nothing, :y)
+    else
+        return AxisTransform(id, (lo, hi), (0.0, 1.0), sc, :identity, vpx, false, false, nothing, nothing, :x)
+    end
 end

@@ -107,7 +107,8 @@ _transform_dict(t::AxisTransform) = Dict{String, Any}(
     "xlims" => collect(t.xlims), "ylims" => collect(t.ylims),
     "xscale" => string(t.xscale), "yscale" => string(t.yscale),
     "viewport" => collect(t.viewport), "xreversed" => t.xreversed, "yreversed" => t.yreversed,
-    "xcats" => t.xcats, "ycats" => t.ycats
+    "xcats" => t.xcats, "ycats" => t.ycats,
+    "valueaxis" => t.valueaxis === nothing ? nothing : string(t.valueaxis),
 )
 
 """

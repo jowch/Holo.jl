@@ -408,4 +408,44 @@ describe("tooltips (mount/showTip)", () => {
         hoverMarker(shadow)
         expect(tip.style.display).toBe("none")
     })
+
+    it("colorbar axis hover shows formatted value not x=undefined", () => {
+        const { host, script } = setup()
+        // colorbar: axis layer with bounded geometry [200,100,24,400] in image px, valueaxis:"y"
+        const cbManifest: Manifest = {
+            width: 1200, height: 800, scaling: 2,
+            transforms: { cb1: { xlims: [0, 1], ylims: [0, 10], xscale: "identity", yscale: "identity",
+                viewport: [200, 100, 24, 400], xreversed: false, yreversed: false, valueaxis: "y" } },
+            layers: [{ id: "colorbar", kind: "axis", geometry: [200, 100, 24, 400], payloads: [], axis: "cb1", events: ["hover"] }],
+        }
+        mount(script, cbManifest)
+        const shadow = shadowOf(host)
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        // client (110,150) → image px (220,300); inside bbox; fy=0.5 → value=5.0; fmt(5)="5.000"
+        ;(shadow.querySelector(".surface") as HTMLElement)
+            .dispatchEvent(new MouseEvent("mousemove", { clientX: 110, clientY: 150, bubbles: true }))
+        expect(tip.style.display).toBe("block")
+        expect(tip.innerHTML).toBe("5.000")
+        expect(tip.innerHTML).not.toContain("undefined")
+    })
+
+    it("plain axis hover shows x=… y=… tooltip (no valueaxis)", () => {
+        const { host, script } = setup()
+        // plain axis: geometry null, transform has no valueaxis → x=/y= tooltip
+        const plainManifest: Manifest = {
+            width: 1200, height: 800, scaling: 2,
+            transforms: { ax1: { xlims: [0, 5], ylims: [0, 5], xscale: "identity", yscale: "identity",
+                viewport: [100, 100, 400, 400], xreversed: false, yreversed: false } },
+            layers: [{ id: "axis", kind: "axis", geometry: null, payloads: [], axis: "ax1", events: ["hover"] }],
+        }
+        mount(script, plainManifest)
+        const shadow = shadowOf(host)
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        ;(shadow.querySelector(".surface") as HTMLElement)
+            .dispatchEvent(new MouseEvent("mousemove", { clientX: 200, clientY: 200, bubbles: true }))
+        expect(tip.style.display).toBe("block")
+        expect(tip.innerHTML).toContain("x=")
+        expect(tip.innerHTML).toContain("y=")
+        expect(tip.innerHTML).not.toContain("undefined")
+    })
 })

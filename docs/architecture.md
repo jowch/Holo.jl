@@ -101,6 +101,7 @@ struct AxisTransform
     yreversed :: Bool
     xcats     :: Union{Nothing, Vector{String}}    # categorical tick map (v1)
     ycats     :: Union{Nothing, Vector{String}}
+    valueaxis :: Union{Nothing, Symbol}            # nothing = 2-D {x,y} readout; :x/:y = 1-D colorbar readout
 end
 ```
 
@@ -113,6 +114,15 @@ for `AxisInteractable` and for live hover-coordinate readout (the drag/Tier-0 en
 ordered tick labels so JS maps a pixel to the right category (and tooltips/readout show the category,
 not the integer index). Without this, bars/boxplots on categorical axes would report wrong coordinates —
 so it's shipped, not stubbed.
+
+**Colorbar `AxisTransform` and the figure-block walk (M3).** Colorbar blocks live in `fig.content`,
+not in any `Axis` scene, so `context()` runs a second walk over `fig.content` after collecting axes —
+picking up every `Makie.Colorbar` and registering it under a `Symbol("cb", k)` id. Each colorbar gets
+its own `AxisTransform`: the value scale (`limits[]`, `scale[]`) is mapped to the long axis (`ylims` for
+vertical, `xlims` for horizontal), and `valueaxis` is set to `:y` or `:x` accordingly. The viewport is
+the colorbar's laid-out pixel bbox (`computedbbox[]`), converted with the same ×scaling + y-flip used for
+axes. JS reads `valueaxis` to invert the cursor pixel to a scalar payload `(; value)` — the same
+`invertAxis` path `AxisInteractable` uses for its 2-D `{x,y}` readout, projected along one axis only.
 
 ## 3. The interactable seam — `AbstractInteractable`
 
@@ -138,11 +148,12 @@ hoverstyle(::AbstractInteractable, idx::Int)::NamedTuple = (; stroke="#ff3b30", 
 **`validate` is per-capability, not a global scale gate** (fixes a latent silent-coordinate bug).
 Element interactables (Point/Segment/Rect/Polygon) are projected **in Julia** via `Makie.project`,
 so they impose **no axis-scale restriction** — they work on any scale Makie can project (linear, log,
-symlog, …). Only `AxisInteractable` relies on **client-side** pixel→data inversion, so *it alone*
-restricts to scales the JS `invert` implements (identity, log10/log, + categorical via the shipped
-category map). A blanket `_OK_SCALES` gate would be both too strict (rejecting element types that work)
-and too loose (passing `AxisInteractable` on a scale the JS inverts wrong). Default `validate` stays
-permissive; `AxisInteractable.validate` is the one that gates.
+symlog, …). Only `AxisInteractable` and `ColorbarInteractable` rely on **client-side** pixel→data
+inversion, so they alone restrict to scales the JS `invert` implements (identity, log10/log, +
+categorical via the shipped category map). A blanket `_OK_SCALES` gate would be both too strict
+(rejecting element types that work) and too loose (passing `AxisInteractable` on a scale the JS
+inverts wrong). Default `validate` stays permissive; `AxisInteractable.validate` and
+`ColorbarInteractable.validate` are the ones that gate.
 
 ### `HitLayer` — the serialized unit (per interactable, per kind)
 
@@ -179,24 +190,25 @@ Geometry layout by `kind` (all coords image-px, top-left origin):
 | `:rects` | `Float32[cx,cy,w,h, …]` | point-in-rect | quad index |
 | `:grid` | `(xedges, yedges, ncols, nrows, values[])` image-px | binary-search bin → (i,j) | `j*ncols+i` (O(1) hit-test; manifest **O(source-cells)** via `values[]`, see §8) |
 | `:polygons` | `Vector{Vector{Float32}}` rings | even-odd point-in-polygon | ring index |
-| `:axis` | `nothing` | always-hit; invert via AxisTransform | `-1` (continuous) |
+| `:axis` | `nothing` (unbounded, `AxisInteractable`) or `Real[x,y,w,h]` bbox (bounded, `ColorbarInteractable`) | absent geometry = always-hit; bbox present = point-in-bbox; invert pixel via `AxisTransform` | `-1` (continuous); `valueaxis ≠ nothing` → 1-D `(; value)` |
 
 This is a **closed set of six geometry kinds** (`:circles/:polyline/:segments/:rects/:grid/:polygons`)
 plus the `:axis` continuous channel. The survey confirmed every retained Makie surface projects to one
 of them; nothing in v1+v2 needs a seventh. (`bbox` — rotated text/markers — is a v2 addition expressed
 as a degenerate polygon, reusing the polygon JS test.)
 
-### Built-in interactables (v1)
+### Built-in interactables (v1 + M3)
 
-Five types, one per hit primitive, parameterized where surfaces differ only in indexing:
+Five v1 types plus `ColorbarInteractable` added in M3, one per hit primitive (`:axis` shared by two):
 
-| Type | kind(s) | Makie surfaces (v1) | payload |
+| Type | kind(s) | Makie surfaces | payload |
 |---|---|---|---|
 | `PointInteractable` | `:circles` | Scatter, Stem, Spy, ScatterLines·pts | `(; index, x, y)` |
 | `SegmentInteractable` | `:polyline` \| `:segments` | Lines, Stairs, ScatterLines·lines (polyline); LineSegments, Errorbars, Rangebars, HLines, VLines (pairs) | `(; segment_index, p0, p1)` |
 | `RectInteractable` | `:rects` \| `:grid` | BarPlot, Hist, Waterfall, CrossBar, HSpan, VSpan (list); Heatmap, Image (grid) | grid `(; i, j, value)`; BarPlot/Waterfall `(; low, high, value)`; Hist `(; value, low, high)`; CrossBar `(; midpoint, low, high)`; HSpan/VSpan `(; low, high)` |
 | `PolygonInteractable` | `:polygons` | Poly, Band, Pie, Density, Contourf, Violin, Voronoiplot | Band/Density/Voronoiplot `(; index)`; Contourf `(; low, high)`; Violin `(; x)` |
-| `AxisInteractable` | `:axis` | the Axis area itself (linear + log) | `(; x, y)` inverted client-side |
+| `AxisInteractable` | `:axis` (unbounded) | the Axis area itself (linear + log) | `(; x, y)` inverted client-side |
+| `ColorbarInteractable` *(M3)* | `:axis` (bounded bbox) | Colorbar — auto-extracted from `fig.content` | `(; value)` inverted client-side via `AxisTransform.valueaxis` |
 
 `SegmentInteractable` carries `mode ∈ {:polyline,:pairs}`; `RectInteractable` carries
 `layout ∈ {:grid,:list}`. Same JS test, different Julia extractor.
@@ -340,8 +352,10 @@ them cleanly:
   the irreducible-latency wall and is out of scope (that's WGLMakie's domain, not this package's).
 
 **Named tensions (accepted, not bugs):**
-1. `AxisInteractable` is the one type that returns no region geometry — it rides the `:axis` channel.
-   Worth the seam: it collapses whole-axis readout (and v2 Density) into the transform we already ship.
+1. `AxisInteractable` returns no region geometry — it rides the `:axis` channel as an unbounded
+   catch-all. `ColorbarInteractable` (M3) also uses `:axis` but ships a bbox so the hit region is
+   bounded to the colorbar's pixel extent. Worth the shared channel: both collapse into the
+   `AxisTransform` already shipped, with no new JS primitive.
 2. No z-order/`Consume` model for overlapping custom regions — JS is first-match-wins in manifest
    order (deterministic; resolves the only v1 collision, ScatterLines points-over-segments). We adopt
    Makie's `events` *vocabulary* now for forward-compat, not its propagation machinery. YAGNI until
@@ -371,7 +385,9 @@ profile shows JS hit-test *specifically* is the bottleneck.
 
 **Phase 2b (shipped):** Band, Density, Contourf, Violin, Voronoiplot — extracted as `:polygons`; surface-specific payloads (Band/Density/Voronoiplot `(; index)`, Contourf `(; low, high)`, Violin `(; x)`). BoxPlot box-body auto-extracted as `:rects` (un-notched) / `:polygons` (notched) with `(; q1, median, q3)`. Tricontourf deferred; BoxPlot whiskers/outliers decorative (box-body-only).
 
-**v2:** plot-object introspection constructors; ABLines/Arc, Colorbar/Legend,
+**M3 Colorbar (shipped):** `ColorbarInteractable` — hover/click value readout for any `Colorbar` block, auto-extracted by `holo(fig)` via a figure-block walk over `fig.content`. Rides the `:axis` channel with a bounded bbox geometry; `AxisTransform.valueaxis` tags the value axis so JS inverts the cursor pixel to a scalar `(; value)`. Legend remains deferred (a linking capability, its own arc).
+
+**v2:** plot-object introspection constructors; ABLines/Arc, Legend,
 text bboxes (font metrics), animation frames, SVG-overlay annotations, spatial hit-test acceleration.
 
 **Never (without a new backend class):** 3D (Surface, MeshScatter, Arrows3D), PolarAxis/Axis3,

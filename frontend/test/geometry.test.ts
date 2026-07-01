@@ -105,3 +105,24 @@ describe("roi hit-test", () => {
         expect(hitLayer(roi, 50, 50)).toBeNull()                                    // outside
     })
 })
+
+describe("colorbar axis hit-test", () => {
+    const bar: HitLayer = { id: "colorbar", kind: "axis", geometry: [100, 50, 12, 200], payloads: [], axis: "cb1", events: ["hover", "click"] }
+    const cbT: AxisTransform = { xlims: [0, 1], ylims: [0, 10], xscale: "identity", yscale: "identity", viewport: [100, 50, 12, 200], xreversed: false, yreversed: false, valueaxis: "y" }
+    const manifest = { transforms: { cb1: cbT } } as unknown as Manifest
+
+    it("bounded axis hit: inside bbox hits, outside misses", () => {
+        expect(hitLayer(bar, 106, 150)).not.toBeNull()          // inside the bar
+        expect(hitLayer(bar, 300, 150)).toBeNull()              // outside → no hit
+    })
+    it("unbounded axis (no geometry) is a catch-all", () => {
+        const axisLayer: HitLayer = { ...bar, id: "axis", geometry: null, axis: "ax1" }
+        expect(hitLayer(axisLayer, 999, 999)).not.toBeNull()
+    })
+    it("valueaxis payload returns a scalar value", () => {
+        const hit = { layer: bar, index: -1, axis: "cb1" }
+        const p = resolvePayload(hit as any, manifest, 106, 150) as { value: number }
+        // py=150 is the vertical midpoint (viewport y=50..250) → fy=0.5 → value=5 on ylims [0,10]
+        expect(p.value).toBeCloseTo(5, 6)
+    })
+})
