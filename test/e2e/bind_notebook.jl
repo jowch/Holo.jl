@@ -17,16 +17,18 @@ macro bind(def, element)
 end
 
 # ╔═╡ c0000000-0000-0000-0000-000000000001
-# Activate HoloWGL's OWN project (HoloWGL/) rather than a fresh temp env: it's the same stable,
-# CI-cached project the static e2e + `holowgl` job use, and its [sources] resolves Holo by path
-# (no manual Pkg.develop). The job pre-warms this project before launching Pluto, so on a warm
-# depot cache instantiate is a no-op — the ~10-min cold WGLMakie precompile only happens once.
-# Activating any project disables Pluto's own pkg management (HoloWGL is unregistered).
+# Self-contained env: dev the local package via a checkout-relative path, add WGLMakie — same
+# dance as examples/webgl_demo.jl. WGLMakie is a weak dep of Holo (the :webgl extension only
+# loads once WGLMakie is `using`'d), so a plain activate of the package root alone can't
+# `using WGLMakie`. Pkg.develop/activate disables Pluto's own pkg management.
 begin
     import Pkg
-    Pkg.activate(normpath(joinpath(@__DIR__, "..", "..")))   # test/e2e -> HoloWGL/
+    Pkg.activate(; temp = true)
+    Pkg.develop(path = normpath(joinpath(@__DIR__, "..", "..")))   # test/e2e -> package root
+    Pkg.add("WGLMakie")
     Pkg.instantiate()
-    using HoloWGL
+    using Holo
+    using WGLMakie
 end
 
 # ╔═╡ c0000000-0000-0000-0000-000000000010
@@ -40,7 +42,7 @@ end
 # ╔═╡ c0000000-0000-0000-0000-000000000011
 # The @bind under test: clicking a scatter marker in the :webgl widget round-trips an
 # InteractionEvent back to `ev` THROUGH the live Pluto kernel (bond transport + reactive re-run).
-@bind ev holo_webgl(fig)
+@bind ev holo(fig)
 
 # ╔═╡ c0000000-0000-0000-0000-000000000012
 # Stable output element the browser asserts on (a distinct id, so it can't match the cell SOURCE

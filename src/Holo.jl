@@ -1,7 +1,6 @@
 module Holo
 
 using Makie: Makie, Point2f, RGBAf
-using CairoMakie
 using FileIO
 using Base64: base64encode
 using HypertextLiteral: HypertextLiteral, @htl
@@ -23,7 +22,7 @@ include("interactables.jl")
 include("introspect.jl")
 include("render.jl")
 
-export AbstractBackend, CairoBackend
+export AbstractBackend
 export AbstractInteractable, AbstractSelector, HitLayer, InteractionContext, AxisTransform
 export PointInteractable, SegmentInteractable, RectInteractable, PolygonInteractable,
     AxisInteractable, ColorbarInteractable, RegionInteractable, FunctionInteractable, ThresholdInteractable, ROIInteractable

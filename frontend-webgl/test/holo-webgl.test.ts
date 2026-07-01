@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest"
 import { rewrap, obs, makeBonitoShim } from "../src/holo-webgl"
 
 // rewrap is the JS half of the 4-rule scene contract — it must decode exactly what `_plain`
-// in src/HoloWGL.jl emits. These lock that cross-language contract (previously untested; the
-// version-coupling guard covers the WGLMakie seam, not this).
+// in ext/HoloWGLMakieExt.jl emits. These lock that cross-language contract (previously
+// untested; the version-coupling guard covers the WGLMakie seam, not this).
 describe("rewrap — the _plain 4-rule decode", () => {
     it("scalars and strings pass through", () => {
         expect(rewrap(5)).toBe(5)

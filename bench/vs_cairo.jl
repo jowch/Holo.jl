@@ -1,5 +1,5 @@
-# Cross-backend head-to-head: :webgl (this package) vs :cairo (Holo core) on the SAME seeded
-# figures — the artifact behind HoloWGL/docs/backend-comparison.md. Reports, per figure:
+# Cross-backend head-to-head: :webgl vs :cairo (both now backends of the same Holo package) on
+# the SAME seeded figures — the artifact behind docs/backend-comparison.md. Reports, per figure:
 #   - WIRE: Cairo PNG+manifest (per render) vs WebGL scene (per render) + the once-per-notebook bundle
 #   - SERVER COST per update: Cairo render+encode+PNG ms vs WebGL serialize ms. WebGL's number
 #     EXCLUDES the GPU draw *by design* — it's offloaded to the client; that offload is the win,
@@ -7,20 +7,27 @@
 #   - CROSSOVER N: renders after which cumulative WebGL (bundle + N·scene) < cumulative Cairo
 #     (N·PNG+manifest, re-shipped every render). Cairo has no bundle but re-rasterizes each time.
 #
-# Two Julia envs can't coexist (CairoMakie vs WGLMakie active in one process), so the Cairo half
-# runs in a root-env subprocess. PREREQ: both envs instantiated (root `Pkg.instantiate()` and
-# `julia --project=HoloWGL -e 'using Pkg; Pkg.instantiate()'`). Numbers reconcile with the two
-# perf-findings.md envelopes and root bench/stress.jl — re-run all three on any wire-format change.
+# Holo supports exactly one backend extension per session (see src/render.jl _resolve_backend), so
+# CairoMakie and WGLMakie can't both be `using`'d in this process — the Cairo half runs in a
+# subprocess instead. PREREQ: the root env has both CairoMakie and WGLMakie available (both are
+# weak deps + `[extras]`/test deps in Project.toml — `Pkg.test()`'s test env resolves them, or
+# `Pkg.add` them into your own dev env). Numbers reconcile with docs/perf-findings.md's two
+# envelopes (Cairo's main envelope + the `:webgl` section) and bench/stress.jl — re-run all three
+# on any wire-format change.
 #
-#   julia --project=HoloWGL HoloWGL/bench/vs_cairo.jl
+#   julia --project=. bench/vs_cairo.jl
 #
 # NOTE: capability facts (pan/zoom/rotate = client-local on WebGL, impossible on Cairo's static PNG)
 # are architectural, not benched — they live in backend-comparison.md's matrix. This bench covers
 # the measurable payload/latency terms only.
 
-using HoloWGL, Printf, Random
+using Holo, WGLMakie, Printf, Random
 Random.seed!(0)   # mirror the Cairo subprocess seed so both sides build the SAME figures reproducibly
 # (matters at small N: an unseeded rand() shifts tick-label glyph content → the scene size drifts).
+
+# scene_payload/wglmakie_bundle_path live in the :webgl extension (WGLMakie is a weak dep of Holo),
+# so reach them via Base.get_extension — same pattern test/runtests.jl uses for the Cairo extension.
+const _WGLExt = Base.get_extension(Holo, :HoloWGLMakieExt)
 
 # Comparison figure set as data so both envs build identical figures. kind ∈ line|scatter|heat|helix.
 const CASES = [
@@ -65,7 +72,7 @@ function wire_blob!(buf, x)
     return buf
 end
 function webgl_measure(kind, n)
-    ser() = (f = buildfig(kind, n); Makie.update_state_before_display!(f); HoloWGL.scene_payload(f))
+    ser() = (f = buildfig(kind, n); Makie.update_state_before_display!(f); _WGLExt.scene_payload(f))
     scene = ser()
     scene_B = length(wire_blob!(UInt8[], scene))
     ser()  # warm
@@ -73,9 +80,10 @@ function webgl_measure(kind, n)
     return (scene_B, ms)
 end
 
-# --- Cairo side (root-env subprocess; parses tab-separated `label\tpng_B\tmanifest_B\tserver_ms`) ---
+# --- Cairo side (subprocess, same root env as this script; parses tab-separated
+# `label\tpng_B\tmanifest_B\tserver_ms`) ---
 function cairo_measure_all()
-    rootproj = abspath(joinpath(@__DIR__, "..", ".."))
+    rootproj = abspath(joinpath(@__DIR__, ".."))
     driver = tempname() * ".jl"
     write(
         driver, """
@@ -131,7 +139,7 @@ function cairo_measure_all()
 end
 
 kb(b) = round(b / 1024; digits = 0)
-bundle_B = filesize(HoloWGL.wglmakie_bundle_path())
+bundle_B = filesize(_WGLExt.wglmakie_bundle_path())
 
 println("WGLMakie bundle (once per notebook, M2): ", round(bundle_B / 1.0e6; digits = 2), " MB\n")
 println("figure        | Cairo png+man/render | Cairo ms | WebGL scene/render | WebGL ms | crossover N")

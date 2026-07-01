@@ -1,11 +1,12 @@
 # Headlessly run every Pluto notebook in this directory and fail if any cell errors.
 # This is the CI gate that keeps the examples in lockstep with the package API: an
 # example that breaks against the current code fails the build instead of rotting
-# silently. No display needed — the notebooks render through CairoMakie (headless).
+# silently. No display needed — most notebooks render through CairoMakie (headless);
+# examples/webgl_demo.jl renders through WGLMakie instead.
 #
 # Run locally:  julia examples/ci_run.jl
-# The notebooks manage their own env (Pkg.develop the package + add CairoMakie), so
-# this runner only needs Pluto itself.
+# Each notebook manages its own env (Pkg.develop the package + add whichever Makie
+# backend it needs), so this runner only needs Pluto itself.
 
 import Pkg
 Pkg.activate(; temp = true)

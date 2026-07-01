@@ -45,6 +45,20 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 - [x] **Bars/areas** *(Hist/Waterfall/CrossBar/HSpan/VSpan done; Colorbar done M3; Legend remaining)*: Hist, Waterfall, CrossBar, HSpan, VSpan now auto-extracted by `holo(fig)` as `:rects` (same primitive as BarPlot, no new JS path). Shared bar payload schema — semantic, no redundant `index` (element index lives in `InteractionEvent.index`): BarPlot/Waterfall `(; low, high, value)`, Hist `(; value, low, high)`, CrossBar `(; midpoint, low, high)`, HSpan/VSpan `(; low, high)`. Span hit-rects clamped to the owning axis's pixel viewport (prevents cross-axis bleed in multi-axis figures). Uniform fail-loud payload-length validation (`_check_payloads`) added to `SegmentInteractable`/`RectInteractable`/`PolygonInteractable` — a wrong-length `payloads=` now throws `ArgumentError` at construction. *Colorbar: done (M3) — `ColorbarInteractable` auto-extracted from `fig.content`; figure-block walk now exists and Legend slots in the same place. Remaining: Legend (deferred — a linking capability, its own arc).*
 - [ ] **Text bboxes** (Text/Annotation/TextLabel): needs font-metric measurement → the `bbox` geometry primitive (rotated → degenerate polygon).
 - [ ] **SVG output path**: `CairoBackend(vector=true)` is groundwork; actually emit SVG base + overlay for sparse, low-primitive plots (cleaner coords, no raster).
+- [~] **`:webgl` live view manipulation (pan/zoom/rotate) — INVESTIGATED → DEFERRED**: `Axis3`/3D
+      *rendering* is a `:cairo` non-goal the `:webgl` backend already covers live (see M0 in the
+      former `HoloWGL` roadmap) — but interactive pan/zoom/rotate is a separate, discretionary
+      capability, and it isn't actually wired on today: the shim disables WGLMakie's `use_orbit_cam`
+      and 2D `Axis` zoom/pan is dead under `Bonito.NoConnection` (verified from source, not a headless
+      browser — software GL there would corroborate, not decide). Enabling it is large and
+      `:webgl`-only (client-side re-projection, `Axis3` plumbing, a shared-`overlay.ts` pointer-events
+      change, optional GPU-pick) — exactly the backend-asymmetric UX this fold-in is designed to avoid
+      (see `.superpowers/specs/2026-06-30-holo-backend-selection-design.md`). **Decision (2026-07-01):
+      deferred, not rejected** — revisit only on an explicit product case; staged design (S1 2D
+      magnifier → S2 3D-rotate → S3 data-space 2D zoom → S4 occlusion) parked in
+      `.superpowers/holowgl-live-camera-overlay-design.md` (local). Folded in from the former
+      `HoloWGL/docs/roadmap.md` (its M1 "live view manipulation" + M2 "resolve the capability claims")
+      on the Phase 2 backend-selection fold-in.
 
 ## M4 — Interaction depth (new capabilities, not new surfaces)
 *Goal: the Tier-0/Tier-1 interactions the architecture already supports.*
@@ -57,6 +71,13 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
   `InteractionEvent[]`). Shipped with `gallery/gallery.jl` recipes (box-select scatter;
   image ROI per-channel stats).
 - [ ] **Wide mode**: `holo(fig, …; max_width=W)` vendoring the `PlutoUI.WideCell` technique inside the widget (it no-ops under `@bind` if used externally).
+- [ ] **`:webgl` tier-2 animation ergonomics**: in-place buffer patching (`find_plots(uuid)`, no new
+      scene re-ship per frame) already works as a manual technique on the `:webgl` backend; still
+      open is wrapping it in a proper API — a Julia accessor for a plot's uuid + a tidy
+      `updatePlotData(uuid, attr, frame)` JS helper. Sibling of the `:cairo` Animation/scrubbing item
+      above (that one is payload-gated; this one is a pure ergonomics wrapper around a working
+      mechanism). Folded in from the former `HoloWGL/docs/roadmap.md`'s M1 on the Phase 2
+      backend-selection fold-in.
 
 ## M5 — Scale & polish
 - [ ] **Spatial acceleration** (quadtree/grid) for large-N hit-testing — only when the documented O(n) ceiling is actually hit (`log()` the cap until then). *Phase 0 reframe:* hit-test is ~0 ms; the wall is manifest **payload size** (~290 ms serialize+transfer at 4.78 MB), so wire-encoding (int-pixel coords / capping `values[]`) outranks a quadtree (see Phase 4).
@@ -64,13 +85,21 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 - [ ] **Theming**: respect Pluto light/dark for highlight/tooltip styling (shadow-DOM scoped). *(Tooltip styling already landed in M2.3 — shadow-DOM `--holo-tip-*` + `prefers-color-scheme` dark mode; what remains is following Pluto's explicit light/dark toggle and the marker-highlight styling.)*
 - [ ] **GLMakie-static backend**: GPU offscreen → PNG, same `AbstractBackend` contract (for envs with a GPU).
 - [ ] **Register in General** once the API stabilizes (CHANGELOG → 0.1.0 tag → Registrator/TagBot).
+- [x] **Distribution decision**: folded into `ext/HoloWGLMakieExt.jl` — see
+      `.superpowers/specs/2026-06-30-holo-backend-selection-design.md`. (This also obsoletes the
+      former `HoloWGL`'s own "General-registry readiness" item — there's no longer a second package
+      needing its own `[compat]` bound or registration path; the item above is Holo's one registration
+      story for both backends.)
 
 ---
 
 ## Non-goals (by design)
-3D (`Surface`, `MeshScatter`, `Arrows3D`), `PolarAxis`/`Axis3`, and **high-frequency live
-redraw** (dragging a data point and reflowing the plot per frame). These need a browser-side
-renderer — that's **WGLMakie's** domain, a different product. Holo stays static-base + thin overlay.
+For the `:cairo` backend specifically: 3D (`Surface`, `MeshScatter`, `Arrows3D`), `PolarAxis`/`Axis3`,
+and **high-frequency live redraw** (dragging a data point and reflowing the plot per frame). These
+need a browser-side renderer, which is exactly what `CairoBackend` deliberately isn't — it stays
+static-base + thin overlay. Since the `:webgl` backend (formerly the separate `HoloWGL` package)
+folded in, Holo *as a whole* now covers 3D/`Axis3` and live GPU-side redraw via `:webgl` (see the
+`:webgl`-tagged items in M3/M4 above) — but `:cairo` itself stays out of that business by design.
 
 ## Suggested order
 

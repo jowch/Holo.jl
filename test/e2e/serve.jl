@@ -1,9 +1,9 @@
 # Launch a headless Pluto server for the through-Pluto @bind E2E (bind_click.mjs drives it).
-# Pluto lives in its OWN temp env (only Pluto needed here); the notebook activates HoloWGL's
-# project (whose [sources] resolves Holo by path) when it runs. Blocks — run in the background, poll the port for readiness
+# Pluto lives in its OWN temp env (only Pluto needed here); the notebook activates its own
+# temp env (dev Holo by path + add WGLMakie) when it runs. Blocks — run in the background, poll the port for readiness
 # (curl localhost:PORT -> 200; do NOT grep the log, Pluto doesn't reliably flush its banner).
 #
-#   julia HoloWGL/test/e2e/serve.jl [port]
+#   julia test/e2e/serve.jl [port]
 
 import Pkg
 Pkg.activate(; temp = true)

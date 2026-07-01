@@ -1,9 +1,9 @@
 {
-  "name": "holowgl-e2e",
+  "name": "holo-webgl-e2e",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Real-browser (Playwright/Chromium) E2E for the HoloWGL :webgl @bind round-trip.",
+  "description": "Real-browser (Playwright/Chromium) E2E for Holo's :webgl @bind round-trip.",
   "scripts": {
     "test": "node click.mjs"
   },

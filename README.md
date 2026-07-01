@@ -2,13 +2,17 @@
 
 [![CI](https://github.com/jowch/Holo.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/jowch/Holo.jl/actions/workflows/CI.yml)
 
-**Light, server-free interactivity for static CairoMakie plots in Pluto.**
+**Light, server-free interactivity for Makie plots in Pluto — CairoMakie by default, WGLMakie
+for 3D / animation / large data.**
 
-Holo lays a thin interactive layer over a static [CairoMakie](https://docs.makie.org/stable/explanations/backends/cairomakie)
-figure inside a [Pluto](https://plutojl.org) notebook — hover for tooltips, click to
-select — and round-trips deliberate clicks to Julia through `@bind`. No parallel server,
-no WebGL: the plot is a publication-quality static image, and a transparent JS overlay
-does the hit-testing.
+Holo lays a thin interactive layer over a Makie figure inside a [Pluto](https://plutojl.org)
+notebook — hover for tooltips, click to select — and round-trips deliberate clicks to Julia
+through `@bind`. The default [`CairoMakie`](https://docs.makie.org/stable/explanations/backends/cairomakie)
+backend renders a publication-quality **static** image with a transparent JS overlay doing the
+hit-testing (no parallel server, no WebGL). Load [`WGLMakie`](https://docs.makie.org/stable/explanations/backends/wglmakie)
+instead and the same `holo`/`@bind` contract drives a **live**, browser-GPU backend for 3D,
+animation, and large/live data — see [3D, animation, and large data](#3d-animation-and-large-data-wglmakie)
+below. Exactly one backend may be loaded per Pluto session.
 
 > **Status: early / experimental (v0.1).** Validated end-to-end in real Pluto — all five
 > interactable kinds and the selection round-trip are exercised live by
@@ -25,7 +29,10 @@ does the hit-testing.
 | Survives offline / static HTML export | yes | no | **yes** (inspection layer) |
 
 Holo fills the gap: *publication-quality 2D plots with light client-side interactivity,
-Pluto-native, no server.* It is **not** a WGLMakie replacement (no 3D, no live camera).
+Pluto-native, no server.* By default (`CairoBackend`) it is **not** a WGLMakie replacement — no
+3D, no live camera. But `holo` also ships a `:webgl` backend: `using WGLMakie` instead of
+`CairoMakie` and the same API gets you 3D, animation, and large/live data on the client GPU — see
+[3D, animation, and large data (`WGLMakie`)](#3d-animation-and-large-data-wglmakie) below.
 
 ## Install
 
@@ -35,7 +42,9 @@ Holo isn't registered yet:
 julia> ] add https://github.com/jowch/Holo.jl
 ```
 
-You'll also want `CairoMakie` and `Pluto`.
+You'll also want `Pluto`, plus exactly one Makie backend: `CairoMakie` for the default static
+path, or `WGLMakie` for 3D / animation / large data (see below) — never both in the same
+session.
 
 ## Quick start
 
@@ -75,9 +84,10 @@ Declare interactables explicitly (geometry in data space):
 - `RegionInteractable` / `FunctionInteractable` — custom interactions, no JavaScript required
 
 Linear, log, and categorical axes; single or multiple axes; linked selection via shared
-payloads through Pluto's reactive graph. Out of scope (that's WGLMakie's domain): 3D and
-high-frequency live redraw; unsupported axis blocks (`PolarAxis`/`Axis3`/`LScene`) fail loud
-at `holo()` time.
+payloads through Pluto's reactive graph. This is the default `CairoBackend`'s 2D overlay — 3D
+and high-frequency live redraw are the `:webgl` backend's domain instead (see
+[3D, animation, and large data](#3d-animation-and-large-data-wglmakie)); on `CairoBackend`,
+unsupported axis blocks (`PolarAxis`/`Axis3`/`LScene`) fail loud at `holo()` time.
 
 [`examples/demo.jl`](examples/demo.jl) is a runnable gallery of every kind below plus the
 selection round-trip.
@@ -87,7 +97,7 @@ selection round-trip.
 ### `holo`
 
 ```julia
-holo(fig, interactables; backend = CairoBackend(), selected = nothing) -> HoloWidget
+holo(fig, interactables; backend = nothing, max_width = 700, selected = nothing) -> HoloWidget
 holo(fig, interactable;  …)   # single-interactable convenience
 holo(fig; …)                  # zero-config: auto-extract interactables from the plots
 ```
@@ -97,9 +107,15 @@ Renders `fig` and overlays hit-testing for the declared interactables. Use as a 
 `holo` does not corrupt your figure (it saves/restores the background and runs the same
 finalize step Makie performs at display time).
 
-- **`backend`** — `CairoBackend(; max_width = 700, vector = false)`. `max_width` is the
-  display width to target (Pluto's column); render resolution is *derived* from it (~2× the
-  display width — retina-crisp, not wasteful), never a fixed DPI.
+- **`backend`** — left as `nothing` (the default), `holo` picks the one backend implied by
+  whichever of `CairoMakie` / `WGLMakie` is loaded (`CairoBackend` / `WebGLBackend`); pass one
+  explicitly to be unambiguous or to override `max_width`. `CairoBackend(; max_width = 700, vector
+  = false)` is the default 2D path; `WebGLBackend(; px_per_unit = 2.0, max_width = 700)` is the
+  browser-GPU path (see [3D, animation, and large data](#3d-animation-and-large-data-wglmakie)).
+  `max_width` is the display width to target (Pluto's column); render resolution is *derived*
+  from it (~2× the display width for `CairoBackend` — retina-crisp, not wasteful — never a fixed
+  DPI). Loading both backend packages in one session, or neither, raises an `ArgumentError`
+  (see `_resolve_backend` in [`src/render.jl`](src/render.jl)).
 - **`selected`** — a `layer_id => indices` map (e.g. `Dict(:scatter => [0, 2])`) that
   pre-highlights elements on mount. Indices are 0-based and match `InteractionEvent.index`.
   Feed a bond value back into it to keep clicked elements highlighted across re-renders,
@@ -248,7 +264,57 @@ elements survive a re-render without flicker. This is exactly the pattern in
 [`examples/demo.jl`](examples/demo.jl) (cells under "Selection round-trip"), which CI runs
 headlessly on every change.
 
-## How it works
+## 3D, animation, and large data (`WGLMakie`)
+
+> **Status: experimental / incubating.** Verified end-to-end in a real Pluto notebook (render,
+> server-free delivery, overlay, and the `@bind` round-trip — see [docs/roadmap.md](docs/roadmap.md)).
+
+The default `CairoBackend` renders a static PNG — great for 2D publication figures, but it can't
+do 3D, animation, or client-side view manipulation. `using WGLMakie` instead of `CairoMakie`
+switches `holo` to a **browser-GPU backend**: the figure is rendered live in a WebGL `<canvas>`
+on the client GPU, with Holo's usual overlay layered on top — same `holo`/`@bind`/
+`InteractionEvent` contract, no code changes beyond the `using` line:
+
+```julia
+using Holo, WGLMakie
+
+fig = Figure()
+ax = Axis3(fig[1, 1])
+scatter!(ax, x, y, z)
+
+@bind ev holo(fig)   # a live WebGL canvas + Holo's overlay; ev is an InteractionEvent on click
+```
+
+[`examples/webgl_demo.jl`](examples/webgl_demo.jl) is a runnable gallery of the `:webgl` backend
+(CI runs it headlessly, same as `demo.jl`).
+
+Holo enforces **exactly one backend per session**: loading both `CairoMakie` and `WGLMakie` (or
+neither) raises an `ArgumentError` explaining which `using` line to keep — that check
+(`_resolve_backend` in [`src/render.jl`](src/render.jl)) is the authoritative, always-in-sync
+statement of when each backend applies, rather than a table here that could drift from the code.
+For the fuller picture — capability differences, wire size, and latency at scale — see
+[`docs/backend-comparison.md`](docs/backend-comparison.md).
+
+### How it works (`:webgl`)
+
+- **Julia** serializes the scene with `WGLMakie.serialize_scene` and encodes it for the browser
+  (a 4-rule transform: observables, GL buffers, multi-dim arrays, scalars).
+- **Delivery** is over Pluto's `published_to_js` channel (scene + the WGLMakie JS bundle + a
+  ~30-line shim), turned into blob URLs in the browser — no server, no `file://`, works
+  local / remote / export.
+- **Render** uses WGLMakie's own bundle (sourced from the installed package, so the renderer
+  always version-matches `serialize_scene`) driven by the shim — no Bonito runtime.
+- **Overlay** is Holo's existing hit-test layer, reused verbatim over the canvas; the projection
+  is Holo's `Makie.project` (measured to align within ~1–2 px).
+
+### Caveats
+
+- **Version-coupled** to WGLMakie's internals (`serialize_scene` shape, `setup_scene_init`
+  signature). Pinned to `WGLMakie = "0.13"`; treat a WGLMakie bump as a re-verification.
+- The WGLMakie bundle ships **once per notebook**, so each cell's own cost is just its scene;
+  sizes are in [`docs/perf-findings.md`](docs/perf-findings.md).
+
+## How it works (`:cairo`, the default)
 
 CairoMakie renders the figure to a PNG; Holo computes a **hit-region manifest** in
 Julia (via `Makie.project`) and ships it to the browser with
@@ -261,7 +327,7 @@ are embedded, the **inspection layer keeps working in an exported, offline stati
 
 ## Development
 
-The browser overlay is TypeScript, bundled to a committed `assets/overlay.js`:
+The `:cairo` overlay is TypeScript, bundled to a committed `assets/overlay.js`:
 
 ```bash
 cd frontend
@@ -270,11 +336,25 @@ npm run lint && npm run typecheck && npm test   # gate
 npm run build                                    # → ../assets/overlay.js
 ```
 
-CI is the source of truth for the bundle (it rebuilds and commits on `main`), so committing
-your local build is optional. Julia tests:
+The `:webgl` shim is a second, separate TypeScript project, bundled to a committed
+`assets/holo-webgl.js`:
 
 ```bash
-julia --project -e 'using Pkg; Pkg.test()'
+cd frontend-webgl
+npm ci
+npm run lint && npm run typecheck && npm test   # gate
+npm run build                                    # → ../assets/holo-webgl.js
+```
+
+CI is the source of truth for both bundles (it rebuilds and commits on `main`), so committing
+your local build is optional. Julia tests are split into three `GROUP`s so `CairoMakie` and
+`WGLMakie` never both load in one test process (mirroring the one-backend-per-session rule);
+`GROUP` defaults to `Core`:
+
+```bash
+julia --project=. -e 'using Pkg; Pkg.test()'                          # GROUP=Core (default)
+GROUP=NoBackend julia --project=. -e 'using Pkg; Pkg.test()'          # neither backend loaded
+GROUP=WebGL julia --project=. -e 'using Pkg; Pkg.test()'              # WGLMakie-only tests
 ```
 
 Julia code is formatted with [Runic](https://github.com/fredrikekre/Runic.jl) (CI enforces it):

@@ -13,7 +13,7 @@ await build({
     outfile: "../assets/holo-webgl.js",
     minify: true,
     legalComments: "none",
-    banner: { js: "/* HoloWGL :webgl shim — generated from HoloWGL/frontend/src by esbuild. Do not edit. */" },
+    banner: { js: "/* Holo :webgl shim — generated from frontend-webgl/src by esbuild. Do not edit. */" },
 })
 
 console.log("built ../assets/holo-webgl.js")

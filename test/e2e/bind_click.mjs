@@ -53,7 +53,7 @@ try {
   // with no button at all), and finish as soon as the widget + readout are present. Manual loop
   // throughout: waitForFunction's explicit timeout is unreliable in this env (silently caps at
   // its 30s default), and a hard "button must appear" gate is exactly what broke CI.
-  const deadline = Date.now() + 1500000;   // cold: env cell devs Holo+HoloWGL + precompiles Makie/WGLMakie (first CI run ~10min+), under the 40-min job cap
+  const deadline = Date.now() + 1500000;   // cold: env cell devs Holo + adds WGLMakie + precompiles Makie/WGLMakie (first CI run ~10min+), under the 40-min job cap
   let ready = false, ranClicked = false, tick = 0;
   while (Date.now() < deadline) {
     const st = await page.evaluate(() => {

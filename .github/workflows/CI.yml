@@ -29,87 +29,93 @@ jobs:
       - uses: julia-actions/cache@v2
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
+        env:
+          GROUP: Core
 
-  holowgl:
-    # The :webgl subpackage isn't covered by the root `julia` job (julia-runtest tests Holo
-    # only). Run its suite — incl. the WGLMakie/Bonito version-coupling guard — so a dependency
-    # bump that moves the wire format fails the gate here instead of only on a manual local run.
-    # Pinned to 1.12 (HoloWGL's compat floor + the [sources] Holo path-dep needs Julia >= 1.11),
-    # so it's deliberately outside the root 1.10/1 matrix.
-    name: HoloWGL (Julia 1.12)
+  no-backend:
+    # Holo core with NEITHER backend extension loaded — the "load a renderer" error path.
+    # Own job: it must run in a process that never `using`s CairoMakie/WGLMakie, so it can't
+    # share a job with `julia` (Core) or `webgl` without risking load order flakiness.
+    name: No-backend error path
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
-          version: '1.12'
+          version: '1'
       - uses: julia-actions/cache@v2
-      - name: Instantiate + test HoloWGL
-        run: |
-          julia --project=HoloWGL -e 'using Pkg; Pkg.instantiate()'
-          julia --project=HoloWGL HoloWGL/test/runtests.jl
+      - uses: julia-actions/julia-buildpkg@v1
+      - uses: julia-actions/julia-runtest@v1
+        env:
+          GROUP: NoBackend
 
-      # Real-browser @bind round-trip: generate the self-contained widget page (reuses the
-      # WGLMakie env just precompiled above), then click scatter marker 0 in headless Chromium
-      # and assert the overlay emits the right bond value (test/e2e/click.mjs). Covers the
-      # browser half the Julia unit tests can't reach.
+  webgl:
+    # The :webgl extension isn't covered by the `julia` job (GROUP=Core loads CairoMakie
+    # only). Run its suite — incl. the WGLMakie/Bonito version-coupling guard and the
+    # both-loaded rejection — so a dependency bump that moves the wire format fails the
+    # gate here instead of only on a manual local run. Pinned to 1.10, the compat floor
+    # Task 4 verified.
+    name: WGLMakie extension
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.10'
+      - uses: julia-actions/cache@v2
+      - name: Instantiate + test WGLMakie extension
+        run: |
+          julia --project=. -e 'using Pkg; Pkg.instantiate()'
+          GROUP=WebGL julia --project=. -e 'using Pkg; Pkg.test()'
+
+      # Real-browser @bind round-trip: generate the self-contained widget page, then click
+      # scatter marker 0 in headless Chromium and assert the overlay emits the right bond
+      # value. Covers the browser half the Julia unit tests can't reach.
       - name: Generate :webgl E2E page
-        run: julia --project=HoloWGL HoloWGL/test/e2e/make_page.jl "$RUNNER_TEMP/e2e"
+        run: julia --project=. test/e2e/make_page.jl "$RUNNER_TEMP/e2e"
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
       - name: Install Playwright + Chromium
-        working-directory: HoloWGL/test/e2e
+        working-directory: test/e2e
         run: |
           npm install
           npx playwright install --with-deps chromium
       - name: Run real-browser @bind E2E
-        working-directory: HoloWGL/test/e2e
+        working-directory: test/e2e
         run: node click.mjs "$RUNNER_TEMP/e2e"
-      # Close the seam: feed the value the browser actually emitted through the real Julia
-      # transform_value (no synthesized payload between emit and consume).
       - name: Verify browser-emitted value through transform_value
-        run: julia --project=HoloWGL HoloWGL/test/e2e/verify_capture.jl "$RUNNER_TEMP/e2e"
+        run: julia --project=. test/e2e/verify_capture.jl "$RUNNER_TEMP/e2e"
 
-  holowgl-bind-e2e:
-    # THROUGH-Pluto @bind E2E: a live headless Pluto kernel + real Chromium. Clicking a marker
-    # round-trips the bond THROUGH Pluto (bond transport + reactive re-run) — the mile the static
-    # E2E in the `holowgl` job skips. Isolated as its own job (heaviest, and the one most exposed
-    # to Pluto-version churn) so it reads cleanly and is trivial to drop if it ever proves flaky.
-    name: HoloWGL @bind E2E (Pluto)
+  webgl-bind-e2e:
+    # THROUGH-Pluto @bind E2E: a live headless Pluto kernel + real Chromium. Isolated as its
+    # own job (heaviest, and the one most exposed to Pluto-version churn) so it reads cleanly
+    # and is trivial to drop if it ever proves flaky.
+    name: WGLMakie @bind E2E (Pluto)
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
-          version: '1.12'
+          version: '1.10'
       - uses: julia-actions/cache@v2
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
       - name: Install Playwright + Chromium
-        working-directory: HoloWGL/test/e2e
+        working-directory: test/e2e
         run: |
           npm install
           npx playwright install --with-deps chromium
-      # Pre-warm: precompile the WGLMakie/Makie/Bonito stack into the depot BEFORE Pluto starts.
-      # bind_notebook.jl activates this same HoloWGL project, so on a warm julia-actions/cache
-      # depot this is a no-op and the notebook's in-kernel instantiate skips the ~10-min cold
-      # precompile (the dominant cost of this job — see the precompile/render split in the
-      # "Pluto server log" step). Cold runs pay it here, in a visible/timed step, not silently
-      # inside the Pluto kernel.
-      - name: Pre-warm HoloWGL env (precompile into the cached depot)
-        run: julia --project=HoloWGL -e 'using Pkg; Pkg.instantiate()'
+      - name: Pre-warm env (precompile into the cached depot)
+        run: julia --project=. -e 'using Pkg; Pkg.instantiate()'
       - name: Through-Pluto @bind round-trip
-        working-directory: HoloWGL/test/e2e
+        working-directory: test/e2e
         run: |
           julia serve.jl 1234 > pluto.log 2>&1 &
           SERVER=$!
-          trap 'kill $SERVER 2>/dev/null || true' EXIT   # cleanup runs even when `set -e` aborts on a failing step
-          # Use 127.0.0.1, NOT localhost: on GitHub runners localhost resolves to ::1 (IPv6) first,
-          # but Pluto binds IPv4 127.0.0.1 — the HTML shell loads via fallback yet the SPA's
-          # WebSocket (window.location.host) hits ::1 and never connects, leaving a blank page.
+          trap 'kill $SERVER 2>/dev/null || true' EXIT
           up=
           for i in $(seq 1 120); do
             code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:1234 || echo 000)
@@ -117,13 +123,10 @@ jobs:
             sleep 2
           done
           [ -n "$up" ] || { echo "::error::Pluto never came up on :1234"; cat pluto.log; exit 1; }
-          node bind_click.mjs http://127.0.0.1:1234 "$GITHUB_WORKSPACE/HoloWGL/test/e2e/bind_notebook.jl"
-      # Always surface the Pluto server log — on success too — so the precompile-vs-first-render
-      # timing is visible (pluto.log is otherwise only dumped when Pluto fails to come up). This
-      # is how we tell whether a slow run is cacheable precompile or non-cacheable render TTFX.
+          node bind_click.mjs http://127.0.0.1:1234 "$GITHUB_WORKSPACE/test/e2e/bind_notebook.jl"
       - name: Pluto server log (precompile + render timing)
         if: always()
-        working-directory: HoloWGL/test/e2e
+        working-directory: test/e2e
         run: tail -n 200 pluto.log || true
 
   examples:
@@ -181,19 +184,19 @@ jobs:
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add assets/overlay.js
             git commit -m "ci: rebuild assets/overlay.js [skip ci]"
-            git pull --rebase origin main   # serialize with the holowgl-frontend commit-back (different file, no conflict)
+            git pull --rebase origin main   # serialize with the webgl-frontend commit-back (different file, no conflict)
             git push
           fi
 
-  holowgl-frontend:
-    # Same gate as `frontend` but for the HoloWGL :webgl shim, which lives in its own subpackage
-    # frontend (HoloWGL/frontend/). lint + typecheck + vitest (locks the rewrap<->_plain contract)
-    # + build; CI is the sole author of HoloWGL/assets/holo-webgl.js, same model as overlay.js.
-    name: HoloWGL frontend (TS) + shim bundle
+  webgl-frontend:
+    # Same gate as `frontend` but for the :webgl shim, which lives in frontend-webgl/.
+    # lint + typecheck + vitest (locks the rewrap<->_plain contract) + build; CI is the sole
+    # author of assets/holo-webgl.js, same model as overlay.js.
+    name: WGLMakie frontend (TS) + shim bundle
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: HoloWGL/frontend
+        working-directory: frontend-webgl
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -205,27 +208,25 @@ jobs:
       - run: npm test
       - run: npm run build
 
-      # PRs (incl. forks, which can't push): fail if the committed shim bundle is stale.
       - name: Verify committed shim bundle is up to date
         if: github.event_name == 'pull_request'
         working-directory: .
         run: |
-          if ! git diff --quiet HoloWGL/assets/holo-webgl.js; then
-            echo "::error::HoloWGL/assets/holo-webgl.js is out of date — run 'cd HoloWGL/frontend && npm run build' and commit."
-            git --no-pager diff --stat HoloWGL/assets/holo-webgl.js
+          if ! git diff --quiet assets/holo-webgl.js; then
+            echo "::error::assets/holo-webgl.js is out of date — run 'cd frontend-webgl && npm run build' and commit."
+            git --no-pager diff --stat assets/holo-webgl.js
             exit 1
           fi
 
-      # Push to main: CI owns the shim bundle — commit any rebuild so main is never stale.
       - name: Commit rebuilt shim bundle
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         working-directory: .
         run: |
-          if ! git diff --quiet HoloWGL/assets/holo-webgl.js; then
+          if ! git diff --quiet assets/holo-webgl.js; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add HoloWGL/assets/holo-webgl.js
-            git commit -m "ci: rebuild HoloWGL/assets/holo-webgl.js [skip ci]"
+            git add assets/holo-webgl.js
+            git commit -m "ci: rebuild assets/holo-webgl.js [skip ci]"
             git pull --rebase origin main   # serialize with the frontend commit-back (different file, no conflict)
             git push
           fi
