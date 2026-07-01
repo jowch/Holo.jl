@@ -4,8 +4,9 @@ module HoloWGL
 # with Holo's overlay layered on top. Unlike CairoBackend (static PNG, 2D only), this
 # handles 3D / animation / large data. Ships NO Bonito runtime and NO server: the scene
 # is serialized to a plain payload (published_to_js) and drawn by a vendored WGLMakie
-# bundle + a ~30-line shim (assets/holo-webgl.js). Validated by spikes 06/08:
-# full 2D+3D fidelity, 1-2px overlay alignment, client-side animation hook.
+# bundle + a small shim (assets/holo-webgl.js, built from HoloWGL/frontend/src/holo-webgl.ts
+# by esbuild). Validated by spikes 06/08: full 2D+3D fidelity, 1-2px overlay alignment,
+# client-side animation hook.
 
 using Holo: Holo, AbstractBackend, InteractionContext
 using Reexport
@@ -141,8 +142,10 @@ function Holo.context(b::WebGLBackend, fig, ppu)
     return InteractionContext(project, transforms, ids, out_w, out_h, scaling, display_scale)
 end
 
-# Path to the committed shim bundle (vendored WGLMakie.bundled.js is sourced at runtime
-# from the installed WGLMakie package, so the renderer always version-matches serialize_scene).
+# Path to the committed shim bundle (built from HoloWGL/frontend/src/holo-webgl.ts by esbuild;
+# CI is its sole author, same as Holo core's overlay.js). The vendored WGLMakie.bundled.js it
+# imports is sourced at runtime from the installed WGLMakie package, so the renderer always
+# version-matches serialize_scene.
 const SHIM_JS = joinpath(@__DIR__, "..", "assets", "holo-webgl.js")
 wglmakie_bundle_path() = joinpath(pkgdir(WGLMakie), "src", "javascript", "WGLMakie.bundled.js")
 

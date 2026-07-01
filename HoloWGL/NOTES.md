@@ -9,8 +9,10 @@ WGLMakie/Bonito out of Holo core's deps. Implements Holo's backend seam
 - `scene_payload(fig)` — NoConnection Session+Screen so the glyph atlas (markers/text) populates.
 - `WebGLBackend <: AbstractBackend`, `mount → :webgl`, `render → WebGLResult`, `context`
   reusing the CairoBackend projection (measured 1–2px aligned on the WGLMakie canvas).
-- `assets/holo-webgl.js` — the hand-authored Bonito shim + `mountWebGL(...)`. Imports WGLMakie's own
-  `WGLMakie.bundled.js` (sourced at runtime from the installed package → always version-matched).
+- `assets/holo-webgl.js` — the Bonito shim + `mountWebGL(...)`, **built from
+  `HoloWGL/frontend/src/holo-webgl.ts` by esbuild** (lint/typecheck/vitest gate; CI sole author,
+  like Holo core's `overlay.js`). Imports WGLMakie's own `WGLMakie.bundled.js` (sourced at runtime
+  from the installed package → always version-matched).
 
 ## Widget integration — DONE additively (Holo core untouched)
 `holo_webgl(fig, interactables)` (src/widget.jl) is a drop-in for `Holo.holo`, returning a
@@ -80,8 +82,13 @@ blobs — the exact mechanism `published_to_js` uses) rendering in a headless br
    buys only a fraction); the atlas glyph-tiles are observed to repeat across scenes (shareable) but
    are small and gzip overlaps. Both deferred until tier-1 animation profiling shows the scene is the
    bottleneck. Numbers + the gzip columns: `docs/perf-findings.md` (re-run `bench/payload_size.jl`).
-5. **Build pipeline** — `assets/holo-webgl.js` is hand-authored now; wire it into the
-   esbuild pipeline alongside `overlay.js` if it grows.
+5. **Build pipeline** — DONE. `assets/holo-webgl.js` is now built from
+   `HoloWGL/frontend/src/holo-webgl.ts` by esbuild, under the same gate as Holo core's
+   `overlay.ts` (lint + typecheck + vitest + build; CI sole author). The vitest suite covers the JS
+   half of the `rewrap`↔`_plain` 4-rule contract (asserts `rewrap` against the `_plain` tag set; it
+   can't catch a renamed/new `_plain` tag on the Julia side — and neither can the overlay E2E, which
+   renders independently of the canvas, so only the live render check does) — `rewrap` was
+   previously the least-tested JS in the repo.
 
 ## Dev
 ```
