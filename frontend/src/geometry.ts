@@ -137,8 +137,13 @@ export function hitLayer(layer: HitLayer, px: number, py: number): Omit<Hit, "la
             if (px >= rg.x && px <= rg.x + rg.w && py >= rg.y && py <= rg.y + rg.h) return { index: 0, roiPart: { move: true } }
             return null
         }
-        case "axis":
-            return { index: -1, axis: layer.axis }
+        case "axis": {
+            if (g && Array.isArray(g) && g.length === 4) {
+                const [x, y, w, h] = g as number[]
+                if (px < x || px > x + w || py < y || py > y + h) return null // bounded (colorbar)
+            }
+            return { index: -1, axis: layer.axis } // catch-all when no bbox (AxisInteractable)
+        }
     }
 }
 
@@ -154,7 +159,11 @@ export function hitTest(manifest: Manifest, px: number, py: number, event: strin
 
 // the @bind payload for a hit (single-select)
 export function resolvePayload(hit: Hit, manifest: Manifest, px: number, py: number): unknown {
-    if (hit.axis) return invertAxis(manifest.transforms[hit.axis], px, py)
+    if (hit.axis) {
+        const t = manifest.transforms[hit.axis]
+        const inv = invertAxis(t, px, py)
+        return t.valueaxis ? { value: inv[t.valueaxis] } : inv
+    }
     if (hit.grid) return hit.grid[2] === undefined ? { i: hit.grid[0], j: hit.grid[1] } : { i: hit.grid[0], j: hit.grid[1], value: hit.grid[2] }
     return hit.layer.payloads[hit.index]
 }
