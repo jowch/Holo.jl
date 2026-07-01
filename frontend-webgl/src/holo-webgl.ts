@@ -6,9 +6,9 @@
 //   import { mountWebGL } from "./holo-webgl.js";
 //   mountWebGL({ canvas, wglBundleUrl, scene: published, width, height, pxPerUnit });
 //
-// `scene` is the published_to_js payload from HoloWGL.scene_payload (the 4-rule encoding);
-// `rewrap` is the JS half of that contract — it mirrors `_plain` in src/HoloWGL.jl, so the two
-// must stay in sync (the unit tests lock it).
+// `scene` is the published_to_js payload from HoloWGLMakieExt.scene_payload (the 4-rule
+// encoding); `rewrap` is the JS half of that contract — it mirrors `_plain` in
+// ext/HoloWGLMakieExt.jl, so the two must stay in sync (the unit tests lock it).
 
 // functional observable shim: stores callbacks, notify() runs them -> the animation hook
 export interface Obs<T = unknown> {
