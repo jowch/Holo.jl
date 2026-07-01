@@ -6,10 +6,15 @@ authors = ["Jonathan Chen <jwhc@ucla.edu>"]
 [deps]
 AbstractPlutoDingetjes = "6e696c72-6542-2067-7265-42206c756150"
 Base64 = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
-CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
 HypertextLiteral = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
+
+[weakdeps]
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+
+[extensions]
+HoloCairoMakieExt = "CairoMakie"
 
 [compat]
 AbstractPlutoDingetjes = "1"
@@ -20,8 +25,9 @@ Makie = "0.24"
 julia = "1.10"
 
 [extras]
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Statistics", "Test"]
+test = ["CairoMakie", "Statistics", "Test"]
