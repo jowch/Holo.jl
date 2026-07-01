@@ -47,11 +47,11 @@ manipulation. Live pan/zoom/rotate is **not a feature of either backend right no
 >
 > Enabling it is a **large, staged feature** (client-side re-projection + Holo-core `z`/`Axis3`
 > plumbing + a shared-`overlay.ts` pointer-events change + optional GPU-pick for occlusion) that would
-> exist **only in `:webgl`**. That asymmetry is itself the open question: a headline capability that one
+> exist **only in `:webgl`**. That asymmetry is the deciding factor: a headline capability that one
 > backend has and the other structurally cannot is at odds with the **co-equal-entry-points** framing
-> this doc argues for — it splits the user's mental model across backends. **Status: under review, not
-> committed.** The investigation + a staged option set live in `.superpowers/` (local); the roadmap
-> tracks the open decision.
+> this doc argues for — it splits the user's mental model across backends. **Status: investigated →
+> deferred.** The investigation + a staged design are parked in `.superpowers/` (local); the roadmap
+> records the deferral. Not scheduled; revisit only on an explicit product decision.
 
 ## 2. Wire + server cost — the measurable half
 
@@ -139,6 +139,7 @@ the user's GPU anyway). Three facts, GL-independent:
   laid out in `.superpowers/holowgl-live-camera-overlay-design.md` (local process doc). It lands **only
   in `:webgl`**.
 
-**Open question (under review, not committed):** should Holo offer live pan/zoom/rotate at all, given it
-would be a headline capability that only one backend can ever have? That asymmetry pulls against the
-co-equal-entry-points framing of this doc. Tracked in `roadmap.md`.
+**Decision — investigated → deferred.** Should Holo offer live pan/zoom/rotate at all, given it would be
+a headline capability that only one backend can ever have? The asymmetry pulls against the
+co-equal-entry-points framing of this doc, so the feature is **deferred** — investigated, staged design
+parked, not scheduled. Revisit only on an explicit product decision. Tracked in `roadmap.md`.

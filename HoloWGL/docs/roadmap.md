@@ -28,9 +28,10 @@ The hard questions are answered and the backend works end-to-end in a real Pluto
 
 - [ ] **Tier-2 data-animation API**: a Julia accessor for a plot's uuid + a tidy
       `updatePlotData(uuid, attr, frame)` JS helper (today it's a manual `find_plots` patch).
-- [ ] **Live view manipulation (pan/zoom/rotate) — OPEN PRODUCT QUESTION, not committed.** Investigated
-      via a fan-out; the staged design lives in `.superpowers/holowgl-live-camera-overlay-design.md`
-      (local). Two findings reframe it:
+- [~] **Live view manipulation (pan/zoom/rotate) — INVESTIGATED → DEFERRED.** Investigated via a
+      fan-out; the staged design lives in `.superpowers/holowgl-live-camera-overlay-design.md` (local).
+      Deferred (not rejected, not scheduled) — revisit only on an explicit product decision. Two
+      findings drove the deferral:
       - **It isn't wired on today.** The shim sets `can_send_to_julia:()=>true` (needed for tier-2
         animation), and WGLMakie's `use_orbit_cam = ()=>!can_send_to_julia()` disables 3D OrbitControls;
         2D `Axis` zoom/pan is Julia-side and dead under `NoConnection`. So the plot renders live but does
@@ -39,10 +40,11 @@ The hard questions are answered and the backend works end-to-end in a real Pluto
         per-axis `projectionview`) → Holo-core `z`/`Axis3` plumbing → a shared-`overlay.ts` pointer-events
         change → optional GPU-pick for occlusion. It would give `:webgl` a headline capability `:cairo`
         structurally cannot have.
-      **Decision needed before any of this is scheduled:** do we even want pan/zoom in Holo, given a
-      feature split across backends works against the co-equal-entry-points UX? Leaning: hold. If pursued,
-      the design doc has the milestones (M1 magnifier → M2 3D-rotate → M3 data-space 2D → M4 occlusion) and
-      the blocking Axis3-interactable spike. (Quantified in `docs/backend-comparison.md` §1†/§6.)
+      **Decision (2026-07-01): deferred.** A feature split across backends works against the
+      co-equal-entry-points UX, so we're not scheduling pan/zoom in Holo now. Not rejected — if a product
+      case later justifies the backend asymmetry, the design doc has the milestones (M1 magnifier → M2
+      3D-rotate → M3 data-space 2D → M4 occlusion) and the blocking Axis3-interactable spike ready to pick
+      up. (Quantified in `docs/backend-comparison.md` §1†/§6.)
 - [x] **Version-coupling guard**: a smoke test that fails loudly when a WGLMakie bump changes
       `serialize_scene`/`setup_scene_init` (the wire format is internal and unstable). *Done
       (`test/runtests.jl` "version-coupling guard"): names each Julia internal the `scene_payload`
