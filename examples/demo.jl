@@ -324,6 +324,26 @@ poly_widget = let
     holo(pf)   # auto-detects Band + Density + Contourf + Violin + Voronoiplot + BoxPlot
 end
 
+# ╔═╡ 40000000-0000-0000-0000-0000000000b0
+md"""
+## Colorbar readout (M3) — `ColorbarInteractable`
+
+`holo(fig)` auto-detects any `Colorbar` block and adds a colorbar readout — **hover** the bar
+to see the data value at the cursor position; **click** to round-trip `(; value)` via `@bind`.
+No manual wiring needed: `ColorbarInteractable` is emitted automatically from the figure-block
+walk (`fig.content`).
+"""
+
+# ╔═╡ 40000000-0000-0000-0000-0000000000b1
+# Colorbar readout — hover the bar for the data value; click round-trips (; value) via @bind
+cbf = let
+    f = Figure()
+    ax = Axis(f[1, 1]; title = "hover / click the colorbar")
+    hm = heatmap!(ax, -3:0.1:3, -3:0.1:3, [exp(-(x^2 + y^2)) for x in -3:0.1:3, y in -3:0.1:3])
+    Colorbar(f[1, 2], hm)
+    holo(f)
+end
+
 # ╔═╡ Cell order:
 # ╟─40000000-0000-0000-0000-000000000000
 # ╠═40000000-0000-0000-0000-000000000001
@@ -370,3 +390,5 @@ end
 # ╠═40000000-0000-0000-0000-000000000091
 # ╟─40000000-0000-0000-0000-0000000000a0
 # ╠═40000000-0000-0000-0000-0000000000a1
+# ╟─40000000-0000-0000-0000-0000000000b0
+# ╠═40000000-0000-0000-0000-0000000000b1
