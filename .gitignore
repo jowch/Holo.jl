@@ -1,16 +1,16 @@
 # Julia
 /Manifest.toml
-# HoloWGL has no committed Manifest by design (re-resolves to latest so the version-coupling
-# guard catches drift); the e2e pre-warm + bind_notebook.jl regenerate it transiently.
-/HoloWGL/Manifest.toml
 *.jl.cov
 *.jl.*.cov
 *.jl.mem
 /docs/build/
 
-# Node / TypeScript (frontend). The built bundle assets/overlay.js IS committed.
+# Node / TypeScript (frontend, frontend-webgl). The built bundles assets/overlay.js and
+# assets/holo-webgl.js ARE committed.
 frontend/node_modules/
 frontend/dist/
+frontend-webgl/node_modules/
+frontend-webgl/dist/
 *.tsbuildinfo
 npm-debug.log*
 

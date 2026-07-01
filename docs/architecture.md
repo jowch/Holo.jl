@@ -55,7 +55,9 @@ struct RenderResult
 end
 ```
 
-**`CairoBackend` is the only v1 implementation** — PNG (`mount = :img`) by default, SVG
+**`CairoBackend` was the only v1 implementation.** (Update: a second, co-equal implementation,
+`WebGLBackend` — the `:webgl` backend, in `ext/HoloWGLMakieExt.jl` — was added later; see the
+note at the end of this section.) `CairoBackend` is PNG (`mount = :img`) by default, SVG
 (`mount = :svg`) optionally for sparse plots. `render` = `colorbuffer` → PNG → bytes. `context` calls
 `Makie.update_state_before_display!(fig)` (mandatory, validated) then builds the projection closure
 and reads each axis's transform.
@@ -66,11 +68,16 @@ so instead the one mutation we introduce — forcing an opaque background — is
 at display/save time, so it's benign, not corruption. See also the DPI/sizing policy in `frontend-delivery.md`
 (render at `2 × (max_width or 700px column)`, opaque background, package-owned wide mode).
 
-The seam is deliberately static-only and stays that way: it still admits a future GLMakie-static
-backend (GPU offscreen → PNG, same contract) or a pure-image backend. A browser-side *live*
-rendering model (WGLMakie) is **out of scope** — research (Q0) found it server-centric, reload-fragile,
-and at odds with the static/durable output this project exists to provide. It is not a deferred target;
-it is a different product.
+The seam was originally scoped static-only: v1's research (Q0) found a browser-side *live*
+WGLMakie rendering model server-centric and reload-fragile, at odds with the static/durable
+output this project set out to provide, and framed it as a different product rather than a
+deferred target. **Update:** the seam turned out to admit a live implementation cleanly after
+all — `WebGLBackend` implements the same `AbstractBackend` contract (`render`/`context`/`mount`)
+against a browser-GPU `<canvas>` instead of a PNG, shipped as the `HoloWGLMakieExt` weak-dep
+extension. The two backends are now co-equal peers, one loaded per session (`_resolve_backend`
+in `src/render.jl`); see `docs/backend-comparison.md` for the capability/cost tradeoff. The seam
+still also admits a future GLMakie-static backend (GPU offscreen → PNG, same contract) or a
+pure-image backend.
 
 ### `InteractionContext` — the backend → interactable bridge
 
@@ -349,7 +356,8 @@ them cleanly:
   (total = frames × per-frame PNG): ~5.5 MB (187 KB × 30) to ~22 MB (× 120) for a typical plot, 100s of MB
   at scale. The `frames` slot must shrink per-frame cost (downscale / fewer frames) before it ships — §8.
 - **Tier 2 (round-trip):** `:click` events → `@bind`. Faithful plot redraw from arbitrary new state is
-  the irreducible-latency wall and is out of scope (that's WGLMakie's domain, not this package's).
+  the irreducible-latency wall for `CairoBackend` and is out of scope for it (that's the `:webgl`
+  backend's domain, in-package as `WebGLBackend`, not `CairoBackend`'s).
 
 **Named tensions (accepted, not bugs):**
 1. `AxisInteractable` returns no region geometry — it rides the `:axis` channel as an unbounded
@@ -390,8 +398,10 @@ profile shows JS hit-test *specifically* is the bottleneck.
 **v2:** plot-object introspection constructors; ABLines/Arc, Legend,
 text bboxes (font metrics), animation frames, SVG-overlay annotations, spatial hit-test acceleration.
 
-**Never (without a new backend class):** 3D (Surface, MeshScatter, Arrows3D), PolarAxis/Axis3,
-high-frequency live redraw. These are WGLMakie's domain.
+**Never for `CairoBackend`:** 3D (Surface, MeshScatter, Arrows3D), PolarAxis/Axis3,
+high-frequency live redraw. These are the `:webgl` backend's domain (`WebGLBackend`, the new
+backend class this once called out as the only way to reach them — it now ships in-package;
+see `docs/backend-comparison.md`).
 
 ## 8. Payload scaling & robustness to large inputs
 
