@@ -428,4 +428,24 @@ describe("tooltips (mount/showTip)", () => {
         expect(tip.innerHTML).toBe("5.000")
         expect(tip.innerHTML).not.toContain("undefined")
     })
+
+    it("plain axis hover shows x=… y=… tooltip (no valueaxis)", () => {
+        const { host, script } = setup()
+        // plain axis: geometry null, transform has no valueaxis → x=/y= tooltip
+        const plainManifest: Manifest = {
+            width: 1200, height: 800, scaling: 2,
+            transforms: { ax1: { xlims: [0, 5], ylims: [0, 5], xscale: "identity", yscale: "identity",
+                viewport: [100, 100, 400, 400], xreversed: false, yreversed: false } },
+            layers: [{ id: "axis", kind: "axis", geometry: null, payloads: [], axis: "ax1", events: ["hover"] }],
+        }
+        mount(script, plainManifest)
+        const shadow = shadowOf(host)
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        ;(shadow.querySelector(".surface") as HTMLElement)
+            .dispatchEvent(new MouseEvent("mousemove", { clientX: 200, clientY: 200, bubbles: true }))
+        expect(tip.style.display).toBe("block")
+        expect(tip.innerHTML).toContain("x=")
+        expect(tip.innerHTML).toContain("y=")
+        expect(tip.innerHTML).not.toContain("undefined")
+    })
 })

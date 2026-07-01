@@ -1131,4 +1131,16 @@ end
     _, _, ctx = ctx_for(fig)
     L = only(hitlayers(cbs[1], ctx))
     @test L.kind === :axis && length(L.geometry) == 4
+    # two colorbars → two ColorbarInteractables with distinct ids
+    fig2 = Figure()
+    ax2 = Axis(fig2[1, 1])
+    hm2a = heatmap!(ax2, rand(10, 10))
+    ax2b = Axis(fig2[2, 1])
+    hm2b = heatmap!(ax2b, rand(5, 5))
+    Colorbar(fig2[1, 2], hm2a)
+    Colorbar(fig2[2, 2], hm2b)
+    Makie.update_state_before_display!(fig2)
+    cbs2 = filter(i -> i isa ColorbarInteractable, auto_interactables(fig2))
+    @test length(cbs2) == 2
+    @test Set(c.id for c in cbs2) == Set([:colorbar, :colorbar_2])
 end

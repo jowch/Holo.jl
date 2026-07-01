@@ -7,7 +7,7 @@
 > Reproduce (numbers below re-run 2026-06-29, last reconciled for M2.3 template-tooltip design
 > on PR #10 and confirmed unchanged for M4 box-select (commit `d05318f`) on 2026-06-29 and for
 > Phase 2a bars/areas/spans on 2026-06-30 and Phase 2b polygon surfaces (commit `431bd99`) on
-> 2026-06-30 and colorbar readout `valueaxis` field (commit `02da982`) on 2026-06-30;
+> 2026-06-30 and colorbar readout `valueaxis` field (PR #27) on 2026-06-30;
 > baseline established after int-pixel geometry quantization, CairoMakie 0.15, Julia 1.12):
 > - **base64-PNG / manifest / render numbers** — `julia --project=. bench/payload_envelope.jl`
 >   (normal envelope) and `julia --project=. bench/stress.jl` (the 10× extremes). Both `seed!(0)`,
@@ -247,7 +247,7 @@ float16; lossy >2048px). Keep `AxisTransform` lims `Float64` (drag inversion) �
   is K events × ~tens of bytes (or a fixed-size region descriptor) — never a size concern. The
   contract change, not the size, was the work.
 
-- **Colorbar readout (`valueaxis` field)** *(delivered, commit `02da982`, 2026-06-30)* —
+- **Colorbar readout (`valueaxis` field)** *(delivered, PR #27, 2026-06-30)* —
   `AxisTransform` gains a `valueaxis::Union{Nothing,Symbol}` field (serialized as `valueaxis?: "x"|"y"|null`
   in MsgPack). For all non-colorbar transforms it serializes as `null` — one nullable key per
   transform entry, negligible at the KB scale of the §A envelope. A colorbar contributes one
