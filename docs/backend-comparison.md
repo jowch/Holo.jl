@@ -1,22 +1,24 @@
 # `:webgl` vs `:cairo` — a backend comparison (wire **and** UX)
 
-> **What this answers.** Holo now has two backends: `:cairo` (core — a static CairoMakie PNG +
-> a thin JS hit-test overlay) and `:webgl` (this package — the figure rendered live in a WGLMakie
-> `<canvas>` on the client GPU, same overlay on top). The open question was whether `:webgl` is just
-> a *heavier* `:cairo` (pay 1.09 MB, get the same thing) or a **co-equal entry point** a user would
-> pick on its own. The measurements say co-equal: they occupy **different regimes**, and `:webgl`
-> owns a **3D-rendering** capability zone `:cairo` cannot enter (live view manipulation is *not* such a
-> zone — it's gated off today and deferred; see §1†).
+> **What this answers.** Holo has two backends: `:cairo` (a static CairoMakie PNG + a thin JS
+> hit-test overlay) and `:webgl` (the figure rendered live in a WGLMakie `<canvas>` on the client
+> GPU, same overlay on top). The open question was whether `:webgl` is just a *heavier* `:cairo`
+> (pay 1.09 MB, get the same thing) or a **co-equal entry point** a user would pick on its own. The
+> measurements say co-equal: they occupy **different regimes**, and `:webgl` owns a **3D-rendering**
+> capability zone `:cairo` cannot enter (live view manipulation is *not* such a zone — it's gated off
+> today and deferred; see §1†).
 >
-> **Numbers reproduce** via `julia --project=HoloWGL HoloWGL/bench/vs_cairo.jl` (WebGL measured live,
-> both sides `Random.seed!(0)`; Cairo measured in a root-env subprocess — one command, nothing
-> hand-stamped). The **size** figures are byte-reproducible and reconcile with root's
-> `bench/payload_envelope.jl` (`markersize=6`, same as here) for the shared cases — scatter-1k 187/38
-> KB, scatter-10k 724/379 KB. The **scatter-100k** row is this bench's own point; root
-> `bench/stress.jl` sweeps 100k too but at `markersize=4` (≈303 KB PNG / ~1.6 s), so it is *not* a
-> corroborating source for the `markersize=6` numbers here — the marker size drives both the PNG and
-> the raster time. **Timings (ms) are wall-clock** (`~` throughout) and vary run-to-run; only sizes
-> are exact. Last run **2026-06-30**, WGLMakie 0.13.12 / CairoMakie 0.15 / Julia 1.12.
+> **Numbers reproduce** via `julia --project=. bench/vs_cairo.jl` (WebGL measured live in this
+> process, both sides `Random.seed!(0)`; Cairo measured in a subprocess, since Holo supports only
+> one backend extension per session — one command, nothing hand-stamped). The **size** figures are
+> byte-reproducible and reconcile with `bench/payload_envelope.jl` (`markersize=6`, same as here) for
+> the shared cases — scatter-1k 187/38 KB, scatter-10k 724/379 KB. The **scatter-100k** row is this
+> bench's own point; `bench/stress.jl` sweeps 100k too but at `markersize=4` (≈303 KB PNG / ~1.6 s),
+> so it is *not* a corroborating source for the `markersize=6` numbers here — the marker size drives
+> both the PNG and the raster time. **Timings (ms) are wall-clock** (`~` throughout) and vary
+> run-to-run; only sizes are exact. Last run **2026-06-30**, WGLMakie 0.13.12 / CairoMakie 0.15 /
+> Julia 1.12. Size/latency figures reconcile with `docs/perf-findings.md`'s `:webgl` section and its
+> `:cairo` envelope — see that file for the full methodology.
 
 ## 1. Capability matrix — the headline is what each backend *can do*, not how fast
 

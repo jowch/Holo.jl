@@ -1,10 +1,11 @@
 # Re-runnable size bench for the :webgl wire format. The `:webgl` payload is a NEW format
 # (scene_payload + the vendored WGLMakie bundle), separate from Holo core's PNG+manifest envelope in
-# ../../docs/perf-findings.md — so per the profiling standing practice it gets its own committed bench
+# docs/perf-findings.md — so per the profiling standing practice it gets its own committed bench
 # here. This prints the live numbers; the recorded envelope (+ reconcile note) lives in
-# HoloWGL/docs/perf-findings.md — re-run this and update that file when the wire format changes.
+# docs/perf-findings.md's "## :webgl backend (WGLMakie)" section — re-run this and update that
+# section when the wire format changes.
 #
-#   julia --project=HoloWGL HoloWGL/bench/payload_size.jl
+#   julia --project=. bench/webgl_payload_size.jl
 #
 # WIRE vs JSON proxy: Pluto's published_to_js does NOT ship the scene as JSON text. Its MsgPack
 # encodes every typed numeric Vector (Float32/Int32/UInt32/UInt8 — exactly what `_plain` emits) as
@@ -16,14 +17,19 @@
 # The two `gzip` columns measure M2's deferred compression levers reproducibly (via system gzip -9,
 # no Julia dep): gzip-of-binary is the ~3× ceiling (but needs a JS msgpack decoder to use), and
 # gzip-of-JSON is the cheap browser path (DecompressionStream → JSON.parse) — only a fraction off the
-# current wire since it starts from float-text. Both deferred — see HoloWGL/docs/perf-findings.md.
+# current wire since it starts from float-text. Both deferred — see docs/perf-findings.md.
 
-using HoloWGL
+using Holo, WGLMakie
 import JSON3
+
+# scene_payload/wglmakie_bundle_path live in the :webgl extension (WGLMakie is a weak dep of
+# Holo), so reach them via Base.get_extension — same pattern test/runtests.jl uses for the Cairo
+# extension.
+const _WGLExt = Base.get_extension(Holo, :HoloWGLMakieExt)
 
 println(
     "WGLMakie bundle (shipped once per notebook, M2): ",
-    round(filesize(HoloWGL.wglmakie_bundle_path()) / 1.0e6; digits = 2), " MB"
+    round(filesize(_WGLExt.wglmakie_bundle_path()) / 1.0e6; digits = 2), " MB"
 )
 
 # Concatenate the binary bytes of every typed numeric Vector in the payload — what Pluto's MsgPack
@@ -66,7 +72,7 @@ println("scene payload, per cell — WIRE (binary, what Pluto ships) + gzip leve
 for (name, mk) in cases
     fig = mk()
     Makie.update_state_before_display!(fig)
-    scene = HoloWGL.scene_payload(fig)
+    scene = _WGLExt.scene_payload(fig)
     blob = wire_blob!(UInt8[], scene)
     jsonstr = JSON3.write(scene)
     println(

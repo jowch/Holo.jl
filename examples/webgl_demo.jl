@@ -17,29 +17,29 @@ macro bind(def, element)
 end
 
 # ╔═╡ d0000000-0000-0000-0000-000000000001
-# Self-contained env: dev BOTH local packages by checkout-relative path (Holo at the repo root,
-# HoloWGL one level in). `using HoloWGL` re-exports the full Makie API (Figure/Axis/plots).
+# Self-contained env: dev the local package via a checkout-relative path, add WGLMakie.
+# Pkg.develop disables Pluto's own pkg management (the local package is unregistered). Holo
+# resolves exactly one backend per session from which extension loads — `using WGLMakie` here
+# (not CairoMakie) selects the `:webgl` backend automatically.
 begin
     import Pkg
     Pkg.activate(; temp = true)
-    Pkg.develop(
-        [
-            Pkg.PackageSpec(path = normpath(joinpath(@__DIR__, "..", ".."))),   # Holo (repo root)
-            Pkg.PackageSpec(path = normpath(joinpath(@__DIR__, ".."))),         # HoloWGL
-        ]
-    )
+    Pkg.develop(path = joinpath(@__DIR__, ".."))   # examples/ -> package root (portable)
+    Pkg.add("WGLMakie")
     Pkg.instantiate()
-    using HoloWGL
+    using Holo
+    using WGLMakie
 end
 
 # ╔═╡ d0000000-0000-0000-0000-000000000002
 md"""
-# HoloWGL — `:webgl` backend demo
+# Holo.jl — `:webgl` backend demo
 
 Each figure renders **live on the browser GPU** (a WGLMakie `<canvas>`) with Holo's interactive
-overlay on top — same `@bind` / `InteractionEvent` contract as `Holo.holo`, but it handles **3D**
-and large/animated data the static CairoBackend can't. Click a marker; the bond below reports the
-typed event. (As of M3.1 the overlay binds straight to the canvas — no sizer shim.)
+overlay on top — same `@bind` / `InteractionEvent` contract as the `:cairo` backend's `holo`, but
+it handles **3D** and large/animated data the static `CairoBackend` can't. Click a marker; the
+bond below reports the typed event. (As of M3.1 the overlay binds straight to the canvas — no
+sizer shim.)
 """
 
 # ╔═╡ d0000000-0000-0000-0000-000000000010
@@ -54,7 +54,7 @@ fig2d = let
 end
 
 # ╔═╡ d0000000-0000-0000-0000-000000000012
-@bind ev2d holo_webgl(fig2d)
+@bind ev2d holo(fig2d)
 
 # ╔═╡ d0000000-0000-0000-0000-000000000013
 ev2d
@@ -73,7 +73,7 @@ fig3d = let
 end
 
 # ╔═╡ d0000000-0000-0000-0000-000000000022
-@bind ev3d holo_webgl(fig3d)
+@bind ev3d holo(fig3d)
 
 # ╔═╡ d0000000-0000-0000-0000-000000000023
 ev3d
