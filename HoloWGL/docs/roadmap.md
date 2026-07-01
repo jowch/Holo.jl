@@ -32,19 +32,24 @@ The hard questions are answered and the backend works end-to-end in a real Pluto
       fan-out; the staged design lives in `.superpowers/holowgl-live-camera-overlay-design.md` (local).
       Deferred (not rejected, not scheduled) — revisit only on an explicit product decision. Two
       findings drove the deferral:
-      - **It isn't wired on today.** The shim sets `can_send_to_julia:()=>true` (needed for tier-2
-        animation), and WGLMakie's `use_orbit_cam = ()=>!can_send_to_julia()` disables 3D OrbitControls;
-        2D `Axis` zoom/pan is Julia-side and dead under `NoConnection`. So the plot renders live but does
-        not pan/zoom/rotate — the overlay "drift" is *latent*, not observed (verified vs the pinned bundle).
+      - **It isn't wired on today.** The shim sets `can_send_to_julia:()=>true` (needed for the
+        client-side camera/uniform *observable* animation path — **not** tier-2, which is the
+        observable-free `find_plots` buffer patch), and WGLMakie's
+        `use_orbit_cam = ()=>!(Bonito.can_send_to_julia && Bonito.can_send_to_julia())` disables 3D
+        OrbitControls; 2D `Axis` zoom/pan is Julia-side and dead under `NoConnection`. So the plot renders
+        live but does not pan/zoom/rotate — the overlay "drift" is *latent*, not observed (verified vs the
+        pinned bundle).
       - **Enabling it is large and `:webgl`-only.** Staged shape: client-side re-projection (read the live
         per-axis `projectionview`) → Holo-core `z`/`Axis3` plumbing → a shared-`overlay.ts` pointer-events
-        change → optional GPU-pick for occlusion. It would give `:webgl` a headline capability `:cairo`
-        structurally cannot have.
-      **Decision (2026-07-01): deferred.** A feature split across backends works against the
+        change → optional GPU-pick for occlusion. It would give `:webgl` a headline *interaction* tier
+        `:cairo` cannot have — distinct from 3D *rendering* (an inherent support gap Cairo simply can't
+        cover): this one is discretionary, so giving it only to `:webgl` is what splits the UX.
+      **Decision (2026-07-01): deferred.** A discretionary feature split across backends works against the
       co-equal-entry-points UX, so we're not scheduling pan/zoom in Holo now. Not rejected — if a product
-      case later justifies the backend asymmetry, the design doc has the milestones (M1 magnifier → M2
-      3D-rotate → M3 data-space 2D → M4 occlusion) and the blocking Axis3-interactable spike ready to pick
-      up. (Quantified in `docs/backend-comparison.md` §1†/§6.)
+      case later justifies the backend asymmetry, the parked design has stages **S1** 2D magnifier → **S2**
+      3D-rotate → **S3** data-space 2D zoom → **S4** occlusion, gated on a blocking `Axis3`-interactable
+      spike. (Verified from source in `docs/backend-comparison.md` §1†/§6; fuller design in
+      `.superpowers/holowgl-live-camera-overlay-design.md`, local.)
 - [x] **Version-coupling guard**: a smoke test that fails loudly when a WGLMakie bump changes
       `serialize_scene`/`setup_scene_init` (the wire format is internal and unstable). *Done
       (`test/runtests.jl` "version-coupling guard"): names each Julia internal the `scene_payload`
@@ -92,14 +97,15 @@ light-vs-heavy.
 - [x] **Resolve the capability claims** (§6 of the comparison). *Done — from the source, not a
       headless browser (software GL there would corroborate, not decide). (1) **Camera is gated off
       today** — the shim sets `can_send_to_julia:()=>true`, so WGLMakie's
-      `use_orbit_cam = ()=>!can_send_to_julia()` disables 3D OrbitControls and 2D `Axis` zoom/pan is
-      dead under `NoConnection` (verified vs the pinned bundle). So pan/zoom/rotate don't happen as
-      shipped — the "drift" below is latent, not observed. (2) **If enabled, zero round-trip by
-      construction** — `scene_payload` serializes through `Bonito.NoConnection()` (`src/HoloWGL.jl:84`)
-      with no transport to the kernel. (3) **Overlay would not track the camera** — it's a static
-      `Makie.project` snapshot (`src/HoloWGL.jl:113-125`). All three are quantified in
-      `docs/backend-comparison.md` §1†/§6. No GL-dependent regression test committed. Whether to enable
-      any of this is the open product question in the live-view item above.*
+      `use_orbit_cam = ()=>!(Bonito.can_send_to_julia && Bonito.can_send_to_julia())` disables 3D
+      OrbitControls and 2D `Axis` zoom/pan is dead under `NoConnection` (verified vs the pinned bundle).
+      So pan/zoom/rotate don't happen as shipped — the "drift" below is latent, not observed. (2) **If
+      enabled, zero round-trip by construction** — `scene_payload` serializes through
+      `Bonito.NoConnection()` (`src/HoloWGL.jl:84`) with no transport to the kernel. (3) **Overlay would
+      not track the camera** — it's a static `Makie.project` snapshot (`src/HoloWGL.jl:113-125`). All
+      three are verified (architectural, not benched) in `docs/backend-comparison.md` §1†/§6. No
+      GL-dependent regression test committed. Whether to enable any of this is **deferred** — see the
+      live-view item above.*
 
 The bundle was the only ~MB term (the per-cell scene is an order smaller — `perf-findings.md`), so
 sharing it was the slimming target:

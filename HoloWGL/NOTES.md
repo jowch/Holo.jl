@@ -62,10 +62,15 @@ blobs — the exact mechanism `published_to_js` uses) rendering in a headless br
   shifted in place (12k px changed). Camera/uniform animation works via observable `.notify`.
   Remaining glue: a Julia accessor for the target plot's uuid + a tidy `updatePlotData` helper.
 
-## TODO (implementation, all de-risked)
-2. **Axis3 / live-camera projection** — `context` reuses `Makie.project` (2D Axis, validated).
-   3D pan/zoom needs the overlay to read WGLMakie's client-side camera (the `project`/`pick`
-   seam). Static 3D renders today; the overlay for 3D is the follow-on.
+## TODO (implementation)
+2. **Live camera (pan/zoom/rotate) — INVESTIGATED → DEFERRED (not a near-term follow-on).** Camera
+   interaction is *gated off* today: the shim's `can_send_to_julia:()=>true` makes WGLMakie's
+   `use_orbit_cam` disable 3D OrbitControls, and 2D `Axis` zoom/pan is dead under `NoConnection` — so
+   the overlay drift is **latent, not observed**. If enabled, `context`'s static `Makie.project`
+   snapshot would need to read WGLMakie's client-side camera (the `project`/`pick` seam) to track it.
+   Deferred because it'd be a `:webgl`-only feature that splits the co-equal-backends UX — see
+   `docs/roadmap.md` + `docs/backend-comparison.md` §1†/§6 (staged design in `.superpowers/`, local).
+   Static 3D *renders* today; live 3D *interaction* is the deferred work.
 3. **Share the bundle once per notebook** — DONE (M2). The bundle no longer costs per cell:
    `published_to_js` ids are content-addressed (`notebook_id/objectid`, `objectid(::String)` is
    content-based), so the one `Ref`-cached bundle string has a stable id that ships **exactly once
