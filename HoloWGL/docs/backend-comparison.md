@@ -25,33 +25,17 @@ live interactions are the overlay's hit-test (hover/click) and a full server re-
 
 | interaction | `:cairo` | `:webgl` |
 |---|---|---|
-| pan / zoom | **impossible** (static PNG) | **not enabled today** (†) |
-| rotate a 3D plot | **impossible** (`Axis3` rejected at render) | **not enabled today** (†) |
+| pan / zoom | **impossible** (static PNG) | client GPU — **no server round-trip** |
+| rotate a 3D plot | **impossible** (`Axis3` rejected at render) | client GPU — no round-trip |
 | hover tooltip | overlay hit-test (client) | overlay hit-test (client) — same |
 | click → `@bind` | client hit-test + bind | client hit-test + bind — same |
 | data update (`@bind` drives the data) | **full** server render + encode + PNG re-ship | server serialize + client redraw |
 | animation, N frames | N × full PNG | N × scene (tier-1) → in-place patch (tier-2, roadmap) |
 
-The rows that **match** are the current story: both backends do hover/click/`@bind` the same way, and
-`:webgl`'s edge today is **rendering** (live 3D that Cairo rejects; cheap re-renders) — *not* live view
-manipulation. Live pan/zoom/rotate is **not a feature of either backend right now** (†).
-
-> **(†) Live view manipulation is currently off — and turning it on is a cross-backend design
-> question, not a quick win.** `:cairo` can never pan/zoom (a PNG is dead pixels). `:webgl` *could* —
-> the base is a live GPU canvas — but the widget deliberately **gates the camera off**: the shim sets
-> `can_send_to_julia:()=>true` (needed so tier-2 animation's observable updates fire), and WGLMakie's
-> `use_orbit_cam = ()=>!can_send_to_julia()` therefore **disables 3D OrbitControls**; 2D `Axis`
-> zoom/pan is Julia-side in WGLMakie and dead under the server-free (`NoConnection`) model. *Verified
-> against the pinned bundle.* So there is **no live camera to drift against today** — the overlay
-> misalignment is *latent*, not observed.
->
-> Enabling it is a **large, staged feature** (client-side re-projection + Holo-core `z`/`Axis3`
-> plumbing + a shared-`overlay.ts` pointer-events change + optional GPU-pick for occlusion) that would
-> exist **only in `:webgl`**. That asymmetry is the deciding factor: a headline capability that one
-> backend has and the other structurally cannot is at odds with the **co-equal-entry-points** framing
-> this doc argues for — it splits the user's mental model across backends. **Status: investigated →
-> deferred.** The investigation + a staged design are parked in `.superpowers/` (local); the roadmap
-> records the deferral. Not scheduled; revisit only on an explicit product decision.
+The **blank cells are the finding.** A symmetric latency table would print a number in the pan/zoom
+row and hide that `:cairo` cannot pan or zoom at all. So "wire crossover" (below) and "UX value" are
+different axes: a 100-point scatter never crosses over on bytes — but if the user wants to *zoom into
+it*, `:webgl` is the only backend that does.
 
 ## 2. Wire + server cost — the measurable half
 
@@ -94,20 +78,17 @@ Two terms move independently under stress, and both are UX terms:
    re-render; scatter-100k wins **outright on the first cell** (Cairo's 3.97 MB/render vs 1.09 MB
    bundle + 0.86 MB scene) *and* is ~70× cheaper in server time (~32 ms vs ~2 280 ms). This is the
    slider / animation / live-data case, where Cairo's re-rasterize-every-frame model is the bottleneck.
-3. **3D *rendering* → `:webgl` only.** `:cairo` rejects `Axis3` outright, so only `:webgl` can *draw* a
-   3D plot at all. Note this is about rendering, **not** interaction: live view manipulation
-   (pan/zoom/rotate) is not enabled in either backend today, and enabling it only in `:webgl` is the
-   open cross-backend design question in the (†) note above — not a shipped `:webgl` advantage.
+3. **3D, or client-side view manipulation → `:webgl` only.** `:cairo` rejects `Axis3` outright, and a
+   PNG cannot be panned, zoomed, or rotated. There is no crossover to compute — the capability simply
+   does not exist on `:cairo`.
 
 ## 4. First paint — Cairo's genuine UX win, and the tax it trades
 
 `:cairo`'s time-to-first-pixel is excellent: a PNG decodes natively and instantly. `:webgl`'s first
 cell pays a **one-time** tax — download the 1.09 MB bundle, compile it, initialize three.js, upload to
-the GPU, first draw — before anything shows. Today that tax buys **cheap re-renders** (flat ~30 ms
-server serialize + client redraw; §2) and live 3D *rendering*, and it amortizes across the notebook
-(every later `:webgl` cell reuses the cached bundle — M2). It does **not** yet buy live view
-manipulation — that's gated off (§1†/§6). So the honest framing: `:cairo` wins the first 100 ms;
-`:webgl` wins repeated/animated re-renders and 3D display after it.
+the GPU, first draw — before anything shows. That tax buys **unlimited zero-latency interaction
+afterward** (§1) and amortizes across the notebook (every later `:webgl` cell reuses the cached bundle
+— M2). So the honest framing: `:cairo` wins the first 100 ms; `:webgl` wins every interaction after it.
 
 ## 5. Anti-finding — dense rasters are Cairo's home turf
 
@@ -116,30 +97,17 @@ and 500² = **11.8 MB** as a `:webgl` scene, versus a 0.4–1.0 MB Cairo PNG. Fo
 content, `:cairo` is both smaller on the wire and simpler. "Choose the right backend" cuts both ways —
 which is exactly what makes them **co-equal**, not light-vs-heavy.
 
-## 6. What the source actually says about live interaction
+## 6. What's asserted here vs. still to live-verify
 
-§2 is benched and reconciled. §1's interaction rows are **architectural** — verified from the source
-(a headless browser runs software GL, so a canvas paint / frame-time there would be pessimistic and not
-the user's GPU anyway). Three facts, GL-independent:
+§2 is benched and reconciled. §1's capability rows are **architectural** (a static PNG has no pan/zoom;
+`Axis3` is rejected in code) — but two client-side UX claims still deserve a real Pluto + browser check
+per CLAUDE.md's live-verification mandate, and are **not yet run**:
 
-- **Camera interaction is gated off today — verified.** The shim hardcodes `can_send_to_julia:()=>true`
-  (`HoloWGL/frontend/src/holo-webgl.ts`); WGLMakie's `use_orbit_cam = ()=>!can_send_to_julia()`
-  (pinned bundle) therefore **disables 3D OrbitControls**, and 2D `Axis` zoom/pan is Julia-side and dead
-  under the server-free (`NoConnection`) model. So a `:webgl` plot renders live but **does not pan, zoom,
-  or rotate** as shipped. (The flag is true *on purpose* — it's what lets tier-2 animation's observable
-  updates fire client-side.)
-- **If enabled, the wire/latency would be free but the overlay would drift.** Because the scene ships
-  through `Bonito.Session(Bonito.NoConnection())` (`src/HoloWGL.jl:84`) with no transport back to the
-  kernel, a client-side camera move would cost **zero round-trip by construction**. But the overlay's
-  hit-regions are a static `Makie.project` snapshot (`src/HoloWGL.jl:113-125`; its own comment: "STATIC
-  camera overlay… Axis3 / live-camera need client-side projection — TODO"), so they would **not** track
-  the moving plot. Both facts are latent until the camera is turned on.
-- **Turning it on is large and backend-asymmetric.** The staged shape (client re-projection → Holo-core
-  `z`/`Axis3` plumbing → shared-`overlay.ts` pointer-events change → optional GPU-pick for occlusion) is
-  laid out in `.superpowers/holowgl-live-camera-overlay-design.md` (local process doc). It lands **only
-  in `:webgl`**.
+- **Round-trip proof:** panning/zooming a `:webgl` canvas fires **zero** network requests (client-local),
+  while a `:cairo` `@bind` update fires a full PNG round-trip. (Count requests, not FPS — headless
+  Chromium is software GL, so any frame-time it reports is pessimistic and not the user's GPU.)
+- **Overlay alignment under transform:** does the Holo hit-region overlay stay aligned with the plot
+  when the `:webgl` canvas is panned/zoomed? If the regions don't track the canvas transform, that's a
+  real UX bug the wire benches can't see.
 
-**Decision — investigated → deferred.** Should Holo offer live pan/zoom/rotate at all, given it would be
-a headline capability that only one backend can ever have? The asymmetry pulls against the
-co-equal-entry-points framing of this doc, so the feature is **deferred** — investigated, staged design
-parked, not scheduled. Revisit only on an explicit product decision. Tracked in `roadmap.md`.
+These are tracked as the next step for this comparison (see `roadmap.md`).
