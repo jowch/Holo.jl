@@ -370,8 +370,15 @@ end
 @bind tx_sel holo(tx_fig)
 
 # ╔═╡ 40000000-0000-0000-0000-0000000000c3
-tx_sel === nothing ? "text: click a label (try the tilted one, or the annotation)" :
+# holo(fig) also auto-detects the scatter!, so a marker click round-trips a (; index, x, y)
+# payload with no "text" key — guard the readout rather than assume every click hit a label.
+if tx_sel === nothing
+    "text: click a label (try the tilted one, or the annotation)"
+elseif haskey(tx_sel.payload, "text")
     "text: picked \"$(tx_sel.payload["text"])\" index=$(tx_sel.payload["index"]) at ($(tx_sel.payload["x"]), $(tx_sel.payload["y"]))"
+else
+    "point: index=$(tx_sel.payload["index"]) (that was a marker — click a label instead)"
+end
 
 # ╔═╡ Cell order:
 # ╟─40000000-0000-0000-0000-000000000000
