@@ -18,7 +18,7 @@ using HypertextLiteral: @htl, JavaScript
 # the module name into WGLMakie's own namespace) — reached qualified so Holo never
 # declares its own Bonito dependency. This couples to WGLMakie's own import STYLE (a bare
 # `using Bonito`, not a selective `using Bonito: X`) — the version-coupling guard testset
-# below fails loudly if a WGLMakie bump ever changes that.
+# in test/webgl_ext_tests.jl fails loudly if a WGLMakie bump ever changes that.
 const Bonito = WGLMakie.Bonito
 
 export WebGLBackend
