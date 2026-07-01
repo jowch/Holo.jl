@@ -83,6 +83,12 @@ numbers; the figures below are the point-in-time M2 record.)*
   scatter marker round-trips `InteractionEvent(:scatter, 0, …)` back to Julia via `@bind`.
 
 ### Notes
+- **Live pan/zoom/rotate: investigated → deferred.** A `:webgl` plot renders live but does not pan,
+  zoom, or rotate as shipped — the shim's `can_send_to_julia:()=>true` (needed for tier-2 animation)
+  makes WGLMakie's `use_orbit_cam` disable 3D OrbitControls, and 2D `Axis` zoom/pan is dead under
+  `NoConnection`. Enabling it is a large, `:webgl`-only feature; a capability only one backend can have
+  works against the co-equal-backends UX, so it's deferred (staged design parked in `.superpowers/`,
+  not committed). See `docs/backend-comparison.md` §1†/§6 and `docs/roadmap.md`.
 - Version-coupled to WGLMakie internals; pinned `WGLMakie = "0.13"`. A WGLMakie bump is a
   re-verification, not a free upgrade.
 - `Holo` has no `[compat]` bound yet (unregistered, path-dev'd) → not General-registrable until
