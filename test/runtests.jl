@@ -1117,3 +1117,18 @@ end
     ci2 = ColorbarInteractable(cb2; id = :colorbar)
     @test validate(ci2, ctx2) isa String                    # rejected with a message
 end
+
+@testset "holo(fig) auto-detects Colorbar" begin
+    using Holo: auto_interactables, ColorbarInteractable
+    fig = Figure(); ax = Axis(fig[1, 1]); hm = heatmap!(ax, rand(10, 10))
+    Colorbar(fig[1, 2], hm)
+    Makie.update_state_before_display!(fig)
+    ints = auto_interactables(fig)
+    cbs = filter(i -> i isa ColorbarInteractable, ints)
+    @test length(cbs) == 1
+    @test cbs[1].id === :colorbar
+    # end-to-end: the emitted layer round-trips through the context
+    _, _, ctx = ctx_for(fig)
+    L = only(hitlayers(cbs[1], ctx))
+    @test L.kind === :axis && length(L.geometry) == 4
+end

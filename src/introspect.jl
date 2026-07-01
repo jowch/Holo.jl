@@ -509,5 +509,14 @@ function auto_interactables(fig)
             append!(ints, _construct(ax, p, id))
         end
     end
+    # Figure-block walk: Colorbar blocks live in fig.content (not in an Axis's scene). Extend the
+    # walk to emit a ColorbarInteractable per colorbar. (Legend/other blocks slot in here later.)
+    nc = 0
+    for c in fig.content
+        c isa Makie.Colorbar || continue
+        nc += 1
+        id = nc == 1 ? :colorbar : Symbol(:colorbar_, nc)
+        push!(ints, ColorbarInteractable(c; id))
+    end
     return ints
 end
