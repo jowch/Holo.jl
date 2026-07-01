@@ -1053,3 +1053,26 @@ end
     )
     @test _transform_dict(tc)["valueaxis"] == "y"
 end
+
+@testset "Colorbar transform in context" begin
+    using Holo: context, CairoBackend, axis_id, build_manifest
+    fig = Figure()
+    ax = Axis(fig[1, 1])
+    hm = heatmap!(ax, rand(10, 10))
+    cb = Colorbar(fig[1, 2], hm)
+    Makie.update_state_before_display!(fig)
+    _, _, ctx = ctx_for(fig)                          # helper: render + build context
+    tid = axis_id(ctx, cb)
+    @test haskey(ctx.transforms, tid)
+    t = ctx.transforms[tid]
+    @test t.valueaxis === :y                          # vertical colorbar → value on y
+    @test t.ylims == (Float64(cb.limits[][1]), Float64(cb.limits[][2]))
+    # the colorbar viewport (image px) sits to the right of the axis viewport and has the bar's aspect
+    axt = ctx.transforms[axis_id(ctx, ax)]
+    @test t.viewport[1] > axt.viewport[1]             # colorbar is right of the axis
+    @test t.viewport[3] < t.viewport[4]               # a vertical bar: width < height
+    # the transform survives serialization into the JS-facing manifest
+    m = build_manifest([], ctx)
+    @test haskey(m["transforms"], string(tid))
+    @test m["transforms"][string(tid)]["valueaxis"] == "y"
+end
