@@ -152,6 +152,31 @@ end
         @test [p.index for p in L.payloads] == [0, 1]       # default per-ring payloads
     end
 
+    @testset "TextInteractable" begin
+        f = Figure(size = (600, 400)); ax = Axis(f[1, 1]); scatter!(ax, 1:3, 1:3)
+        t = text!(ax, [1.5, 2.5], [2.0, 1.0]; text = ["Hello", "Wörld"], fontsize = 20)
+        bk, ppu, ctx = ctx_for(f)          # finalizes (update_state_before_display!) + builds ctx
+        ti = TextInteractable(ax, t)
+        # payload: (; text, index, x, y) — 0-based index, DATA anchors
+        @test ti.payloads[1] == (; text = "Hello", index = 0, x = 1.5, y = 2.0)
+        @test ti.payloads[2] == (; text = "Wörld", index = 1, x = 2.5, y = 1.0)
+        # hitlayer: one :rects layer, 2 boxes × (cx,cy,w,h) = 8 coords
+        L = only(hitlayers(ti, ctx))
+        @test L.kind === :rects && length(L.geometry) == 8
+        # the box centers land on rendered glyphs (non-white pixels near center)
+        img = Makie.colorbuffer(f; px_per_unit = ppu)
+        for k in 0:1
+            @test drawn_near(img, L.geometry[4k + 1], L.geometry[4k + 2])
+        end
+        # the projected data anchor lies within its label's box
+        for (k, anchor) in enumerate(((1.5, 2.0), (2.5, 1.0)))
+            aimg = data_to_image_px(ctx, ax, anchor)
+            cx, cy, w, h = L.geometry[(4k - 3):(4k)]
+            @test (cx - w / 2 - 1) <= aimg[1] <= (cx + w / 2 + 1)
+            @test (cy - h / 2 - 2) <= aimg[2] <= (cy + h / 2 + 2)
+        end
+    end
+
     @testset "Segment + Axis + custom" begin
         @test only(hitlayers(SegmentInteractable(ax, pts; mode = :polyline), ctx)).kind === :polyline
         @test only(hitlayers(AxisInteractable(ax), ctx)).geometry === nothing
