@@ -462,6 +462,36 @@ end
             @test isempty(w.manifest["layers"])
             @test !isempty(w.b64)                  # static image still produced
         end
+
+        @testset "holo auto-detects text!" begin
+            f = Figure(); ax = Axis(f[1, 1]); scatter!(ax, 1:3, 1:3)
+            text!(ax, [1.5], [2.0]; text = ["Hi"])
+            Makie.update_state_before_display!(f)
+            ints = auto_interactables(f)
+            @test count(i -> i isa TextInteractable, ints) == 1
+        end
+        @testset "holo auto-detects annotation!" begin
+            f = Figure(); ax = Axis(f[1, 1]); scatter!(ax, 1:3, 1:3)
+            annotation!(ax, [1.5], [2.0]; text = ["note"])
+            Makie.update_state_before_display!(f)
+            ints = auto_interactables(f)
+            ti = only(filter(i -> i isa TextInteractable, ints))
+            @test ti.payloads[1].text == "note"
+        end
+        @testset "holo skips non-data-space text" begin
+            f = Figure(); ax = Axis(f[1, 1]); scatter!(ax, 1:3, 1:3)
+            text!(ax, [10.0], [10.0]; text = ["px"], space = :pixel)
+            Makie.update_state_before_display!(f)
+            ints = auto_interactables(f)
+            @test count(i -> i isa TextInteractable, ints) == 0
+        end
+        @testset "rotated text still yields one box" begin
+            f = Figure(size = (600, 400)); ax = Axis(f[1, 1])
+            t = text!(ax, [1.0], [1.0]; text = ["Tilt"], rotation = 0.6)
+            _, _, ctx = ctx_for(f)
+            g = only(hitlayers(TextInteractable(ax, t), ctx)).geometry
+            @test length(g) == 4 && g[3] > 0 && g[4] > 0   # one box, positive w, h
+        end
     end
 
     @testset "M3 cheap-wins introspection" begin

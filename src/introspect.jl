@@ -425,6 +425,17 @@ _scatterlines_parts(ax, p, base) = AbstractInteractable[
 # Walk each Axis's top-level plots and emit the Vector{AbstractInteractable} a user could
 # hand-write, via the M2.1 constructors. Unsupported plot type → skip + warn. Pure sugar.
 
+# Text → TextInteractable, but only for DATA-anchored text: its anchor projects to a meaningful
+# (x, y). Pixel/relative-space text (rare manual overlays, most decorations) is skipped, loudly but
+# specifically (not via the generic "unsupported plot type" path).
+function _text_interactables(ax, p::Makie.Text, id)
+    if p.space[] !== :data
+        @warn "holo: skipping non-data-space text (space=$(p.space[]))" maxlog = 16
+        return AbstractInteractable[]
+    end
+    return AbstractInteractable[TextInteractable(ax, p; id)]
+end
+
 # the layer-id base for a plot, or nothing if Holo can't introspect it
 function _plotbase(p)
     p isa Makie.Scatter && return :scatter
@@ -452,6 +463,8 @@ function _plotbase(p)
     p isa Makie.Stem && return :stem
     p isa Makie.ScatterLines && return :scatterlines
     p isa Makie.BoxPlot && return :boxplot
+    p isa Makie.Text && return :text
+    p isa Makie.Annotation && return :annotation
     return nothing
 end
 
@@ -476,6 +489,8 @@ function _construct(ax, p, id)
     p isa Makie.Stem && return _stem_parts(ax, p, id)
     p isa Makie.ScatterLines && return _scatterlines_parts(ax, p, id)
     p isa Makie.BoxPlot && return [_boxplot_interactable(ax, p; id)]
+    p isa Makie.Text && return _text_interactables(ax, p, id)
+    p isa Makie.Annotation && return _text_interactables(ax, _descendant(p, Makie.Text), id)
     # unreachable while _plotbase gates callers; loud if the two ever drift (kind added to one, not the other)
     return error("auto_interactables: $(typeof(p).name.name) passed _plotbase but has no _construct branch")
 end
