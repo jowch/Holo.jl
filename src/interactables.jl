@@ -228,6 +228,7 @@ function hitlayers(i::TextInteractable, ctx)
         error("TextInteractable: $(length(boxes)) boxes for $(length(i.payloads)) payloads (Makie internals changed?)")
     o = i.ax.scene.viewport[].origin           # scene-local → figure pixel offset
     g = Real[]
+    # divergence from design spec §1 ("skip empty strings"): NOT skipped — a zero-area box keeps box-count == payload-count for the guards above (deliberate).
     for b in boxes
         bx, by = Float64(b.origin[1]), Float64(b.origin[2])
         bw, bh = Float64(b.widths[1]), Float64(b.widths[2])

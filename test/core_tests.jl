@@ -177,6 +177,16 @@ end
         end
     end
 
+    @testset "TextInteractable: scalar text! normalizes to a length-1 vector" begin
+        f = Figure(size = (600, 400)); ax = Axis(f[1, 1]); scatter!(ax, 1:3, 1:3)
+        t = text!(ax, 1.0, 1.0; text = "single")   # Makie normalizes: p.text[] == ["single"]
+        _, _, ctx = ctx_for(f)
+        ti = TextInteractable(ax, t)
+        @test ti.payloads == [(; text = "single", index = 0, x = 1.0, y = 1.0)]
+        L = only(hitlayers(ti, ctx))
+        @test L.kind === :rects && length(L.geometry) == 4   # one box × (cx,cy,w,h)
+    end
+
     @testset "Segment + Axis + custom" begin
         @test only(hitlayers(SegmentInteractable(ax, pts; mode = :polyline), ctx)).kind === :polyline
         @test only(hitlayers(AxisInteractable(ax), ctx)).geometry === nothing
@@ -477,6 +487,8 @@ end
             ints = auto_interactables(f)
             ti = only(filter(i -> i isa TextInteractable, ints))
             @test ti.payloads[1].text == "note"
+            # x,y come from the Text descendant's positions[] — the DATA-space anchor
+            @test ti.payloads[1].x == 1.5 && ti.payloads[1].y == 2.0
         end
         @testset "holo skips non-data-space text" begin
             f = Figure(); ax = Axis(f[1, 1]); scatter!(ax, 1:3, 1:3)
