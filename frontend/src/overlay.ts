@@ -174,8 +174,8 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         } else if (hit.grid) {
             html = hit.grid[2] === undefined ? `(${hit.grid[0]},${hit.grid[1]})` : `(${hit.grid[0]},${hit.grid[1]}) = ${esc(hit.grid[2])}`
         } else if (hit.axis) {
-            const v = resolvePayload(hit, manifest, x, y) as { x: unknown; y: unknown }
-            html = `x=${esc(fmt(v.x))}, y=${esc(fmt(v.y))}`
+            const v = resolvePayload(hit, manifest, x, y) as { x?: unknown; y?: unknown; value?: unknown }
+            html = "value" in v ? esc(fmt(v.value)) : `x=${esc(fmt(v.x))}, y=${esc(fmt(v.y))}`
         } else {
             html = renderAutoTable(hit.layer.payloads[hit.index])
         }
