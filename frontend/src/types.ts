@@ -44,6 +44,7 @@ export interface AxisTransform {
     yreversed: boolean
     xcats?: string[] | null // categorical tick labels, if any
     ycats?: string[] | null
+    valueaxis?: "x" | "y" | null // 1-D colorbar readout: which axis carries the value; absent/null = 2-D {x,y}
 }
 
 export interface LayerStyle {

@@ -32,6 +32,7 @@ struct AxisTransform
     yreversed::Bool
     xcats::Union{Nothing, Vector{String}}   # categorical tick map (v1; nothing if not categorical)
     ycats::Union{Nothing, Vector{String}}
+    valueaxis::Union{Nothing, Symbol}       # nothing = 2-D {x,y} readout; :x/:y = 1-D colorbar value readout
 end
 
 """
@@ -147,6 +148,6 @@ function _axis_transform(id, ax, scaling, out_h)
         (fo[1], fo[1] + fw[1]), (fo[2], fo[2] + fw[2]),
         _scalesym(ax.xscale[]), _scalesym(ax.yscale[]),
         vpx, ax.xreversed[], ax.yreversed[],
-        _cats(ax.dim1_conversion[]), _cats(ax.dim2_conversion[])
+        _cats(ax.dim1_conversion[]), _cats(ax.dim2_conversion[]), nothing
     )
 end

@@ -1034,3 +1034,22 @@ end
         @test cx_px + w_px / 2 <= vp_x + vp_w             # right edge within viewport
     end
 end
+
+@testset "AxisTransform valueaxis field + serialization" begin
+    using Holo: AxisTransform, _transform_dict
+    # a normal axis transform defaults valueaxis = nothing → serializes to nothing
+    t = AxisTransform(
+        :ax1, (0.0, 1.0), (0.0, 2.0), :identity, :identity,
+        (0.0, 0.0, 10.0, 20.0), false, false, nothing, nothing, nothing
+    )
+    @test t.valueaxis === nothing
+    d = _transform_dict(t)
+    @test haskey(d, "valueaxis")
+    @test d["valueaxis"] === nothing
+    # a colorbar-style transform tags the value axis
+    tc = AxisTransform(
+        :cb1, (0.0, 1.0), (0.0, 2.0), :identity, :log10,
+        (0.0, 0.0, 10.0, 20.0), false, false, nothing, nothing, :y
+    )
+    @test _transform_dict(tc)["valueaxis"] == "y"
+end
