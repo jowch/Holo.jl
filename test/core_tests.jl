@@ -224,6 +224,8 @@ end
             fu = Figure(); mk(fu[1, 1])
             err = (@test_throws ArgumentError ctx_for(fu)).value
             @test occursin("supports 2D `Makie.Axis` only", err.msg)
+            @test occursin("WGLMakie", err.msg)       # steers to the backend that renders these today
+            @test occursin("scoping guard", err.msg)  # framing: Holo scoping, not a CairoMakie capability limit
         end
     end
 

@@ -410,3 +410,17 @@ The per-cell scene is already small (binary), so compression is **deferred** —
 
 **Revisit both only if tier-1 animation profiling (per-frame scene re-ship) shows the scene is the
 bottleneck** — tier-2 in-place patching (`docs/roadmap.md`) already ships no new scene at all.
+
+## Axis3 projection hinge spike (2026-07-01)
+
+Not a size/latency number, but recorded here under the same single-source rule (one committed
+home for a measured figure; other docs cite, never restate — `spike/` itself is gitignored).
+
+**Result: build-time `Makie.project(ax.scene, Point3f)` lands on the rendered CairoMakie `Axis3`
+raster with 0.0 px deviation** — measured on a static camera *and* again after an
+`azimuth`/`elevation` change, projecting the scatter's data points through the corrected shared
+projection closure (post-PR #32, `transform_func` applied) and comparing against the rendered
+marker positions in the raster. `Point2f(x, y)` ≡ `Point3f(x, y, 0)` is byte-identical through
+the same closure, so widening the geometry path to 3D cannot regress 2D. This is the WS-3D
+"projection hinge" gate — cleared. Cited by `architecture.md`, `backend-comparison.md`, and
+`roadmap.md` (M3 Axis3 parity item).

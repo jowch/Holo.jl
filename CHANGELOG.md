@@ -35,6 +35,7 @@ Initial implementation — not yet released or registered.
 - Validated end-to-end in real Pluto for `PointInteractable`; other interactable kinds are
   unit-tested (geometry + manifest) but not all exercised live yet.
 - Current `:cairo` scoping: `PolarAxis`/`Axis3`/`LScene` are rejected at `holo()` time — a Holo
-  guard, not a CairoMakie limit (static `Axis3` support is roadmap scope; CairoMakie renders
-  static 3D natively). High-frequency live redraw is a shared cost limit on both backends. The
+  guard, not a CairoMakie limit (static `Axis3` support is roadmap scope; `PolarAxis`/`LScene`
+  disposition — parity item or Holo-wide non-goal — is an explicit roadmap decision item;
+  CairoMakie renders static 3D natively). High-frequency live redraw is a shared cost limit on both backends. The
   `:webgl` backend renders 3D live today — see the README's "3D, animation, and large data".

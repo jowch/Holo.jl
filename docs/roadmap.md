@@ -47,8 +47,9 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 - [ ] **SVG output path**: `CairoBackend(vector=true)` is groundwork; actually emit SVG base + overlay for sparse, low-primitive plots (cleaner coords, no raster).
 - [ ] **Axis3 static overlays (parity)** — CairoMakie renders static 3D natively; the `:cairo`
       `Axis3` guard is Holo scoping, slated to lift. Projection hinge spike-verified (2026-07-01):
-      build-time `Makie.project(ax.scene, Point3f)` lands on the CairoMakie `Axis3` raster at
-      **0.0 px**, static and rotated; `Point2f(x,y) ≡ Point3f(x,y,0)` byte-identical through the
+      build-time `Makie.project(ax.scene, Point3f)` lands exactly on the CairoMakie `Axis3` raster,
+      static and rotated (figure recorded once in `perf-findings.md` §"Axis3 projection hinge
+      spike"); `Point2f(x,y) ≡ Point3f(x,y,0)` byte-identical through the
       shared closure (so the widen can't regress 2D). Work: widen Point/Segment/Polygon storage +
       the shared closure to 3D, lift the guard, per-type introspection (3D scatter/lines ~free;
       wireframe/arrows/meshscatter M; `Surface` deferred — unbounded per-cell payload + occlusion),
@@ -64,10 +65,19 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
       overlay every step). Sliders/controls first (`:cairo` needs nothing; `:webgl` is gated on
       GL-context **reuse** — persist canvas+renderer across cell re-runs, dispose-on-delete; the
       re-run-vs-delete lifecycle spike is the open feasibility question). Drag-to-pan/rotate is the
-      follow-on (commit-on-release — shares the animation latency gate above; modifier-key
-      arbitration vs box-select drag). The **client-side GPU camera stays out** (Holo-wide
+      follow-on (commit-on-release; a live drag *preview* shares the Animation/scrubbing item's
+      payload gate — M4, below; modifier-key arbitration vs box-select drag). The **client-side GPU camera stays out** (Holo-wide
       non-goal): a camera Julia never hears about desyncs the Julia-projected overlay and is
       structurally one-backend-only. 3D rotation additionally depends on the Axis3 item above.
+- [ ] **`PolarAxis` + `LScene` disposition (a decision item, not yet a feature commitment)** —
+      the `:cairo` guard rejects both alongside `Axis3`, and `:webgl` renders them live but builds
+      no overlay transforms for them (interactables keyed to them fail loud). The parity doctrine
+      allows no third state: each must become a scheduled parity item (overlays on both —
+      `PolarAxis`'s discrete hit geometry looks tractable now that the shared projection closure
+      applies `transform_func`, where the polar map lives, though its *continuous* axis readout
+      would still need the polar transform serialized to JS; `LScene` needs its own camera/scoping
+      look) or an explicit Holo-wide non-goal. Until decided, this is the known interim
+      per-backend gap.
 
 ## M4 — Interaction depth (new capabilities, not new surfaces)
 *Goal: the Tier-0/Tier-1 interactions the architecture already supports.*
@@ -112,7 +122,9 @@ limit on both backends, not a capability split.
 
 Per-backend there are no *feature* non-goals, only substrate facts: `:cairo` ships a static base
 (its former "3D needs a browser-side renderer" note was wrong — CairoMakie renders static 3D
-natively; the `Axis3` guard is Holo scoping, lifting with the Axis3 parity item in M3), and
+natively; the `Axis3` guard is Holo scoping, lifting with the Axis3 parity item in M3; the same
+guard also rejects `PolarAxis`/`LScene`, whose disposition — parity item or Holo-wide non-goal —
+is an explicit M3 decision item and the one known interim gap), and
 `:webgl` ships a live canvas (so it renders 3D live today and re-renders cheaply). Backends
 differ in **cost**, never in the interaction contract — enforced by the parity golden harness
 (`test/fixtures/parity/`).

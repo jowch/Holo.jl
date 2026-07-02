@@ -271,8 +271,10 @@ headlessly on every change.
 > **Status: experimental / incubating.** Verified end-to-end in a real Pluto notebook (render,
 > server-free delivery, overlay, and the `@bind` round-trip — see [docs/roadmap.md](docs/roadmap.md)).
 
-The default `CairoBackend` renders a static PNG — great for 2D publication figures, but it can't
-do 3D, animation, or client-side view manipulation. `using WGLMakie` instead of `CairoMakie`
+The default `CairoBackend` renders a static PNG — great for publication figures, but every update
+re-rasterizes the whole scene (so animation and frequent re-renders are costly there), and today
+Holo's `Axis3` guard keeps 3D off `:cairo` (roadmap scope, not a CairoMakie limit — see
+[What's interactable](#whats-interactable-v1)). `using WGLMakie` instead of `CairoMakie`
 switches `holo` to a **browser-GPU backend**: the figure is rendered live in a WebGL `<canvas>`
 on the client GPU, with Holo's usual overlay layered on top — same `holo`/`@bind`/
 `InteractionEvent` contract, no code changes beyond the `using` line:

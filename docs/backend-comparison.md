@@ -45,7 +45,7 @@ is still in place). Live pan/zoom/rotate is **not shipped on either backend yet*
 lands it lands on both, as server-authoritative re-render (†).
 
 > **(†) View manipulation: planned as backend-symmetric `@bind` re-render; the client-side GPU
-> camera is the one thing that stays out.** What is true today, verified from source: the widget
+> camera stays out (a Holo-wide non-goal, alongside GPU-pick occlusion).** What is true today, verified from source: the widget
 > deliberately gates the client camera off — the shim sets `can_send_to_julia:()=>true` (needed for
 > the client-side camera/uniform *observable* animation path), so WGLMakie's
 > `use_orbit_cam = ()=>!(Bonito.can_send_to_julia && Bonito.can_send_to_julia())` **disables 3D
@@ -64,7 +64,7 @@ lands it lands on both, as server-authoritative re-render (†).
 > naive re-mounting leaks WebGL contexts toward the browser's cap). Continuous *smooth* drag on
 > large scenes remains expensive on both — a shared cost wall, not a capability split. Status:
 > **planned, unbuilt** — sliders first, drag after; 3D rotation additionally needs the Axis3
-> parity item (`docs/roadmap.md` M3/M4).
+> parity item (`docs/roadmap.md` M3, same milestone as view manipulation).
 
 ## 2. Wire + server cost — the measurable half
 
@@ -108,8 +108,9 @@ Two terms move independently under stress, and both are UX terms:
    bundle + 0.86 MB scene) *and* is ~70× cheaper in server time (~32 ms vs ~2 280 ms). This is the
    slider / animation / live-data case, where Cairo's re-rasterize-every-frame model is the bottleneck.
 3. **3D rendering, today → `:webgl`.** `:cairo` currently rejects `Axis3` — a Holo scoping guard
-   slated to lift (CairoMakie draws static 3D natively; the projection hinge is spike-verified at
-   0.0 px), after which static-3D overlays are parity and this regime reduces to regime 2's cost
+   slated to lift (CairoMakie draws static 3D natively; the projection hinge is spike-verified
+   exact — figure in `perf-findings.md` §"Axis3 projection hinge spike"), after which static-3D
+   overlays are parity and this regime reduces to regime 2's cost
    question (re-render price per view change). Live view manipulation ships on both or neither —
    see (†).
 
@@ -164,5 +165,6 @@ deferred" call answered the wrong question — it scoped view manipulation as a 
 (which is indeed `:webgl`-only, drift-prone, and stays out). Server-authoritative `@bind`
 re-render gives pan/zoom/rotate on **both** backends with the overlay recomputed each step, so
 the backend-asymmetry objection dissolves; what remains is a per-step **cost** difference and the
-`:webgl` GL-context-reuse prerequisite. Scheduled in `roadmap.md` (M3 Axis3 parity + M4
-view-manipulation); the client-side GPU camera remains the Holo-wide non-goal.
+`:webgl` GL-context-reuse prerequisite. Both scheduled in `roadmap.md` M3 (Axis3 parity + view
+manipulation via `@bind` re-render); the client-side GPU camera remains a Holo-wide non-goal
+(alongside GPU-pick occlusion).

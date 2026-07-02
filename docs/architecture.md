@@ -428,14 +428,17 @@ the plot-scene walk) remains deferred.
 **Backend scope — corrected (2026-07-02).** The earlier framing here ("3D … is the `:webgl`
 backend's domain") was wrong about *why*: CairoMakie renders **static 3D natively** — the current
 `Axis3`/`PolarAxis`/`LScene` rejection is Holo's own scoping guard, slated to lift for `Axis3`
-(build-time `Makie.project` on a static `Axis3` camera is spike-verified exact — 0.0 px, static
-*and* after an `azimuth`/`elevation` change). 3D/`Axis3` is **parity scope in progress**: static
-overlays on both backends, rotation via `@bind` re-render; the `:webgl` half awaits its own
-canvas-alignment spike. The **Holo-wide** non-goals (every backend, by design) are the
+(build-time `Makie.project` on a static `Axis3` camera is spike-verified exact, static *and*
+after an `azimuth`/`elevation` change — figure recorded in `perf-findings.md` §"Axis3 projection
+hinge spike"); `PolarAxis`/`LScene` are pending an explicit disposition — parity item or
+Holo-wide non-goal — tracked as a roadmap M3 decision item. 3D/`Axis3` is **parity scope in
+progress**: static overlays on both backends, rotation via `@bind` re-render; the `:webgl` half
+awaits its own canvas-alignment spike. The **Holo-wide** non-goals (every backend, by design) are the
 **client-side GPU camera** — a JS-driven camera the kernel never hears about, which would desync
 the Julia-projected overlay and can only ever exist on one backend — and **GPU-pick occlusion**.
-3D-mesh hit-testing (`Surface`, `MeshScatter`) is deferred on both alike (a hit-test-complexity
-gap, not a backend-capability gap). High-frequency live redraw is the shared cost wall above,
+`Surface` hit-testing is deferred on both alike (a hit-test-complexity gap — unbounded per-cell
+payload + occlusion — not a backend-capability gap); `MeshScatter`/wireframe/arrows are M-effort
+work inside the M3 `Axis3` parity item, not deferred. High-frequency live redraw is the shared cost wall above,
 not a per-backend exclusion. See `docs/backend-comparison.md` and `docs/roadmap.md`.
 
 ## 8. Payload scaling & robustness to large inputs

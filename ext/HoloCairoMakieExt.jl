@@ -58,14 +58,16 @@ function Holo.context(b::CairoBackend, fig, ppu)
 
     # Fail loud, never silently wrong: an axis-like block that isn't a 2D `Makie.Axis`
     # (PolarAxis/Axis3/LScene) would be silently dropped here, then interactables would
-    # project against the wrong axis. Reject it up front. (architecture.md non-goals)
+    # project against the wrong axis. Reject it up front. (roadmap.md M3: Axis3 parity +
+    # PolarAxis/LScene disposition; architecture.md "Backend scope — corrected")
     unsupported = unique(typeof.(c for c in fig.content if c isa Makie.AbstractAxis && !(c isa Makie.Axis)))
     isempty(unsupported) || throw(
         ArgumentError(
-            "Holo's CairoMakie backend overlays a static base + thin JS overlay and supports 2D " *
-                "`Makie.Axis` only; found unsupported $(join(unsupported, ", ")). PolarAxis/Axis3/" *
-                "LScene need a browser-side renderer: restart this session with `using WGLMakie` " *
-                "(instead of `using CairoMakie`) and call `holo` again.",
+            "Holo's CairoMakie backend supports 2D `Makie.Axis` only; found unsupported " *
+                "$(join(unsupported, ", ")). This is Holo's own scoping guard, not a CairoMakie " *
+                "limit (static `Axis3` overlays on `:cairo` are roadmap scope). Today: restart " *
+                "this session with `using WGLMakie` (instead of `using CairoMakie`) and call " *
+                "`holo` again to render these live.",
         ),
     )
 

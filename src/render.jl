@@ -179,7 +179,8 @@ function _resolve_backend(explicit; max_width)
         ArgumentError(
             "holo(fig) needs a rendering backend loaded: `using CairoMakie` for a static base, or " *
                 "`using WGLMakie` for animation/large or frequently re-rendered data — then call " *
-                "`holo` again. (Both expose the same interactions; the choice is a cost profile.)",
+                "`holo` again. (Both expose the same interactions; the choice is a cost profile — " *
+                "today `Axis3` renders only with `WGLMakie`.)",
         ),
     )
 end
