@@ -76,10 +76,10 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
       some arrows and misses others. A real recipe must reconstruct shaft+tip extents from the
       children (quaternion rotation × markersize.z along the shaft axis) or resolve the scaling
       chain — its own arc. Until then arrows3d skip-warns (no `_plotbase` entry).
-      `Surface` stays deferred (unbounded per-cell payload + occlusion — same class as the heatmap
-      `values[]` hole). Occlusion policy: **document-and-accept on both backends** (no
-      `:webgl`-only GPU-pick); upgrade path = a build-time CPU painter's cull in Julia,
-      backend-symmetric by construction.
+- [ ] **Axis3 per-type extraction — `Surface` (deferred)** — unbounded per-cell payload +
+      occlusion, same class as the heatmap `values[]` hole. Occlusion policy for all 3D types:
+      **document-and-accept on both backends** (no `:webgl`-only GPU-pick); upgrade path = a
+      build-time CPU painter's cull in Julia, backend-symmetric by construction.
 - [ ] **View manipulation via `@bind` re-render (pan/zoom/rotate, parity)** — supersedes the
       2026-07-01 "investigated → deferred" framing, which scoped the problem as a *client-side*
       camera (the shim disables WGLMakie's `use_orbit_cam`; 2D zoom/pan is dead under
