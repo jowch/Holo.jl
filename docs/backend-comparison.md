@@ -33,7 +33,7 @@ camera is deliberately not client-driven on either backend (§1†).
 
 | interaction | `:cairo` | `:webgl` |
 |---|---|---|
-| pan / zoom | planned: `@bind` re-render of `limits` (†) | planned: same, gated on GL-context reuse (†) |
+| pan / zoom | planned: `@bind` re-render of `limits` (†) | planned: same (†) — re-render churn is upstream-managed, no context gate |
 | rotate a 3D plot | planned: `@bind` re-render of `azimuth`/`elevation` (†) — static `Axis3` overlays ship today | planned: same (†) — renders `Axis3` live today, same overlays |
 | hover tooltip | overlay hit-test (client) | overlay hit-test (client) — same |
 | click → `@bind` | client hit-test + bind | client hit-test + bind — same |
@@ -60,12 +60,14 @@ either backend yet** — and when it lands it lands on both, as server-authorita
 > `azimuth`/`elevation` change → Julia re-renders → fresh base + freshly projected overlay. That is
 > backend-symmetric and drift-free *by construction* (Julia recomputes the overlay every step).
 > Cost, honestly: `:cairo` re-rasterizes per step (scales with the scene; fine for sliders and
-> commit-on-release drag), `:webgl` re-serializes (~flat, §2) but is gated on **GL-context reuse**
-> across cell re-runs (persist canvas+renderer; dispose-on-delete — an unresolved lifecycle spike;
-> naive re-mounting leaks WebGL contexts toward the browser's cap). Continuous *smooth* drag on
-> large scenes remains expensive on both — a shared cost wall, not a capability split. Status:
-> **planned, unbuilt** — sliders first, drag after; 3D rotation additionally needs the Axis3
-> parity item (`docs/roadmap.md` M3, same milestone as view manipulation).
+> commit-on-release drag); `:webgl` re-serializes (~flat, §2) and re-initializes the GL
+> context + scene per step. **The former "gated on GL-context reuse" claim was measured FALSE**
+> (2026-07-02 — figures and mechanism in `perf-findings.md` §"WGL context lifecycle"): re-init
+> per step is a *cost* (the camera-only resident-scene patch is the planned optimization), not
+> a feasibility gate. Continuous *smooth* drag on large scenes remains expensive on both — a
+> shared cost wall, not a capability split. Status: **planned, unbuilt** — sliders work today
+> on both (verified live); drag after; 3D rotation additionally needs the Axis3 parity item
+> (`docs/roadmap.md` M3, same milestone as view manipulation).
 
 ## 2. Wire + server cost — the measurable half
 
@@ -166,7 +168,8 @@ the user's GPU anyway). Three facts, GL-independent:
 deferred" call answered the wrong question — it scoped view manipulation as a *client-side camera*
 (which is indeed `:webgl`-only, drift-prone, and stays out). Server-authoritative `@bind`
 re-render gives pan/zoom/rotate on **both** backends with the overlay recomputed each step, so
-the backend-asymmetry objection dissolves; what remains is a per-step **cost** difference and the
-`:webgl` GL-context-reuse prerequisite. Both scheduled in `roadmap.md` M3 (Axis3 parity + view
+the backend-asymmetry objection dissolves; what remains is only a per-step **cost** difference
+(the once-suspected `:webgl` GL-context-reuse prerequisite dissolved when measured — see (†)
+and `perf-findings.md` §"WGL context lifecycle"). Both scheduled in `roadmap.md` M3 (Axis3 parity + view
 manipulation via `@bind` re-render); the client-side GPU camera remains a Holo-wide non-goal
 (alongside GPU-pick occlusion).
