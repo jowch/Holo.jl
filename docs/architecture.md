@@ -75,7 +75,8 @@ deferred target. **Update:** the seam turned out to admit a live implementation 
 all — `WebGLBackend` implements the same `AbstractBackend` contract (`render`/`context`/`mount`)
 against a browser-GPU `<canvas>` instead of a PNG, shipped as the `HoloWGLMakieExt` weak-dep
 extension. The two backends are now co-equal peers, one loaded per session (`_resolve_backend`
-in `src/render.jl`); see `docs/backend-comparison.md` for the capability/cost tradeoff. The seam
+in `src/render.jl`); see `docs/backend-comparison.md` for the cost/regime tradeoff (the interaction
+feature set is identical on both — parity is CI-enforced by the golden-manifest harness). The seam
 still also admits a future GLMakie-static backend (GPU offscreen → PNG, same contract) or a
 pure-image backend.
 
@@ -372,9 +373,12 @@ them cleanly:
   the manifest; the format is designed not to preclude it). **It is the one payload-unbounded feature**
   (total = frames × per-frame PNG): ~5.5 MB (187 KB × 30) to ~22 MB (× 120) for a typical plot, 100s of MB
   at scale. The `frames` slot must shrink per-frame cost (downscale / fewer frames) before it ships — §8.
-- **Tier 2 (round-trip):** `:click` events → `@bind`. Faithful plot redraw from arbitrary new state is
-  the irreducible-latency wall for `CairoBackend` and is out of scope for it (that's the `:webgl`
-  backend's domain, in-package as `WebGLBackend`, not `CairoBackend`'s).
+- **Tier 2 (round-trip):** `:click` events → `@bind`. Discrete server re-render from new state is in
+  scope on **both** backends — it is the substrate of the planned view-manipulation arc (`@bind`
+  re-render of 2D `limits` / 3D `azimuth`/`elevation`, backend-symmetric). What differs is **cost**:
+  `:webgl` re-serializes (~flat) while `:cairo` re-rasterizes (scales with the scene) — see
+  `backend-comparison.md`. *Per-frame* faithful redraw (smooth-drag-as-a-guarantee) is a shared
+  latency wall on both, not a `:cairo`-only exclusion.
 
 **Named tensions (accepted, not bugs):**
 1. `AxisInteractable` returns no region geometry — it rides the `:axis` channel as an unbounded
@@ -421,10 +425,18 @@ the plot-scene walk) remains deferred.
 **v2:** plot-object introspection constructors; ABLines/Arc, Legend,
 `TextLabel` (Block) support, animation frames, SVG-overlay annotations, spatial hit-test acceleration.
 
-**Never for `CairoBackend`:** 3D (Surface, MeshScatter, Arrows3D), PolarAxis/Axis3,
-high-frequency live redraw. These are the `:webgl` backend's domain (`WebGLBackend`, the new
-backend class this once called out as the only way to reach them — it now ships in-package;
-see `docs/backend-comparison.md`).
+**Backend scope — corrected (2026-07-02).** The earlier framing here ("3D … is the `:webgl`
+backend's domain") was wrong about *why*: CairoMakie renders **static 3D natively** — the current
+`Axis3`/`PolarAxis`/`LScene` rejection is Holo's own scoping guard, slated to lift for `Axis3`
+(build-time `Makie.project` on a static `Axis3` camera is spike-verified exact — 0.0 px, static
+*and* after an `azimuth`/`elevation` change). 3D/`Axis3` is **parity scope in progress**: static
+overlays on both backends, rotation via `@bind` re-render; the `:webgl` half awaits its own
+canvas-alignment spike. The **Holo-wide** non-goals (every backend, by design) are the
+**client-side GPU camera** — a JS-driven camera the kernel never hears about, which would desync
+the Julia-projected overlay and can only ever exist on one backend — and **GPU-pick occlusion**.
+3D-mesh hit-testing (`Surface`, `MeshScatter`) is deferred on both alike (a hit-test-complexity
+gap, not a backend-capability gap). High-frequency live redraw is the shared cost wall above,
+not a per-backend exclusion. See `docs/backend-comparison.md` and `docs/roadmap.md`.
 
 ## 8. Payload scaling & robustness to large inputs
 

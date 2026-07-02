@@ -2,8 +2,9 @@
 
 [![CI](https://github.com/jowch/Holo.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/jowch/Holo.jl/actions/workflows/CI.yml)
 
-**Light, server-free interactivity for Makie plots in Pluto — CairoMakie by default, WGLMakie
-for 3D / animation / large data.**
+**Light, server-free interactivity for Makie plots in Pluto — the same interactions on either
+backend: CairoMakie (static base) by default, or WGLMakie (live base) for animation / large
+data / 3D.**
 
 Holo lays a thin interactive layer over a Makie figure inside a [Pluto](https://plutojl.org)
 notebook — hover for tooltips, click to select — and round-trips deliberate clicks to Julia
@@ -43,8 +44,8 @@ julia> ] add https://github.com/jowch/Holo.jl
 ```
 
 You'll also want `Pluto`, plus exactly one Makie backend: `CairoMakie` for the default static
-path, or `WGLMakie` for 3D / animation / large data (see below) — never both in the same
-session.
+path, or `WGLMakie` for animation / large data / 3D (see below) — a cost profile, not a feature
+fork — and never both in the same session.
 
 ## Quick start
 
@@ -84,10 +85,11 @@ Declare interactables explicitly (geometry in data space):
 - `RegionInteractable` / `FunctionInteractable` — custom interactions, no JavaScript required
 
 Linear, log, and categorical axes; single or multiple axes; linked selection via shared
-payloads through Pluto's reactive graph. This is the default `CairoBackend`'s 2D overlay — 3D
-and high-frequency live redraw are the `:webgl` backend's domain instead (see
-[3D, animation, and large data](#3d-animation-and-large-data-wglmakie)); on `CairoBackend`,
-unsupported axis blocks (`PolarAxis`/`Axis3`/`LScene`) fail loud at `holo()` time.
+payloads through Pluto's reactive graph. This is the default `CairoBackend`'s 2D overlay. 3D currently renders only on
+`:webgl` (see [3D, animation, and large data](#3d-animation-and-large-data-wglmakie)) — static
+`Axis3` overlays on `:cairo` are roadmap scope (CairoMakie draws static 3D natively; the guard
+is Holo's) — and high-frequency live redraw is a shared cost limit on both backends. On
+`CairoBackend`, unsupported axis blocks (`PolarAxis`/`Axis3`/`LScene`) fail loud at `holo()` time.
 
 [`examples/demo.jl`](examples/demo.jl) is a runnable gallery of every kind below plus the
 selection round-trip.
@@ -292,7 +294,7 @@ Holo enforces **exactly one backend per session**: loading both `CairoMakie` and
 neither) raises an `ArgumentError` explaining which `using` line to keep — that check
 (`_resolve_backend` in [`src/render.jl`](src/render.jl)) is the authoritative, always-in-sync
 statement of when each backend applies, rather than a table here that could drift from the code.
-For the fuller picture — capability differences, wire size, and latency at scale — see
+For the fuller picture — cost regimes, wire size, and latency at scale — see
 [`docs/backend-comparison.md`](docs/backend-comparison.md).
 
 ### How it works (`:webgl`)

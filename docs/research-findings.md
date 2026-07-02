@@ -1,5 +1,9 @@
 # Holo.jl — Feasibility Research Findings
 
+> **Historical snapshot (2026-06-26)** — predates the `:webgl` backend fold-in and the
+> backend-parity doctrine; scope statements here ("no 3D", WGLMakie-as-alternative) describe the
+> original `:cairo`-only v1. Current backend story: `backend-comparison.md` / `roadmap.md`.
+>
 > Output of the research workflow fact-checking the assumptions in `design.md` (Q0–Q5).
 > Generated 2026-06-26. 6 parallel primary-source research agents + synthesis.
 

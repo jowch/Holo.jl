@@ -167,8 +167,8 @@ function _resolve_backend(explicit; max_width)
             ArgumentError(
                 "Holo supports exactly one rendering backend per session, but both CairoMakie " *
                     "and WGLMakie are loaded. Restart the session with only one `using` line " *
-                    "(`using CairoMakie` for static 2D, `using WGLMakie` for 3D/animation/large " *
-                    "data) — mixing them in one session isn't supported.",
+                    "(`using CairoMakie` for a static base, `using WGLMakie` for animation/large " *
+                    "or frequently re-rendered data) — mixing them in one session isn't supported.",
             ),
         )
     end
@@ -177,8 +177,9 @@ function _resolve_backend(explicit; max_width)
     wgl_ext !== nothing && return wgl_ext.WebGLBackend(; max_width)
     throw(
         ArgumentError(
-            "holo(fig) needs a rendering backend loaded: `using CairoMakie` for static 2D, or " *
-                "`using WGLMakie` for 3D/animation/large data — then call `holo` again.",
+            "holo(fig) needs a rendering backend loaded: `using CairoMakie` for a static base, or " *
+                "`using WGLMakie` for animation/large or frequently re-rendered data — then call " *
+                "`holo` again. (Both expose the same interactions; the choice is a cost profile.)",
         ),
     )
 end
@@ -188,8 +189,11 @@ end
 
 Render `fig` and overlay JS hit-testing for the declared `interactables`. Use as a Pluto
 `@bind` source; the bond value is `nothing` until a click, then an [`InteractionEvent`](@ref).
-Requires exactly one rendering backend loaded: `using CairoMakie` for static 2D, or
-`using WGLMakie` for 3D/animation/large data.
+Requires exactly one rendering backend loaded: `using CairoMakie` for a static base, or
+`using WGLMakie` for animation/large or frequently re-rendered data. Both expose the same
+interaction feature set — the backend choice is a cost/substrate profile, not a capability fork
+(see `docs/backend-comparison.md`). Today `Axis3` renders only on `:webgl`; static-`Axis3`
+support on `:cairo` is roadmap scope (the guard is Holo's, not a CairoMakie limit).
 
 `selected` (a `layer_id => indices` map) pre-highlights elements on mount. Feed a bond value
 back into it — `Dict(ev.layer => [ev.index])` — to keep clicked elements highlighted across
