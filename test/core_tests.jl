@@ -69,6 +69,44 @@ end
         end
     end
 
+    @testset "log-scale axes: element geometry lands on markers" begin
+        # The 2-arg Makie.project(scene, p) expects TRANSFORMED coords — it does NOT apply the
+        # scene's transform_func (verified empirically, Makie 0.24.12). The project closure must
+        # apply the axis transform first; feeding raw data mis-places every element hit-region on
+        # any non-identity-scale axis (regression: 0/5 on-marker on a log axis). Red markers +
+        # red-pixel assert so gridlines/decorations can't false-pass drawn_near's notwhite check.
+        fl = Figure(size = (600, 400))
+        axl = Axis(fl[1, 1]; yscale = log10)
+        lpts = [(1.0, 0.1), (2.0, 10.0), (3.0, 1000.0)]
+        scatter!(axl, first.(lpts), last.(lpts); color = :red, markersize = 14)
+        axb = Axis(fl[1, 2]; xscale = log10, yscale = log10)
+        bpts = [(0.1, 0.5), (1.0, 5.0), (10.0, 50.0)]
+        scatter!(axb, first.(bpts), last.(bpts); color = :red, markersize = 14)
+        _, ppul, ctxl = ctx_for(fl)
+        img = Makie.colorbuffer(fl; px_per_unit = ppul)
+        isred(c) = Float64(Makie.red(c)) > 0.6 && Float64(Makie.green(c)) < 0.4 && Float64(Makie.blue(c)) < 0.4
+        function red_near(cx, cy; tol = 6)
+            ih, iw = size(img)
+            x, y = round(Int, cx), round(Int, cy)
+            for dy in -tol:tol, dx in -tol:tol
+                xx, yy = x + dx, y + dy
+                (1 <= xx <= iw && 1 <= yy <= ih) || continue
+                isred(img[yy, xx]) && return true
+            end
+            return false
+        end
+        for (axk, pp) in ((axl, lpts), (axb, bpts))
+            L = only(hitlayers(PointInteractable(axk, pp), ctxl))
+            for k in 0:2
+                @test red_near(L.geometry[3k + 1], L.geometry[3k + 2])
+            end
+        end
+        # out-of-domain log input degrades to non-finite geometry (apply_transform throws
+        # DomainError; the closure NaN-guards it) — never a crash, never a finite wrong pixel
+        Lo = only(hitlayers(PointInteractable(axl, [(1.0, -5.0)]), ctxl))
+        @test !isfinite(Lo.geometry[1]) && !isfinite(Lo.geometry[2])
+    end
+
     @testset "geometry quantized to integer pixels" begin
         # finite per-element geometry ships as Int (1–3 B/coord in MsgPack vs Float32's 5) — architecture.md §9.
         # Containers are Real[] (so non-finite coords can pass through), so assert the *values*, not eltype.

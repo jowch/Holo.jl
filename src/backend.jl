@@ -69,6 +69,30 @@ function make_widget end  # (backend, <backend's RenderResult-like>, manifest, d
 # ---- shared axis-transform helpers: both CairoBackend and WebGLBackend build the same
 # AxisTransform shape off a 2D Makie.Axis. WebGLBackend's context() calls these directly
 # (see ext/HoloWGLMakieExt.jl) rather than duplicating the loop. ----
+
+# The shared data→image-px projection closure — both backends' context() build it with
+# this (ONE fix site, not two). The 2-arg `Makie.project(scene, p)` expects TRANSFORMED
+# (post-transform_func) coordinates — it does NOT apply the scene's transform_func
+# (verified empirically on Makie 0.24.12: raw feed lands 0/5 on a log-axis scatter's
+# rendered markers; transformed feed 5/5 at 0.0px) — so apply the axis transform first.
+# Out-of-domain input (e.g. log10 of a negative) throws DomainError inside
+# apply_transform: NaN-guard it so the point degrades to a non-finite projection
+# (element layers are un-gated on scale; `_q` passes non-finite through — see
+# interactables.jl and the log-scale testset in core_tests.jl).
+function _project_closure(scaling, out_h)
+    return function (ax, p)
+        tp = try
+            Makie.apply_transform(Makie.transform_func(ax.scene), Point2f(Float64(p[1]), Float64(p[2])))
+        catch e
+            e isa DomainError || rethrow()
+            Point2f(NaN32, NaN32)
+        end
+        q = Makie.project(ax.scene, tp)
+        o = ax.scene.viewport[].origin
+        return Point2f((q[1] + o[1]) * scaling, out_h - (q[2] + o[2]) * scaling)  # flip to image coords
+    end
+end
+
 _scalesym(f) = f === identity ? :identity : Symbol(nameof(f))
 
 # ordered category labels for a categorical dim conversion, else nothing
