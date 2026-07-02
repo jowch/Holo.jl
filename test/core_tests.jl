@@ -395,6 +395,25 @@ end
         @test ev isa InteractionEvent && ev.layer === :scatter && ev.index == 2
     end
 
+    @testset "axis_id fails loud on unregistered blocks" begin
+        # The old :ax1 fallback silently rebound any unregistered fig.content block to the
+        # main axis (the Colorbar-misbind class). Pin the fail-loud replacement: an
+        # interactable keyed to an axis from a DIFFERENT figure must error at manifest
+        # build, as ArgumentError, naming the problem — a regression back to a silent
+        # default (or a bare KeyError) fails here.
+        ffig = Figure(size = (600, 400)); Axis(ffig[1, 1])
+        _, _, fctx = ctx_for(ffig)
+        other = Figure(size = (600, 400)); oax = Axis(other[1, 1])
+        @test_throws ArgumentError build_manifest([PointInteractable(oax, [(1.0, 1.0)])], fctx)
+        err = try
+            build_manifest([PointInteractable(oax, [(1.0, 1.0)])], fctx)
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError && occursin("not registered", err.msg)
+    end
+
     @testset "transform_value multi-select envelope" begin
         using Holo: InteractionEvent
         tv = Holo.APD.Bonds.transform_value

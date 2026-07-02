@@ -29,7 +29,7 @@ else
     @eval using JSON3
     @testset "cross-backend parity invariant (golden fixtures)" begin
         dir = joinpath(@__DIR__, "fixtures", "parity")
-        names = sort(unique(first.(split.(filter(endswith(".json"), readdir(dir)), '.'))))
+        names = sort(unique(replace.(filter(endswith(".json"), readdir(dir)), r"\.(cairo|webgl)\.json$" => "")))
         @test !isempty(names)
         for name in names
             ca = JSON3.read(read(joinpath(dir, "$name.cairo.json"), String))
@@ -40,6 +40,9 @@ else
                 # layers: same multiset of (id, kind, axis) — the misbind class fails HERE
                 lkey(L) = (L[:id], L[:kind], L[:axis])
                 @test sort(lkey.(ca[:layers])) == sort(lkey.(wg[:layers]))
+                # the pairwise match below keys on the triple — a duplicate would silently
+                # compare against the wrong twin, so fail loud if a future corpus makes one
+                @test allunique(lkey.(wg[:layers]))
                 wmap = Dict(lkey(L) => L for L in wg[:layers])
                 for L in ca[:layers]
                     haskey(wmap, lkey(L)) || continue   # multiset mismatch already reported above

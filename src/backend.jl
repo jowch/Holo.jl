@@ -65,11 +65,13 @@ data_to_image_px(ctx::InteractionContext, ax, p) = ctx.project(ax, p)
 # that isn't part of the rendered figure — both must surface at build time.
 axis_id(ctx::InteractionContext, ax) =
     get(ctx.ids, ax) do
-    error(
-        "Holo: $(typeof(ax)) is not registered in this backend's InteractionContext — " *
-            "no axis/colorbar transform was built for it. Interactables must be keyed to a " *
-            "Makie.Axis or Colorbar that is part of the rendered figure. (If it IS part of " *
-            "the figure, this is a backend context() bug — please report it.)"
+    throw(
+        ArgumentError(
+            "Holo: $(typeof(ax)) is not registered in this backend's InteractionContext — " *
+                "no axis/colorbar transform was built for it. Interactables must be keyed to a " *
+                "Makie.Axis or Colorbar that is part of the rendered figure. (If it IS part of " *
+                "the figure, this is a backend context() bug — please report it.)"
+        )
     )
 end
 

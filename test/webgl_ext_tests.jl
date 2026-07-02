@@ -185,22 +185,11 @@ end
 # which (correctly) makes every *subsequent* implicit-backend holo() call in this process
 # fail with the both-loaded error. Nothing after this testset may rely on the WGLMakie-only
 # auto-resolution path.
-@testset "holo(fig) rejects both backends loaded" begin
-    using CairoMakie
-    fig = Figure(; size = (300, 200)); ax = Axis(fig[1, 1]); scatter!(ax, 1:5, rand(5))
-    err = try
-        holo(fig)
-        nothing
-    catch e
-        e
-    end
-    @test err isa ArgumentError
-    @test occursin("exactly one rendering backend", err.msg)
-end
-
 # ---- cross-backend parity harness: within-backend golden drift (:webgl half) ----
 # (JSON3 is already a hard dep of this GROUP — no guard needed; see core_tests.jl's
-# guarded twin for the regeneration discipline.)
+# guarded twin for the regeneration discipline.) Runs BEFORE the "rejects both backends"
+# testset below loads CairoMakie: goldens come from a WGLMakie-only env, so the live
+# manifests should be built in one too.
 include("parity_corpus.jl")
 @testset "parity goldens (:webgl drift)" begin
     dir = joinpath(@__DIR__, "fixtures", "parity")
@@ -212,4 +201,17 @@ include("parity_corpus.jl")
         golden = JSON3.read(read(joinpath(dir, "$name.webgl.json"), String))
         @test live == golden
     end
+end
+
+@testset "holo(fig) rejects both backends loaded" begin
+    using CairoMakie
+    fig = Figure(; size = (300, 200)); ax = Axis(fig[1, 1]); scatter!(ax, 1:5, rand(5))
+    err = try
+        holo(fig)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("exactly one rendering backend", err.msg)
 end
