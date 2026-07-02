@@ -132,5 +132,19 @@ function _parity_corpus()
         end
     )
 
+    # 7. Axis3 (WS-3D): the 3D projection path + is3d transform. Explicit camera (azimuth/
+    # elevation literals) so the projection snapshot is deterministic; 3-coord scatter +
+    # polyline exercise the widened Point/Segment storage and the {index,x,y,z} payloads.
+    push!(
+        corpus, "axis3" => function ()
+            fig = Figure(size = (600, 450))
+            ax3 = Axis3(fig[1, 1]; azimuth = 0.4, elevation = 0.5)
+            sc = scatter!(ax3, Makie.Point3f[(1, 2, 3), (4, 5, 6), (7, 8, 2)]; markersize = 14)
+            ln = lines!(ax3, Makie.Point3f[(0, 0, 0), (3, 3, 3), (6, 0, 2)])
+            Makie.update_state_before_display!(fig)
+            return (fig, [PointInteractable(ax3, sc), SegmentInteractable(ax3, ln)])
+        end
+    )
+
     return corpus
 end

@@ -1,6 +1,6 @@
 module Holo
 
-using Makie: Makie, Point2f, RGBAf
+using Makie: Makie, Point2f, Point3f, RGBAf
 using FileIO
 using Base64: base64encode
 using HypertextLiteral: HypertextLiteral, @htl

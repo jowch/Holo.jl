@@ -4,15 +4,15 @@
 
 **Light, server-free interactivity for Makie plots in Pluto — the same interactions on either
 backend: CairoMakie (static base) by default, or WGLMakie (live base) for animation / large
-data / 3D.**
+data / live 3D.**
 
 Holo lays a thin interactive layer over a Makie figure inside a [Pluto](https://plutojl.org)
 notebook — hover for tooltips, click to select — and round-trips deliberate clicks to Julia
 through `@bind`. The default [`CairoMakie`](https://docs.makie.org/stable/explanations/backends/cairomakie)
 backend renders a publication-quality **static** image with a transparent JS overlay doing the
 hit-testing (no parallel server, no WebGL). Load [`WGLMakie`](https://docs.makie.org/stable/explanations/backends/wglmakie)
-instead and the same `holo`/`@bind` contract drives a **live**, browser-GPU backend for 3D,
-animation, and large/live data — see [3D, animation, and large data](#3d-animation-and-large-data-wglmakie)
+instead and the same `holo`/`@bind` contract drives a **live**, browser-GPU backend for
+animation, large/live data, and live 3D — see [3D, animation, and large data](#3d-animation-and-large-data-wglmakie)
 below. Exactly one backend may be loaded per Pluto session.
 
 > **Status: early / experimental (v0.1).** Validated end-to-end in real Pluto — all five
@@ -30,10 +30,10 @@ below. Exactly one backend may be loaded per Pluto session.
 | Survives offline / static HTML export | yes | no | **yes** (inspection layer) |
 
 Holo fills the gap: *publication-quality 2D plots with light client-side interactivity,
-Pluto-native, no server.* By default (`CairoBackend`) it is **not** a WGLMakie replacement — no
-3D, no live camera. But `holo` also ships a `:webgl` backend: `using WGLMakie` instead of
-`CairoMakie` and the same API gets you 3D, animation, and large/live data on the client GPU — see
-[3D, animation, and large data (`WGLMakie`)](#3d-animation-and-large-data-wglmakie) below.
+Pluto-native, no server.* By default (`CairoBackend`) it is **not** a WGLMakie replacement —
+static 3D only, no live camera. But `holo` also ships a `:webgl` backend: `using WGLMakie` instead
+of `CairoMakie` and the same API gets you live 3D, animation, and large/live data on the client
+GPU — see [3D, animation, and large data (`WGLMakie`)](#3d-animation-and-large-data-wglmakie) below.
 
 ## Install
 
@@ -44,8 +44,8 @@ julia> ] add https://github.com/jowch/Holo.jl
 ```
 
 You'll also want `Pluto`, plus exactly one Makie backend: `CairoMakie` for the default static
-path, or `WGLMakie` for animation / large data / 3D (see below) — a cost profile, not a feature
-fork — and never both in the same session.
+path, or `WGLMakie` for animation / large data / live 3D (see below) — a cost profile, not a
+feature fork — and never both in the same session.
 
 ## Quick start
 
@@ -85,11 +85,13 @@ Declare interactables explicitly (geometry in data space):
 - `RegionInteractable` / `FunctionInteractable` — custom interactions, no JavaScript required
 
 Linear, log, and categorical axes; single or multiple axes; linked selection via shared
-payloads through Pluto's reactive graph. This is the default `CairoBackend`'s 2D overlay. 3D currently renders only on
-`:webgl` (see [3D, animation, and large data](#3d-animation-and-large-data-wglmakie)) — static
-`Axis3` overlays on `:cairo` are roadmap scope (CairoMakie draws static 3D natively; the guard
-is Holo's) — and high-frequency live redraw is a shared cost limit on both backends. On
-`CairoBackend`, unsupported axis blocks (`PolarAxis`/`Axis3`/`LScene`) fail loud at `holo()` time.
+payloads through Pluto's reactive graph. `Axis3` gets the same treatment on both backends: 3D
+scatter/lines carry point/segment overlays with `{index, x, y, z}` payloads, projected at build
+time through the shared closure — static base on `:cairo`, live on `:webgl` (see
+[3D, animation, and large data](#3d-animation-and-large-data-wglmakie)). Continuous pixel→data
+readout (`AxisInteractable`/`ThresholdInteractable`/`ROIInteractable`) fails loud on a 3D axis
+(a screen pixel is a ray, not a data point), and high-frequency live redraw is a shared cost
+limit on both backends. Unsupported axis blocks (`PolarAxis`/`LScene`) fail loud at `holo()` time.
 
 [`examples/demo.jl`](examples/demo.jl) is a runnable gallery of every kind below plus the
 selection round-trip.
@@ -272,9 +274,8 @@ headlessly on every change.
 > server-free delivery, overlay, and the `@bind` round-trip — see [docs/roadmap.md](docs/roadmap.md)).
 
 The default `CairoBackend` renders a static PNG — great for publication figures, but every update
-re-rasterizes the whole scene (so animation and frequent re-renders are costly there), and today
-Holo's `Axis3` guard keeps 3D off `:cairo` (roadmap scope, not a CairoMakie limit — see
-[What's interactable](#whats-interactable-v1)). `using WGLMakie` instead of `CairoMakie`
+re-rasterizes the whole scene, so animation, frequent re-renders, and live 3D rotation are costly
+there. `using WGLMakie` instead of `CairoMakie`
 switches `holo` to a **browser-GPU backend**: the figure is rendered live in a WebGL `<canvas>`
 on the client GPU, with Holo's usual overlay layered on top — same `holo`/`@bind`/
 `InteractionEvent` contract, no code changes beyond the `using` line:

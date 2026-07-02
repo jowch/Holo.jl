@@ -36,6 +36,7 @@ struct AxisTransform
     xcats::Union{Nothing, Vector{String}}   # categorical tick map (v1; nothing if not categorical)
     ycats::Union{Nothing, Vector{String}}
     valueaxis::Union{Nothing, Symbol}       # nothing = 2-D {x,y} readout; :x/:y = 1-D colorbar value readout
+    is3d::Bool                              # Axis3: pixel→data inversion is undefined (a pixel is a ray) — lims degenerate, JS never inverts
 end
 
 """
@@ -100,13 +101,21 @@ function make_widget end  # (backend, <backend's RenderResult-like>, manifest, d
 # (log10(0.0) is -Inf WITHOUT throwing — that degrades through the same non-finite
 # path, no guard needed.) Element layers are un-gated on scale; `_q` passes non-finite
 # through — see interactables.jl and the log-scale testset in core_tests.jl.
+# 3D enters ONLY here (WS-3D): points widen to Point3 (z=0 for 2-coord input, so the 2D
+# path is unchanged — spike-verified byte-identical incl. on log axes), Makie's 2-tuple
+# transform_func applies to x/y and preserves z, Axis3's transform_func is `identity`,
+# and `Makie.project` handles the 3D camera. The output stays a 2D image-px point:
+# hit-testing is 2D pixel geometry on both backends regardless of scene dimensionality.
 function _project_closure(scaling, out_h)
     return function (ax, p)
         tp = try
-            Makie.apply_transform(Makie.transform_func(ax.scene), Makie.Point2(Float64(p[1]), Float64(p[2])))
+            Makie.apply_transform(
+                Makie.transform_func(ax.scene),
+                Makie.Point3(Float64(p[1]), Float64(p[2]), length(p) >= 3 ? Float64(p[3]) : 0.0)
+            )
         catch e
             e isa DomainError || rethrow()
-            Point2f(NaN32, NaN32)
+            Point3f(NaN32, NaN32, NaN32)
         end
         q = Makie.project(ax.scene, tp)
         o = ax.scene.viewport[].origin
@@ -132,7 +141,22 @@ function _axis_transform(id, ax, scaling, out_h)
         (fo[1], fo[1] + fw[1]), (fo[2], fo[2] + fw[2]),
         _scalesym(ax.xscale[]), _scalesym(ax.yscale[]),
         vpx, ax.xreversed[], ax.yreversed[],
-        _cats(ax.dim1_conversion[]), _cats(ax.dim2_conversion[]), nothing
+        _cats(ax.dim1_conversion[]), _cats(ax.dim2_conversion[]), nothing, false
+    )
+end
+
+# An Axis3's transform carries only what is well-defined for a 3D scene: its pixel viewport
+# and is3d=true. Continuous pixel→data inversion has no meaning on a projected 3D axis (a
+# screen pixel is a ray, not a data point), so lims are degenerate and the JS side never
+# inverts them — interactables that NEED inversion (Axis/Threshold/ROI) fail loud in
+# validate() on is3d. Element interactables only need `ctx.ids[ax]` set: they project in
+# Julia through the shared closure, which handles the 3D camera.
+function _axis3_transform(id, ax, scaling, out_h)
+    vp = ax.scene.viewport[]; o = vp.origin; wv = vp.widths
+    vpx = (o[1] * scaling, out_h - (o[2] + wv[2]) * scaling, wv[1] * scaling, wv[2] * scaling)
+    return AxisTransform(
+        id, (0.0, 1.0), (0.0, 1.0), :identity, :identity,
+        vpx, false, false, nothing, nothing, nothing, true
     )
 end
 
@@ -150,8 +174,8 @@ function _colorbar_transform(id, cb, scaling, out_h)
     sc = _scalesym(cb.scale[])
     vertical = cb.vertical[]
     if vertical
-        return AxisTransform(id, (0.0, 1.0), (lo, hi), :identity, sc, vpx, false, false, nothing, nothing, :y)
+        return AxisTransform(id, (0.0, 1.0), (lo, hi), :identity, sc, vpx, false, false, nothing, nothing, :y, false)
     else
-        return AxisTransform(id, (lo, hi), (0.0, 1.0), sc, :identity, vpx, false, false, nothing, nothing, :x)
+        return AxisTransform(id, (lo, hi), (0.0, 1.0), sc, :identity, vpx, false, false, nothing, nothing, :x, false)
     end
 end

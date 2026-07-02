@@ -109,6 +109,7 @@ _transform_dict(t::AxisTransform) = Dict{String, Any}(
     "viewport" => collect(t.viewport), "xreversed" => t.xreversed, "yreversed" => t.yreversed,
     "xcats" => t.xcats, "ycats" => t.ycats,
     "valueaxis" => t.valueaxis === nothing ? nothing : string(t.valueaxis),
+    "is3d" => t.is3d,
 )
 
 """
@@ -179,8 +180,8 @@ function _resolve_backend(explicit; max_width)
         ArgumentError(
             "holo(fig) needs a rendering backend loaded: `using CairoMakie` for a static base, or " *
                 "`using WGLMakie` for animation/large or frequently re-rendered data — then call " *
-                "`holo` again. (Both expose the same interactions; the choice is a cost profile — " *
-                "today `Axis3` renders only with `WGLMakie`.)",
+                "`holo` again. (Both expose the same interactions, `Axis3` included; the choice " *
+                "is a cost profile.)",
         ),
     )
 end
@@ -193,8 +194,10 @@ Render `fig` and overlay JS hit-testing for the declared `interactables`. Use as
 Requires exactly one rendering backend loaded: `using CairoMakie` for a static base, or
 `using WGLMakie` for animation/large or frequently re-rendered data. Both expose the same
 interaction feature set — the backend choice is a cost/substrate profile, not a capability fork
-(see `docs/backend-comparison.md`). Today `Axis3` renders only on `:webgl`; static-`Axis3`
-support on `:cairo` is roadmap scope (the guard is Holo's, not a CairoMakie limit).
+(see `docs/backend-comparison.md`). `Axis3` works on both: static overlays on `:cairo`, live
+rendering on `:webgl`; element interactables (points/segments/polygons) project through the
+same shared closure, while continuous pixel→data readout (Axis/Threshold/ROI) fails loud on a
+3D axis (a screen pixel is a ray).
 
 `selected` (a `layer_id => indices` map) pre-highlights elements on mount. Feed a bond value
 back into it — `Dict(ev.layer => [ev.index])` — to keep clicked elements highlighted across

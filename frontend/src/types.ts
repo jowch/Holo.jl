@@ -45,6 +45,9 @@ export interface AxisTransform {
     xcats?: string[] | null // categorical tick labels, if any
     ycats?: string[] | null
     valueaxis?: "x" | "y" | null // 1-D colorbar readout: which axis carries the value; absent/null = 2-D {x,y}
+    is3d?: boolean // Axis3: lims are degenerate and pixel→data inversion is undefined (a pixel is a ray).
+    // Julia's validate() rejects every inversion consumer (axis/threshold/roi layers) on an is3d
+    // transform, so invertAxis is never reached with one — the flag is the wire contract, not a JS branch.
 }
 
 export interface LayerStyle {

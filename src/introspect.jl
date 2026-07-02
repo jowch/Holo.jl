@@ -498,8 +498,10 @@ end
 """
     auto_interactables(fig) -> Vector{AbstractInteractable}
 
-Introspect a Makie `Figure`: for every supported plot in every `Axis`, build the interactable
-its M2.1 constructor would. Unsupported plot types are skipped with a warning. Layer ids are
+Introspect a Makie `Figure`: for every supported plot in every `Axis` or `Axis3`, build the
+interactable its M2.1 constructor would (on `Axis3`, `Scatter`/`Lines`/`LineSegments` — their
+3-coord positions ride the same constructors; other 3D plot kinds are skipped with a warning
+pending their own extraction recipes, see docs/roadmap.md M3). Layer ids are
 the plot kind (`:scatter`, `:lines`, …), suffixed `_2`, `_3`, … when a kind repeats. Returns
 the same concrete vector you could pass to [`holo`](@ref) yourself — edit or extend it freely.
 
@@ -511,11 +513,22 @@ function auto_interactables(fig)
     ints = AbstractInteractable[]
     seen = Dict{Symbol, Int}()
     for ax in fig.content
-        ax isa Makie.Axis || continue
+        ax isa Union{Makie.Axis, Makie.Axis3} || continue
         for p in ax.scene.plots
             base = _plotbase(p)
             if base === nothing
                 @warn "holo: skipping unsupported plot type $(typeof(p).name.name) (no introspection recipe)" maxlog = 16
+                continue
+            end
+            # Axis3 gate: only recipes whose geometry survives a 3D camera. Every other 2D
+            # recipe extracts pixel-separable geometry (grid edges projected per-axis,
+            # axis-aligned rects, 2D anchors) that a perspective projection silently
+            # misaligns — the silent-wrong class, so skip LOUDLY rather than construct.
+            # (roadmap M3 per-type extraction graduates kinds out of this gate.)
+            if ax isa Makie.Axis3 && !(p isa Union{Makie.Scatter, Makie.Lines, Makie.LineSegments})
+                @warn "holo: skipping $(typeof(p).name.name) on Axis3 — only Scatter/Lines/" *
+                    "LineSegments have 3D-valid extraction today; other kinds are roadmap scope " *
+                    "(docs/roadmap.md M3 per-type extraction)" maxlog = 16
                 continue
             end
             n = get(seen, base, 0) + 1

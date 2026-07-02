@@ -11,6 +11,8 @@ frontend/node_modules/
 frontend/dist/
 frontend-webgl/node_modules/
 frontend-webgl/dist/
+test/e2e/node_modules/
+test/e2e/package-lock.json
 *.tsbuildinfo
 npm-debug.log*
 

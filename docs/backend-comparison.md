@@ -6,9 +6,10 @@
 > (pay 1.09 MB, get the same thing) or a **co-equal entry point** a user would pick on its own. The
 > measurements say co-equal: they occupy **different cost regimes** under an identical interaction
 > contract (parity is CI-enforced by the golden-manifest harness, `test/fixtures/parity/`).
-> `:webgl` renders 3D live *today*; static-`Axis3` on `:cairo` is roadmap parity scope — a Holo
-> scoping guard, not a CairoMakie limit. View manipulation is planned as **backend-symmetric
-> `@bind` re-render**; only the client-side GPU camera is out of scope (see §1†).
+> Both backends ship `Axis3` overlays (WS-3D core, 2026-07-02) — static base on `:cairo`, live on
+> `:webgl` — with identical manifests (the `axis3` parity goldens are byte-identical). View
+> manipulation is planned as **backend-symmetric `@bind` re-render**; only the client-side GPU
+> camera is out of scope (see §1†).
 >
 > **Numbers reproduce** via `julia --project=. bench/vs_cairo.jl` (WebGL measured live in this
 > process, both sides `Random.seed!(0)`; Cairo measured in a subprocess, since Holo supports only
@@ -33,16 +34,16 @@ camera is deliberately not client-driven on either backend (§1†).
 | interaction | `:cairo` | `:webgl` |
 |---|---|---|
 | pan / zoom | planned: `@bind` re-render of `limits` (†) | planned: same, gated on GL-context reuse (†) |
-| rotate a 3D plot | planned: `@bind` re-render of `azimuth`/`elevation`, after the Axis3 parity item (†) | planned: same (†) — renders 3D live today |
+| rotate a 3D plot | planned: `@bind` re-render of `azimuth`/`elevation` (†) — static `Axis3` overlays ship today | planned: same (†) — renders `Axis3` live today, same overlays |
 | hover tooltip | overlay hit-test (client) | overlay hit-test (client) — same |
 | click → `@bind` | client hit-test + bind | client hit-test + bind — same |
 | data update (`@bind` drives the data) | **full** server render + encode + PNG re-ship | server serialize + client redraw |
 | animation, N frames | N × full PNG | N × scene (tier-1) → in-place patch (tier-2, roadmap) |
 
-The rows that **match** are the current story: both backends do hover/click/`@bind` the same way;
-`:webgl`'s edge today is rendering **cost** (cheap re-renders; live 3D while `:cairo`'s Axis3 guard
-is still in place). Live pan/zoom/rotate is **not shipped on either backend yet** — and when it
-lands it lands on both, as server-authoritative re-render (†).
+The rows that **match** are the current story: both backends do hover/click/`@bind` the same way
+(`Axis3` included — same overlays, same `{index,x,y,z}` payloads); `:webgl`'s edge is rendering
+**cost** (cheap re-renders; live rather than static 3D). Live pan/zoom/rotate is **not shipped on
+either backend yet** — and when it lands it lands on both, as server-authoritative re-render (†).
 
 > **(†) View manipulation: planned as backend-symmetric `@bind` re-render; the client-side GPU
 > camera stays out (a Holo-wide non-goal, alongside GPU-pick occlusion).** What is true today, verified from source: the widget
@@ -107,12 +108,12 @@ Two terms move independently under stress, and both are UX terms:
    re-render; scatter-100k wins **outright on the first cell** (Cairo's 3.97 MB/render vs 1.09 MB
    bundle + 0.86 MB scene) *and* is ~70× cheaper in server time (~32 ms vs ~2 280 ms). This is the
    slider / animation / live-data case, where Cairo's re-rasterize-every-frame model is the bottleneck.
-3. **3D rendering, today → `:webgl`.** `:cairo` currently rejects `Axis3` — a Holo scoping guard
-   slated to lift (CairoMakie draws static 3D natively; the projection hinge is spike-verified
-   exact — figure in `perf-findings.md` §"Axis3 projection hinge spike"), after which static-3D
-   overlays are parity and this regime reduces to regime 2's cost
-   question (re-render price per view change). Live view manipulation ships on both or neither —
-   see (†).
+3. **3D, live → `:webgl`; 3D, static picture → `:cairo`.** `Axis3` overlays ship on both (WS-3D
+   core — the projection hinge is spike-verified exact on the Cairo raster and on the live
+   `:webgl` canvas; figures in `perf-findings.md` §"Axis3 projection hinge spike"), so this
+   regime reduces to regime 2's cost question (re-render price per view change): a 3D scene you
+   rotate or animate wants `:webgl`; a static 3D figure with hover/click wants `:cairo`. Live
+   view manipulation ships on both or neither — see (†).
 
 ## 4. First paint — Cairo's genuine UX win, and the tax it trades
 
@@ -149,8 +150,9 @@ the user's GPU anyway). Three facts, GL-independent:
 - **If enabled, the wire/latency would be free but the overlay would drift.** Because the scene ships
   through `Bonito.Session(Bonito.NoConnection())` (`src/HoloWGL.jl:84`) with no transport back to the
   kernel, a client-side camera move would cost **zero round-trip by construction**. But the overlay's
-  hit-regions are a static `Makie.project` snapshot (`src/HoloWGL.jl:113-125`; its own comment: "STATIC
-  camera overlay… Axis3 / live-camera need client-side projection — TODO"), so they would **not** track
+  hit-regions are a static `Makie.project` snapshot (`src/HoloWGL.jl:113-125`; its comment at the
+  time: "STATIC camera overlay… Axis3 / live-camera need client-side projection — TODO" — the
+  Axis3 half has since shipped server-side, WS-3D), so they would **not** track
   the moving plot. Both facts are latent until the camera is turned on.
 - **Turning the *client* camera on would be large and backend-asymmetric — which is why that path
   is retired.** Its staged design (S1 2D magnifier → S2 3D-rotate via client re-projection → S3 JS

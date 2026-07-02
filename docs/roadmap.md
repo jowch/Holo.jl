@@ -45,17 +45,27 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 - [x] **Bars/areas** *(Hist/Waterfall/CrossBar/HSpan/VSpan done; Colorbar done M3; Legend remaining)*: Hist, Waterfall, CrossBar, HSpan, VSpan now auto-extracted by `holo(fig)` as `:rects` (same primitive as BarPlot, no new JS path). Shared bar payload schema — semantic, no redundant `index` (element index lives in `InteractionEvent.index`): BarPlot/Waterfall `(; low, high, value)`, Hist `(; value, low, high)`, CrossBar `(; midpoint, low, high)`, HSpan/VSpan `(; low, high)`. Span hit-rects clamped to the owning axis's pixel viewport (prevents cross-axis bleed in multi-axis figures). Uniform fail-loud payload-length validation (`_check_payloads`) added to `SegmentInteractable`/`RectInteractable`/`PolygonInteractable` — a wrong-length `payloads=` now throws `ArgumentError` at construction. *Colorbar: done (M3) — `ColorbarInteractable` auto-extracted from `fig.content`; figure-block walk now exists and Legend slots in the same place. Remaining: Legend (deferred — a linking capability, its own arc).*
 - [x] **Text bboxes** (Text/Annotation): `TextInteractable` — `text!`/`annotation!` labels auto-extracted as `:rects` click-to-pick buttons, payload `(; text, index, x, y)`. *Done: the original "needs font-metric measurement → new `bbox` primitive" premise was obsolete — `Makie.string_boundingboxes` already returns per-string boxes, so no new geometry kind or dependency was needed. `TextLabel` (a `Block`, not a plot — needs the figure-block walk `ColorbarInteractable` uses, not the scene-plot walk) is the remaining deferred piece.*
 - [ ] **SVG output path**: `CairoBackend(vector=true)` is groundwork; actually emit SVG base + overlay for sparse, low-primitive plots (cleaner coords, no raster).
-- [ ] **Axis3 static overlays (parity)** — CairoMakie renders static 3D natively; the `:cairo`
-      `Axis3` guard is Holo scoping, slated to lift. Projection hinge spike-verified (2026-07-01):
-      build-time `Makie.project(ax.scene, Point3f)` lands exactly on the CairoMakie `Axis3` raster,
-      static and rotated (figure recorded once in `perf-findings.md` §"Axis3 projection hinge
-      spike"); `Point2f(x,y) ≡ Point3f(x,y,0)` byte-identical through the
-      shared closure (so the widen can't regress 2D). Work: widen Point/Segment/Polygon storage +
-      the shared closure to 3D, lift the guard, per-type introspection (3D scatter/lines ~free;
-      wireframe/arrows/meshscatter M; `Surface` deferred — unbounded per-cell payload + occlusion),
-      occlusion = document-and-accept on **both** backends (no `:webgl`-only GPU-pick). The
-      `:webgl` half is gated on its own canvas-alignment spike. Extends the parity corpus with an
-      Axis3 figure.
+- [x] **Axis3 overlays (parity) — core** *(delivered 2026-07-02, WS-3D core widening)*:
+      Point/Segment/Polygon storage + the shared projection closure widened to 3D (`Point3f`,
+      z=0 for 2-coord input — every pre-existing golden value-identical modulo the new `is3d`
+      transform key, so the widen provably didn't move 2D); `:cairo` guard lifted (`Axis3`
+      collected on both backends; `PolarAxis`/`LScene` still rejected pending their decision
+      item below); `is3d` `AxisTransform` (degenerate lims — `Axis`/`Threshold`/`ROI`
+      interactables fail loud: a screen pixel on a 3D axis is a ray, not a data point); z-aware
+      `{index,x,y,z}` payloads; 3-coord `Scatter`/`Lines` introspection; `axis3` parity-corpus
+      figure (goldens **byte-identical across backends**); an Axis3 case in the real-browser
+      E2E (click + z payload through `transform_value`). Live-verified on both halves:
+      `:cairo` through-Pluto (hover tooltip shows the z row; bond round-trips through a live
+      kernel) and the `:webgl` **canvas-alignment spike — passed** (every build-time projected
+      marker center sits on a GPU-rendered marker pixel; figure recorded in `perf-findings.md`
+      §"Axis3 projection hinge spike"; re-runnable via `test/e2e/alignment.mjs`).
+- [ ] **Axis3 per-type extraction (parity)** — the remaining introspection recipes:
+      wireframe/arrows/meshscatter (M each — net-new geometry extraction; meshscatter needs an
+      explicit `radius=` or a screen-px approximation since its `markersize` is `:data`);
+      `Surface` deferred (unbounded per-cell payload + occlusion — same class as the heatmap
+      `values[]` hole). Occlusion policy: **document-and-accept on both backends** (no
+      `:webgl`-only GPU-pick); upgrade path = a build-time CPU painter's cull in Julia,
+      backend-symmetric by construction.
 - [ ] **View manipulation via `@bind` re-render (pan/zoom/rotate, parity)** — supersedes the
       2026-07-01 "investigated → deferred" framing, which scoped the problem as a *client-side*
       camera (the shim disables WGLMakie's `use_orbit_cam`; 2D zoom/pan is dead under
@@ -122,9 +132,10 @@ limit on both backends, not a capability split.
 
 Per-backend there are no *feature* non-goals, only substrate facts: `:cairo` ships a static base
 (its former "3D needs a browser-side renderer" note was wrong — CairoMakie renders static 3D
-natively; the `Axis3` guard is Holo scoping, lifting with the Axis3 parity item in M3; the same
-guard also rejects `PolarAxis`/`LScene`, whose disposition — parity item or Holo-wide non-goal —
-is an explicit M3 decision item and the one known interim gap), and
+natively; the `Axis3` guard **lifted 2026-07-02** with the M3 Axis3 core item, so `Axis3`
+overlays now ship on both backends; the guard still rejects `PolarAxis`/`LScene`, whose
+disposition — parity item or Holo-wide non-goal — is an explicit M3 decision item and the one
+known interim gap), and
 `:webgl` ships a live canvas (so it renders 3D live today and re-renders cheaply). Backends
 differ in **cost**, never in the interaction contract — enforced by the parity golden harness
 (`test/fixtures/parity/`).

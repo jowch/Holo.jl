@@ -3,30 +3,30 @@
         "ax1": {
             "xscale": "identity",
             "xreversed": false,
-            "yscale": "log10",
+            "yscale": "identity",
             "ylims": [
-                0.06309573401504136,
-                1584.8932033370284
+                0,
+                1
             ],
             "xlims": [
-                0.8999999985098839,
-                3.100000001490116
+                0,
+                1
             ],
             "yreversed": false,
             "xcats": null,
-            "is3d": false,
+            "is3d": true,
             "ycats": null,
             "viewport": [
-                104,
                 32,
-                1064,
-                690
+                32,
+                1136,
+                836
             ],
             "valueaxis": null
         }
     },
     "scaling": 2,
-    "height": 800,
+    "height": 900,
     "width": 1200,
     "layers": [
         {
@@ -37,15 +37,15 @@
             "kind": "circles",
             "axis": "ax1",
             "geometry": [
-                152,
-                691,
-                9,
-                636,
-                377,
-                9,
-                1120,
-                63,
-                9
+                551,
+                341,
+                14,
+                647,
+                323,
+                14,
+                743,
+                671,
+                14
             ],
             "id": "scatter",
             "style": {
@@ -56,17 +56,20 @@
                 {
                     "index": 0,
                     "x": 1,
-                    "y": 0.1
+                    "y": 2,
+                    "z": 3
                 },
                 {
                     "index": 1,
-                    "x": 2,
-                    "y": 10
+                    "x": 4,
+                    "y": 5,
+                    "z": 6
                 },
                 {
                     "index": 2,
-                    "x": 3,
-                    "y": 1000
+                    "x": 7,
+                    "y": 8,
+                    "z": 2
                 }
             ]
         },
@@ -78,12 +81,12 @@
             "kind": "polyline",
             "axis": "ax1",
             "geometry": [
-                152,
-                534,
-                636,
-                377,
-                1120,
-                220
+                458,
+                438,
+                553,
+                421,
+                279,
+                537
             ],
             "id": "lines",
             "style": {
