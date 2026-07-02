@@ -444,7 +444,7 @@ y-flip on an `Axis3` canvas) is exactly what this measures. Bond-level coverage 
 
 ## WGL context lifecycle — the "context leak" premise, measured (2026-07-02)
 
-> Measured at **PR #37** (Holo head of the WS-3D per-type merge, `53f55dd` base),
+> Measured at **PR #37** (branch base `8cc47cc`, the WS-3D core merge),
 > **WGLMakie 0.13.12** (vendored bundle), Julia 1.12, headless Chromium (Playwright).
 
 **Result: `:webgl` cell re-renders do NOT leak GL contexts.** Method: a live Pluto kernel
