@@ -35,8 +35,9 @@ end
 # markersize is DATA-space by construction (no markerspace attribute), so the pixel radius is
 # camera/depth-dependent — normalize it to per-element Vec3f half-extents and let hitlayers
 # project them (PointInteractable.radius3d). Spike-verified (2026-07-02): markersize acts as the
-# sphere radius; the projected ±axis-offset max is a few % under the true silhouette on
-# diagonals (frontend HIT_TOL absorbs it). Non-sphere `marker=` meshes ride the same
+# sphere radius. The projected ±axis-offset max underestimates the true silhouette when data
+# axes project onto nearly the same screen direction (worst case ~√2; a few % on typical
+# cameras, where frontend HIT_TOL absorbs it). Non-sphere `marker=` meshes ride the same
 # half-extent approximation; pass `radius=`/`radius3d=` explicitly if it's too coarse.
 function _meshscatter_extents(ms, n)
     ms isa Makie.VecTypes{3} && return fill(Makie.Vec3f(ms...), n)
@@ -70,7 +71,7 @@ SegmentInteractable(ax, p::Makie.LineSegments; id = :segments, payloads = nothin
 # the mesh-triangulation diagonals a grid-edge reconstruction would miss. Same read-the-child
 # pattern as Stairs.
 SegmentInteractable(ax, p::Makie.Wireframe; id = :wireframe, payloads = nothing, tol = 6) =
-    SegmentInteractable(ax, _childof(p, Makie.LineSegments).converted[][1]; mode = :pairs, id, payloads, tol)
+    SegmentInteractable(ax, _conv(_childof(p, Makie.LineSegments))[1]; mode = :pairs, id, payloads, tol)
 
 # ---- Heatmap / Image -> RectInteractable(:grid) ----
 # converted gives (x, y, values). Makie converts cell *centers* to an edge vector (length n+1);

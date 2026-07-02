@@ -78,7 +78,9 @@ struct PointInteractable <: AbstractInteractable
     # Data-space half-extents, one per point (meshscatter: markers are data-sized, so the pixel
     # radius depends on the camera/depth). When present, `radius` is unused and hitlayers derives
     # each element's pixel radius by projecting the ±axis offsets — an axis-aligned approximation
-    # of the projected sphere (a few % under on diagonals; the frontend HIT_TOL absorbs it).
+    # of the projected silhouette. It underestimates when data axes project onto nearly the same
+    # screen direction (worst case ~√2, ~29%, at adversarial azimuth/elevation; a few % on
+    # typical cameras, where HIT_TOL absorbs it). Pass radius=/radius3d= for extreme cases.
     radius3d::Union{Nothing, Vector{Makie.Vec3f}}
     tooltip::Union{Nothing, Markup, Bool}
 end

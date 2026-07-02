@@ -334,9 +334,9 @@ end
         fm = Figure(; size = (600, 450))
         axm = Axis3(fm[1, 1]; azimuth = 0.4, elevation = 0.5)
         mpts = Makie.Point3f[(1, 2, 3), (4, 5, 6), (7, 8, 2)]
-        meshscatter!(axm, mpts; markersize = 0.6, color = :red)
+        msp = meshscatter!(axm, mpts; markersize = 0.6, color = :red)
         Makie.update_state_before_display!(fm)
-        mints = auto_interactables(fm)                  # no gate warn expected
+        mints = @test_logs auto_interactables(fm)       # no logs: meshscatter must NOT re-gate
         mi = only(mints)
         @test mi isa PointInteractable
         @test mi.radius3d !== nothing && length(mi.radius3d) == 3
@@ -353,6 +353,40 @@ end
         end
         # edge sanity: a pixel just inside the reported radius (rightward) is still marker-red
         @test color_near(isredc, imgm, Lm.geometry[1] + 0.8 * Lm.geometry[3], Lm.geometry[2]; tol = 3)
+
+        # radius= override disables radius3d derivation (fixed pixel radius, like Scatter)
+        mio = PointInteractable(axm, msp; radius = 5)
+        @test mio.radius3d === nothing
+        Lo = only(hitlayers(mio, ctxm))
+        @test Lo.geometry[3] == round(Int, 5 * ctxm.scaling)
+
+        # PER-ELEMENT radii (the headline behavior): three different markersizes must yield
+        # radii in that proportion — a regression that reuses one element's extents (or any
+        # single shared radius) collapses the ratios to 1:1:1 and fails here. Also covers
+        # _meshscatter_extents' per-element vector branch.
+        fv = Figure(; size = (600, 450))
+        axv = Axis3(fv[1, 1]; azimuth = 0.4, elevation = 0.5)
+        meshscatter!(axv, mpts; markersize = [0.2, 0.5, 0.9], color = :red)
+        Makie.update_state_before_display!(fv)
+        vi = only(@test_logs auto_interactables(fv))
+        @test vi.radius3d == [Makie.Vec3f(0.2, 0.2, 0.2), Makie.Vec3f(0.5, 0.5, 0.5), Makie.Vec3f(0.9, 0.9, 0.9)]
+        _, _, ctxv = ctx_for(fv)
+        Lv = only(hitlayers(vi, ctxv))
+        rv = [Lv.geometry[3k + 3] for k in 0:2]
+        @test 2.0 < rv[2] / rv[1] < 3.0        # ≈ 0.5/0.2 = 2.5
+        @test 3.6 < rv[3] / rv[1] < 5.4        # ≈ 0.9/0.2 = 4.5
+
+        # DEPTH-dependence: under real perspective, equal extents at different depths project
+        # to different radii — a camera-independent precomputed radius collapses them to equal.
+        fp = Figure(; size = (600, 450))
+        axp = Axis3(fp[1, 1]; azimuth = 0.4, elevation = 0.5, perspectiveness = 1.0)
+        meshscatter!(axp, Makie.Point3f[(1, 1, 1), (9, 9, 9)]; markersize = 0.6, color = :red)
+        Makie.update_state_before_display!(fp)
+        pi3 = only(@test_logs auto_interactables(fp))
+        _, _, ctxp = ctx_for(fp)
+        Lp = only(hitlayers(pi3, ctxp))
+        rp = [Lp.geometry[3k + 3] for k in 0:1]
+        @test abs(rp[1] / rp[2] - 1) > 0.1     # near/far radii differ (>10%)
 
         # radius3d validation fails loud on length mismatch
         @test_throws ArgumentError PointInteractable(axm, mpts; radius3d = [Makie.Vec3f(1, 1, 1)])
@@ -373,7 +407,7 @@ end
         Lw = only(hitlayers(wi, ctxw))
         @test Lw.kind === :segments
         nseg = length(wi.vertices) ÷ 2
-        for k in 0:7:(nseg - 1)   # sample every 8th segment's midpoint on the rendered wire
+        for k in 0:7:(nseg - 1)   # sample every 7th segment's midpoint on the rendered wire
             mx = (Lw.geometry[4k + 1] + Lw.geometry[4k + 3]) / 2
             my = (Lw.geometry[4k + 2] + Lw.geometry[4k + 4]) / 2
             @test color_near(isbluec, imgw, mx, my; tol = 3)
