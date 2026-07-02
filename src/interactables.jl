@@ -74,7 +74,15 @@ end
 
 # ============================ PointInteractable ============================
 struct PointInteractable <: AbstractInteractable
-    ax; points::Vector{Point3f}; id::Symbol; payloads::Vector{Any}; radius::Float64; tooltip::Union{Nothing, Markup, Bool}
+    ax; points::Vector{Point3f}; id::Symbol; payloads::Vector{Any}; radius::Float64
+    # Data-space half-extents, one per point (meshscatter: markers are data-sized, so the pixel
+    # radius depends on the camera/depth). When present, `radius` is unused and hitlayers derives
+    # each element's pixel radius by projecting the ±axis offsets — an axis-aligned approximation
+    # of the projected silhouette. It underestimates when data axes project onto nearly the same
+    # screen direction (worst case ~√2, ~29%, at adversarial azimuth/elevation; a few % on
+    # typical cameras, where HIT_TOL absorbs it). Pass radius=/radius3d= for extreme cases.
+    radius3d::Union{Nothing, Vector{Makie.Vec3f}}
+    tooltip::Union{Nothing, Markup, Bool}
 end
 function PointInteractable(
         ax, points; id = :points,
@@ -84,17 +92,37 @@ function PointInteractable(
                 (; index = k - 1, x = Float64(p[1]), y = Float64(p[2]))
                 for (k, p) in enumerate(points)
         ],
-        radius = 9, tooltip = nothing
+        radius = 9, radius3d = nothing, tooltip = nothing
     )
     pts = [_pt3(p) for p in points]
     length(payloads) == length(pts) || throw(ArgumentError("payloads must match points"))
-    return PointInteractable(ax, pts, id, collect(Any, payloads), Float64(radius), tooltip)
+    r3 = radius3d === nothing ? nothing : Vector{Makie.Vec3f}(radius3d)
+    r3 === nothing || length(r3) == length(pts) ||
+        throw(ArgumentError("radius3d must have one entry per point (got $(length(r3)) for $(length(pts)))"))
+    return PointInteractable(ax, pts, id, collect(Any, payloads), Float64(radius), r3, tooltip)
 end
 tooltip_spec(i::PointInteractable) = i.tooltip
+# pixel radius of a data-sized marker: max projected displacement over the ±axis half-extents
+# (already image px — the projection closure includes ×scaling; non-finite offsets are skipped,
+# and a non-finite center yields radius 0, which can never hit)
+function _px_radius3d(ctx, ax, p, e, q)
+    m = 0.0
+    for d in (
+            (e[1], 0, 0), (-e[1], 0, 0), (0, e[2], 0),
+            (0, -e[2], 0), (0, 0, e[3]), (0, 0, -e[3]),
+        )
+        q2 = _proj(ctx, ax, (p[1] + d[1], p[2] + d[2], p[3] + d[3]))
+        r = hypot(q2[1] - q[1], q2[2] - q[2])
+        isfinite(r) && (m = max(m, r))
+    end
+    return m
+end
 function hitlayers(i::PointInteractable, ctx)
     g = Real[]
-    for p in i.points
-        q = _proj(ctx, i.ax, p); append!(g, (_q(q[1]), _q(q[2]), _q(i.radius * ctx.scaling)))
+    for (k, p) in enumerate(i.points)
+        q = _proj(ctx, i.ax, p)
+        r = i.radius3d === nothing ? i.radius * ctx.scaling : _px_radius3d(ctx, i.ax, p, i.radius3d[k], q)
+        append!(g, (_q(q[1]), _q(q[2]), _q(r)))
     end
     return [HitLayer(i.id, :circles, g, i.payloads, axis_id(ctx, i.ax), events(i))]
 end

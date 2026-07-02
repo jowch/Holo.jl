@@ -59,13 +59,27 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
       kernel) and the `:webgl` **canvas-alignment spike — passed** (every build-time projected
       marker center sits on a GPU-rendered marker pixel; figure recorded in `perf-findings.md`
       §"Axis3 projection hinge spike"; re-runnable via `test/e2e/alignment.mjs`).
-- [ ] **Axis3 per-type extraction (parity)** — the remaining introspection recipes:
-      wireframe/arrows/meshscatter (M each — net-new geometry extraction; meshscatter needs an
-      explicit `radius=` or a screen-px approximation since its `markersize` is `:data`);
-      `Surface` deferred (unbounded per-cell payload + occlusion — same class as the heatmap
-      `values[]` hole). Occlusion policy: **document-and-accept on both backends** (no
-      `:webgl`-only GPU-pick); upgrade path = a build-time CPU painter's cull in Julia,
-      backend-symmetric by construction.
+- [x] **Axis3 per-type extraction — MeshScatter + Wireframe** *(delivered 2026-07-02)*:
+      `MeshScatter` → `PointInteractable` with **depth-correct per-element pixel radii** — its
+      `markersize` is data-space by construction (no `markerspace` attribute at all, spike-verified),
+      so `PointInteractable` gained an optional `radius3d` (data-space half-extents; hitlayers
+      projects the ±axis offsets per element — the wire shape is unchanged, `:circles` always
+      carried per-element r). `Wireframe` → `SegmentInteractable(:pairs)` from its child
+      `LineSegments`' converted (data space, spike-verified; includes the triangulation diagonals
+      a grid-edge reconstruction would miss). Both graduate out of the Axis3 introspection gate;
+      rendered-pixel unit tests + through-Pluto live-verify.
+- [ ] **Axis3 per-type extraction — Arrows3D** — **premise corrected (2026-07-02):** the planned
+      "Segment/:pairs base→tip from data" is WRONG — `arrows3d` autoscales (resolved
+      `arrowscale` ≈ 2.84 on the spike scene) and renders via three `MeshScatter` children whose
+      positions/rotations/markersizes live in a **normalized, anisotropically-scaled space** (data
+      (1,1,1) → child (−0.909,−0.909,−0.606)), so raw pos→pos+dir matches the drawn pixels for
+      some arrows and misses others. A real recipe must reconstruct shaft+tip extents from the
+      children (quaternion rotation × markersize.z along the shaft axis) or resolve the scaling
+      chain — its own arc. Until then arrows3d skip-warns (no `_plotbase` entry).
+- [ ] **Axis3 per-type extraction — `Surface` (deferred)** — unbounded per-cell payload +
+      occlusion, same class as the heatmap `values[]` hole. Occlusion policy for all 3D types:
+      **document-and-accept on both backends** (no `:webgl`-only GPU-pick); upgrade path = a
+      build-time CPU painter's cull in Julia, backend-symmetric by construction.
 - [ ] **View manipulation via `@bind` re-render (pan/zoom/rotate, parity)** — supersedes the
       2026-07-01 "investigated → deferred" framing, which scoped the problem as a *client-side*
       camera (the shim disables WGLMakie's `use_orbit_cam`; 2D zoom/pan is dead under
