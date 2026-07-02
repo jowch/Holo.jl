@@ -53,11 +53,8 @@ function Holo.context(b::CairoBackend, fig, ppu)
     # in true on-screen px instead of hardcoding the 2× DPI factor.
     display_scale = min(w, b.max_width) / out_w
 
-    project = function (ax, p)
-        q = Makie.project(ax.scene, Point2f(Float64(p[1]), Float64(p[2])))
-        o = ax.scene.viewport[].origin
-        return Point2f((q[1] + o[1]) * scaling, out_h - (q[2] + o[2]) * scaling)  # flip to image coords
-    end
+    # shared closure: transform_func applied, then Makie.project + viewport + scaling + y-flip
+    project = Holo._project_closure(scaling, out_h)
 
     # Fail loud, never silently wrong: an axis-like block that isn't a 2D `Makie.Axis`
     # (PolarAxis/Axis3/LScene) would be silently dropped here, then interactables would

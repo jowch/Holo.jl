@@ -115,22 +115,17 @@ function Holo.render(b::WebGLBackend, fig, ppu)
     return WebGLResult(scene_payload(fig), w, h, Float64(ppu))
 end
 
-# context: reuse the CairoBackend projection (Makie.project + viewport + scaling + flip).
-# The spike measured this lands within 1-2px of where WGLMakie draws the data, so the
-# STATIC-camera overlay rides the existing manifest unchanged.
-#   NOTE: Axis3 / live-camera need client-side projection (read WGLMakie's camera) — TODO,
-#   see docs/roadmap.md. For 2D Axis this is the validated path.
+# context: the same shared projection closure as CairoBackend (transform_func applied,
+# then Makie.project + viewport + scaling + y-flip — Holo._project_closure). The spike
+# measured this lands within 1-2px of where WGLMakie draws the data, so the STATIC-camera
+# overlay rides the existing manifest unchanged. (Axis3 support: see docs/roadmap.md.)
 function Holo.context(b::WebGLBackend, fig, ppu)
     w, h = size(fig.scene)
     scaling = Float64(ppu)
     out_w, out_h = round(Int, w * scaling), round(Int, h * scaling)
     display_scale = min(w, b.max_width) / out_w
 
-    project = function (ax, p)
-        q = Makie.project(ax.scene, Point2f(Float64(p[1]), Float64(p[2])))
-        o = ax.scene.viewport[].origin
-        return Point2f((q[1] + o[1]) * scaling, out_h - (q[2] + o[2]) * scaling)
-    end
+    project = Holo._project_closure(scaling, out_h)
 
     axes = [c for c in fig.content if c isa Makie.Axis]
     ids = IdDict{Any, Symbol}()
