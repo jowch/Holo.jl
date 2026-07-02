@@ -220,13 +220,88 @@ end
     end
 
     @testset "fail loud on unsupported axis types" begin
-        for mk in (Makie.PolarAxis, Axis3, LScene)
+        for mk in (Makie.PolarAxis, LScene)           # Axis3 is supported since WS-3D
             fu = Figure(); mk(fu[1, 1])
             err = (@test_throws ArgumentError ctx_for(fu)).value
-            @test occursin("supports 2D `Makie.Axis` only", err.msg)
+            @test occursin("supports `Makie.Axis` and `Makie.Axis3` only", err.msg)
             @test occursin("WGLMakie", err.msg)       # steers to the backend that renders these today
             @test occursin("scoping guard", err.msg)  # framing: Holo scoping, not a CairoMakie capability limit
         end
+    end
+
+    @testset "Axis3: context + projection + payloads + gates (WS-3D core)" begin
+        f3 = Figure(; size = (600, 450))
+        ax3 = Axis3(f3[1, 1]; azimuth = 0.4, elevation = 0.5)
+        pts3 = Makie.Point3f[(1, 2, 3), (4, 5, 6), (7, 8, 2)]
+        scatter!(ax3, pts3; color = :red, markersize = 14)
+        _, ppu3, ctx3 = ctx_for(f3)
+
+        # registered with an is3d transform: degenerate lims, real pixel viewport
+        t3 = ctx3.transforms[IP.axis_id(ctx3, ax3)]
+        @test t3.is3d
+        @test t3.viewport[3] > 0 && t3.viewport[4] > 0
+        @test IP._transform_dict(t3)["is3d"] === true
+
+        # projected :circles land on the rendered markers — the projection hinge as a unit
+        # test (red-pixel assert, same idiom as the log-scale testsets), static then rotated
+        isred(c) = Float64(Makie.red(c)) > 0.6 && Float64(Makie.green(c)) < 0.4 && Float64(Makie.blue(c)) < 0.4
+        function red_near_in(img, cx, cy; tol = 6)
+            ih, iw = size(img)
+            x, y = round(Int, cx), round(Int, cy)
+            for dy in -tol:tol, dx in -tol:tol
+                xx, yy = x + dx, y + dy
+                (1 <= xx <= iw && 1 <= yy <= ih) || continue
+                isred(img[yy, xx]) && return true
+            end
+            return false
+        end
+        img3 = Makie.colorbuffer(f3; px_per_unit = ppu3)
+        L3 = only(hitlayers(PointInteractable(ax3, pts3; radius = 7), ctx3))
+        @test L3.kind === :circles && length(L3.geometry) == 9
+        for k in 0:2
+            @test red_near_in(img3, L3.geometry[3k + 1], L3.geometry[3k + 2])
+        end
+
+        # rotation via azimuth/elevation re-render: fresh context re-projects onto the new view
+        ax3.azimuth[] = 1.1; ax3.elevation[] = 0.2
+        _, ppu3b, ctx3b = ctx_for(f3)
+        img3b = Makie.colorbuffer(f3; px_per_unit = ppu3b)
+        L3b = only(hitlayers(PointInteractable(ax3, pts3; radius = 7), ctx3b))
+        @test any(L3b.geometry[i] != L3.geometry[i] for i in 1:9)   # the view actually moved
+        for k in 0:2
+            @test red_near_in(img3b, L3b.geometry[3k + 1], L3b.geometry[3k + 2])
+        end
+
+        # 3-coord default payloads carry z; 2-coord payloads keep the exact 2D shape
+        @test PointInteractable(ax3, pts3).payloads[1] == (; index = 0, x = 1.0, y = 2.0, z = 3.0)
+        @test PointInteractable(ax3, [(1.0, 2.0)]).payloads[1] == (; index = 0, x = 1.0, y = 2.0)
+
+        # continuous pixel→data consumers fail loud on is3d (a screen pixel is a ray)
+        for bad in (
+                AxisInteractable(ax3),
+                ThresholdInteractable(ax3; orientation = :horizontal, value = 1.0),
+                ROIInteractable(ax3; bounds = (1.0, 2.0, 1.0, 2.0)),
+            )
+            msg = validate(bad, ctx3)
+            @test msg !== nothing && occursin("Axis3", msg)
+            @test_throws ArgumentError build_manifest([bad], ctx3)
+        end
+
+        # introspection: Scatter/Lines on Axis3 ride the widened constructors for free
+        f3i = Figure(; size = (600, 450))
+        ax3i = Axis3(f3i[1, 1])
+        scatter!(ax3i, Makie.Point3f[(1, 2, 3), (4, 5, 6)]; markersize = 10)
+        lines!(ax3i, Makie.Point3f[(0, 0, 0), (2, 2, 2), (4, 0, 1)])
+        Makie.update_state_before_display!(f3i)
+        ints = auto_interactables(f3i)
+        @test any(i -> i isa PointInteractable, ints)
+        @test any(i -> i isa SegmentInteractable, ints)
+        _, _, ctx3i = ctx_for(f3i)
+        m3 = build_manifest(ints, ctx3i)
+        @test m3["transforms"]["ax1"]["is3d"] === true
+        @test length(m3["layers"]) == 2
+        pl3 = only(filter(l -> l["kind"] == "circles", m3["layers"]))["payloads"][1]
+        @test pl3 == (; index = 0, x = 1.0, y = 2.0, z = 3.0)   # introspected scatter payload carries z
     end
 
     @testset "Polygon geometry projects per ring" begin
@@ -1241,16 +1316,17 @@ end
     # a normal axis transform defaults valueaxis = nothing → serializes to nothing
     t = AxisTransform(
         :ax1, (0.0, 1.0), (0.0, 2.0), :identity, :identity,
-        (0.0, 0.0, 10.0, 20.0), false, false, nothing, nothing, nothing
+        (0.0, 0.0, 10.0, 20.0), false, false, nothing, nothing, nothing, false
     )
     @test t.valueaxis === nothing
     d = _transform_dict(t)
     @test haskey(d, "valueaxis")
     @test d["valueaxis"] === nothing
+    @test d["is3d"] === false
     # a colorbar-style transform tags the value axis
     tc = AxisTransform(
         :cb1, (0.0, 1.0), (0.0, 2.0), :identity, :log10,
-        (0.0, 0.0, 10.0, 20.0), false, false, nothing, nothing, :y
+        (0.0, 0.0, 10.0, 20.0), false, false, nothing, nothing, :y, false
     )
     @test _transform_dict(tc)["valueaxis"] == "y"
 end

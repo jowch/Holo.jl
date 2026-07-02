@@ -1,11 +1,13 @@
 module HoloWGLMakieExt
 
 # The :webgl backend — render the figure live in a WGLMakie <canvas> on the client GPU,
-# with Holo's overlay layered on top. Unlike CairoBackend (static PNG, 2D only), this
-# handles 3D / animation / large data. Ships NO Bonito runtime and NO server: the scene
-# is serialized to a plain payload (published_to_js) and drawn by a vendored WGLMakie
-# bundle + a ~30-line shim (assets/holo-webgl.js). Validated by spikes 06/08:
-# full 2D+3D fidelity, 1-2px overlay alignment, client-side animation hook.
+# with Holo's overlay layered on top. Same interaction contract as CairoBackend (2D and
+# Axis3 alike — the shared projection closure handles both); the difference is COST: the
+# live canvas makes animation, large data, and frequent re-renders cheap where the static
+# PNG re-rasterizes. Ships NO Bonito runtime and NO server: the scene is serialized to a
+# plain payload (published_to_js) and drawn by a vendored WGLMakie bundle + a ~30-line
+# shim (assets/holo-webgl.js). Validated by spikes 06/08: full 2D+3D fidelity, 1-2px
+# overlay alignment, client-side animation hook.
 
 using Holo: Holo, AbstractBackend, InteractionContext, build_manifest, InteractionEvent, auto_interactables
 using WGLMakie
@@ -118,7 +120,8 @@ end
 # context: the same shared projection closure as CairoBackend (transform_func applied,
 # then Makie.project + viewport + scaling + y-flip — Holo._project_closure). The spike
 # measured this lands within 1-2px of where WGLMakie draws the data, so the STATIC-camera
-# overlay rides the existing manifest unchanged. (Axis3 support: see docs/roadmap.md.)
+# overlay rides the existing manifest unchanged; Axis3 rides the same closure (3D enters
+# only at the projection step — src/backend.jl).
 function Holo.context(b::WebGLBackend, fig, ppu)
     w, h = size(fig.scene)
     scaling = Float64(ppu)
@@ -127,7 +130,7 @@ function Holo.context(b::WebGLBackend, fig, ppu)
 
     project = Holo._project_closure(scaling, out_h)
 
-    axes = [c for c in fig.content if c isa Makie.Axis]
+    axes = [c for c in fig.content if c isa Union{Makie.Axis, Makie.Axis3}]
     ids = IdDict{Any, Symbol}()
     transforms = Dict{Symbol, Holo.AxisTransform}()
     for (k, ax) in enumerate(axes)
@@ -135,11 +138,12 @@ function Holo.context(b::WebGLBackend, fig, ppu)
         ids[ax] = id
         # Populate the per-axis transform exactly as CairoBackend does. Without this, every
         # axis-keyed interactable (Threshold/ROI/Region/box-select) KeyErrors at manifest build
-        # (interactables.jl indexes ctx.transforms[axis_id]). We call Holo._axis_transform
-        # directly (both backends share it, per src/backend.jl) rather than duplicating the
+        # (interactables.jl indexes ctx.transforms[axis_id]). We call the shared constructors
+        # directly (both backends share them, per src/backend.jl) rather than duplicating the
         # loop — CairoBackend now lives in a sibling extension we can't (and don't need to)
         # reach from here.
-        transforms[id] = Holo._axis_transform(id, ax, scaling, out_h)
+        transforms[id] = ax isa Makie.Axis3 ? Holo._axis3_transform(id, ax, scaling, out_h) :
+            Holo._axis_transform(id, ax, scaling, out_h)
     end
     # Colorbar transforms, exactly as CairoBackend builds them. This loop was missing
     # (the one-sided context() divergence the parity goldens now pin): a ColorbarInteractable

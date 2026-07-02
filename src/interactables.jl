@@ -45,6 +45,12 @@ const GRID_VALUES_MIN_SCREEN_PX = 1.0
 
 _proj(ctx, ax, p) = data_to_image_px(ctx, ax, p)
 
+# One storage path for 2D and 3D geometry: points widen to Point3f with z=0 for 2-coord
+# input, so a 2D interactable's projected output is unchanged (the shared closure feeds
+# x/y/z straight through; z=0 ≡ the 2D path, spike-verified byte-identical). Float32
+# storage caps coordinates at floatmax(Float32) — same as the previous Point2f storage.
+_pt3(p) = Point3f(p[1], p[2], length(p) >= 3 ? p[3] : 0)
+
 # Quantize a finite geometry coordinate to integer image-px. MsgPack encodes a small Int in 1–3 bytes
 # vs a Float32's flat 5, so per-element geometry stores Int — −58% on that term, no manifest-shape change
 # (the frontend reads numbers either way), and ≤0.5px is inside the ~1px hit-test tolerance. AxisTransform
@@ -68,17 +74,19 @@ end
 
 # ============================ PointInteractable ============================
 struct PointInteractable <: AbstractInteractable
-    ax; points::Vector{Point2f}; id::Symbol; payloads::Vector{Any}; radius::Float64; tooltip::Union{Nothing, Markup, Bool}
+    ax; points::Vector{Point3f}; id::Symbol; payloads::Vector{Any}; radius::Float64; tooltip::Union{Nothing, Markup, Bool}
 end
 function PointInteractable(
         ax, points; id = :points,
         payloads = [
-            (; index = k - 1, x = Float64(p[1]), y = Float64(p[2]))
+            length(p) >= 3 ?
+                (; index = k - 1, x = Float64(p[1]), y = Float64(p[2]), z = Float64(p[3])) :
+                (; index = k - 1, x = Float64(p[1]), y = Float64(p[2]))
                 for (k, p) in enumerate(points)
         ],
         radius = 9, tooltip = nothing
     )
-    pts = [Point2f(p[1], p[2]) for p in points]
+    pts = [_pt3(p) for p in points]
     length(payloads) == length(pts) || throw(ArgumentError("payloads must match points"))
     return PointInteractable(ax, pts, id, collect(Any, payloads), Float64(radius), tooltip)
 end
@@ -93,13 +101,13 @@ end
 
 # ============================ SegmentInteractable ==========================
 struct SegmentInteractable <: AbstractInteractable
-    ax; vertices::Vector{Point2f}; mode::Symbol; id::Symbol; payloads::Vector{Any}; tol::Float64; tooltip::Union{Nothing, Markup, Bool}
+    ax; vertices::Vector{Point3f}; mode::Symbol; id::Symbol; payloads::Vector{Any}; tol::Float64; tooltip::Union{Nothing, Markup, Bool}
 end
 function SegmentInteractable(
         ax, vertices; mode = :polyline, id = :segments,
         payloads = nothing, tol = 6, tooltip = nothing
     )
-    vs = [Point2f(v[1], v[2]) for v in vertices]
+    vs = [_pt3(v) for v in vertices]
     nseg = mode === :polyline ? max(0, length(vs) - 1) : length(vs) ÷ 2
     pl = payloads === nothing ? Any[(; segment_index = k - 1) for k in 1:nseg] : _check_payloads(payloads, nseg, "SegmentInteractable")
     return SegmentInteractable(ax, vs, mode, id, pl, Float64(tol), tooltip)
@@ -247,7 +255,7 @@ struct PolygonInteractable <: AbstractInteractable
     ax; rings::Vector; id::Symbol; payloads::Vector{Any}; tooltip::Union{Nothing, Markup, Bool}
 end
 function PolygonInteractable(ax, rings; id = :polygons, payloads = nothing, tooltip = nothing)
-    rs = [[Point2f(p[1], p[2]) for p in ring] for ring in rings]
+    rs = [[_pt3(p) for p in ring] for ring in rings]
     pl = payloads === nothing ? Any[(; index = k - 1) for k in 1:length(rs)] : _check_payloads(payloads, length(rs), "PolygonInteractable")
     return PolygonInteractable(ax, rs, id, pl, tooltip)
 end
@@ -272,6 +280,9 @@ end
 AxisInteractable(ax; id = :axis) = AxisInteractable(ax, id)
 function validate(i::AxisInteractable, ctx::InteractionContext)
     t = ctx.transforms[axis_id(ctx, i.ax)]
+    t.is3d && return "AxisInteractable: continuous pixel→data readout is undefined on an Axis3 " *
+        "(a screen pixel is a ray, not a data point). Use element interactables " *
+        "(points/segments/polygons) on 3D axes."
     (t.xscale in _JS_INVERTIBLE && t.yscale in _JS_INVERTIBLE) ||
         return "AxisInteractable: scale (x=$(t.xscale), y=$(t.yscale)) is not invertible client-side; " *
         "supported: identity/log10/log (categorical is fine)."
@@ -320,6 +331,8 @@ end
 events(::ThresholdInteractable) = (:drag,)
 function validate(i::ThresholdInteractable, ctx::InteractionContext)
     t = ctx.transforms[axis_id(ctx, i.ax)]
+    t.is3d && return "ThresholdInteractable: drag inverts a pixel to a data scalar via the axis " *
+        "transform, which is undefined on an Axis3 (a screen pixel is a ray, not a data value)."
     sc = i.orientation === :horizontal ? t.yscale : t.xscale
     sc in _JS_INVERTIBLE || return "ThresholdInteractable: $(i.orientation) drag needs a client-side " *
         "invertible $(i.orientation === :horizontal ? "y" : "x")-scale ($(sc) is not; supported: identity/log10/log)."
@@ -358,6 +371,8 @@ compatible_kinds(::ROIInteractable) = (:circles, :grid)
 events(::ROIInteractable) = (:drag,)
 function validate(i::ROIInteractable, ctx::InteractionContext)
     t = ctx.transforms[axis_id(ctx, i.ax)]
+    t.is3d && return "ROIInteractable: drag inverts pixel corners to data-space bounds via the axis " *
+        "transform, which is undefined on an Axis3 (a screen pixel is a ray, not a data point)."
     (t.xscale in _JS_INVERTIBLE && t.yscale in _JS_INVERTIBLE) ||
         return "ROIInteractable: drag needs client-side invertible x and y scales " *
         "(x=$(t.xscale), y=$(t.yscale); supported: identity/log10/log)."

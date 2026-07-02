@@ -58,4 +58,42 @@ expected = Dict(
 )
 write(joinpath(outdir, "expected.json"), JSON3.write(expected))
 
+# --- Axis3 case (WS-3D): the same self-contained page for a 3D scatter. Clicking marker 0
+# at its BUILD-TIME projected center asserts, in a real browser, that the overlay's
+# 3D-projected hit geometry and the {index,x,y,z} payload survive the wire end-to-end.
+# Red markers + explicit azimuth/elevation literals so the projection snapshot is
+# deterministic AND the local canvas-alignment check can pixel-assert against the render.
+fig3 = Figure(; size = (400, 300))
+ax3 = Axis3(fig3[1, 1]; azimuth = 0.4, elevation = 0.5)
+scatter!(ax3, Point3f[(1, 2, 3), (4, 5, 6), (7, 8, 2)]; markersize = 16, color = :red)
+w3 = holo(fig3)
+
+inner3 = sprint(
+    show, MIME"text/html"(),
+    _WGLExt._widget_html(
+        w3;
+        scene_expr = JavaScript(JSON3.write(w3.scene)),
+        manifest_expr = JavaScript(JSON3.write(w3.manifest)),
+        bundle_js = JavaScript(JSON3.write(_WGLExt._bundle_text())),
+        shim_js = JavaScript(JSON3.write(_WGLExt._shim_text())),
+    ),
+)
+write(
+    joinpath(outdir, "page3d.html"),
+    "<!doctype html><html><head><meta charset=\"utf-8\"></head><body>\n$inner3\n</body></html>",
+)
+
+layer3 = only(w3.manifest["layers"])
+g3 = layer3["geometry"]
+scale3 = w3.display_css / w3.manifest["width"]
+# All three projected marker centers (image px): [0] is the click target; the local
+# alignment check samples the rendered canvas at every one.
+expected3 = Dict(
+    "cssX" => g3[1] * scale3, "cssY" => g3[2] * scale3,
+    "layer" => layer3["id"], "index" => 0,
+    "markersPx" => [Dict("x" => g3[3k + 1], "y" => g3[3k + 2], "r" => g3[3k + 3]) for k in 0:2],
+    "scale" => scale3,
+)
+write(joinpath(outdir, "expected3d.json"), JSON3.write(expected3))
+
 println(outdir)   # the runner reads this line to find the artifacts

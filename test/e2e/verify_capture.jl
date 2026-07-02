@@ -37,3 +37,14 @@ ev.index == 0 || error("index mismatch: $(ev.index)")
 ev.payload === nothing && error("payload dropped (browser emitted one)")
 
 println("seam OK — browser host.value -> ", ev)
+
+# Axis3 case (WS-3D): same seam, and the payload must carry the z the 3D scatter shipped.
+captured3 = JSON3.read(read(joinpath(dir, "captured3d.json"), String), Dict{String, Any})
+ev3 = APD.Bonds.transform_value(w, captured3)
+ev3 isa Holo.InteractionEvent || error("transform_value (3D) did not return an InteractionEvent: $(typeof(ev3))")
+ev3.layer === :scatter || error("3D layer mismatch: $(ev3.layer)")
+ev3.index == 0 || error("3D index mismatch: $(ev3.index)")
+(ev3.payload isa AbstractDict && haskey(ev3.payload, "z")) ||
+    error("Axis3 payload missing z (got $(ev3.payload)) — the {index,x,y,z} payload was dropped on the wire")
+
+println("seam OK (Axis3) — browser host.value -> ", ev3)

@@ -2,10 +2,19 @@
     "transforms": {
         "ax1": {
             "xscale": "identity",
-            "yreversed": false,
             "xreversed": false,
             "yscale": "identity",
+            "ylims": [
+                0.9499999992549419,
+                2.050000000745058
+            ],
+            "xlims": [
+                0.9499999992549419,
+                2.050000000745058
+            ],
+            "yreversed": false,
             "xcats": null,
+            "is3d": false,
             "ycats": null,
             "viewport": [
                 88,
@@ -13,22 +22,23 @@
                 494,
                 690
             ],
+            "valueaxis": null
+        },
+        "ax2": {
+            "xscale": "identity",
+            "xreversed": false,
+            "yscale": "identity",
             "ylims": [
                 0.9499999992549419,
                 2.050000000745058
             ],
-            "valueaxis": null,
             "xlims": [
                 0.9499999992549419,
                 2.050000000745058
-            ]
-        },
-        "ax2": {
-            "xscale": "identity",
+            ],
             "yreversed": false,
-            "xreversed": false,
-            "yscale": "identity",
             "xcats": null,
+            "is3d": false,
             "ycats": null,
             "viewport": [
                 674,
@@ -36,15 +46,7 @@
                 494,
                 690
             ],
-            "ylims": [
-                0.9499999992549419,
-                2.050000000745058
-            ],
-            "valueaxis": null,
-            "xlims": [
-                0.9499999992549419,
-                2.050000000745058
-            ]
+            "valueaxis": null
         }
     },
     "scaling": 2,

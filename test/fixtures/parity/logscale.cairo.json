@@ -2,10 +2,19 @@
     "transforms": {
         "ax1": {
             "xscale": "identity",
-            "yreversed": false,
             "xreversed": false,
             "yscale": "log10",
+            "ylims": [
+                0.06309573401504136,
+                1584.8932033370284
+            ],
+            "xlims": [
+                0.8999999985098839,
+                3.100000001490116
+            ],
+            "yreversed": false,
             "xcats": null,
+            "is3d": false,
             "ycats": null,
             "viewport": [
                 104,
@@ -13,15 +22,7 @@
                 1064,
                 690
             ],
-            "ylims": [
-                0.06309573401504136,
-                1584.8932033370284
-            ],
-            "valueaxis": null,
-            "xlims": [
-                0.8999999985098839,
-                3.100000001490116
-            ]
+            "valueaxis": null
         }
     },
     "scaling": 2,

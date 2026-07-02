@@ -8,7 +8,10 @@
 > on PR #10 and confirmed unchanged for M4 box-select (commit `d05318f`) on 2026-06-29 and for
 > Phase 2a bars/areas/spans on 2026-06-30 and Phase 2b polygon surfaces (commit `431bd99`) on
 > 2026-06-30 and colorbar readout `valueaxis` field (PR #27) on 2026-06-30 and text labels
-> (`TextInteractable`, this arc) on 2026-07-01;
+> (`TextInteractable`, this arc) on 2026-07-01 and re-run for WS-3D Axis3 core on 2026-07-02
+> (manifest-shape change: new per-transform `is3d` key + z in 3-coord point payloads — envelope
+> unchanged: scatter-1k manifest 38.0 KB, heatmap-200² 196.8 KB, 30-frame scrub 5.6 MB; the
+> `is3d` key costs ~10 B/transform and z one float per 3-coord point, both noise at this scale);
 > baseline established after int-pixel geometry quantization, CairoMakie 0.15, Julia 1.12):
 > - **base64-PNG / manifest / render numbers** — `julia --project=. bench/payload_envelope.jl`
 >   (normal envelope) and `julia --project=. bench/stress.jl` (the 10× extremes). Both `seed!(0)`,
@@ -318,6 +321,9 @@ confirms render time, not the browser, is the latency bottleneck.
 > **Reproduce** (re-runnable, prints the live numbers — they can't silently rot):
 > `julia --project=. bench/webgl_payload_size.jl`. Last measured **2026-06-30** at commit
 > **`f763c6d`** (the M2 envelope correction, pre-fold-in PR #20), **WGLMakie 0.13.12, Julia 1.12**.
+> Re-run for WS-3D Axis3 core on **2026-07-02** (this arc): all three wire figures unchanged —
+> bundle 1.09 MB, 2D lines-200 0.07 MB, 2D scatter+text-40 0.1 MB, 3D helix-300 0.14 MB (the
+> scene payload never carried Holo's manifest, and the manifest's `is3d`/z additions are noise).
 > Re-run and reconcile this section on any wire-format change (a new geometry layout, a new scene
 > field, an encoding change, an animation/frames slot) — and note the new commit here.
 
@@ -424,3 +430,14 @@ marker positions in the raster. `Point2f(x, y)` ≡ `Point3f(x, y, 0)` is byte-i
 the same closure, so widening the geometry path to 3D cannot regress 2D. This is the WS-3D
 "projection hinge" gate — cleared. Cited by `architecture.md`, `backend-comparison.md`, and
 `roadmap.md` (M3 Axis3 parity item).
+
+**`:webgl` canvas half (2026-07-02, WS-3D core landing): 0.0 px.** The mirror check on the live
+canvas: render the E2E `page3d.html` (Axis3 scatter, red markers, explicit azimuth/elevation) in
+GL-capable headless Chromium (SwiftShader), screenshot the `<canvas>`, and probe the pixel at
+every build-time projected marker center — **each center pixel is a rendered marker pixel**
+(nearest red at 0.0 px for all three markers; blank-canvas guarded so GL-init failure can't pass
+vacuously). This was the "WGL canvas-alignment spike" gating the `:webgl` half of Axis3 parity —
+cleared. The one semantic the 2D WGL alignment spike hadn't exercised (`viewport` origin/ppu/
+y-flip on an `Axis3` canvas) is exactly what this measures. Bond-level coverage is committed CI:
+`test/e2e` clicks the Axis3 page's marker 0 and asserts the `{index,x,y,z}` payload through
+`transform_value`.

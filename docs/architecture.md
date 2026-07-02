@@ -425,20 +425,26 @@ the plot-scene walk) remains deferred.
 **v2:** plot-object introspection constructors; ABLines/Arc, Legend,
 `TextLabel` (Block) support, animation frames, SVG-overlay annotations, spatial hit-test acceleration.
 
-**Backend scope — corrected (2026-07-02).** The earlier framing here ("3D … is the `:webgl`
-backend's domain") was wrong about *why*: CairoMakie renders **static 3D natively** — the current
-`Axis3`/`PolarAxis`/`LScene` rejection is Holo's own scoping guard, slated to lift for `Axis3`
-(build-time `Makie.project` on a static `Axis3` camera is spike-verified exact, static *and*
-after an `azimuth`/`elevation` change — figure recorded in `perf-findings.md` §"Axis3 projection
-hinge spike"); `PolarAxis`/`LScene` are pending an explicit disposition — parity item or
-Holo-wide non-goal — tracked as a roadmap M3 decision item. 3D/`Axis3` is **parity scope in
-progress**: static overlays on both backends, rotation via `@bind` re-render; the `:webgl` half
-awaits its own canvas-alignment spike. The **Holo-wide** non-goals (every backend, by design) are the
+**Backend scope — corrected (2026-07-02), core shipped (WS-3D).** The earlier framing here
+("3D … is the `:webgl` backend's domain") was wrong about *why*: CairoMakie renders **static 3D
+natively**. The `Axis3` guard has since **lifted**: both backends collect `Axis3` blocks, element
+interactables project through the shared closure (3D enters only at the projection step —
+spike-verified exact on the Cairo raster *and* at 0.0 px on the live `:webgl` canvas, static and
+after an `azimuth`/`elevation` change; figures in `perf-findings.md` §"Axis3 projection hinge
+spike"), and the `axis3` parity goldens are byte-identical across backends. Continuous pixel→data
+inversion is undefined on a 3D axis (a screen pixel is a ray), so `is3d` transforms ship
+degenerate lims and `Axis`/`Threshold`/`ROI` interactables fail loud. `PolarAxis`/`LScene` remain
+guarded, pending an explicit disposition — parity item or Holo-wide non-goal — tracked as a
+roadmap M3 decision item. The **Holo-wide** non-goals (every backend, by design) are the
 **client-side GPU camera** — a JS-driven camera the kernel never hears about, which would desync
 the Julia-projected overlay and can only ever exist on one backend — and **GPU-pick occlusion**.
-`Surface` hit-testing is deferred on both alike (a hit-test-complexity gap — unbounded per-cell
-payload + occlusion — not a backend-capability gap); `MeshScatter`/wireframe/arrows are M-effort
-work inside the M3 `Axis3` parity item, not deferred. High-frequency live redraw is the shared cost wall above,
+**Occlusion policy (document-and-accept, backend-symmetric):** every projected vertex is
+hittable, including far-side points on solid objects — first-match-wins resolves overlaps exactly
+as in 2D; the upgrade path is a build-time CPU painter's cull in Julia (NDC depth), symmetric by
+construction. `Surface` hit-testing is deferred on both alike (a hit-test-complexity gap —
+unbounded per-cell payload + occlusion — not a backend-capability gap);
+`MeshScatter`/wireframe/arrows are M-effort work in the M3 per-type extraction item, not
+deferred. High-frequency live redraw is the shared cost wall above,
 not a per-backend exclusion. See `docs/backend-comparison.md` and `docs/roadmap.md`.
 
 ## 8. Payload scaling & robustness to large inputs

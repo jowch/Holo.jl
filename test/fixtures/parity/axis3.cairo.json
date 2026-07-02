@@ -1,0 +1,106 @@
+{
+    "transforms": {
+        "ax1": {
+            "xscale": "identity",
+            "xreversed": false,
+            "yscale": "identity",
+            "ylims": [
+                0,
+                1
+            ],
+            "xlims": [
+                0,
+                1
+            ],
+            "yreversed": false,
+            "xcats": null,
+            "is3d": true,
+            "ycats": null,
+            "viewport": [
+                32,
+                32,
+                1136,
+                836
+            ],
+            "valueaxis": null
+        }
+    },
+    "scaling": 2,
+    "height": 900,
+    "width": 1200,
+    "layers": [
+        {
+            "events": [
+                "click",
+                "hover"
+            ],
+            "kind": "circles",
+            "axis": "ax1",
+            "geometry": [
+                551,
+                341,
+                14,
+                647,
+                323,
+                14,
+                743,
+                671,
+                14
+            ],
+            "id": "scatter",
+            "style": {
+                "stroke": "#ff3b30",
+                "width": 3
+            },
+            "payloads": [
+                {
+                    "index": 0,
+                    "x": 1,
+                    "y": 2,
+                    "z": 3
+                },
+                {
+                    "index": 1,
+                    "x": 4,
+                    "y": 5,
+                    "z": 6
+                },
+                {
+                    "index": 2,
+                    "x": 7,
+                    "y": 8,
+                    "z": 2
+                }
+            ]
+        },
+        {
+            "events": [
+                "click",
+                "hover"
+            ],
+            "kind": "polyline",
+            "axis": "ax1",
+            "geometry": [
+                458,
+                438,
+                553,
+                421,
+                279,
+                537
+            ],
+            "id": "lines",
+            "style": {
+                "stroke": "#ff3b30",
+                "width": 3
+            },
+            "payloads": [
+                {
+                    "segment_index": 0
+                },
+                {
+                    "segment_index": 1
+                }
+            ]
+        }
+    ]
+}

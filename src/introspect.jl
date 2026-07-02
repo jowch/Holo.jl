@@ -498,8 +498,10 @@ end
 """
     auto_interactables(fig) -> Vector{AbstractInteractable}
 
-Introspect a Makie `Figure`: for every supported plot in every `Axis`, build the interactable
-its M2.1 constructor would. Unsupported plot types are skipped with a warning. Layer ids are
+Introspect a Makie `Figure`: for every supported plot in every `Axis` or `Axis3`, build the
+interactable its M2.1 constructor would (on `Axis3`, `Scatter`/`Lines`/`LineSegments` — their
+3-coord positions ride the same constructors; other 3D plot kinds are skipped with a warning
+pending their own extraction recipes, see docs/roadmap.md M3). Layer ids are
 the plot kind (`:scatter`, `:lines`, …), suffixed `_2`, `_3`, … when a kind repeats. Returns
 the same concrete vector you could pass to [`holo`](@ref) yourself — edit or extend it freely.
 
@@ -511,7 +513,7 @@ function auto_interactables(fig)
     ints = AbstractInteractable[]
     seen = Dict{Symbol, Int}()
     for ax in fig.content
-        ax isa Makie.Axis || continue
+        ax isa Union{Makie.Axis, Makie.Axis3} || continue
         for p in ax.scene.plots
             base = _plotbase(p)
             if base === nothing

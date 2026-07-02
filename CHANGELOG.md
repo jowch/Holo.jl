@@ -24,7 +24,7 @@ Initial implementation — not yet released or registered.
   HTML export); typed bond value via `AbstractPlutoDingetjes.Bonds.transform_value`.
 - `WebGLBackend` (`:webgl`) — a second, co-equal `AbstractBackend`: the figure renders live in
   a browser WGLMakie `<canvas>` (client GPU) with the same overlay/`@bind` contract, making
-  animation, large/live data, and (today) 3D rendering cheap where `:cairo` would re-rasterize —
+  animation, large/live data, and live 3D cheap where `:cairo` would re-rasterize —
   a substrate/cost difference; the interaction contract is identical on both. `CairoMakie`/`WGLMakie` are both weak
   dependencies gated behind package extensions; `holo(fig)` resolves whichever one is loaded and
   enforces exactly one backend per session (errors loudly if neither or both are loaded — never
@@ -34,8 +34,12 @@ Initial implementation — not yet released or registered.
 ### Notes
 - Validated end-to-end in real Pluto for `PointInteractable`; other interactable kinds are
   unit-tested (geometry + manifest) but not all exercised live yet.
-- Current `:cairo` scoping: `PolarAxis`/`Axis3`/`LScene` are rejected at `holo()` time — a Holo
-  guard, not a CairoMakie limit (static `Axis3` support is roadmap scope; `PolarAxis`/`LScene`
-  disposition — parity item or Holo-wide non-goal — is an explicit roadmap decision item;
-  CairoMakie renders static 3D natively). High-frequency live redraw is a shared cost limit on both backends. The
-  `:webgl` backend renders 3D live today — see the README's "3D, animation, and large data".
+- `Axis3` parity (WS-3D core): 3D `Scatter`/`Lines` get the same point/segment overlays with
+  `{index, x, y, z}` payloads on **both** backends — static base on `:cairo`, live on `:webgl` —
+  projected at build time through the shared closure (`is3d` axis transforms ship degenerate
+  lims; `Axis`/`Threshold`/`ROI` interactables fail loud on a 3D axis, where a screen pixel is a
+  ray). Wireframe/arrows/meshscatter extraction and `Surface` remain roadmap scope.
+- Current `:cairo` scoping: `PolarAxis`/`LScene` are rejected at `holo()` time — a Holo
+  guard, not a CairoMakie limit (their disposition — parity item or Holo-wide non-goal — is an
+  explicit roadmap decision item). High-frequency live redraw is a shared cost limit on both
+  backends.
