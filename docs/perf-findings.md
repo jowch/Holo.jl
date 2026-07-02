@@ -444,6 +444,9 @@ y-flip on an `Axis3` canvas) is exactly what this measures. Bond-level coverage 
 
 ## WGL context lifecycle — the "context leak" premise, measured (2026-07-02)
 
+> Measured at **PR #37** (Holo head of the WS-3D per-type merge, `53f55dd` base),
+> **WGLMakie 0.13.12** (vendored bundle), Julia 1.12, headless Chromium (Playwright).
+
 **Result: `:webgl` cell re-renders do NOT leak GL contexts.** Method: a live Pluto kernel
 (headless Chromium), a `@bind` PlutoUI slider driving `azimuth` into `holo(fig)` (each step =
 a full kernel re-render of the widget), `HTMLCanvasElement.getContext` instrumented before any
@@ -461,13 +464,19 @@ animation frame, disposes any screen whose canvas is no longer in the document
 the DOM anymore!"). Pluto replaces the cell output on re-run, the old canvas detaches, and the
 context is reclaimed within one frame. Cell **delete** detaches the canvas identically, so the
 same mechanism covers it — the once-planned re-run-vs-delete lifecycle distinction is moot.
+(Scope, honestly: the sweep *measures* the re-run half; the delete half is inferred from the
+shared DOM-detach mechanism. `ctx_growth.mjs` attempts to measure delete too — it drives
+Pluto's delete-cell control when reachable and asserts live→0 — but Pluto 0.20's delete UI is
+not a directly-clickable button, so runs report `delete_measured=false` and the inference
+stands until Pluto's UI or the tool's drive changes.)
 
 **What this kills and what it keeps.** The earlier claim ("naive re-mounting leaks WebGL
 contexts toward the browser's ~16 cap; all `:webgl` view-manip is gated on unbuilt context
 reuse") was reasoned-not-measured, and is **false** on the shipped stack. `:webgl` sliders work
 today (the sweep round-tripped the bond on every step). What survives as fact: each re-render
-pays context + scene re-initialization — a per-step *cost*, for which the camera-only
-resident-scene patch (roadmap "Level 2") remains the planned optimization.
+pays context + scene re-initialization — a per-step *cost*, for which the **camera-only
+resident-scene patch** (ship only the new camera + freshly projected overlay to the still-live
+scene; roadmap M3 view-manipulation item) remains the planned optimization.
 
 **Reproduce**: `test/e2e/ctxgrowth_notebook.jl` + `test/e2e/ctx_growth.mjs` (local tools, same
 serve.jl harness as the through-Pluto E2E; not in CI — a through-Pluto job is the flake-prone

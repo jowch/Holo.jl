@@ -61,15 +61,13 @@ either backend yet** — and when it lands it lands on both, as server-authorita
 > backend-symmetric and drift-free *by construction* (Julia recomputes the overlay every step).
 > Cost, honestly: `:cairo` re-rasterizes per step (scales with the scene; fine for sliders and
 > commit-on-release drag); `:webgl` re-serializes (~flat, §2) and re-initializes the GL
-> context + scene per step. **The former "gated on GL-context reuse" claim was wrong —
-> measured (2026-07-02, `perf-findings.md` §"WGL context lifecycle"): WGLMakie's own render
-> loop disposes any context whose canvas left the DOM, so a slider sweep holds live contexts
-> at 1 and the browser cap is never approached.** Context/scene re-init per step is a *cost*
-> (the camera-only resident-scene patch is the planned optimization), not a feasibility gate.
-> Continuous *smooth* drag on large scenes remains expensive on both — a shared cost wall,
-> not a capability split. Status: **planned, unbuilt** — sliders work today on both (verified
-> live); drag after; 3D rotation additionally needs the Axis3 parity item (`docs/roadmap.md`
-> M3, same milestone as view manipulation).
+> context + scene per step. **The former "gated on GL-context reuse" claim was measured FALSE**
+> (2026-07-02 — figures and mechanism in `perf-findings.md` §"WGL context lifecycle"): re-init
+> per step is a *cost* (the camera-only resident-scene patch is the planned optimization), not
+> a feasibility gate. Continuous *smooth* drag on large scenes remains expensive on both — a
+> shared cost wall, not a capability split. Status: **planned, unbuilt** — sliders work today
+> on both (verified live); drag after; 3D rotation additionally needs the Axis3 parity item
+> (`docs/roadmap.md` M3, same milestone as view manipulation).
 
 ## 2. Wire + server cost — the measurable half
 

@@ -67,6 +67,13 @@ try {
     cellId: document.querySelector(".ip-host")?.closest("pluto-cell")?.id ?? null,
   }));
   console.error("baseline before sweep:", JSON.stringify(before));
+  // Vacuous-pass guard: if no WebGL context was created by mount, the widget rendered down some
+  // non-GL path and this tool is measuring nothing — FAIL, don't report a hollow LIVE=0 success.
+  if (before.created < 1 || before.canvases < 1) {
+    throw new Error(`no WebGL context at baseline (created=${before.created}, canvases=${before.canvases}) — widget did not take the :webgl path; measurement is vacuous`);
+  }
+
+  let cellIdStable = before.cellId !== null;
 
   // Sweep: drive the PlutoUI slider through 5 NEW positions (PlutoUI range inputs are
   // index-based — min/step/max are indices, the bond transform maps them to values), and
@@ -98,13 +105,39 @@ try {
       canvases: document.querySelectorAll("canvas.holo-webgl-base").length,
       cellId: document.querySelector(".ip-host")?.closest("pluto-cell")?.id ?? null,
     }));
+    if (st.cellId !== before.cellId) cellIdStable = false;   // stability, not mere presence
     console.error(`after step ${s} (az=${moved}):`, JSON.stringify(st));
   }
 
   const after = await page.evaluate(() => ({ created: window.__glCreated, lost: window.__glLost, canvases: document.querySelectorAll("canvas.holo-webgl-base").length }));
   const live = after.created - after.lost;
-  if (live > 1) throw new Error(`LIVE contexts grew to ${live} across ${STEPS} re-renders — the upstream check_screen disposal is gone (see perf-findings §"WGL context lifecycle")`);
-  console.log(`RESULT created=${after.created} lost=${after.lost} LIVE=${live} canvases_in_dom=${after.canvases} steps=${STEPS} cellid_stable=${before.cellId !== null}`);
+  if (after.created < STEPS + 1) throw new Error(`only ${after.created} contexts created across ${STEPS} re-renders + mount — re-renders did not exercise the GL path; measurement is vacuous`);
+  if (live !== 1) throw new Error(`LIVE contexts = ${live} after the sweep (expected exactly 1) — ${live > 1 ? 'the upstream check_screen disposal is gone' : 'the resident context was disposed spuriously'} (see perf-findings §"WGL context lifecycle")`);
+
+  // DELETE half — measured, not inferred: delete the holo cell via Pluto's UI and assert the
+  // last context is disposed (live → 0). Best-effort: Pluto's delete UI may change; report
+  // delete_measured=false rather than fail if the controls aren't found.
+  let deleteMeasured = false;
+  const deleted = await page.evaluate((cellId) => {
+    const cell = document.getElementById(cellId);
+    if (!cell) return "no-cell";
+    const open = cell.querySelector("button.delete_cell") ||
+      [...cell.querySelectorAll("button")].find((b) => /delete/i.test(b.title || b.ariaLabel || ""));
+    if (open) { open.click(); return "clicked"; }
+    return "no-button";
+  }, before.cellId);
+  if (deleted === "clicked") {
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r) => setTimeout(r, 250));
+      const st = await page.evaluate(() => ({ live: window.__glCreated - window.__glLost, canvases: document.querySelectorAll("canvas.holo-webgl-base").length }));
+      if (st.live === 0 && st.canvases === 0) { deleteMeasured = true; break; }
+    }
+    if (!deleteMeasured) throw new Error("cell deleted but the context was never disposed (live never reached 0) — the delete half of the disposal claim FAILED");
+  } else {
+    console.error(`delete step skipped (${deleted}) — delete disposal stays mechanism-inferred this run`);
+  }
+
+  console.log(`RESULT created=${after.created} lost=${after.lost} LIVE=${live} canvases_in_dom=${after.canvases} steps=${STEPS} cellid_stable=${cellIdStable} delete_measured=${deleteMeasured}`);
 } catch (e) {
   failed = e;
 } finally {
