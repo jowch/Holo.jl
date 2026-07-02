@@ -302,6 +302,18 @@ end
         @test length(m3["layers"]) == 2
         pl3 = only(filter(l -> l["kind"] == "circles", m3["layers"]))["payloads"][1]
         @test pl3 == (; index = 0, x = 1.0, y = 2.0, z = 3.0)   # introspected scatter payload carries z
+
+        # Axis3 introspection gate: a recipe whose extraction is only 2D-valid (heatmap's grid
+        # edges are projected per-axis — separably, which a 3D camera breaks) must warn-and-skip,
+        # never construct silently-misaligned geometry.
+        f3g = Figure(; size = (600, 450))
+        ax3g = Axis3(f3g[1, 1])
+        heatmap!(ax3g, 1:3, 1:3, [Float64(i + j) for i in 1:3, j in 1:3])
+        scatter!(ax3g, Makie.Point3f[(1, 2, 3)]; markersize = 10)
+        Makie.update_state_before_display!(f3g)
+        gints = @test_logs (:warn, r"on Axis3"i) auto_interactables(f3g)
+        @test length(gints) == 1
+        @test only(gints) isa PointInteractable
     end
 
     @testset "Polygon geometry projects per ring" begin

@@ -39,7 +39,10 @@ async function runCase(browser, c) {
     res.end(pageHtml);
   });
   await new Promise((r) => server.listen(0, r));
-  const url = `http://localhost:${server.address().port}/${c.page}`;
+  // 127.0.0.1, not localhost — CI runners have resolved localhost to ::1 with the server on
+  // IPv4 before (the project's headless-CI notes); the manual poll loop replaces
+  // waitForFunction for the same reason (its timeout handling has misbehaved in CI).
+  const url = `http://127.0.0.1:${server.address().port}/${c.page}`;
 
   try {
     const page = await browser.newPage();
@@ -47,13 +50,19 @@ async function runCase(browser, c) {
 
     // Wait for the overlay to mount on the <canvas> base: host + canvas + the overlay's shadow
     // `.surface`. (The overlay is base-agnostic and binds straight to the canvas — no sizer shim.)
-    await page.waitForFunction(() => {
-      const host = document.querySelector(".ip-host");
-      const canvas = host?.querySelector("canvas.holo-webgl-base");
-      if (!canvas) return false;
-      let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
-      return !!(sr && sr.querySelector(".surface"));
-    }, { timeout: 20000 });
+    const deadline = Date.now() + 20000;
+    let mounted = false;
+    while (Date.now() < deadline && !mounted) {
+      mounted = await page.evaluate(() => {
+        const host = document.querySelector(".ip-host");
+        const canvas = host?.querySelector("canvas.holo-webgl-base");
+        if (!canvas) return false;
+        let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
+        return !!(sr && sr.querySelector(".surface"));
+      });
+      if (!mounted) await new Promise((r) => setTimeout(r, 250));
+    }
+    if (!mounted) throw new Error(`[${c.name}] overlay never mounted (host/canvas/.surface within 20s)`);
 
     const got = await page.evaluate(async (exp) => {
       const host = document.querySelector(".ip-host");

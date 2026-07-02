@@ -321,7 +321,7 @@ confirms render time, not the browser, is the latency bottleneck.
 > **Reproduce** (re-runnable, prints the live numbers — they can't silently rot):
 > `julia --project=. bench/webgl_payload_size.jl`. Last measured **2026-06-30** at commit
 > **`f763c6d`** (the M2 envelope correction, pre-fold-in PR #20), **WGLMakie 0.13.12, Julia 1.12**.
-> Re-run for WS-3D Axis3 core on **2026-07-02** (this arc): all three wire figures unchanged —
+> Re-run for WS-3D Axis3 core on **2026-07-02** (PR #35): all three wire figures unchanged —
 > bundle 1.09 MB, 2D lines-200 0.07 MB, 2D scatter+text-40 0.1 MB, 3D helix-300 0.14 MB (the
 > scene payload never carried Holo's manifest, and the manifest's `is3d`/z additions are noise).
 > Re-run and reconcile this section on any wire-format change (a new geometry layout, a new scene

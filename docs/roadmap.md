@@ -56,9 +56,9 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
       figure (goldens **byte-identical across backends**); an Axis3 case in the real-browser
       E2E (click + z payload through `transform_value`). Live-verified on both halves:
       `:cairo` through-Pluto (hover tooltip shows the z row; bond round-trips through a live
-      kernel) and the `:webgl` **canvas-alignment spike — passed at 0.0 px** (every build-time
-      projected marker center sits on a GPU-rendered marker pixel; recorded in
-      `perf-findings.md` §"Axis3 projection hinge spike").
+      kernel) and the `:webgl` **canvas-alignment spike — passed** (every build-time projected
+      marker center sits on a GPU-rendered marker pixel; figure recorded in `perf-findings.md`
+      §"Axis3 projection hinge spike"; re-runnable via `test/e2e/alignment.mjs`).
 - [ ] **Axis3 per-type extraction (parity)** — the remaining introspection recipes:
       wireframe/arrows/meshscatter (M each — net-new geometry extraction; meshscatter needs an
       explicit `radius=` or a screen-px approximation since its `markersize` is `:data`);

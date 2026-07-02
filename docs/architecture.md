@@ -429,7 +429,7 @@ the plot-scene walk) remains deferred.
 ("3D … is the `:webgl` backend's domain") was wrong about *why*: CairoMakie renders **static 3D
 natively**. The `Axis3` guard has since **lifted**: both backends collect `Axis3` blocks, element
 interactables project through the shared closure (3D enters only at the projection step —
-spike-verified exact on the Cairo raster *and* at 0.0 px on the live `:webgl` canvas, static and
+spike-verified exact on the Cairo raster *and* on the live `:webgl` canvas, static and
 after an `azimuth`/`elevation` change; figures in `perf-findings.md` §"Axis3 projection hinge
 spike"), and the `axis3` parity goldens are byte-identical across backends. Continuous pixel→data
 inversion is undefined on a 3D axis (a screen pixel is a ray), so `is3d` transforms ship

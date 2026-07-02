@@ -60,7 +60,7 @@ else
                 for k in keys(ca[:transforms])
                     haskey(wg[:transforms], k) || continue
                     tc, tw = ca[:transforms][k], wg[:transforms][k]
-                    for f in (:valueaxis, :xscale, :yscale, :xlims, :ylims, :viewport, :xreversed, :yreversed, :xcats, :ycats)
+                    for f in (:valueaxis, :xscale, :yscale, :xlims, :ylims, :viewport, :xreversed, :yreversed, :xcats, :ycats, :is3d)
                         @test get(tc, f, nothing) == get(tw, f, nothing)
                     end
                 end

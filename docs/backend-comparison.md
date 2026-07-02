@@ -109,8 +109,8 @@ Two terms move independently under stress, and both are UX terms:
    bundle + 0.86 MB scene) *and* is ~70× cheaper in server time (~32 ms vs ~2 280 ms). This is the
    slider / animation / live-data case, where Cairo's re-rasterize-every-frame model is the bottleneck.
 3. **3D, live → `:webgl`; 3D, static picture → `:cairo`.** `Axis3` overlays ship on both (WS-3D
-   core — the projection hinge is spike-verified exact on the Cairo raster and at 0.0 px on the
-   live `:webgl` canvas; figures in `perf-findings.md` §"Axis3 projection hinge spike"), so this
+   core — the projection hinge is spike-verified exact on the Cairo raster and on the live
+   `:webgl` canvas; figures in `perf-findings.md` §"Axis3 projection hinge spike"), so this
    regime reduces to regime 2's cost question (re-render price per view change): a 3D scene you
    rotate or animate wants `:webgl`; a static 3D figure with hover/click wants `:cairo`. Live
    view manipulation ships on both or neither — see (†).

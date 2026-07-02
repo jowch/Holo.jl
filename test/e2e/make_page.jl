@@ -86,13 +86,12 @@ write(
 layer3 = only(w3.manifest["layers"])
 g3 = layer3["geometry"]
 scale3 = w3.display_css / w3.manifest["width"]
-# All three projected marker centers (image px): [0] is the click target; the local
-# alignment check samples the rendered canvas at every one.
+# All three projected marker centers (image px): [0] is click.mjs's click target; alignment.mjs
+# (the local GL canvas-alignment check) pixel-probes the rendered canvas at every one.
 expected3 = Dict(
     "cssX" => g3[1] * scale3, "cssY" => g3[2] * scale3,
     "layer" => layer3["id"], "index" => 0,
     "markersPx" => [Dict("x" => g3[3k + 1], "y" => g3[3k + 2], "r" => g3[3k + 3]) for k in 0:2],
-    "scale" => scale3,
 )
 write(joinpath(outdir, "expected3d.json"), JSON3.write(expected3))
 

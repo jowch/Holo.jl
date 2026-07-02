@@ -520,6 +520,17 @@ function auto_interactables(fig)
                 @warn "holo: skipping unsupported plot type $(typeof(p).name.name) (no introspection recipe)" maxlog = 16
                 continue
             end
+            # Axis3 gate: only recipes whose geometry survives a 3D camera. Every other 2D
+            # recipe extracts pixel-separable geometry (grid edges projected per-axis,
+            # axis-aligned rects, 2D anchors) that a perspective projection silently
+            # misaligns — the silent-wrong class, so skip LOUDLY rather than construct.
+            # (roadmap M3 per-type extraction graduates kinds out of this gate.)
+            if ax isa Makie.Axis3 && !(p isa Union{Makie.Scatter, Makie.Lines, Makie.LineSegments})
+                @warn "holo: skipping $(typeof(p).name.name) on Axis3 — only Scatter/Lines/" *
+                    "LineSegments have 3D-valid extraction today; other kinds are roadmap scope " *
+                    "(docs/roadmap.md M3 per-type extraction)" maxlog = 16
+                continue
+            end
             n = get(seen, base, 0) + 1
             seen[base] = n
             id = n == 1 ? base : Symbol(base, :_, n)

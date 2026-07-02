@@ -8,6 +8,7 @@
     "test": "node click.mjs"
   },
   "devDependencies": {
-    "playwright": "1.49.1"
+    "playwright": "1.49.1",
+    "pngjs": "7.0.0"
   }
 }
