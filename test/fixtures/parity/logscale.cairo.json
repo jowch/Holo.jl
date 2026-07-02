@@ -1,0 +1,102 @@
+{
+    "transforms": {
+        "ax1": {
+            "xscale": "identity",
+            "yreversed": false,
+            "xreversed": false,
+            "yscale": "log10",
+            "xcats": null,
+            "ycats": null,
+            "viewport": [
+                104,
+                32,
+                1064,
+                690
+            ],
+            "ylims": [
+                0.06309573401504136,
+                1584.8932033370284
+            ],
+            "valueaxis": null,
+            "xlims": [
+                0.8999999985098839,
+                3.100000001490116
+            ]
+        }
+    },
+    "scaling": 2,
+    "height": 800,
+    "width": 1200,
+    "layers": [
+        {
+            "events": [
+                "click",
+                "hover"
+            ],
+            "kind": "circles",
+            "axis": "ax1",
+            "geometry": [
+                152,
+                691,
+                9,
+                636,
+                377,
+                9,
+                1120,
+                63,
+                9
+            ],
+            "id": "scatter",
+            "style": {
+                "stroke": "#ff3b30",
+                "width": 3
+            },
+            "payloads": [
+                {
+                    "index": 0,
+                    "x": 1,
+                    "y": 0.1
+                },
+                {
+                    "index": 1,
+                    "x": 2,
+                    "y": 10
+                },
+                {
+                    "index": 2,
+                    "x": 3,
+                    "y": 1000
+                }
+            ]
+        },
+        {
+            "events": [
+                "click",
+                "hover"
+            ],
+            "kind": "polyline",
+            "axis": "ax1",
+            "geometry": [
+                152,
+                534,
+                636,
+                377,
+                1120,
+                220
+            ],
+            "id": "lines",
+            "style": {
+                "stroke": "#ff3b30",
+                "width": 3
+            },
+            "payloads": [
+                {
+                    "segment_index": 0
+                },
+                {
+                    "segment_index": 1
+                }
+            ]
+        }
+    ]
+}

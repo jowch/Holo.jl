@@ -1,0 +1,207 @@
+{
+    "transforms": {
+        "cb1": {
+            "xscale": "identity",
+            "yreversed": false,
+            "xreversed": false,
+            "yscale": "identity",
+            "xcats": null,
+            "ycats": null,
+            "viewport": [
+                1096.864013671875,
+                32.0,
+                24.0,
+                689.3800048828125
+            ],
+            "ylims": [
+                4,
+                19
+            ],
+            "valueaxis": "y",
+            "xlims": [
+                0,
+                1
+            ]
+        },
+        "ax1": {
+            "xscale": "identity",
+            "yreversed": false,
+            "xreversed": false,
+            "yscale": "identity",
+            "xcats": null,
+            "ycats": null,
+            "viewport": [
+                66,
+                32,
+                994,
+                690
+            ],
+            "ylims": [
+                0.5,
+                5.5
+            ],
+            "valueaxis": null,
+            "xlims": [
+                0.5,
+                4.5
+            ]
+        }
+    },
+    "scaling": 2,
+    "height": 800,
+    "width": 1200,
+    "layers": [
+        {
+            "events": [
+                "click",
+                "hover"
+            ],
+            "kind": "grid",
+            "axis": "ax1",
+            "geometry": {
+                "yedges": [
+                    722,
+                    584,
+                    446,
+                    308,
+                    170,
+                    32
+                ],
+                "nrows": 5,
+                "values": [
+                    4,
+                    5,
+                    6,
+                    7,
+                    7,
+                    8,
+                    9,
+                    10,
+                    10,
+                    11,
+                    12,
+                    13,
+                    13,
+                    14,
+                    15,
+                    16,
+                    16,
+                    17,
+                    18,
+                    19
+                ],
+                "xedges": [
+                    66,
+                    314,
+                    563,
+                    812,
+                    1060
+                ],
+                "ncols": 4
+            },
+            "id": "cells",
+            "style": {
+                "stroke": "#ff3b30",
+                "width": 3
+            },
+            "payloads": [
+            ]
+        },
+        {
+            "events": [
+                "click",
+                "hover"
+            ],
+            "kind": "circles",
+            "axis": "ax1",
+            "geometry": [
+                190,
+                584,
+                9,
+                563,
+                377,
+                9,
+                936,
+                170,
+                9
+            ],
+            "id": "scatter",
+            "style": {
+                "stroke": "#ff3b30",
+                "width": 3
+            },
+            "payloads": [
+                {
+                    "index": 0,
+                    "x": 1,
+                    "y": 1.5
+                },
+                {
+                    "index": 1,
+                    "x": 2.5,
+                    "y": 3
+                },
+                {
+                    "index": 2,
+                    "x": 4,
+                    "y": 4.5
+                }
+            ]
+        },
+        {
+            "events": [
+                "click",
+                "hover"
+            ],
+            "kind": "polyline",
+            "axis": "ax1",
+            "geometry": [
+                190,
+                239,
+                439,
+                377,
+                687,
+                515,
+                936,
+                653
+            ],
+            "id": "lines",
+            "style": {
+                "stroke": "#ff3b30",
+                "width": 3
+            },
+            "payloads": [
+                {
+                    "segment_index": 0
+                },
+                {
+                    "segment_index": 1
+                },
+                {
+                    "segment_index": 2
+                }
+            ]
+        },
+        {
+            "events": [
+                "click",
+                "hover"
+            ],
+            "kind": "axis",
+            "axis": "cb1",
+            "geometry": [
+                1096.864013671875,
+                32.0,
+                24.0,
+                689.3800048828125
+            ],
+            "id": "colorbar",
+            "style": {
+                "stroke": "#ff3b30",
+                "width": 3
+            },
+            "payloads": [
+            ]
+        }
+    ]
+}

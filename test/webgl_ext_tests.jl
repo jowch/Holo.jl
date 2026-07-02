@@ -197,3 +197,19 @@ end
     @test err isa ArgumentError
     @test occursin("exactly one rendering backend", err.msg)
 end
+
+# ---- cross-backend parity harness: within-backend golden drift (:webgl half) ----
+# (JSON3 is already a hard dep of this GROUP — no guard needed; see core_tests.jl's
+# guarded twin for the regeneration discipline.)
+include("parity_corpus.jl")
+@testset "parity goldens (:webgl drift)" begin
+    dir = joinpath(@__DIR__, "fixtures", "parity")
+    for (name, build) in _parity_corpus()
+        fig, ints = build()
+        bk = _WGLExt.WebGLBackend()
+        ctx = Holo.context(bk, fig, Holo._ppu(bk, fig))
+        live = JSON3.read(JSON3.write(Holo.build_manifest(ints, ctx)))
+        golden = JSON3.read(read(joinpath(dir, "$name.webgl.json"), String))
+        @test live == golden
+    end
+end

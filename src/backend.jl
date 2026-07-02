@@ -57,7 +57,21 @@ end
 
 "the one coordinate primitive interactables call — never re-derive projection"
 data_to_image_px(ctx::InteractionContext, ax, p) = ctx.project(ax, p)
-axis_id(ctx::InteractionContext, ax) = get(ctx.ids, ax, :ax1)
+# Fail loud, never silently wrong: the old `:ax1` fallback silently absorbed any
+# fig.content block a backend forgot to register (a Colorbar, tomorrow a Legend) and
+# rebound it to the main axis — turning a missing transform into a plausible-but-WRONG
+# widget (whole-plot 2-D readout instead of the colorbar value; validate passed). An
+# unregistered block is a backend context() bug or an interactable keyed to an axis
+# that isn't part of the rendered figure — both must surface at build time.
+axis_id(ctx::InteractionContext, ax) =
+    get(ctx.ids, ax) do
+    error(
+        "Holo: $(typeof(ax)) is not registered in this backend's InteractionContext — " *
+            "no axis/colorbar transform was built for it. Interactables must be keyed to a " *
+            "Makie.Axis or Colorbar that is part of the rendered figure. (If it IS part of " *
+            "the figure, this is a backend context() bug — please report it.)"
+    )
+end
 
 # ---- interface (every backend extension implements methods for these) ----
 function render end

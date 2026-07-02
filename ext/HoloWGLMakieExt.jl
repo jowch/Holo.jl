@@ -141,6 +141,17 @@ function Holo.context(b::WebGLBackend, fig, ppu)
         # reach from here.
         transforms[id] = Holo._axis_transform(id, ax, scaling, out_h)
     end
+    # Colorbar transforms, exactly as CairoBackend builds them. This loop was missing
+    # (the one-sided context() divergence the parity goldens now pin): a ColorbarInteractable
+    # then fell through axis_id's old :ax1 fallback and silently rendered a whole-plot 2-D
+    # {x,y} readout instead of the 1-D colorbar value. Caught by the cross-backend parity
+    # invariant (colorbar figure + valueaxis oracle) in test/no_backend_tests.jl.
+    cbs = [c for c in fig.content if c isa Makie.Colorbar]
+    for (k, cb) in enumerate(cbs)
+        id = Symbol("cb", k)
+        ids[cb] = id
+        transforms[id] = Holo._colorbar_transform(id, cb, scaling, out_h)
+    end
     return InteractionContext(project, transforms, ids, out_w, out_h, scaling, display_scale)
 end
 

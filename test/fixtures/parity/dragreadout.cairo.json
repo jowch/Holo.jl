@@ -1,0 +1,91 @@
+{
+    "transforms": {
+        "ax1": {
+            "xscale": "identity",
+            "yreversed": false,
+            "xreversed": false,
+            "yscale": "identity",
+            "xcats": null,
+            "ycats": null,
+            "viewport": [
+                88,
+                32,
+                1080,
+                690
+            ],
+            "ylims": [
+                0.5999999940395355,
+                9.400000005960464
+            ],
+            "valueaxis": null,
+            "xlims": [
+                0.8999999985098839,
+                3.100000001490116
+            ]
+        }
+    },
+    "scaling": 2,
+    "height": 800,
+    "width": 1200,
+    "layers": [
+        {
+            "events": [
+                "drag"
+            ],
+            "kind": "threshold",
+            "axis": "ax1",
+            "geometry": {
+                "span": [
+                    88,
+                    1168
+                ],
+                "orientation": "h",
+                "pos": 455.40915
+            },
+            "id": "threshold",
+            "style": {
+                "stroke": "#ff3b30",
+                "width": 3
+            },
+            "payloads": [
+            ]
+        },
+        {
+            "events": [
+                "drag"
+            ],
+            "kind": "roi",
+            "axis": "ax1",
+            "geometry": {
+                "w": 490.90915,
+                "x": 382.54544,
+                "handle": 16,
+                "h": 313.63632,
+                "y": 298.59097
+            },
+            "id": "roi",
+            "style": {
+                "stroke": "#ff3b30",
+                "width": 3
+            },
+            "payloads": [
+            ]
+        },
+        {
+            "events": [
+                "click",
+                "hover"
+            ],
+            "kind": "axis",
+            "axis": "ax1",
+            "geometry": null,
+            "id": "axis",
+            "style": {
+                "stroke": "#ff3b30",
+                "width": 3
+            },
+            "payloads": [
+            ]
+        }
+    ]
+}

@@ -360,23 +360,30 @@ end
     end
 
     @testset "build_manifest + widget + bond" begin
-        m = build_manifest([PointInteractable(ax, pts; id = :scatter), AxisInteractable(ax)], ctx)
+        # Self-contained: the file's shared fig/ax/ctx get clobbered by earlier testsets
+        # (soft-scope `ax = Axis(...)` / `_, _, ctx = ctx_for(f)` assignments), leaving a
+        # desynced ax/ctx pair here. axis_id's old :ax1 fallback silently absorbed that;
+        # it now fails loudly, so this testset builds its own consistent trio.
+        bfig = Figure(size = (600, 400)); bax = Axis(bfig[1, 1])
+        scatter!(bax, first.(pts), last.(pts))
+        _, _, bctx = ctx_for(bfig)
+        m = build_manifest([PointInteractable(bax, pts; id = :scatter), AxisInteractable(bax)], bctx)
         @test [L["kind"] for L in m["layers"]] == ["circles", "axis"]
         @test haskey(m["transforms"], "ax1")
 
         # selection round-trip: pre-highlight indices ride the manifest keyed by layer id
         @test !haskey(m["layers"][1], "selected")                       # absent when unselected
-        ms = build_manifest([PointInteractable(ax, pts; id = :scatter)], ctx; selected = Dict(:scatter => [0, 2]))
+        ms = build_manifest([PointInteractable(bax, pts; id = :scatter)], bctx; selected = Dict(:scatter => [0, 2]))
         @test ms["layers"][1]["selected"] == [0, 2]
         @test !haskey(
             build_manifest(
-                [PointInteractable(ax, pts; id = :scatter)], ctx;
+                [PointInteractable(bax, pts; id = :scatter)], bctx;
                 selected = Dict(:scatter => Int[])
             )["layers"][1], "selected"
         )   # empty omitted
-        @test holo(fig, PointInteractable(ax, pts; id = :scatter); selected = Dict(:scatter => [1])).manifest["layers"][1]["selected"] == [1]
+        @test holo(bfig, PointInteractable(bax, pts; id = :scatter); selected = Dict(:scatter => [1])).manifest["layers"][1]["selected"] == [1]
 
-        w = holo(fig, PointInteractable(ax, pts; id = :scatter))
+        w = holo(bfig, PointInteractable(bax, pts; id = :scatter))
         @test w isa HoloWidget
         @test w.manifest["layers"][1]["kind"] == "circles"
         @test !isempty(w.b64)
@@ -906,25 +913,28 @@ end
     end
 
     @testset "manifest tooltip wiring" begin
+        # self-contained fig/ax/ctx (see "build_manifest + widget + bond" for why)
+        tfig = Figure(size = (600, 400)); tax = Axis(tfig[1, 1])
+        _, _, tctx = ctx_for(tfig)
         pts2 = [(1.0, 1.0), (2.0, 4.0), (3.0, 9.0)]
-        pi = PointInteractable(ax, pts2; tooltip = holo"x=$(x), y=$(y)")
-        man = build_manifest([pi], ctx; tip_style = Holo.tip_style_dict(; tooltip_bg = :red))
+        pi = PointInteractable(tax, pts2; tooltip = holo"x=$(x), y=$(y)")
+        man = build_manifest([pi], tctx; tip_style = Holo.tip_style_dict(; tooltip_bg = :red))
         L = man["layers"][1]
         @test haskey(L, "template")
         @test !haskey(L, "tooltips")                       # old per-element array removed
         @test L["template"][1] == "x="
         @test man["tipStyle"]["--holo-tip-bg"] == "rgb(255,0,0)"
 
-        off = build_manifest([PointInteractable(ax, pts2; tooltip = false)], ctx)
+        off = build_manifest([PointInteractable(tax, pts2; tooltip = false)], tctx)
         @test off["layers"][1]["tooltip"] === false
-        @test !haskey(build_manifest([PointInteractable(ax, pts2)], ctx), "tipStyle")
+        @test !haskey(build_manifest([PointInteractable(tax, pts2)], tctx), "tipStyle")
 
         # bad field → build-time error
-        bad = PointInteractable(ax, pts2; tooltip = holo"$(nope)")
-        @test_throws ArgumentError build_manifest([bad], ctx)
+        bad = PointInteractable(tax, pts2; tooltip = holo"$(nope)")
+        @test_throws ArgumentError build_manifest([bad], tctx)
 
         # `tooltip = true` is meaningless (only `false` suppresses) → fail loud
-        @test_throws ArgumentError build_manifest([PointInteractable(ax, pts2; tooltip = true)], ctx)
+        @test_throws ArgumentError build_manifest([PointInteractable(tax, pts2; tooltip = true)], tctx)
     end
 
     @testset "AbstractSelector / ROIInteractable selects" begin
@@ -939,29 +949,32 @@ end
     end
 
     @testset "selects: manifest field + selector validation (M4 Task 3)" begin
-        pts_i = PointInteractable(ax, [(1.0, 1.0), (5.0, 5.0)]; id = :pts)
-        seg_i = SegmentInteractable(ax, [(1.0, 1.0), (5.0, 5.0)]; id = :segs)
-        roi_bare = ROIInteractable(ax; bounds = (2.0, 8.0, 2.0, 8.0))
-        roi_linked = ROIInteractable(ax; bounds = (2.0, 8.0, 2.0, 8.0), selects = :pts)
+        # self-contained fig/ax/ctx (see "build_manifest + widget + bond" for why)
+        sfig = Figure(size = (600, 400)); sax = Axis(sfig[1, 1])
+        _, _, sctx = ctx_for(sfig)
+        pts_i = PointInteractable(sax, [(1.0, 1.0), (5.0, 5.0)]; id = :pts)
+        seg_i = SegmentInteractable(sax, [(1.0, 1.0), (5.0, 5.0)]; id = :segs)
+        roi_bare = ROIInteractable(sax; bounds = (2.0, 8.0, 2.0, 8.0))
+        roi_linked = ROIInteractable(sax; bounds = (2.0, 8.0, 2.0, 8.0), selects = :pts)
 
         # ROI without selects: no "selects" key in layer dict
-        @test !haskey(build_manifest([roi_bare], ctx)["layers"][1], "selects")
+        @test !haskey(build_manifest([roi_bare], sctx)["layers"][1], "selects")
 
         # ROI with selects = :pts: "selects" => "pts" in layer dict; circles layer gets no "selects"
-        layers_sel = build_manifest([pts_i, roi_linked], ctx)["layers"]
+        layers_sel = build_manifest([pts_i, roi_linked], sctx)["layers"]
         roi_d = filter(l -> l["kind"] == "roi", layers_sel) |> only
         @test roi_d["selects"] == "pts"
         @test !haskey(filter(l -> l["kind"] == "circles", layers_sel) |> only, "selects")
 
         # Validation: target layer absent → ArgumentError
         @test_throws ArgumentError build_manifest(
-            [ROIInteractable(ax; bounds = (2.0, 8.0, 2.0, 8.0), selects = :ghost)], ctx
+            [ROIInteractable(sax; bounds = (2.0, 8.0, 2.0, 8.0), selects = :ghost)], sctx
         )
 
         # did-you-mean: :pt is within edit-distance 2 of :pts → suggestion appears in error message
         err = try
             build_manifest(
-                [pts_i, ROIInteractable(ax; bounds = (2.0, 8.0, 2.0, 8.0), selects = :pt)], ctx
+                [pts_i, ROIInteractable(sax; bounds = (2.0, 8.0, 2.0, 8.0), selects = :pt)], sctx
             )
             nothing
         catch e
@@ -971,11 +984,11 @@ end
 
         # Validation: target exists but kind not in compatible_kinds (:polyline ∉ (:circles,:grid)) → error
         @test_throws ArgumentError build_manifest(
-            [seg_i, ROIInteractable(ax; bounds = (2.0, 8.0, 2.0, 8.0), selects = :segs)], ctx
+            [seg_i, ROIInteractable(sax; bounds = (2.0, 8.0, 2.0, 8.0), selects = :segs)], sctx
         )
 
         # happy path: valid selects → manifest ROI layer carries "selects"; no error thrown
-        m_ok = build_manifest([pts_i, roi_linked], ctx)
+        m_ok = build_manifest([pts_i, roi_linked], sctx)
         @test filter(l -> l["kind"] == "roi", m_ok["layers"]) |> only |> l -> l["selects"] == "pts"
     end
 
@@ -1310,4 +1323,29 @@ end
     cbs2 = filter(i -> i isa ColorbarInteractable, auto_interactables(fig2))
     @test length(cbs2) == 2
     @test Set(c.id for c in cbs2) == Set([:colorbar, :colorbar_2])
+end
+
+# ---- cross-backend parity harness: within-backend golden drift (:cairo half) ----
+# JSON3 comes from the test extras (Pkg.test / CI); a bare `julia --project=.` root env
+# may lack it — skip LOUDLY rather than break the direct-run dev loop.
+if Base.find_package("JSON3") === nothing
+    @warn "SKIPPING parity-golden drift testset — JSON3 not in this env; run via Pkg.test()"
+else
+    @eval using JSON3
+    include("parity_corpus.jl")
+    @testset "parity goldens (:cairo drift)" begin
+        # Each corpus manifest, built live, must equal its committed golden
+        # (test/fixtures/parity/<name>.cairo.json). A mismatch means the wire format
+        # changed: regenerate via test/fixtures/parity/generate.jl (BOTH backends) and
+        # review the golden diff in the PR — same discipline as the perf-findings re-run.
+        dir = joinpath(@__DIR__, "fixtures", "parity")
+        for (name, build) in _parity_corpus()
+            fig, ints = build()
+            bk = _CairoExt.CairoBackend()
+            ctx = IP.context(bk, fig, IP._ppu(bk, fig))
+            live = JSON3.read(JSON3.write(build_manifest(ints, ctx)))   # canonicalize via JSON round-trip
+            golden = JSON3.read(read(joinpath(dir, "$name.cairo.json"), String))
+            @test live == golden
+        end
+    end
 end
