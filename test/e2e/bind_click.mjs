@@ -99,16 +99,22 @@ try {
     const scale = host.clientWidth / outW;   // == display_css / out_w
     const o = { bubbles: true, composed: true, cancelable: true, clientX: b.x + MARKER0.x * scale, clientY: b.y + MARKER0.y * scale, pointerId: 1, pointerType: "mouse", isPrimary: true };
     const before = document.querySelector("#bondout").innerText;
-    surface.dispatchEvent(new PointerEvent("pointermove", o));
-    surface.dispatchEvent(new PointerEvent("pointerdown", o));
-    surface.dispatchEvent(new PointerEvent("pointerup", o));
-    surface.dispatchEvent(new MouseEvent("click", o));
-    // Wait for the kernel to re-run the readout cell through the Pluto bond (reactive round-trip).
     let after = before;
-    for (let i = 0; i < 75; i++) { // ~15s
-      await new Promise((r) => setTimeout(r, 200));
-      after = document.querySelector("#bondout").innerText;
-      if (after !== before) break;
+    // Retry the click, don't dispatch-once-and-hope: the through-Pluto round-trip is flaky (verified
+    // 2026-07-01 — PR #30 red twice on this, green on re-run, code untouched). A single dispatch can
+    // race the overlay's listener wiring, and the reactive round-trip (emit → WS → kernel re-run →
+    // WS → DOM) can outlast one wait window on a loaded runner. Re-clicking the SAME marker is
+    // idempotent (:scatter, 0 either way), so retrying is a pure robustness win — ~30s total patience.
+    retry: for (let attempt = 0; attempt < 3; attempt++) {
+      surface.dispatchEvent(new PointerEvent("pointermove", o));
+      surface.dispatchEvent(new PointerEvent("pointerdown", o));
+      surface.dispatchEvent(new PointerEvent("pointerup", o));
+      surface.dispatchEvent(new MouseEvent("click", o));
+      for (let i = 0; i < 50; i++) { // ~10s per attempt
+        await new Promise((r) => setTimeout(r, 200));
+        after = document.querySelector("#bondout").innerText;
+        if (after !== before) break retry;
+      }
     }
     return { before, after };
   });
