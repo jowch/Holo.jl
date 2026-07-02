@@ -1,0 +1,121 @@
+{
+    "transforms": {
+        "ax1": {
+            "xscale": "identity",
+            "yreversed": false,
+            "xreversed": false,
+            "yscale": "identity",
+            "xcats": null,
+            "ycats": null,
+            "viewport": [
+                88,
+                32,
+                494,
+                690
+            ],
+            "ylims": [
+                0.9499999992549419,
+                2.050000000745058
+            ],
+            "valueaxis": null,
+            "xlims": [
+                0.9499999992549419,
+                2.050000000745058
+            ]
+        },
+        "ax2": {
+            "xscale": "identity",
+            "yreversed": false,
+            "xreversed": false,
+            "yscale": "identity",
+            "xcats": null,
+            "ycats": null,
+            "viewport": [
+                674,
+                32,
+                494,
+                690
+            ],
+            "ylims": [
+                0.9499999992549419,
+                2.050000000745058
+            ],
+            "valueaxis": null,
+            "xlims": [
+                0.9499999992549419,
+                2.050000000745058
+            ]
+        }
+    },
+    "scaling": 2,
+    "height": 800,
+    "width": 1200,
+    "layers": [
+        {
+            "events": [
+                "click",
+                "hover"
+            ],
+            "kind": "circles",
+            "axis": "ax1",
+            "geometry": [
+                110,
+                691,
+                18,
+                560,
+                63,
+                18
+            ],
+            "id": "left",
+            "style": {
+                "stroke": "#ff3b30",
+                "width": 3
+            },
+            "payloads": [
+                {
+                    "index": 0,
+                    "x": 1,
+                    "y": 1
+                },
+                {
+                    "index": 1,
+                    "x": 2,
+                    "y": 2
+                }
+            ]
+        },
+        {
+            "events": [
+                "click",
+                "hover"
+            ],
+            "kind": "circles",
+            "axis": "ax2",
+            "geometry": [
+                696,
+                63,
+                18,
+                1146,
+                691,
+                18
+            ],
+            "id": "right",
+            "style": {
+                "stroke": "#ff3b30",
+                "width": 3
+            },
+            "payloads": [
+                {
+                    "index": 0,
+                    "x": 1,
+                    "y": 2
+                },
+                {
+                    "index": 1,
+                    "x": 2,
+                    "y": 1
+                }
+            ]
+        }
+    ]
+}

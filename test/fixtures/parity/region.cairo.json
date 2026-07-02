@@ -1,0 +1,101 @@
+{
+    "transforms": {
+        "ax1": {
+            "xscale": "identity",
+            "yreversed": false,
+            "xreversed": false,
+            "yscale": "identity",
+            "xcats": null,
+            "ycats": null,
+            "viewport": [
+                82,
+                32,
+                1086,
+                690
+            ],
+            "ylims": [
+                -0.5000000074505806,
+                10.50000000745058
+            ],
+            "valueaxis": null,
+            "xlims": [
+                -0.5000000074505806,
+                10.50000000745058
+            ]
+        }
+    },
+    "scaling": 2,
+    "height": 800,
+    "width": 1200,
+    "layers": [
+        {
+            "events": [
+                "click",
+                "hover"
+            ],
+            "kind": "circles",
+            "axis": "ax1",
+            "geometry": [
+                329,
+                565,
+                24
+            ],
+            "id": "region_c",
+            "style": {
+                "stroke": "#ff3b30",
+                "width": 3
+            },
+            "payloads": [
+                "c"
+            ]
+        },
+        {
+            "events": [
+                "click",
+                "hover"
+            ],
+            "kind": "rects",
+            "axis": "ax1",
+            "geometry": [
+                625,
+                377,
+                197,
+                63
+            ],
+            "id": "region_r",
+            "style": {
+                "stroke": "#ff3b30",
+                "width": 3
+            },
+            "payloads": [
+                "r"
+            ]
+        },
+        {
+            "events": [
+                "click",
+                "hover"
+            ],
+            "kind": "polygons",
+            "axis": "ax1",
+            "geometry": [
+                [
+                    822,
+                    628,
+                    1020,
+                    628,
+                    921,
+                    502
+                ]
+            ],
+            "id": "region_p",
+            "style": {
+                "stroke": "#ff3b30",
+                "width": 3
+            },
+            "payloads": [
+                "p"
+            ]
+        }
+    ]
+}

@@ -1,0 +1,134 @@
+{
+    "transforms": {
+        "ax1": {
+            "xscale": "identity",
+            "yreversed": false,
+            "xreversed": false,
+            "yscale": "identity",
+            "xcats": null,
+            "ycats": null,
+            "viewport": [
+                88,
+                32,
+                494,
+                690
+            ],
+            "ylims": [
+                0.8999999985098839,
+                3.100000001490116
+            ],
+            "valueaxis": null,
+            "xlims": [
+                0.8999999985098839,
+                3.100000001490116
+            ]
+        },
+        "ax2": {
+            "xscale": "identity",
+            "yreversed": false,
+            "xreversed": false,
+            "yscale": "identity",
+            "xcats": [
+                "a",
+                "b",
+                "c"
+            ],
+            "ycats": null,
+            "viewport": [
+                674,
+                32,
+                494,
+                690
+            ],
+            "ylims": [
+                0.8999999985098839,
+                3.100000001490116
+            ],
+            "valueaxis": null,
+            "xlims": [
+                0.8999999985098839,
+                3.100000001490116
+            ]
+        }
+    },
+    "scaling": 2,
+    "height": 800,
+    "width": 1200,
+    "layers": [
+        {
+            "events": [
+                "click",
+                "hover"
+            ],
+            "kind": "polygons",
+            "template": [
+                "tri ",
+                {
+                    "f": "index"
+                }
+            ],
+            "axis": "ax1",
+            "geometry": [
+                [
+                    110,
+                    691,
+                    560,
+                    691,
+                    335,
+                    63
+                ]
+            ],
+            "id": "polygons",
+            "style": {
+                "stroke": "#ff3b30",
+                "width": 3
+            },
+            "payloads": [
+                {
+                    "index": 0
+                }
+            ]
+        },
+        {
+            "events": [
+                "click",
+                "hover"
+            ],
+            "kind": "circles",
+            "axis": "ax2",
+            "geometry": [
+                696,
+                691,
+                9,
+                921,
+                377,
+                9,
+                1146,
+                63,
+                9
+            ],
+            "id": "scatter",
+            "style": {
+                "stroke": "#ff3b30",
+                "width": 3
+            },
+            "payloads": [
+                {
+                    "index": 0,
+                    "x": 1,
+                    "y": 1
+                },
+                {
+                    "index": 1,
+                    "x": 2,
+                    "y": 2
+                },
+                {
+                    "index": 2,
+                    "x": 3,
+                    "y": 3
+                }
+            ]
+        }
+    ]
+}
