@@ -66,23 +66,28 @@ function mount end        # :img (raster) | :svg (vector) | :webgl (live canvas)
 function _ppu end         # (backend, fig) -> px_per_unit / device scale
 function make_widget end  # (backend, <backend's RenderResult-like>, manifest, display_css) -> the @bind widget
 
-# ---- shared axis-transform helpers: both CairoBackend and WebGLBackend build the same
-# AxisTransform shape off a 2D Makie.Axis. WebGLBackend's context() calls these directly
-# (see ext/HoloWGLMakieExt.jl) rather than duplicating the loop. ----
+# ---- shared projection + axis-transform helpers: both CairoBackend and WebGLBackend
+# build the same projection closure and AxisTransform shape off a 2D Makie.Axis.
+# WebGLBackend's context() calls these directly (see ext/HoloWGLMakieExt.jl) rather
+# than duplicating them. ----
 
 # The shared data→image-px projection closure — both backends' context() build it with
 # this (ONE fix site, not two). The 2-arg `Makie.project(scene, p)` expects TRANSFORMED
 # (post-transform_func) coordinates — it does NOT apply the scene's transform_func
 # (verified empirically on Makie 0.24.12: raw feed lands 0/5 on a log-axis scatter's
-# rendered markers; transformed feed 5/5 at 0.0px) — so apply the axis transform first.
+# rendered markers; transformed feed 5/5 at 0.0px) — so apply the axis transform first,
+# in input (Float64) precision: `project` f32-converts afterward, and a Float32-first
+# cast would lose precision on large-magnitude coords and overflow to Inf above
+# floatmax(Float32) (e.g. x=1e39 on a log axis is fine in Float64: log10 → 39).
 # Out-of-domain input (e.g. log10 of a negative) throws DomainError inside
-# apply_transform: NaN-guard it so the point degrades to a non-finite projection
-# (element layers are un-gated on scale; `_q` passes non-finite through — see
-# interactables.jl and the log-scale testset in core_tests.jl).
+# apply_transform: NaN-guard it so the point degrades to a non-finite projection.
+# (log10(0.0) is -Inf WITHOUT throwing — that degrades through the same non-finite
+# path, no guard needed.) Element layers are un-gated on scale; `_q` passes non-finite
+# through — see interactables.jl and the log-scale testset in core_tests.jl.
 function _project_closure(scaling, out_h)
     return function (ax, p)
         tp = try
-            Makie.apply_transform(Makie.transform_func(ax.scene), Point2f(Float64(p[1]), Float64(p[2])))
+            Makie.apply_transform(Makie.transform_func(ax.scene), Makie.Point2(Float64(p[1]), Float64(p[2])))
         catch e
             e isa DomainError || rethrow()
             Point2f(NaN32, NaN32)

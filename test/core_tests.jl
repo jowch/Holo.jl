@@ -105,6 +105,52 @@ end
         # DomainError; the closure NaN-guards it) — never a crash, never a finite wrong pixel
         Lo = only(hitlayers(PointInteractable(axl, [(1.0, -5.0)]), ctxl))
         @test !isfinite(Lo.geometry[1]) && !isfinite(Lo.geometry[2])
+        # log10(0.0) = -Inf does NOT throw — same non-finite degrade via plain propagation
+        Lz = only(hitlayers(PointInteractable(axl, [(1.0, 0.0)]), ctxl))
+        @test !isfinite(Lz.geometry[2])
+    end
+
+    @testset "log-scale axes: Float64-precision transform + grid edges" begin
+        # transform runs in Float64 (input precision): x=1e39 overflows Float32 to Inf
+        # (losing the marker) but is an ordinary log-axis value in Float64 (log10 → 39)
+        fh = Figure(size = (600, 400))
+        axh = Axis(fh[1, 1]; xscale = log10)
+        hpts = [(1.0e10, 1.0), (1.0e39, 2.0)]
+        scatter!(axh, first.(hpts), last.(hpts); color = :red, markersize = 14)
+        # grid on a log axis: the per-edge companion-coordinate projection path. Centers
+        # chosen so Makie's LINEAR edge expansion stays positive (centers [1,10,100] would
+        # give a -3.5 edge → Makie itself throws log10(-3.5) in its boundingbox pass).
+        axg = Axis(fh[1, 2]; yscale = log10)
+        hm = heatmap!(axg, [1.0, 2.0, 3.0], [10.0, 20.0, 30.0], rand(3, 3))
+        _, ppuh, ctxh = ctx_for(fh)
+        img = Makie.colorbuffer(fh; px_per_unit = ppuh)
+        isred(c) = Float64(Makie.red(c)) > 0.6 && Float64(Makie.green(c)) < 0.4 && Float64(Makie.blue(c)) < 0.4
+        function red_near(cx, cy; tol = 6)
+            ih, iw = size(img)
+            x, y = round(Int, cx), round(Int, cy)
+            for dy in -tol:tol, dx in -tol:tol
+                xx, yy = x + dx, y + dy
+                (1 <= xx <= iw && 1 <= yy <= ih) || continue
+                isred(img[yy, xx]) && return true
+            end
+            return false
+        end
+        L = only(hitlayers(PointInteractable(axh, [hpts[1]]), ctxh))
+        @test red_near(L.geometry[1], L.geometry[2])
+        # The closure transforms in Float64: 1e39 — Inf32 if cast to Float32 first — projects
+        # to a finite pixel on its rendered marker via the direct projection contract.
+        # (PointInteractable STORAGE is Point2f, so the struct-mediated path keeps a
+        # floatmax(Float32) ceiling; the closure no longer adds its own. Storage widening
+        # is WS-3D scope, where those fields are already being touched.)
+        q = data_to_image_px(ctxh, axh, (1.0e39, 2.0))
+        @test all(isfinite, q)
+        @test red_near(q[1], q[2])
+        # grid edges: finite, monotonic in image px (y flips: data ↑ → image y ↓), inside viewport
+        Lg = only(hitlayers(RectInteractable(axg, hm), ctxh))
+        ye = Lg.geometry["yedges"]
+        vp = ctxh.transforms[:ax2].viewport
+        @test all(isfinite, ye) && issorted(ye; rev = true)
+        @test all(vp[2] - 1 <= y <= vp[2] + vp[4] + 1 for y in ye)
     end
 
     @testset "geometry quantized to integer pixels" begin
