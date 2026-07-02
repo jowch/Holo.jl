@@ -448,4 +448,28 @@ describe("tooltips (mount/showTip)", () => {
         expect(tip.innerHTML).toContain("y=")
         expect(tip.innerHTML).not.toContain("undefined")
     })
+
+    it("selected= pre-highlights are persistent: all indices drawn, and they survive hover", () => {
+        const { host, script } = setup()
+        // two circles pre-selected — the view-manip persistence contract: Julia re-derives
+        // `selected` each render; the overlay must keep it visible through transient hovers
+        const selManifest: Manifest = {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [{
+                id: "pts", kind: "circles", geometry: [300, 200, 20, 600, 400, 20, 900, 600, 20],
+                payloads: [{ i: 0 }, { i: 1 }, { i: 2 }], axis: "ax1", events: ["click", "hover"],
+                selected: [0, 2],
+            }],
+        }
+        mount(script, selManifest)
+        const shadow = shadowOf(host)
+        const sel = shadow.querySelector("g.sel") as SVGGElement
+        expect(sel.children.length).toBe(2)                 // BOTH indices, not just the last
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        // hover a non-selected element, then empty space (empty space clears g.hi)
+        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 10, clientY: 10, bubbles: true }))
+        expect(sel.children.length).toBe(2)                 // pre-selection survived the hovers
+        expect((shadow.querySelector("g.hi") as SVGGElement).children.length).toBe(0)
+    })
 })
