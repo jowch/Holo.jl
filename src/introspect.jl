@@ -31,11 +31,46 @@ function PointInteractable(ax, p::Makie.Scatter; id = :scatter, payloads = nothi
         PointInteractable(ax, pts; id, radius = r, payloads)
 end
 
+# ---- MeshScatter -> PointInteractable (data-sized markers) ----
+# markersize is DATA-space by construction (no markerspace attribute), so the pixel radius is
+# camera/depth-dependent — normalize it to per-element Vec3f half-extents and let hitlayers
+# project them (PointInteractable.radius3d). Spike-verified (2026-07-02): markersize acts as the
+# sphere radius; the projected ±axis-offset max is a few % under the true silhouette on
+# diagonals (frontend HIT_TOL absorbs it). Non-sphere `marker=` meshes ride the same
+# half-extent approximation; pass `radius=`/`radius3d=` explicitly if it's too coarse.
+function _meshscatter_extents(ms, n)
+    ms isa Makie.VecTypes{3} && return fill(Makie.Vec3f(ms...), n)
+    ms isa Real && return fill(Makie.Vec3f(ms, ms, ms), n)
+    if ms isa AbstractVector && length(ms) == n
+        return Makie.Vec3f[v isa Real ? Makie.Vec3f(v, v, v) : Makie.Vec3f(v...) for v in ms]
+    end
+    return error(
+        "PointInteractable: can't derive hit radii from meshscatter markersize " *
+            "$(typeof(ms)) for $(n) elements; pass radius= (pixels) or radius3d= explicitly."
+    )
+end
+function PointInteractable(ax, p::Makie.MeshScatter; id = :meshscatter, payloads = nothing, radius = nothing, radius3d = nothing)
+    pts = _conv(p)[1]
+    r3 = radius !== nothing || radius3d !== nothing ? radius3d : _meshscatter_extents(p.markersize[], length(pts))
+    kw = (; id, radius = something(radius, 9), radius3d = r3)
+    return payloads === nothing ?
+        PointInteractable(ax, pts; kw...) :
+        PointInteractable(ax, pts; kw..., payloads)
+end
+
 # ---- Lines -> SegmentInteractable(:polyline) / LineSegments -> (:pairs) ----
 SegmentInteractable(ax, p::Makie.Lines; id = :lines, payloads = nothing, tol = 6) =
     SegmentInteractable(ax, _conv(p)[1]; mode = :polyline, id, payloads, tol)
 SegmentInteractable(ax, p::Makie.LineSegments; id = :segments, payloads = nothing, tol = 6) =
     SegmentInteractable(ax, _conv(p)[1]; mode = :pairs, id, payloads, tol)
+
+# ---- Wireframe -> SegmentInteractable(:pairs) ----
+# The rendered edges live in the child LineSegments' converted (DATA space — spike-verified
+# extrema match the input, and every segment midpoint lands on rendered wire pixels), including
+# the mesh-triangulation diagonals a grid-edge reconstruction would miss. Same read-the-child
+# pattern as Stairs.
+SegmentInteractable(ax, p::Makie.Wireframe; id = :wireframe, payloads = nothing, tol = 6) =
+    SegmentInteractable(ax, _childof(p, Makie.LineSegments).converted[][1]; mode = :pairs, id, payloads, tol)
 
 # ---- Heatmap / Image -> RectInteractable(:grid) ----
 # converted gives (x, y, values). Makie converts cell *centers* to an edge vector (length n+1);
@@ -439,8 +474,10 @@ end
 # the layer-id base for a plot, or nothing if Holo can't introspect it
 function _plotbase(p)
     p isa Makie.Scatter && return :scatter
+    p isa Makie.MeshScatter && return :meshscatter
     p isa Makie.Lines && return :lines
     p isa Makie.LineSegments && return :segments
+    p isa Makie.Wireframe && return :wireframe
     (p isa Makie.Heatmap || p isa Makie.Image) && return :cells
     p isa Makie.BarPlot && return :bars
     p isa Makie.Poly && return :poly
@@ -471,7 +508,8 @@ end
 # returns a Vector{AbstractInteractable} — usually one, two for composites (Stem, ScatterLines).
 function _construct(ax, p, id)
     p isa Makie.Scatter && return [PointInteractable(ax, p; id)]
-    (p isa Makie.Lines || p isa Makie.LineSegments) && return [SegmentInteractable(ax, p; id)]
+    p isa Makie.MeshScatter && return [PointInteractable(ax, p; id)]
+    (p isa Makie.Lines || p isa Makie.LineSegments || p isa Makie.Wireframe) && return [SegmentInteractable(ax, p; id)]
     (
         p isa Makie.Stairs || p isa Makie.Errorbars || p isa Makie.Rangebars ||
             p isa Makie.HLines || p isa Makie.VLines
@@ -499,9 +537,10 @@ end
     auto_interactables(fig) -> Vector{AbstractInteractable}
 
 Introspect a Makie `Figure`: for every supported plot in every `Axis` or `Axis3`, build the
-interactable its M2.1 constructor would (on `Axis3`, `Scatter`/`Lines`/`LineSegments` — their
-3-coord positions ride the same constructors; other 3D plot kinds are skipped with a warning
-pending their own extraction recipes, see docs/roadmap.md M3). Layer ids are
+interactable its M2.1 constructor would (on `Axis3`: `Scatter`/`Lines`/`LineSegments` ride the
+widened constructors, `MeshScatter` gets depth-correct per-element hit radii from its data-space
+`markersize`, and `Wireframe` reads its child's rendered edge segments; other 3D plot kinds are
+skipped with a warning pending their own extraction recipes, see docs/roadmap.md M3). Layer ids are
 the plot kind (`:scatter`, `:lines`, …), suffixed `_2`, `_3`, … when a kind repeats. Returns
 the same concrete vector you could pass to [`holo`](@ref) yourself — edit or extend it freely.
 
@@ -525,10 +564,10 @@ function auto_interactables(fig)
             # axis-aligned rects, 2D anchors) that a perspective projection silently
             # misaligns — the silent-wrong class, so skip LOUDLY rather than construct.
             # (roadmap M3 per-type extraction graduates kinds out of this gate.)
-            if ax isa Makie.Axis3 && !(p isa Union{Makie.Scatter, Makie.Lines, Makie.LineSegments})
+            if ax isa Makie.Axis3 && !(p isa Union{Makie.Scatter, Makie.Lines, Makie.LineSegments, Makie.MeshScatter, Makie.Wireframe})
                 @warn "holo: skipping $(typeof(p).name.name) on Axis3 — only Scatter/Lines/" *
-                    "LineSegments have 3D-valid extraction today; other kinds are roadmap scope " *
-                    "(docs/roadmap.md M3 per-type extraction)" maxlog = 16
+                    "LineSegments/MeshScatter/Wireframe have 3D-valid extraction today; other " *
+                    "kinds are roadmap scope (docs/roadmap.md M3 per-type extraction)" maxlog = 16
                 continue
             end
             n = get(seen, base, 0) + 1

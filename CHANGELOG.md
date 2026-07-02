@@ -38,7 +38,9 @@ Initial implementation — not yet released or registered.
   `{index, x, y, z}` payloads on **both** backends — static base on `:cairo`, live on `:webgl` —
   projected at build time through the shared closure (`is3d` axis transforms ship degenerate
   lims; `Axis`/`Threshold`/`ROI` interactables fail loud on a 3D axis, where a screen pixel is a
-  ray). Wireframe/arrows/meshscatter extraction and `Surface` remain roadmap scope.
+  ray). `MeshScatter` (depth-correct per-element hit radii from its data-space `markersize`, via
+  the new `PointInteractable` `radius3d=` option) and `Wireframe` (rendered edge segments from
+  its child) are auto-extracted too; `Arrows3D` and `Surface` remain roadmap scope.
 - Current `:cairo` scoping: `PolarAxis`/`LScene` are rejected at `holo()` time — a Holo
   guard, not a CairoMakie limit (their disposition — parity item or Holo-wide non-goal — is an
   explicit roadmap decision item). High-frequency live redraw is a shared cost limit on both

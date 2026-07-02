@@ -316,6 +316,81 @@ end
         @test only(gints) isa PointInteractable
     end
 
+    @testset "Axis3 per-type extraction: MeshScatter + Wireframe" begin
+        isredc(c) = Float64(Makie.red(c)) > 0.6 && Float64(Makie.green(c)) < 0.4 && Float64(Makie.blue(c)) < 0.4
+        isbluec(c) = Float64(Makie.blue(c)) > 0.4 && Float64(Makie.red(c)) < 0.5 && Float64(Makie.green(c)) < 0.5
+        function color_near(pred, img, cx, cy; tol = 5)
+            ih, iw = size(img)
+            x, y = round(Int, cx), round(Int, cy)
+            for dy in -tol:tol, dx in -tol:tol
+                xx, yy = x + dx, y + dy
+                (1 <= xx <= iw && 1 <= yy <= ih) || continue
+                pred(img[yy, xx]) && return true
+            end
+            return false
+        end
+
+        # MeshScatter: data-space markersize → per-element, depth-dependent pixel radii
+        fm = Figure(; size = (600, 450))
+        axm = Axis3(fm[1, 1]; azimuth = 0.4, elevation = 0.5)
+        mpts = Makie.Point3f[(1, 2, 3), (4, 5, 6), (7, 8, 2)]
+        meshscatter!(axm, mpts; markersize = 0.6, color = :red)
+        Makie.update_state_before_display!(fm)
+        mints = auto_interactables(fm)                  # no gate warn expected
+        mi = only(mints)
+        @test mi isa PointInteractable
+        @test mi.radius3d !== nothing && length(mi.radius3d) == 3
+        @test mi.payloads[1] == (; index = 0, x = 1.0, y = 2.0, z = 3.0)
+        _, ppum, ctxm = ctx_for(fm)
+        imgm = Makie.colorbuffer(fm; px_per_unit = ppum)
+        Lm = only(hitlayers(mi, ctxm))
+        @test Lm.kind === :circles && length(Lm.geometry) == 9
+        for k in 0:2
+            @test color_near(isredc, imgm, Lm.geometry[3k + 1], Lm.geometry[3k + 2])
+            # computed radius, not the 9px-logical default (which would be 9×2=18 image px):
+            # a 0.6-data-radius sphere at this camera projects to ~40 image px
+            @test 25 < Lm.geometry[3k + 3] < 60
+        end
+        # edge sanity: a pixel just inside the reported radius (rightward) is still marker-red
+        @test color_near(isredc, imgm, Lm.geometry[1] + 0.8 * Lm.geometry[3], Lm.geometry[2]; tol = 3)
+
+        # radius3d validation fails loud on length mismatch
+        @test_throws ArgumentError PointInteractable(axm, mpts; radius3d = [Makie.Vec3f(1, 1, 1)])
+
+        # Wireframe: rendered edges from the child LineSegments (data space), :pairs mode
+        fw = Figure(; size = (600, 450))
+        axw = Axis3(fw[1, 1]; azimuth = 0.4, elevation = 0.5)
+        wxs = 1:5
+        wzs = [sin(x) * cos(y) + 3 for x in wxs, y in wxs]
+        wireframe!(axw, wxs, wxs, wzs; color = :blue)
+        Makie.update_state_before_display!(fw)
+        wints = auto_interactables(fw)
+        wi = only(wints)
+        @test wi isa SegmentInteractable && wi.mode === :pairs
+        @test iseven(length(wi.vertices)) && length(wi.vertices) >= 80   # grid edges + triangulation diagonals
+        _, ppuw, ctxw = ctx_for(fw)
+        imgw = Makie.colorbuffer(fw; px_per_unit = ppuw)
+        Lw = only(hitlayers(wi, ctxw))
+        @test Lw.kind === :segments
+        nseg = length(wi.vertices) ÷ 2
+        for k in 0:7:(nseg - 1)   # sample every 8th segment's midpoint on the rendered wire
+            mx = (Lw.geometry[4k + 1] + Lw.geometry[4k + 3]) / 2
+            my = (Lw.geometry[4k + 2] + Lw.geometry[4k + 4]) / 2
+            @test color_near(isbluec, imgw, mx, my; tol = 3)
+        end
+
+        # Arrows3D stays skipped (deferred): its rendered geometry is autoscaled into a
+        # normalized child space — raw pos→pos+dir does NOT match the drawn pixels (spike
+        # 2026-07-02), so extracting it needs its own recipe, not a pass-through. It has no
+        # _plotbase entry, so it takes the generic no-recipe warn path.
+        fa = Figure(; size = (600, 450))
+        axa = Axis3(fa[1, 1])
+        arrows3d!(axa, Makie.Point3f[(1, 1, 1)], Makie.Vec3f[(1, 0, 0)])
+        Makie.update_state_before_display!(fa)
+        aints = @test_logs (:warn, r"skipping"i) auto_interactables(fa)
+        @test isempty(aints)
+    end
+
     @testset "Polygon geometry projects per ring" begin
         rings = [[(1.0, 1.0), (2.0, 4.0), (3.0, 1.0)], [(1.5, 2.0), (2.5, 2.0), (2.0, 3.0)]]
         L = only(hitlayers(PolygonInteractable(ax, rings; id = :poly), ctx))

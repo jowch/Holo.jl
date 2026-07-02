@@ -86,8 +86,10 @@ Declare interactables explicitly (geometry in data space):
 
 Linear, log, and categorical axes; single or multiple axes; linked selection via shared
 payloads through Pluto's reactive graph. `Axis3` gets the same treatment on both backends: 3D
-scatter/lines carry point/segment overlays with `{index, x, y, z}` payloads, projected at build
-time through the shared closure — static base on `:cairo`, live on `:webgl` (see
+scatter/lines carry point/segment overlays with `{index, x, y, z}` payloads, meshscatter gets
+depth-correct per-marker hit radii from its data-space `markersize`, and wireframe's rendered
+edges are hoverable — all projected at build time through the shared closure — static base on
+`:cairo`, live on `:webgl` (see
 [3D, animation, and large data](#3d-animation-and-large-data-wglmakie)). Continuous pixel→data
 readout (`AxisInteractable`/`ThresholdInteractable`/`ROIInteractable`) fails loud on a 3D axis
 (a screen pixel is a ray, not a data point), and high-frequency live redraw is a shared cost
