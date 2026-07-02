@@ -99,12 +99,17 @@ try {
     const scale = host.clientWidth / outW;   // == display_css / out_w
     const o = { bubbles: true, composed: true, cancelable: true, clientX: b.x + MARKER0.x * scale, clientY: b.y + MARKER0.y * scale, pointerId: 1, pointerType: "mouse", isPrimary: true };
     const before = document.querySelector("#bondout").innerText;
-    let after = before;
+    let after = before, won = -1;
     // Retry the click, don't dispatch-once-and-hope: the through-Pluto round-trip is flaky (verified
     // 2026-07-01 — PR #30 red twice on this, green on re-run, code untouched). A single dispatch can
     // race the overlay's listener wiring, and the reactive round-trip (emit → WS → kernel re-run →
     // WS → DOM) can outlast one wait window on a loaded runner. Re-clicking the SAME marker is
     // idempotent (:scatter, 0 either way), so retrying is a pure robustness win — ~30s total patience.
+    // `before` is captured ONCE and every read compares to it, so a late DOM flip from an earlier
+    // attempt's click is still caught by a later attempt's poll: effective patience is the full ~30s,
+    // NOT a hard 10s ceiling per round-trip. `won` records which attempt flipped the bond — 0 ⇒ healthy
+    // first click (slow round-trip); ≥1 ⇒ the first click(s) were dropped, which for a real user is a
+    // dropped click (the readiness gate only checks `.surface` EXISTS, not that listeners are wired).
     retry: for (let attempt = 0; attempt < 3; attempt++) {
       surface.dispatchEvent(new PointerEvent("pointermove", o));
       surface.dispatchEvent(new PointerEvent("pointerdown", o));
@@ -112,11 +117,13 @@ try {
       surface.dispatchEvent(new MouseEvent("click", o));
       for (let i = 0; i < 50; i++) { // ~10s per attempt
         await new Promise((r) => setTimeout(r, 200));
-        after = document.querySelector("#bondout").innerText;
-        if (after !== before) break retry;
+        // Null-safe: the click induces a Pluto re-run of the readout cell, so #bondout is briefly
+        // absent while Pluto swaps that cell's output — treat a mid-swap read as "unchanged", keep polling.
+        after = document.querySelector("#bondout")?.innerText ?? before;
+        if (after !== before) { won = attempt; break retry; }
       }
     }
-    return { before, after };
+    return { before, after, attempt: won };
   });
 
   // Check the shim leak FIRST: a leak that also breaks rendering would otherwise surface as the
@@ -130,7 +137,10 @@ try {
   if (!/InteractionEvent\(:scatter, 0/.test(result.after)) {
     throw new Error(`unexpected readout after click: "${result.after}"`);
   }
-  console.log("THROUGH-PLUTO E2E OK —", result.before, "->", result.after);
+  if (result.attempt > 0) {
+    console.error(`WARNING: bond round-tripped only on click attempt ${result.attempt} (0-based) — the first click(s) were DROPPED, not merely a slow round-trip. A real user would see a dropped click; suspect an overlay listener-wiring race (the readiness gate checks .surface EXISTS, not that its listeners are attached). If this warns every run, promote to a blocking assertion.`);
+  }
+  console.log(`THROUGH-PLUTO E2E OK (attempt ${result.attempt}) —`, result.before, "->", result.after);
 } catch (e) {
   failed = e;
 } finally {
