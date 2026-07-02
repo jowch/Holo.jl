@@ -98,6 +98,13 @@ limit on both backends. Unsupported axis blocks (`PolarAxis`/`LScene`) fail loud
 [`examples/demo.jl`](examples/demo.jl) is a runnable gallery of every kind below plus the
 selection round-trip.
 
+**Pan, zoom, and 3D rotation need no Holo API**: `@bind` a slider to the view parameter
+(`limits` for 2D, `azimuth`/`elevation` for `Axis3`) and rebuild the figure — `holo`
+re-renders with a freshly projected overlay, so hit regions never drift, and a `selected=`
+feedback keeps selections highlighted across view changes.
+[`examples/view_manip.jl`](examples/view_manip.jl) demonstrates all three (drag gestures are
+roadmap scope — see `docs/roadmap.md` M3).
+
 ## API reference
 
 ### `holo`

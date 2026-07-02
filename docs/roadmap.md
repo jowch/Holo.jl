@@ -86,12 +86,15 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
       `Bonito.NoConnection` — still true, still intentional). The re-frame: view params (2D
       `limits`, 3D `azimuth`/`elevation`) are ordinary `@bind` state — change → server re-render →
       fresh overlay — **backend-symmetric and drift-free by construction** (Julia recomputes the
-      overlay every step). Sliders/controls **work today on both backends** — the former
-      "`:webgl` gated on GL-context reuse" premise was **measured FALSE** (2026-07-02; figures,
-      mechanism, and scope of the measurement live in `perf-findings.md` §"WGL context
-      lifecycle"; re-runnable via `test/e2e/ctx_growth.mjs`). What remains on `:webgl` is
-      per-step context+scene re-init *cost* — the camera-only resident-scene patch is the
-      planned optimization, no longer a feasibility gate. Drag-to-pan/rotate is the
+      overlay every step). **Sliders: shipped** — `examples/view_manip.jl` (CI-run) demonstrates
+      2D `limits` zoom, 3D `azimuth`/`elevation` rotation, and selection persisting across view
+      re-renders via `selected=`; live-verified through Pluto on `:cairo` (this arc) and the
+      `:webgl` slider path in the #37 sweep. The former "`:webgl` gated on GL-context reuse"
+      premise was **measured FALSE** (2026-07-02; figures, mechanism, and scope in
+      `perf-findings.md` §"WGL context lifecycle"; re-runnable via `test/e2e/ctx_growth.mjs`).
+      What remains on `:webgl` is per-step context+scene re-init *cost* — the camera-only
+      resident-scene patch is the planned optimization, no longer a feasibility gate.
+      Remaining in this item — drag-to-pan/rotate is the
       follow-on (commit-on-release; a live drag *preview* shares the Animation/scrubbing item's
       payload gate — M4, below; modifier-key arbitration vs box-select drag). The **client-side GPU camera stays out** (Holo-wide
       non-goal): a camera Julia never hears about desyncs the Julia-projected overlay and is

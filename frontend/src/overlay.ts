@@ -286,12 +286,20 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     window.addEventListener("mousemove", onDrag)
     window.addEventListener("mouseup", onUp)
 
-    // persistent selected-state from the manifest (re-derived each render)
-    for (const layer of manifest.layers) {
-        for (const idx of layer.selected ?? []) {
-            const h = hitLayerByIndex(layer, idx)
-            if (h) drawHi({ layer, ...h })
+    // persistent selected-state from the manifest (re-derived each render) — drawn into the
+    // PERSISTENT selection group (g.sel, z-below hover), NOT the transient hover group: it
+    // must survive hovers (onMove clears g.hi on every miss) and support multiple selected
+    // indices (drawHi keeps only the last). Pre-#38 this used drawHi — an M1.2 leftover from
+    // before box-select introduced the persistent group.
+    {
+        const pre: Hit[] = []
+        for (const layer of manifest.layers) {
+            for (const idx of layer.selected ?? []) {
+                const h = hitLayerByIndex(layer, idx)
+                if (h) pre.push({ layer, ...h })
+            }
         }
+        if (pre.length) drawSelection(pre)
     }
 
     const cleanup = () => {
