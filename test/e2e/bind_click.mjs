@@ -138,7 +138,7 @@ try {
     throw new Error(`unexpected readout after click: "${result.after}"`);
   }
   if (result.attempt > 0) {
-    console.error(`WARNING: bond round-tripped only on click attempt ${result.attempt} (0-based) — the first click(s) were DROPPED, not merely a slow round-trip. A real user would see a dropped click; suspect an overlay listener-wiring race (the readiness gate checks .surface EXISTS, not that its listeners are attached). If this warns every run, promote to a blocking assertion.`);
+    console.error(`WARNING: bond round-tripped only on click attempt ${result.attempt} (0-based) — SUGGESTS a dropped first click (overlay listener-wiring race; the readiness gate checks .surface EXISTS, not that its listeners are wired). Not proof: a healthy round-trip slower than the ~10s per-attempt poll window also surfaces as attempt >=1. If this warns every run, investigate — a chronic dropped first click would be a real user-facing bug.`);
   }
   console.log(`THROUGH-PLUTO E2E OK (attempt ${result.attempt}) —`, result.before, "->", result.after);
 } catch (e) {
