@@ -45,20 +45,39 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 - [x] **Bars/areas** *(Hist/Waterfall/CrossBar/HSpan/VSpan done; Colorbar done M3; Legend remaining)*: Hist, Waterfall, CrossBar, HSpan, VSpan now auto-extracted by `holo(fig)` as `:rects` (same primitive as BarPlot, no new JS path). Shared bar payload schema — semantic, no redundant `index` (element index lives in `InteractionEvent.index`): BarPlot/Waterfall `(; low, high, value)`, Hist `(; value, low, high)`, CrossBar `(; midpoint, low, high)`, HSpan/VSpan `(; low, high)`. Span hit-rects clamped to the owning axis's pixel viewport (prevents cross-axis bleed in multi-axis figures). Uniform fail-loud payload-length validation (`_check_payloads`) added to `SegmentInteractable`/`RectInteractable`/`PolygonInteractable` — a wrong-length `payloads=` now throws `ArgumentError` at construction. *Colorbar: done (M3) — `ColorbarInteractable` auto-extracted from `fig.content`; figure-block walk now exists and Legend slots in the same place. Remaining: Legend (deferred — a linking capability, its own arc).*
 - [x] **Text bboxes** (Text/Annotation): `TextInteractable` — `text!`/`annotation!` labels auto-extracted as `:rects` click-to-pick buttons, payload `(; text, index, x, y)`. *Done: the original "needs font-metric measurement → new `bbox` primitive" premise was obsolete — `Makie.string_boundingboxes` already returns per-string boxes, so no new geometry kind or dependency was needed. `TextLabel` (a `Block`, not a plot — needs the figure-block walk `ColorbarInteractable` uses, not the scene-plot walk) is the remaining deferred piece.*
 - [ ] **SVG output path**: `CairoBackend(vector=true)` is groundwork; actually emit SVG base + overlay for sparse, low-primitive plots (cleaner coords, no raster).
-- [~] **`:webgl` live view manipulation (pan/zoom/rotate) — INVESTIGATED → DEFERRED**: `Axis3`/3D
-      *rendering* is a `:cairo` non-goal the `:webgl` backend already covers live (see M0 in the
-      former `HoloWGL` roadmap) — but interactive pan/zoom/rotate is a separate, discretionary
-      capability, and it isn't actually wired on today: the shim disables WGLMakie's `use_orbit_cam`
-      and 2D `Axis` zoom/pan is dead under `Bonito.NoConnection` (verified from source, not a headless
-      browser — software GL there would corroborate, not decide). Enabling it is large and
-      `:webgl`-only (client-side re-projection, `Axis3` plumbing, a shared-`overlay.ts` pointer-events
-      change, optional GPU-pick) — exactly the backend-asymmetric UX this fold-in is designed to avoid
-      (see `.superpowers/specs/2026-06-30-holo-backend-selection-design.md`). **Decision (2026-07-01):
-      deferred, not rejected** — revisit only on an explicit product case; staged design (S1 2D
-      magnifier → S2 3D-rotate → S3 data-space 2D zoom → S4 occlusion) parked in
-      `.superpowers/holowgl-live-camera-overlay-design.md` (local). Folded in from the former
-      `HoloWGL/docs/roadmap.md` (its M1 "live view manipulation" + M2 "resolve the capability claims")
-      on the Phase 2 backend-selection fold-in.
+- [ ] **Axis3 static overlays (parity)** — CairoMakie renders static 3D natively; the `:cairo`
+      `Axis3` guard is Holo scoping, slated to lift. Projection hinge spike-verified (2026-07-01):
+      build-time `Makie.project(ax.scene, Point3f)` lands exactly on the CairoMakie `Axis3` raster,
+      static and rotated (figure recorded once in `perf-findings.md` §"Axis3 projection hinge
+      spike"); `Point2f(x,y) ≡ Point3f(x,y,0)` byte-identical through the
+      shared closure (so the widen can't regress 2D). Work: widen Point/Segment/Polygon storage +
+      the shared closure to 3D, lift the guard, per-type introspection (3D scatter/lines ~free;
+      wireframe/arrows/meshscatter M; `Surface` deferred — unbounded per-cell payload + occlusion),
+      occlusion = document-and-accept on **both** backends (no `:webgl`-only GPU-pick). The
+      `:webgl` half is gated on its own canvas-alignment spike. Extends the parity corpus with an
+      Axis3 figure.
+- [ ] **View manipulation via `@bind` re-render (pan/zoom/rotate, parity)** — supersedes the
+      2026-07-01 "investigated → deferred" framing, which scoped the problem as a *client-side*
+      camera (the shim disables WGLMakie's `use_orbit_cam`; 2D zoom/pan is dead under
+      `Bonito.NoConnection` — still true, still intentional). The re-frame: view params (2D
+      `limits`, 3D `azimuth`/`elevation`) are ordinary `@bind` state — change → server re-render →
+      fresh overlay — **backend-symmetric and drift-free by construction** (Julia recomputes the
+      overlay every step). Sliders/controls first (`:cairo` needs nothing; `:webgl` is gated on
+      GL-context **reuse** — persist canvas+renderer across cell re-runs, dispose-on-delete; the
+      re-run-vs-delete lifecycle spike is the open feasibility question). Drag-to-pan/rotate is the
+      follow-on (commit-on-release; a live drag *preview* shares the Animation/scrubbing item's
+      payload gate — M4, below; modifier-key arbitration vs box-select drag). The **client-side GPU camera stays out** (Holo-wide
+      non-goal): a camera Julia never hears about desyncs the Julia-projected overlay and is
+      structurally one-backend-only. 3D rotation additionally depends on the Axis3 item above.
+- [ ] **`PolarAxis` + `LScene` disposition (a decision item, not yet a feature commitment)** —
+      the `:cairo` guard rejects both alongside `Axis3`, and `:webgl` renders them live but builds
+      no overlay transforms for them (interactables keyed to them fail loud). The parity doctrine
+      allows no third state: each must become a scheduled parity item (overlays on both —
+      `PolarAxis`'s discrete hit geometry looks tractable now that the shared projection closure
+      applies `transform_func`, where the polar map lives, though its *continuous* axis readout
+      would still need the polar transform serialized to JS; `LScene` needs its own camera/scoping
+      look) or an explicit Holo-wide non-goal. Until decided, this is the known interim
+      per-backend gap.
 
 ## M4 — Interaction depth (new capabilities, not new surfaces)
 *Goal: the Tier-0/Tier-1 interactions the architecture already supports.*
@@ -94,12 +113,21 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 ---
 
 ## Non-goals (by design)
-For the `:cairo` backend specifically: 3D (`Surface`, `MeshScatter`, `Arrows3D`), `PolarAxis`/`Axis3`,
-and **high-frequency live redraw** (dragging a data point and reflowing the plot per frame). These
-need a browser-side renderer, which is exactly what `CairoBackend` deliberately isn't — it stays
-static-base + thin overlay. Since the `:webgl` backend (formerly the separate `HoloWGL` package)
-folded in, Holo *as a whole* now covers 3D/`Axis3` and live GPU-side redraw via `:webgl` (see the
-`:webgl`-tagged items in M3/M4 above) — but `:cairo` itself stays out of that business by design.
+**Holo-wide** (every backend — the parity doctrine forbids capability one backend can never have):
+the **client-side GPU camera** (a JS camera driven without a Julia round-trip — it desyncs the
+Julia-projected overlay and is structurally `:webgl`-only) and **GPU-pick occlusion** (same
+reason; the symmetric alternative, a build-time CPU cull, stays available). **High-frequency
+live redraw** — per-frame kernel round-trips as a smooth-drag guarantee — is a shared *cost*
+limit on both backends, not a capability split.
+
+Per-backend there are no *feature* non-goals, only substrate facts: `:cairo` ships a static base
+(its former "3D needs a browser-side renderer" note was wrong — CairoMakie renders static 3D
+natively; the `Axis3` guard is Holo scoping, lifting with the Axis3 parity item in M3; the same
+guard also rejects `PolarAxis`/`LScene`, whose disposition — parity item or Holo-wide non-goal —
+is an explicit M3 decision item and the one known interim gap), and
+`:webgl` ships a live canvas (so it renders 3D live today and re-renders cheaply). Backends
+differ in **cost**, never in the interaction contract — enforced by the parity golden harness
+(`test/fixtures/parity/`).
 
 ## Suggested order
 

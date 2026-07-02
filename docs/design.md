@@ -1,5 +1,9 @@
 # Holo.jl — Design Notes
 
+> **Historical snapshot (2026-06-26)** — predates the `:webgl` backend fold-in and the
+> backend-parity doctrine. Where this document's scope statements (e.g. "no 3D", WGLMakie
+> framing) disagree with `architecture.md` / `backend-comparison.md` / `roadmap.md`, those win.
+>
 > Distilled from the brainstorming conversation in `../pluto-makie-interactive-plots.md`.
 > Status: **core architecture validated by spike** (2026-06-26). See `research-findings.md`
 > for the desk research and `../spike/` for the working proof.
