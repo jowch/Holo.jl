@@ -43,7 +43,7 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 - [x] **Filled-area curves (Band/Density)**: Band and Density auto-extracted by `holo(fig)` as `:polygons` with `(; index)` payload. *Done (`src/introspect.jl`).*
 - [x] **Computational-geometry extraction**: Contourf/Violin/Voronoiplot + BoxPlot box-body shipped; Tricontourf deferred; BoxPlot box-body-only (whiskers/outliers decorative). *Done (`src/introspect.jl`): Contourf → `:polygons` per contour level with `(; low, high)` from Makie's computed level range; Violin → `:polygons` with `(; x)` from the data position; Voronoiplot → `:polygons` with `(; index)`; BoxPlot box-body → `:rects` (un-notched) / `:polygons` (notched) with `(; q1, median, q3)` from Makie's computed-stats node. Principle: hit geometry from rendered shapes; payload values from Makie's computed values.*
 - [x] **Bars/areas** *(Hist/Waterfall/CrossBar/HSpan/VSpan done; Colorbar done M3; Legend remaining)*: Hist, Waterfall, CrossBar, HSpan, VSpan now auto-extracted by `holo(fig)` as `:rects` (same primitive as BarPlot, no new JS path). Shared bar payload schema — semantic, no redundant `index` (element index lives in `InteractionEvent.index`): BarPlot/Waterfall `(; low, high, value)`, Hist `(; value, low, high)`, CrossBar `(; midpoint, low, high)`, HSpan/VSpan `(; low, high)`. Span hit-rects clamped to the owning axis's pixel viewport (prevents cross-axis bleed in multi-axis figures). Uniform fail-loud payload-length validation (`_check_payloads`) added to `SegmentInteractable`/`RectInteractable`/`PolygonInteractable` — a wrong-length `payloads=` now throws `ArgumentError` at construction. *Colorbar: done (M3) — `ColorbarInteractable` auto-extracted from `fig.content`; figure-block walk now exists and Legend slots in the same place. Remaining: Legend (deferred — a linking capability, its own arc).*
-- [ ] **Text bboxes** (Text/Annotation/TextLabel): needs font-metric measurement → the `bbox` geometry primitive (rotated → degenerate polygon).
+- [x] **Text bboxes** (Text/Annotation): `TextInteractable` — `text!`/`annotation!` labels auto-extracted as `:rects` click-to-pick buttons, payload `(; text, index, x, y)`. *Done: the original "needs font-metric measurement → new `bbox` primitive" premise was obsolete — `Makie.string_boundingboxes` already returns per-string boxes, so no new geometry kind or dependency was needed. `TextLabel` (a `Block`, not a plot — needs the figure-block walk `ColorbarInteractable` uses, not the scene-plot walk) is the remaining deferred piece.*
 - [ ] **SVG output path**: `CairoBackend(vector=true)` is groundwork; actually emit SVG base + overlay for sparse, low-primitive plots (cleaner coords, no raster).
 - [~] **`:webgl` live view manipulation (pan/zoom/rotate) — INVESTIGATED → DEFERRED**: `Axis3`/3D
       *rendering* is a `:cairo` non-goal the `:webgl` backend already covers live (see M0 in the
@@ -182,10 +182,17 @@ pre-manifest step for all three.)
   deferred; BoxPlot box-body-only — whiskers/outliers decorative. All reuse v1's `:polygons`
   even-odd test; no new JS primitive. Principle: hit geometry from rendered shapes; payload from
   Makie's computed values.
-- **Text bboxes** (Text/Annotation/TextLabel) — *not* a 7th primitive: rotated text = degenerate
-  polygon reusing the polygon test. The genuinely new work is **font-metric measurement**, the
-  one thing the coord system was built not to model (`design.md` §6) — do it last in this phase,
-  self-contained.
+- [x] **Text bboxes** (Text, Annotation) — *not* a 7th primitive, but not for the reason originally
+  guessed either: the plan was that rotated text needs a degenerate-polygon `bbox` primitive plus
+  **font-metric measurement** (the one thing the coord system was built not to model, `design.md`
+  §6). Both turned out obsolete — `Makie.string_boundingboxes(p)` already returns each string's
+  scene-local pixel box (font metrics included), so `TextInteractable` rides plain `:rects`
+  instead: a rotated label just gets its box expanded to stay axis-aligned. Payload
+  `(; text, index, x, y)`; `holo(fig)` auto-detects `text!` directly and `annotation!` via
+  `_descendant(p, Makie.Text)`; only data-space text is auto-detected (pixel/relative-space text
+  is skipped with a warning). **`TextLabel` is deferred**: it's a `Makie.Block`, not a plot, so it
+  needs the figure-block walk (`fig.content`, the mechanism `ColorbarInteractable` uses), not the
+  scene-plot walk this arc used — a small follow-up, not a design unknown.
 
 These three are independent and can run concurrently.
 

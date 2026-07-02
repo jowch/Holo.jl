@@ -344,6 +344,42 @@ cbf = let
     holo(f)
 end
 
+# ╔═╡ 40000000-0000-0000-0000-0000000000c0
+md"""
+## Text labels — `TextInteractable` (click-to-pick buttons)
+
+`holo(fig)` auto-detects data-space `text!`/`annotation!` labels as clickable boxes — geometry
+comes straight from Makie's own `Makie.string_boundingboxes` (no font-metric math needed), so
+each label rides the same `:rects` primitive as a bar or a heatmap cell. A **rotated** label
+still yields one box (a looser, axis-aligned one). **Click a label** to pick it — the bond
+reports `(; text, index, x, y)`.
+"""
+
+# ╔═╡ 40000000-0000-0000-0000-0000000000c1
+begin
+    tx_fig = Figure(size = (500, 350))
+    tx_ax = Axis(tx_fig[1, 1]; title = "Click a label")
+    tx_pts = [(1.0, 1.0), (2.0, 3.0), (3.0, 2.0)]
+    scatter!(tx_ax, first.(tx_pts), last.(tx_pts); markersize = 16)
+    text!(tx_ax, first.(tx_pts), last.(tx_pts); text = ["Alpha", "Beta", "Gamma"], offset = (8, 8), fontsize = 18)
+    text!(tx_ax, [2.2], [1.4]; text = ["Tilted"], rotation = 0.5, fontsize = 18)     # rotated → axis-aligned box
+    annotation!(tx_ax, [3.3], [3.2]; text = ["Annotated"])                          # annotation! → same button
+end
+
+# ╔═╡ 40000000-0000-0000-0000-0000000000c2
+@bind tx_sel holo(tx_fig)
+
+# ╔═╡ 40000000-0000-0000-0000-0000000000c3
+# holo(fig) also auto-detects the scatter!, so a marker click round-trips a (; index, x, y)
+# payload with no "text" key — guard the readout rather than assume every click hit a label.
+if tx_sel === nothing
+    "text: click a label (try the tilted one, or the annotation)"
+elseif haskey(tx_sel.payload, "text")
+    "text: picked \"$(tx_sel.payload["text"])\" index=$(tx_sel.payload["index"]) at ($(tx_sel.payload["x"]), $(tx_sel.payload["y"]))"
+else
+    "point: index=$(tx_sel.payload["index"]) (that was a marker — click a label instead)"
+end
+
 # ╔═╡ Cell order:
 # ╟─40000000-0000-0000-0000-000000000000
 # ╠═40000000-0000-0000-0000-000000000001
@@ -392,3 +428,7 @@ end
 # ╠═40000000-0000-0000-0000-0000000000a1
 # ╟─40000000-0000-0000-0000-0000000000b0
 # ╠═40000000-0000-0000-0000-0000000000b1
+# ╟─40000000-0000-0000-0000-0000000000c0
+# ╠═40000000-0000-0000-0000-0000000000c1
+# ╠═40000000-0000-0000-0000-0000000000c2
+# ╠═40000000-0000-0000-0000-0000000000c3

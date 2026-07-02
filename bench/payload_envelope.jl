@@ -163,4 +163,39 @@ let
     contourf!(ax, xs, ys, [sin(x) * cos(y) for x in xs, y in ys])
     poly_row("contourf, 50×50, default levels", holo(f))
 end
+
+println("\n=== G. text labels — :rects box (4 ints) + (; text, index, x, y) payload ===")
+# Text labels reuse v1's :rects primitive (no new geometry kind); the only new wire term is the
+# payload's string `text` field. holo(fig) auto-detects text! as id=:text (src/introspect.jl).
+function text_row(label, w)
+    textlayers = filter(l -> l["id"] == "text", w.manifest["layers"])
+    isempty(textlayers) && (println("  $label — no text layer"); return)
+    n_elems = sum(nhits, textlayers; init = 0)
+    geom_b = sum(mp(l["geometry"]) for l in textlayers; init = 0)
+    pl_b = sum(mp(l["payloads"]) for l in textlayers; init = 0)
+    return @printf(
+        "  %-40s  png=%6s KB   manifest=%6s KB   labels=%4d  ~%3d B/label (geom=%dB payload=%dB)\n",
+        label, kb(b64bytes(w)), kb(mp(w.manifest)), n_elems,
+        round(Int, (geom_b + pl_b) / max(n_elems, 1)),
+        round(Int, geom_b / max(n_elems, 1)), round(Int, pl_b / max(n_elems, 1))
+    )
+end
+let
+    # Small labelled-scatter picker (matches the demo cell shape) — the realistic case.
+    n = 5
+    f = Figure(size = (600, 400)); ax = Axis(f[1, 1])
+    xs, ys = rand(n) .* 10, rand(n) .* 10
+    scatter!(ax, xs, ys)
+    text!(ax, xs, ys; text = ["Label $(k)" for k in 1:n], fontsize = 16)
+    text_row("scatter+labels, $n labels", holo(f))
+end
+let
+    # A denser label grid — still low-N vs. scatter (labels are inherently sparse: legible text
+    # needs screen-space room, unlike point markers).
+    n = 100
+    f = Figure(size = (900, 700)); ax = Axis(f[1, 1])
+    xs, ys = rand(n) .* 10, rand(n) .* 10
+    text!(ax, xs, ys; text = ["L$(k)" for k in 1:n], fontsize = 10)
+    text_row("text-only, $n labels", holo(f))
+end
 println()

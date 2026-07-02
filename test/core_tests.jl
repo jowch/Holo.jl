@@ -152,6 +152,53 @@ end
         @test [p.index for p in L.payloads] == [0, 1]       # default per-ring payloads
     end
 
+    @testset "TextInteractable" begin
+        f = Figure(size = (600, 400)); ax = Axis(f[1, 1]); scatter!(ax, 1:3, 1:3)
+        t = text!(ax, [1.5, 2.5], [2.0, 1.0]; text = ["Hello", "Wörld"], fontsize = 20)
+        bk, ppu, ctx = ctx_for(f)          # finalizes (update_state_before_display!) + builds ctx
+        ti = TextInteractable(ax, t)
+        # payload: (; text, index, x, y) — 0-based index, DATA anchors
+        @test ti.payloads[1] == (; text = "Hello", index = 0, x = 1.5, y = 2.0)
+        @test ti.payloads[2] == (; text = "Wörld", index = 1, x = 2.5, y = 1.0)
+        # hitlayer: one :rects layer, 2 boxes × (cx,cy,w,h) = 8 coords
+        L = only(hitlayers(ti, ctx))
+        @test L.kind === :rects && length(L.geometry) == 8
+        # the box centers land on rendered glyphs (non-white pixels near center)
+        img = Makie.colorbuffer(f; px_per_unit = ppu)
+        for k in 0:1
+            @test drawn_near(img, L.geometry[4k + 1], L.geometry[4k + 2])
+        end
+        # the projected data anchor lies within its label's box
+        for (k, anchor) in enumerate(((1.5, 2.0), (2.5, 1.0)))
+            aimg = data_to_image_px(ctx, ax, anchor)
+            cx, cy, w, h = L.geometry[(4k - 3):(4k)]
+            @test (cx - w / 2 - 1) <= aimg[1] <= (cx + w / 2 + 1)
+            @test (cy - h / 2 - 2) <= aimg[2] <= (cy + h / 2 + 2)
+        end
+    end
+
+    @testset "TextInteractable: scalar text! normalizes to a length-1 vector" begin
+        f = Figure(size = (600, 400)); ax = Axis(f[1, 1]); scatter!(ax, 1:3, 1:3)
+        t = text!(ax, 1.0, 1.0; text = "single")   # Makie normalizes: p.text[] == ["single"]
+        _, _, ctx = ctx_for(f)
+        ti = TextInteractable(ax, t)
+        @test ti.payloads == [(; text = "single", index = 0, x = 1.0, y = 1.0)]
+        L = only(hitlayers(ti, ctx))
+        @test L.kind === :rects && length(L.geometry) == 4   # one box × (cx,cy,w,h)
+    end
+
+    @testset "TextInteractable: one box per string (count invariant)" begin
+        # Locks the `length(boxes) == length(payloads)` assumption `hitlayers` guards on: an empty
+        # string still emits a (degenerate) box, and a multi-line string is ONE box, not one per line
+        # — so both drift-guards stay satisfied if a future Makie ever splits strings into per-run boxes.
+        f = Figure(size = (600, 400)); ax = Axis(f[1, 1])
+        t = text!(ax, [1.0, 2.0], [1.0, 2.0]; text = ["", "multi\nline"])
+        _, _, ctx = ctx_for(f)
+        ti = TextInteractable(ax, t)
+        @test length(ti.payloads) == 2
+        @test length(only(hitlayers(ti, ctx)).geometry) == 8   # 2 strings × (cx,cy,w,h) — one box each
+    end
+
     @testset "Segment + Axis + custom" begin
         @test only(hitlayers(SegmentInteractable(ax, pts; mode = :polyline), ctx)).kind === :polyline
         @test only(hitlayers(AxisInteractable(ax), ctx)).geometry === nothing
@@ -436,6 +483,38 @@ end
             w = @test_logs (:warn,) match_mode = :any holo(f)
             @test isempty(w.manifest["layers"])
             @test !isempty(w.b64)                  # static image still produced
+        end
+
+        @testset "holo auto-detects text!" begin
+            f = Figure(); ax = Axis(f[1, 1]); scatter!(ax, 1:3, 1:3)
+            text!(ax, [1.5], [2.0]; text = ["Hi"])
+            Makie.update_state_before_display!(f)
+            ints = auto_interactables(f)
+            @test count(i -> i isa TextInteractable, ints) == 1
+        end
+        @testset "holo auto-detects annotation!" begin
+            f = Figure(); ax = Axis(f[1, 1]); scatter!(ax, 1:3, 1:3)
+            annotation!(ax, [1.5], [2.0]; text = ["note"])
+            Makie.update_state_before_display!(f)
+            ints = auto_interactables(f)
+            ti = only(filter(i -> i isa TextInteractable, ints))
+            @test ti.payloads[1].text == "note"
+            # x,y come from the Text descendant's positions[] — the DATA-space anchor
+            @test ti.payloads[1].x == 1.5 && ti.payloads[1].y == 2.0
+        end
+        @testset "holo skips non-data-space text" begin
+            f = Figure(); ax = Axis(f[1, 1]); scatter!(ax, 1:3, 1:3)
+            text!(ax, [10.0], [10.0]; text = ["px"], space = :pixel)
+            Makie.update_state_before_display!(f)
+            ints = auto_interactables(f)
+            @test count(i -> i isa TextInteractable, ints) == 0
+        end
+        @testset "rotated text still yields one box" begin
+            f = Figure(size = (600, 400)); ax = Axis(f[1, 1])
+            t = text!(ax, [1.0], [1.0]; text = ["Tilt"], rotation = 0.6)
+            _, _, ctx = ctx_for(f)
+            g = only(hitlayers(TextInteractable(ax, t), ctx)).geometry
+            @test length(g) == 4 && g[3] > 0 && g[4] > 0   # one box, positive w, h
         end
     end
 

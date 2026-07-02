@@ -192,6 +192,56 @@ function hitlayers(i::RectInteractable, ctx)
     end
 end
 
+# ============================ TextInteractable =============================
+# Text labels as click-to-pick buttons. Geometry = Makie's cached per-string boxes
+# (`Makie.string_boundingboxes`, in SCENE-LOCAL pixel space, y-up, bottom-left origin — NOT data
+# space, so we do NOT project; we convert scene-local px → image px directly, mirroring the backend
+# `project` closure). Payload (; text, index, x, y): the string, which label (0-based, per the
+# package convention), and the DATA-space anchor (`positions`). A rotated label yields the
+# axis-aligned (expanded) box → still one `:rects` element.
+#
+# `string_boundingboxes`/`viewport` are read ONLY in `hitlayers` (during build_manifest, after
+# update_state_before_display!), never at construction: a manually-built TextInteractable may exist
+# before the figure is finalized. Payloads come from `text[]`/`positions[]` (converted input).
+struct TextInteractable <: AbstractInteractable
+    ax; p; id::Symbol; payloads::Vector{Any}; tooltip::Union{Nothing, Markup, Bool}   # p::Makie.Text
+end
+function TextInteractable(ax, p::Makie.Text; id = :text, payloads = nothing, tooltip = nothing)
+    strs = p.text[]
+    anchors = p.positions[]
+    length(anchors) == length(strs) ||
+        error("TextInteractable: $(length(anchors)) positions for $(length(strs)) strings (Makie internals changed?)")
+    pl = if payloads === nothing
+        Any[
+            (; text = string(strs[k]), index = k - 1, x = Float64(anchors[k][1]), y = Float64(anchors[k][2]))
+                for k in eachindex(strs)
+        ]
+    else
+        _check_payloads(payloads, length(strs), "TextInteractable")
+    end
+    return TextInteractable(ax, p, id, pl, tooltip)
+end
+tooltip_spec(i::TextInteractable) = i.tooltip
+function hitlayers(i::TextInteractable, ctx)
+    boxes = Makie.string_boundingboxes(i.p)   # Vector{Rect3d}, scene-local pixel (y-up), one per string
+    length(boxes) == length(i.payloads) ||
+        error("TextInteractable: $(length(boxes)) boxes for $(length(i.payloads)) payloads (Makie internals changed?)")
+    o = i.ax.scene.viewport[].origin           # scene-local → figure pixel offset
+    g = Real[]
+    # divergence from design spec §1 ("skip empty strings"): NOT skipped — a zero-area box keeps box-count == payload-count for the guards above (deliberate).
+    for b in boxes
+        bx, by = Float64(b.origin[1]), Float64(b.origin[2])
+        bw, bh = Float64(b.widths[1]), Float64(b.widths[2])
+        # scene-local (y-up, bottom-left) → image px (y-down, top-left): same ×scaling + y-flip the
+        # backend `project` closure applies to a projected point (ext/HoloCairoMakieExt.jl `project`).
+        x_left = (bx + o[1]) * ctx.scaling
+        y_top = ctx.height - (by + bh + o[2]) * ctx.scaling
+        w = bw * ctx.scaling; h = bh * ctx.scaling
+        append!(g, (_q(x_left + w / 2), _q(y_top + h / 2), _q(w), _q(h)))   # :rects list = (cx, cy, w, h)
+    end
+    return [HitLayer(i.id, :rects, g, i.payloads, axis_id(ctx, i.ax), events(i))]
+end
+
 # ============================ PolygonInteractable ==========================
 struct PolygonInteractable <: AbstractInteractable
     ax; rings::Vector; id::Symbol; payloads::Vector{Any}; tooltip::Union{Nothing, Markup, Bool}

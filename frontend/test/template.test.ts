@@ -29,4 +29,11 @@ describe("renderAutoTable", () => {
         expect(html).toContain("&lt;b&gt;")
         expect(html).toContain("holo-tip-row")
     })
+
+    it("renders the text-button payload (; text, index, x, y)", () => {
+        const html = renderAutoTable({ text: "Hello", index: 0, x: 1.5, y: 2 })
+        expect(html).toContain("text")
+        expect(html).toContain("Hello")
+        expect(html).toContain("1.5")
+    })
 })

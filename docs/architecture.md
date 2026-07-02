@@ -201,12 +201,14 @@ Geometry layout by `kind` (all coords image-px, top-left origin):
 
 This is a **closed set of six geometry kinds** (`:circles/:polyline/:segments/:rects/:grid/:polygons`)
 plus the `:axis` continuous channel. The survey confirmed every retained Makie surface projects to one
-of them; nothing in v1+v2 needs a seventh. (`bbox` — rotated text/markers — is a v2 addition expressed
-as a degenerate polygon, reusing the polygon JS test.)
+of them; nothing in v1+v2 needs a seventh. (Text labels — the surface once speculated to need a new
+`bbox`/degenerate-polygon primitive — turned out not to: `TextInteractable` rides plain `:rects`, with
+a rotated label's box simply expanded to stay axis-aligned; see §3. That premise is retired for text.)
 
-### Built-in interactables (v1 + M3)
+### Built-in interactables (v1 + M3 + Phase 2 text labels)
 
-Five v1 types plus `ColorbarInteractable` added in M3, one per hit primitive (`:axis` shared by two):
+Five v1 types plus `ColorbarInteractable` (M3) and `TextInteractable` (Phase 2 text labels), one
+per hit primitive (`:axis` shared by two; `TextInteractable` reuses `:rects`, no new primitive):
 
 | Type | kind(s) | Makie surfaces | payload |
 |---|---|---|---|
@@ -216,9 +218,24 @@ Five v1 types plus `ColorbarInteractable` added in M3, one per hit primitive (`:
 | `PolygonInteractable` | `:polygons` | Poly, Band, Pie, Density, Contourf, Violin, Voronoiplot | Band/Density/Voronoiplot `(; index)`; Contourf `(; low, high)`; Violin `(; x)` |
 | `AxisInteractable` | `:axis` (unbounded) | the Axis area itself (linear + log) | `(; x, y)` inverted client-side |
 | `ColorbarInteractable` *(M3)* | `:axis` (bounded bbox) | Colorbar — auto-extracted from `fig.content` | `(; value)` inverted client-side via `AxisTransform.valueaxis` |
+| `TextInteractable` *(Phase 2 text labels)* | `:rects` | Text, Annotation (via `_descendant(p, Makie.Text)`) — data-space only | `(; text, index, x, y)` |
 
 `SegmentInteractable` carries `mode ∈ {:polyline,:pairs}`; `RectInteractable` carries
 `layout ∈ {:grid,:list}`. Same JS test, different Julia extractor.
+
+**Text labels as click-to-pick buttons.** `TextInteractable` geometry comes from Makie's own
+`Makie.string_boundingboxes(p)` — scene-local pixel space, y-up, bottom-left origin — converted
+*directly* to image px (the same ×scaling + y-flip as `project`, but no `project` call: the boxes
+are already pixel-space, not data-space, so there is nothing to project). A rotated label still
+yields exactly one `:rects` box, expanded to stay axis-aligned (a looser hit target, not a new
+geometry kind). The payload's `text`/`index` are the string and its 0-based per-label index;
+`x`/`y` are the DATA-space anchor (`positions`), not the pixel box — consistent with `PointInteractable`'s
+`(; index, x, y)` shape. `holo(fig)` auto-detects `text!` directly and `annotation!` by reaching
+through to its child `Makie.Text` plot (`_descendant`); only **data-space** text is auto-detected
+(`space === :data`) — pixel/relative-space text (decorative overlays) is skipped with a warning, not
+silently dropped. `TextLabel` (a `Makie.Block`, not a plot) is **not** covered — it needs the
+figure-block walk `ColorbarInteractable` uses, not the plot-scene walk — and remains deferred (see
+`roadmap.md`).
 
 **Bar payload schema (Phase 2a).** All `:rects`-list bar/span surfaces (BarPlot, Waterfall,
 Hist, CrossBar, HSpan, VSpan) use a shared semantic payload — `InteractionEvent.index` carries the element index, so payloads contain only
@@ -395,8 +412,14 @@ profile shows JS hit-test *specifically* is the bottleneck.
 
 **M3 Colorbar (shipped):** `ColorbarInteractable` — hover/click value readout for any `Colorbar` block, auto-extracted by `holo(fig)` via a figure-block walk over `fig.content`. Rides the `:axis` channel with a bounded bbox geometry; `AxisTransform.valueaxis` tags the value axis so JS inverts the cursor pixel to a scalar `(; value)`. Legend remains deferred (a linking capability, its own arc).
 
+**Phase 2 text labels (shipped):** `TextInteractable` — `text!` and `annotation!` labels as
+click-to-pick buttons, auto-extracted by `holo(fig)` for data-space text. Rides `:rects`; geometry
+from `Makie.string_boundingboxes` (no font-metric measurement needed — the originally-speculated
+`bbox` primitive was never built). `TextLabel` (a `Block`, needs the figure-block walk rather than
+the plot-scene walk) remains deferred.
+
 **v2:** plot-object introspection constructors; ABLines/Arc, Legend,
-text bboxes (font metrics), animation frames, SVG-overlay annotations, spatial hit-test acceleration.
+`TextLabel` (Block) support, animation frames, SVG-overlay annotations, spatial hit-test acceleration.
 
 **Never for `CairoBackend`:** 3D (Surface, MeshScatter, Arrows3D), PolarAxis/Axis3,
 high-frequency live redraw. These are the `:webgl` backend's domain (`WebGLBackend`, the new
