@@ -259,7 +259,7 @@ end
 # accumulate the clicked index (acyclic: depends on rt_sel + the once-init Ref)
 picked = begin
     rt_sel === nothing || push!(sel_acc[], rt_sel.index)
-    unique!(sort(sel_acc[]))
+    unique!(sort!(sel_acc[]))
 end
 
 # ╔═╡ 40000000-0000-0000-0000-000000000075

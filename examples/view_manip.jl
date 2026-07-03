@@ -101,7 +101,7 @@ end
 # accumulate clicked indices (acyclic: depends on vm_sel + the once-init Ref)
 vm_picked = begin
     vm_sel === nothing || push!(vm_acc[], vm_sel.index)
-    unique!(sort(vm_acc[]))
+    unique!(sort!(vm_acc[]))
 end
 
 # ╔═╡ 50000000-0000-0000-0000-000000000025

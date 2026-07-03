@@ -32,7 +32,8 @@ Initial implementation — not yet released or registered.
   `docs/backend-comparison.md`.
 - View manipulation via `@bind` re-render (sliders): 2D `limits` zoom, 3D `azimuth`/`elevation`
   rotation, and selection persistence across view re-renders (`selected=` feedback) — no new
-  API, demonstrated in `examples/view_manip.jl` (CI-run) and live-verified on both backends.
+  API, demonstrated in `examples/view_manip.jl` (CI-run); live-verified on `:cairo` (this
+  example) and on the `:webgl` slider path (the PR #37 instrumented sweep).
   Drag gestures remain roadmap scope.
 
 ### Fixed
