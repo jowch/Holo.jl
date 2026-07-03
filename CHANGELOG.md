@@ -30,6 +30,17 @@ Initial implementation — not yet released or registered.
   enforces exactly one backend per session (errors loudly if neither or both are loaded — never
   silently switches). See the README's "3D, animation, and large data" section and
   `docs/backend-comparison.md`.
+- View manipulation via `@bind` re-render (sliders): 2D `limits` zoom, 3D `azimuth`/`elevation`
+  rotation, and selection persistence across view re-renders (`selected=` feedback) — no new
+  API, demonstrated in `examples/view_manip.jl` (CI-run); live-verified on `:cairo` (this
+  example) and on the `:webgl` slider path (the PR #37 instrumented sweep).
+  Drag gestures remain roadmap scope.
+
+### Fixed
+- `selected=` pre-highlights are now genuinely persistent: they draw into the overlay's
+  persistent selection group instead of the transient hover group, so they survive hovers and
+  all selected indices render (previously the first hover erased them and only the last index
+  showed — an M1.2 leftover from before box-select introduced the persistent group).
 
 ### Notes
 - Validated end-to-end in real Pluto for `PointInteractable`; other interactable kinds are
