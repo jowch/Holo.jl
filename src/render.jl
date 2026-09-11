@@ -72,6 +72,54 @@ function _layer_dict(i, L::HitLayer)
     return d
 end
 
+# Kinds the overlay can draw as a persistent pre-highlight (`hitLayerByIndex` / `makeHiElement`).
+# Unsupported kinds (segments/grid/axis/…) with `selected=` used to silently draw nothing — fail loud
+# instead, same doctrine as wrong-length `payloads=` (`_check_payloads`).
+const _SELECTED_KINDS = (:circles, :rects, :polygons)
+
+# Element count for a HitLayer geometry, matching the JS layout in types.ts / hitLayerByIndex.
+function _layer_n_elements(kind::Symbol, geometry)
+    return if kind === :circles
+        length(geometry) ÷ 3
+    elseif kind === :rects
+        length(geometry) ÷ 4
+    elseif kind === :polygons
+        length(geometry)
+    elseif kind === :segments
+        length(geometry) ÷ 4
+    elseif kind === :polyline
+        max(0, length(geometry) ÷ 2 - 1)
+    elseif kind === :grid
+        Int(geometry["ncols"]) * Int(geometry["nrows"])
+    else
+        0   # :axis / :threshold / :roi — not element-indexed for selected=
+    end
+end
+
+# Validate `selected=` indices for one layer: supported kind + in-range (0-based). Throws ArgumentError.
+function _check_selected(L::HitLayer, sel)
+    kind = L.kind
+    if !(kind in _SELECTED_KINDS)
+        throw(
+            ArgumentError(
+                "selected: layer :$(L.id) has kind :$kind, which does not support pre-highlight " *
+                    "(supported: $(join(_SELECTED_KINDS, ", ")))",
+            ),
+        )
+    end
+    n = _layer_n_elements(kind, L.geometry)
+    idxs = collect(Int, sel)
+    for idx in idxs
+        (0 <= idx < n) || throw(
+            ArgumentError(
+                "selected: layer :$(L.id) index $idx out of range for $n elements" *
+                    (n > 0 ? " (valid: 0:$(n - 1))" : ""),
+            ),
+        )
+    end
+    return idxs
+end
+
 # Fail loud when a selector's `selects` target is absent or has an incompatible kind.
 function _validate_selectors(interactables, layers)
     kinds = Dict(l["id"] => l["kind"] for l in layers)
@@ -130,7 +178,9 @@ function build_manifest(interactables, ctx::InteractionContext; selected = nothi
         for L in hitlayers(i, ctx)
             d = _layer_dict(i, L)
             sel = selected === nothing ? nothing : get(selected, L.id, nothing)
-            (sel === nothing || isempty(sel)) || (d["selected"] = collect(Int, sel))
+            if sel !== nothing && !isempty(sel)
+                d["selected"] = _check_selected(L, sel)
+            end
             push!(layers, d)
         end
     end

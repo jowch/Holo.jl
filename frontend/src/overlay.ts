@@ -295,8 +295,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         const pre: Hit[] = []
         for (const layer of manifest.layers) {
             for (const idx of layer.selected ?? []) {
-                const h = hitLayerByIndex(layer, idx)
-                if (h) pre.push({ layer, ...h })
+                pre.push({ layer, ...hitLayerByIndex(layer, idx) })
             }
         }
         if (pre.length) drawSelection(pre)
@@ -407,8 +406,39 @@ function computeSelection(
     return { items: [], hits: [] } // unsupported target kind
 }
 
-// resolve a layer element by index to a highlight geom (for pre-selected drawing)
-function hitLayerByIndex(layer: import("./types").HitLayer, index: number): Omit<Hit, "layer"> | null {
+// Kinds that can be drawn as a persistent pre-highlight (mirrors Julia `_SELECTED_KINDS`).
+const SELECTED_KINDS = new Set(["circles", "rects", "polygons"])
+
+function layerNElements(layer: import("./types").HitLayer): number {
+    const g = layer.geometry
+    if (layer.kind === "circles" && Array.isArray(g)) return Math.floor((g as number[]).length / 3)
+    if (layer.kind === "rects" && Array.isArray(g)) return Math.floor((g as number[]).length / 4)
+    if (layer.kind === "polygons" && Array.isArray(g)) return (g as number[][]).length
+    if (layer.kind === "segments" && Array.isArray(g)) return Math.floor((g as number[]).length / 4)
+    if (layer.kind === "grid" && g && typeof g === "object" && "ncols" in (g as object)) {
+        const gg = g as import("./types").GridGeometry
+        return gg.ncols * gg.nrows
+    }
+    return 0
+}
+
+// Resolve a layer element by index to a highlight geom (for pre-selected drawing).
+// Fail loud on unsupported kinds / OOB indices — Julia `build_manifest` validates the same;
+// this is the defense-in-depth path when a hand-built / stale manifest reaches mount.
+function hitLayerByIndex(layer: import("./types").HitLayer, index: number): Omit<Hit, "layer"> {
+    if (!SELECTED_KINDS.has(layer.kind)) {
+        throw new Error(
+            `selected: layer ${layer.id} has kind ${layer.kind}, which does not support pre-highlight ` +
+                `(supported: circles, rects, polygons)`,
+        )
+    }
+    const n = layerNElements(layer)
+    if (index < 0 || index >= n) {
+        throw new Error(
+            `selected: layer ${layer.id} index ${index} out of range for ${n} elements` +
+                (n > 0 ? ` (valid: 0:${n - 1})` : ""),
+        )
+    }
     const g = layer.geometry
     if (layer.kind === "circles" && Array.isArray(g)) {
         const a = g as number[]
@@ -418,8 +448,6 @@ function hitLayerByIndex(layer: import("./types").HitLayer, index: number): Omit
         const a = g as number[]
         return { index, geom: ["rect", a[4 * index], a[4 * index + 1], a[4 * index + 2], a[4 * index + 3]] }
     }
-    if (layer.kind === "polygons" && Array.isArray(g)) {
-        return { index, geom: ["poly", (g as number[][])[index]] }
-    }
-    return null
+    // polygons (only remaining SELECTED_KINDS entry)
+    return { index, geom: ["poly", (g as number[][])[index]] }
 }

@@ -472,4 +472,70 @@ describe("tooltips (mount/showTip)", () => {
         expect(sel.children.length).toBe(2)                 // pre-selection survived the hovers
         expect((shadow.querySelector("g.hi") as SVGGElement).children.length).toBe(0)
     })
+
+    // issue #39: selected= fail-loud on unsupported kinds / OOB (mirror Julia build_manifest)
+    it("selected= on segments fails loud at mount (no silent empty g.sel)", () => {
+        const { script } = setup()
+        const bad: Manifest = {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [{
+                id: "segs", kind: "segments", geometry: [0, 0, 100, 100, 200, 200, 300, 300],
+                payloads: [{ i: 0 }, { i: 1 }], axis: "ax1", events: ["click", "hover"],
+                selected: [0],
+            }],
+        }
+        expect(() => mount(script, bad)).toThrow(/selected/i)
+    })
+
+    it("selected= on grid fails loud at mount", () => {
+        const { script } = setup()
+        const bad: Manifest = {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [{
+                id: "heat", kind: "grid",
+                geometry: { xedges: [0, 100, 200], yedges: [0, 100, 200], ncols: 2, nrows: 2 },
+                payloads: [], axis: "ax1", events: ["hover"], selected: [0],
+            }],
+        }
+        expect(() => mount(script, bad)).toThrow(/selected/i)
+    })
+
+    it("selected= out-of-range index fails loud at mount", () => {
+        const { script } = setup()
+        const bad: Manifest = {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [{
+                id: "pts", kind: "circles", geometry: [300, 200, 20, 600, 400, 20],
+                payloads: [{ i: 0 }, { i: 1 }], axis: "ax1", events: ["click", "hover"],
+                selected: [2],
+            }],
+        }
+        expect(() => mount(script, bad)).toThrow(/selected|out of range|index/i)
+    })
+
+    it("selected= pre-highlights are replaced when a selects-ROI commits (one selection at a time)", () => {
+        // mount-time selected= shares g.sel with box-select; ROI drag clears + redraws
+        const m: Manifest = {
+            width: 1200, height: 800, scaling: 2,
+            transforms: { ax1: { xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
+                viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false } },
+            layers: [
+                { id: "pts", kind: "circles", geometry: [300, 300, 10, 500, 500, 10, 900, 700, 10],
+                    payloads: [{ i: 0 }, { i: 1 }, { i: 2 }], axis: "ax1", events: ["click", "hover"],
+                    selected: [2] },  // only the third point pre-highlighted
+                { id: "roi", kind: "roi", axis: "ax1", events: ["drag"], payloads: [],
+                    selects: "pts", geometry: { x: 200, y: 200, w: 400, h: 400, handle: 16 } },
+            ],
+        }
+        const { host, script } = setup()
+        mount(script, m)
+        const shadow = shadowOf(host)
+        const sel = shadow.querySelector("g.sel") as SVGGElement
+        expect(sel.children.length).toBe(1)  // pre-highlight alone
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        // commit current ROI enclosure (points 0 and 1) — replaces pre-selection of index 2
+        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 200, clientY: 200, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 200, clientY: 200, bubbles: true }))
+        expect(sel.children.length).toBe(2)
+    })
 })
