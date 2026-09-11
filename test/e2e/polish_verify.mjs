@@ -1,6 +1,5 @@
-// Overlay polish live-verify (LOCAL — not CI). Asserts the same boxes as
-// docs/live-interaction-checklist.md (hover/unhover/selected persist/wash vs ring/
-// tooltip/console). Click→@bind / selection-moves is bind_click.mjs + the kitchen-sink.
+// Overlay-chrome smoke (LOCAL — not CI). Wash+ring on one figure. Not sufficient
+// live-verify — agents run docs/live-interaction-checklist.md via kind_sweep.mjs.
 //
 //   node polish_verify.mjs <base-url> <notebook-abs-path> <cairo|webgl>
 import { chromium } from "playwright";
