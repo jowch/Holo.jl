@@ -76,7 +76,8 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
       `startpoints`/`endpoints` (DATA space; the span the shaft+tip MeshScatter children cover
       after `arrowscale`). Emits `SegmentInteractable(:pairs)` with `{index,x,y,z,u,v,w}`
       payloads. Unit tests cover anisotropic limits + `lengthscale=0.5` (raw midpoints miss;
-      processed midpoints hit). Live-verified through Pluto.
+      processed midpoints hit). Dual-backend Pluto+browser live-verify tracked in PR #43 /
+      `docs/arrows3d-arc.md` (required before merge).
 - [ ] **Axis3 per-type extraction — `Surface` (deferred)** — unbounded per-cell payload +
       occlusion, same class as the heatmap `values[]` hole. Occlusion policy for all 3D types:
       **document-and-accept on both backends** (no `:webgl`-only GPU-pick); upgrade path = a
