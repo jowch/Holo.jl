@@ -171,7 +171,7 @@ begin
 end
 
 # ╔═╡ 50000000-0000-0000-0000-000000000043
-@bind pan_ev holo(pan_fig, pan_pts, pan_view)
+@bind pan_ev holo(pan_fig, [pan_pts, pan_view])
 
 # ╔═╡ 50000000-0000-0000-0000-000000000044
 pan_committed = begin
