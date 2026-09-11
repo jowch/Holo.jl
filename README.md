@@ -131,10 +131,12 @@ finalize step Makie performs at display time).
   (see `_resolve_backend` in [`src/render.jl`](src/render.jl)).
 - **`selected`** — a `layer_id => indices` map (e.g. `Dict(:scatter => [0, 2])`) that
   pre-highlights elements on mount. Indices are 0-based and match `InteractionEvent.index`.
-  Feed a bond value back into it to keep clicked elements highlighted across re-renders,
-  flicker-free (see [Selection round-trip](#selection-round-trip)). Keys are layer ids: for
-  the single-layer kinds that's the interactable's `id`, but `RegionInteractable` splits into
-  suffixed layers (`:id_c` circles / `:id_r` rects / `:id_p` polygons) — key on those.
+  Supported kinds: `circles` / `rects` / `polygons`. Unsupported kinds (`segments`, `grid`, …)
+  or out-of-range indices throw `ArgumentError` at build time (fail loud, like wrong-length
+  `payloads=`). Feed a bond value back into it to keep clicked elements highlighted across
+  re-renders, flicker-free (see [Selection round-trip](#selection-round-trip)). Keys are layer
+  ids: for the single-layer kinds that's the interactable's `id`, but `RegionInteractable`
+  splits into suffixed layers (`:id_c` circles / `:id_r` rects / `:id_p` polygons) — key on those.
 
 ### `InteractionEvent`
 

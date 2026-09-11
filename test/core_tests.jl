@@ -581,6 +581,58 @@ end
         )   # empty omitted
         @test holo(bfig, PointInteractable(bax, pts; id = :scatter); selected = Dict(:scatter => [1])).manifest["layers"][1]["selected"] == [1]
 
+        # selected= fail-loud (issue #39): unsupported kinds and OOB indices must throw at
+        # build_manifest, same doctrine as wrong-length payloads= (_check_payloads).
+        @testset "selected= fails loud on unsupported kinds and OOB indices" begin
+            segs = SegmentInteractable(bax, [(1.0, 1.0), (2.0, 2.0), (3.0, 3.0), (4.0, 4.0)]; mode = :pairs, id = :segs)
+            @test_throws ArgumentError build_manifest([segs], bctx; selected = Dict(:segs => [0]))
+            err_seg = try
+                build_manifest([segs], bctx; selected = Dict(:segs => [0])); nothing
+            catch e
+                e
+            end
+            @test err_seg isa ArgumentError
+            @test occursin(r"selected"i, sprint(showerror, err_seg))
+            @test occursin("segments", sprint(showerror, err_seg))
+
+            grid_i = RectInteractable(bax; grid = (0.5:1:3.5, 0.5:1:3.5, rand(3, 3)), id = :heat)
+            @test_throws ArgumentError build_manifest([grid_i], bctx; selected = Dict(:heat => [0]))
+            err_grid = try
+                build_manifest([grid_i], bctx; selected = Dict(:heat => [0])); nothing
+            catch e
+                e
+            end
+            @test err_grid isa ArgumentError
+            @test occursin(r"selected"i, sprint(showerror, err_grid))
+            @test occursin("grid", sprint(showerror, err_grid))
+
+            # 3 pts → valid indices 0:2; index 5 and -1 must fail
+            @test_throws ArgumentError build_manifest(
+                [PointInteractable(bax, pts; id = :scatter)], bctx; selected = Dict(:scatter => [5])
+            )
+            @test_throws ArgumentError build_manifest(
+                [PointInteractable(bax, pts; id = :scatter)], bctx; selected = Dict(:scatter => [-1])
+            )
+            err_oob = try
+                build_manifest(
+                    [PointInteractable(bax, pts; id = :scatter)], bctx; selected = Dict(:scatter => [5])
+                ); nothing
+            catch e
+                e
+            end
+            @test err_oob isa ArgumentError
+            @test occursin(r"selected"i, sprint(showerror, err_oob))
+            @test occursin(r"5|out of range|elements"i, sprint(showerror, err_oob))
+
+            # supported kinds still accept in-range indices (rects list + polygons)
+            rects = RectInteractable(bax; rects = [(1.0, 1.0, 0.5, 0.5), (2.0, 2.0, 0.5, 0.5)], id = :boxes)
+            mr = build_manifest([rects], bctx; selected = Dict(:boxes => [1]))
+            @test mr["layers"][1]["selected"] == [1]
+            polys = PolygonInteractable(bax, [[(0.0, 0.0), (1.0, 0.0), (0.5, 1.0)]]; id = :poly)
+            mp = build_manifest([polys], bctx; selected = Dict(:poly => [0]))
+            @test mp["layers"][1]["selected"] == [0]
+        end
+
         w = holo(bfig, PointInteractable(bax, pts; id = :scatter))
         @test w isa HoloWidget
         @test w.manifest["layers"][1]["kind"] == "circles"

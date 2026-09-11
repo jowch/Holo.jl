@@ -37,6 +37,11 @@ Initial implementation — not yet released or registered.
   Drag gestures remain roadmap scope.
 
 ### Fixed
+- `selected=` now fails loud at `build_manifest` (and at overlay mount) for unsupported
+  layer kinds (`segments`/`grid`/…) and out-of-range indices — same doctrine as wrong-length
+  `payloads=` (`_check_payloads`). Pre-highlight remains supported for `circles`/`rects`/
+  `polygons`. Mount-time `selected=` sharing `g.sel` with box-select is covered by a unit
+  test (ROI commit replaces pre-highlights — one selection at a time). Closes #39.
 - `selected=` pre-highlights are now genuinely persistent: they draw into the overlay's
   persistent selection group instead of the transient hover group, so they survive hovers and
   all selected indices render (previously the first hover erased them and only the last index
