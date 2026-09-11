@@ -27,18 +27,22 @@ plots in Pluto. Browser layer is TypeScript in `frontend/`, bundled by esbuild t
 ## Live verification (standing practice — not optional)
 Unit/frontend tests assert the manifest and the JS in isolation; they don't prove the rendered
 widget behaves for the user. **Any change that can alter what the user interacts with must be
-live-verified in a real Pluto + browser before it's called done** — and "user-facing" includes
-**backend/Julia-only changes**: the manifest shape, payload contents, hit-test geometry, projection/
-DPI, `@bind` value, hover/tooltip text, and overlay behavior all originate in Julia. The test passing
-is necessary, not sufficient. (E.g. the grid `values[]` cap is a pure-Julia change with no visible
-markup, yet it changes hover text and the bond payload → it gets a live check.)
-- **What "live-verified" means:** open the affected case in headless Pluto, drive it with Playwright
-  (hover/click), and confirm the actual on-screen result — tooltip text, highlight, `@bind` round-trip,
-  no console errors — matches intent. Inspect the real `published_to_js` manifest in-page when the
-  change is about payload shape (a thing the unit tests can't reach — they never call `show`).
+live-verified in a real Pluto + browser on every supported backend before it's called done**
+(today: CairoMakie and WGLMakie / `:webgl`; same rule for any future backend — all backends, not
+one) — and "user-facing" includes **backend/Julia-only changes**: the manifest shape, payload
+contents, hit-test geometry, projection/DPI, `@bind` value, hover/tooltip text, and overlay
+behavior all originate in Julia. The test passing is necessary, not sufficient. (E.g. the grid
+`values[]` cap is a pure-Julia change with no visible markup, yet it changes hover text and the
+bond payload → it gets a live check on every backend.)
+- **What "live-verified" means:** on each backend, open the affected case in headless Pluto, drive
+  it with Playwright (hover/click), and confirm the actual on-screen result — tooltip text,
+  highlight, `@bind` round-trip, no console errors — matches intent. Inspect the real
+  `published_to_js` manifest in-page when the change is about payload shape (a thing the unit
+  tests can't reach — they never call `show`).
 - **Skip only** pure-internal refactors with zero observable delta (and say so). When unsure, it's
-  user-facing — verify.
-- Mechanics below. Reuse `examples/demo.jl`'s dev-the-local-package env cell.
+  user-facing — verify on all backends.
+- Mechanics below. Reuse each backend's demo env cell (`examples/demo.jl` for `:cairo`,
+  `examples/webgl_demo.jl` for `:webgl`; `test/e2e/webgl_sweep.mjs` for the `:webgl` path sweep).
 
 ## Pluto integration testing (slow — minutes)
 - A fresh per-notebook env re-resolves + precompiles the Makie stack (~6 min first open).

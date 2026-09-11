@@ -15,10 +15,10 @@ instead and the same `holo`/`@bind` contract drives a **live**, browser-GPU back
 animation, large/live data, and live 3D — see [3D, animation, and large data](#3d-animation-and-large-data-wglmakie)
 below. Exactly one backend may be loaded per Pluto session.
 
-> **Status: early / experimental (v0.1).** Validated end-to-end in real Pluto — all five
-> interactable kinds and the selection round-trip are exercised live by
-> [`examples/demo.jl`](examples/demo.jl) (CI runs it headlessly on every change). APIs may
-> still change.
+> **Status: early / experimental (v0.1).** Validated end-to-end in real Pluto on every supported
+> backend — CairoMakie via [`examples/demo.jl`](examples/demo.jl), WGLMakie via
+> [`examples/webgl_demo.jl`](examples/webgl_demo.jl) (CI runs both headlessly). APIs may still
+> change.
 
 ## Why
 
