@@ -34,13 +34,11 @@ end
 md"""
 # Holo.jl — view manipulation via `@bind` re-render
 
-Pan, zoom, and 3D rotation need **no Holo API at all**: bind a slider to the view
-parameter (`limits` for 2D, `azimuth`/`elevation` for `Axis3`), rebuild the figure, and
-`holo` re-renders with a **freshly projected overlay** — Julia owns the view, so hit
-regions and tooltips can never drift from the pixels. The same notebook runs on the
-`:webgl` backend (`using WGLMakie` instead of `CairoMakie`): the interaction contract is
-identical, only the re-render *cost* differs (see `docs/backend-comparison.md`; re-render
-churn on `:webgl` is upstream-managed — `docs/perf-findings.md` §"WGL context lifecycle").
+Pan, zoom, and 3D rotation use the same server-authoritative `@bind` re-render model:
+change `limits` (2D) or `azimuth`/`elevation` (`Axis3`) and rebuild — `holo` re-projects
+the overlay so hit regions never drift. Drive those params with PlutoUI sliders (no Holo
+API) or with **`ViewInteractable`** drag-to-pan / drag-to-rotate (commit-on-release).
+The same notebook runs on `:webgl` (`examples/view_manip_webgl.jl`).
 """
 
 # ╔═╡ 50000000-0000-0000-0000-000000000010
@@ -154,79 +152,90 @@ HTML("<span id=\"rotout\">ROT=$(repr(rot_sel)) az=$(rot_az) el=$(rot_el)</span>"
 md"""
 ## Drag-to-pan (2D) — commit on release
 
-`ViewInteractable` turns an empty-plot drag into new `limits`. The overlay tracks the
-gesture locally; mouse-up emits `(; xmin, xmax, ymin, ymax)` and Julia rebuilds the
-figure — same re-render contract as the slider above. **Shift+drag** forces pan even
-over a Tier-0 ROI/threshold (box-select arbitration).
+`ViewInteractable` emits new `limits` on mouse-up. Pluto forbids feeding that bond back
+into the *same* figure cell (cyclic reference), so the **top** plot is a fixed-seed drag
+surface and the **bottom** plot re-renders from the committed bond — same server-authoritative
+contract as the slider. **Shift+drag** forces pan over Tier-0 ROI/threshold.
 """
 
 # ╔═╡ 50000000-0000-0000-0000-000000000041
-pan_lims = Ref((0.0, 8.0, 0.0, 40.0))
+pan_seed = (0.0, 8.0, 0.0, 40.0)
 
 # ╔═╡ 50000000-0000-0000-0000-000000000042
-# Soft @bind cycle: remember lims in a Ref so a post-rebuild `nothing` bond doesn't reset the view.
-pan_now = begin
-    if (
-            @isdefined(pan_ev) && pan_ev !== nothing && pan_ev isa InteractionEvent &&
-                pan_ev.layer === :view
-        )
-        pl = pan_ev.payload
-        pan_lims[] = (Float64(pl["xmin"]), Float64(pl["xmax"]), Float64(pl["ymin"]), Float64(pl["ymax"]))
-    end
-    pan_lims[]
-end
-
-# ╔═╡ 50000000-0000-0000-0000-000000000043
 begin
     pan_fig = Figure(size = (500, 320))
-    pan_ax = Axis(pan_fig[1, 1]; limits = pan_now, title = "drag to pan — commit on release")
+    pan_ax = Axis(pan_fig[1, 1]; limits = pan_seed, title = "drag to pan — commit on release")
     scatter!(pan_ax, first.(zoom_data), last.(zoom_data); color = :dodgerblue, markersize = 18)
     pan_pts = PointInteractable(pan_ax, zoom_data; id = :scatter)
     pan_view = ViewInteractable(pan_ax)
 end
 
-# ╔═╡ 50000000-0000-0000-0000-000000000044
+# ╔═╡ 50000000-0000-0000-0000-000000000043
 @bind pan_ev holo(pan_fig, pan_pts, pan_view)
 
+# ╔═╡ 50000000-0000-0000-0000-000000000044
+pan_committed = begin
+    if pan_ev !== nothing && pan_ev isa InteractionEvent && pan_ev.layer === :view
+        pl = pan_ev.payload
+        (Float64(pl["xmin"]), Float64(pl["xmax"]), Float64(pl["ymin"]), Float64(pl["ymax"]))
+    else
+        pan_seed
+    end
+end
+
 # ╔═╡ 50000000-0000-0000-0000-000000000045
-HTML("<span id=\"panout\">PAN=$(repr(pan_ev)) lims=$(pan_now)</span>")
+HTML("<span id=\"panout\">PAN=$(repr(pan_ev)) lims=$(pan_committed)</span>")
+
+# ╔═╡ 50000000-0000-0000-0000-000000000046
+begin
+    pan_fig2 = Figure(size = (500, 320))
+    pan_ax2 = Axis(pan_fig2[1, 1]; limits = pan_committed, title = "committed pan view")
+    scatter!(pan_ax2, first.(zoom_data), last.(zoom_data); color = :dodgerblue, markersize = 18)
+    holo(pan_fig2, PointInteractable(pan_ax2, zoom_data; id = :scatter))
+end
 
 # ╔═╡ 50000000-0000-0000-0000-000000000050
 md"""
 ## Drag-to-rotate (Axis3) — commit on release
 
-Same gesture on `Axis3`: drag emits `(; azimuth, elevation)` for the next re-render.
+Same split: drag on the seed camera (top); bottom re-renders from committed
+`(azimuth, elevation)`.
 """
 
 # ╔═╡ 50000000-0000-0000-0000-000000000051
-orbit_cam = Ref((0.4, 0.5))
+orb_seed = (0.4, 0.5)
 
 # ╔═╡ 50000000-0000-0000-0000-000000000052
-orbit_now = begin
-    if (
-            @isdefined(orb_ev) && orb_ev !== nothing && orb_ev isa InteractionEvent &&
-                orb_ev.layer === :view
-        )
-        op = orb_ev.payload
-        orbit_cam[] = (Float64(op["azimuth"]), Float64(op["elevation"]))
-    end
-    orbit_cam[]
-end
-
-# ╔═╡ 50000000-0000-0000-0000-000000000053
 begin
-    orb_az, orb_el = orbit_now
     orb_fig = Figure(size = (500, 380))
-    orb_ax = Axis3(orb_fig[1, 1]; azimuth = orb_az, elevation = orb_el, title = "drag to rotate")
+    orb_ax = Axis3(orb_fig[1, 1]; azimuth = orb_seed[1], elevation = orb_seed[2], title = "drag to rotate")
     scatter!(orb_ax, Makie.Point3f[(1, 2, 3), (4, 5, 6), (7, 8, 2)]; color = :crimson, markersize = 16)
     orb_view = ViewInteractable(orb_ax)
 end
 
-# ╔═╡ 50000000-0000-0000-0000-000000000054
+# ╔═╡ 50000000-0000-0000-0000-000000000053
 @bind orb_ev holo(orb_fig, orb_view)
 
+# ╔═╡ 50000000-0000-0000-0000-000000000054
+orbit_committed = begin
+    if orb_ev !== nothing && orb_ev isa InteractionEvent && orb_ev.layer === :view
+        op = orb_ev.payload
+        (Float64(op["azimuth"]), Float64(op["elevation"]))
+    else
+        orb_seed
+    end
+end
+
 # ╔═╡ 50000000-0000-0000-0000-000000000055
-HTML("<span id=\"orbout\">ORB=$(repr(orb_ev)) cam=$(orbit_now)</span>")
+HTML("<span id=\"orbout\">ORB=$(repr(orb_ev)) cam=$(orbit_committed)</span>")
+
+# ╔═╡ 50000000-0000-0000-0000-000000000056
+begin
+    orb_fig2 = Figure(size = (500, 380))
+    orb_ax2 = Axis3(orb_fig2[1, 1]; azimuth = orbit_committed[1], elevation = orbit_committed[2], title = "committed orbit view")
+    scatter!(orb_ax2, Makie.Point3f[(1, 2, 3), (4, 5, 6), (7, 8, 2)]; color = :crimson, markersize = 16)
+    holo(orb_fig2)
+end
 
 # ╔═╡ Cell order:
 # ╠═50000000-0000-0000-0000-000000000001
@@ -258,9 +267,11 @@ HTML("<span id=\"orbout\">ORB=$(repr(orb_ev)) cam=$(orbit_now)</span>")
 # ╠═50000000-0000-0000-0000-000000000043
 # ╠═50000000-0000-0000-0000-000000000044
 # ╠═50000000-0000-0000-0000-000000000045
+# ╠═50000000-0000-0000-0000-000000000046
 # ╟─50000000-0000-0000-0000-000000000050
 # ╠═50000000-0000-0000-0000-000000000051
 # ╠═50000000-0000-0000-0000-000000000052
 # ╠═50000000-0000-0000-0000-000000000053
 # ╠═50000000-0000-0000-0000-000000000054
 # ╠═50000000-0000-0000-0000-000000000055
+# ╠═50000000-0000-0000-0000-000000000056

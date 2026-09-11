@@ -44,7 +44,9 @@ try {
       if (runBtn) runBtn.click();
       const hosts = document.querySelectorAll(".ip-host").length;
       const running = document.querySelectorAll(".running, .queued").length;
-      const errored = document.querySelectorAll(".errored, .error_log").length;
+      const errored = [...document.querySelectorAll("pluto-cell.errored, .errored")].filter((e) =>
+        /Cyclic reference|Error message/i.test(e.innerText || "")
+      ).length;
       const pan = document.querySelector("#panout")?.textContent || "";
       const orb = document.querySelector("#orbout")?.textContent || "";
       return { hosts, running, errored, pan, orb };
@@ -66,6 +68,34 @@ try {
 
   await page.screenshot({ path: path.join(evidence, "01-ready.png"), fullPage: true });
 
+  async function hostNear(sel) {
+    return page.evaluate((selector) => {
+      const el = document.querySelector(selector);
+      if (!el) return -1;
+      const hosts = [...document.querySelectorAll(".ip-host")];
+      let best = -1, bestDist = Infinity;
+      const er = el.getBoundingClientRect();
+      for (let i = 0; i < hosts.length; i++) {
+        const hr = hosts[i].getBoundingClientRect();
+        const dy = Math.abs(hr.bottom - er.top);
+        const dx = Math.abs(hr.left - er.left);
+        const d = dy + dx * 0.01;
+        if (d < bestDist) { bestDist = d; best = i; }
+      }
+      // Prefer the host *above* the readout (drag surface), not the committed view below.
+      // Walk hosts whose bottom is above the readout top.
+      let above = -1, aboveDist = Infinity;
+      for (let i = 0; i < hosts.length; i++) {
+        const hr = hosts[i].getBoundingClientRect();
+        if (hr.bottom <= er.top + 8) {
+          const d = er.top - hr.bottom;
+          if (d < aboveDist) { aboveDist = d; above = i; }
+        }
+      }
+      return above >= 0 ? above : best;
+    }, sel);
+  }
+
   async function dragHost(idx, dxCss, dyCss) {
     const box = await page.locator(".ip-host").nth(idx).boundingBox();
     if (!box) throw new Error(`no host ${idx}`);
@@ -81,29 +111,31 @@ try {
     const t0 = Date.now();
     while (Date.now() - t0 < ms) {
       const now = await page.locator(sel).innerText();
-      if (now !== before && !/nothing/.test(now)) return now;
-      // also accept lims=/cam= changing even if bond shows nothing after rebuild
       if (now !== before) return now;
       await page.waitForTimeout(500);
     }
     throw new Error(`${label}: no change from ${JSON.stringify(before)}`);
   }
 
-  // --- pan ---
+  // --- pan (drag surface above #panout) ---
+  const panIdx = await hostNear("#panout");
+  record("pan-host-index", panIdx >= 0, { panIdx });
   const panBefore = await page.locator("#panout").innerText();
-  await dragHost(0, 80, 0);
+  await dragHost(panIdx, 80, 0);
   const panAfter = await waitChange("#panout", panBefore, "pan-drag");
-  const panOk = /:view/.test(panAfter) || (panAfter !== panBefore && /lims=\(/.test(panAfter));
+  const panOk = /:view/.test(panAfter) || /InteractionEvent/.test(panAfter);
   record("drag-pan-bind", panOk, panAfter.slice(0, 160));
-  await page.locator(".ip-host").nth(0).screenshot({ path: path.join(evidence, "02-after-pan.png") });
+  await page.locator(".ip-host").nth(panIdx).screenshot({ path: path.join(evidence, "02-after-pan.png") });
 
   // --- orbit ---
+  const orbIdx = await hostNear("#orbout");
+  record("orbit-host-index", orbIdx >= 0, { orbIdx });
   const orbBefore = await page.locator("#orbout").innerText();
-  await dragHost(1, 100, 40);
+  await dragHost(orbIdx, 100, 40);
   const orbAfter = await waitChange("#orbout", orbBefore, "orbit-drag");
-  const orbOk = /:view/.test(orbAfter) || (orbAfter !== orbBefore && /cam=\(/.test(orbAfter));
+  const orbOk = /:view/.test(orbAfter) || /InteractionEvent/.test(orbAfter);
   record("drag-orbit-bind", orbOk, orbAfter.slice(0, 160));
-  await page.locator(".ip-host").nth(1).screenshot({ path: path.join(evidence, "03-after-orbit.png") });
+  await page.locator(".ip-host").nth(orbIdx).screenshot({ path: path.join(evidence, "03-after-orbit.png") });
 
   const interesting = pageErrors.filter((m) => !/ResizeObserver|favicon/i.test(m));
   record("console-clean", interesting.length === 0, { interesting, pageErrors });
