@@ -48,6 +48,9 @@ export interface AxisTransform {
     is3d?: boolean // Axis3: lims are degenerate and pixel→data inversion is undefined (a pixel is a ray).
     // Julia's validate() rejects every inversion consumer (axis/threshold/roi layers) on an is3d
     // transform, so invertAxis is never reached with one — the flag is the wire contract, not a JS branch.
+    ispolar?: boolean // PolarAxis: discrete hits project server-side via transform_func; continuous θ/r
+    // readout needs the polar transform in JS (not yet shipped). Julia validate() rejects inversion
+    // consumers on ispolar the same way as is3d.
 }
 
 export interface LayerStyle {

@@ -37,6 +37,7 @@ struct AxisTransform
     ycats::Union{Nothing, Vector{String}}
     valueaxis::Union{Nothing, Symbol}       # nothing = 2-D {x,y} readout; :x/:y = 1-D colorbar value readout
     is3d::Bool                              # Axis3: pixel→data inversion is undefined (a pixel is a ray) — lims degenerate, JS never inverts
+    ispolar::Bool                           # PolarAxis: discrete hits project via transform_func; continuous θ/r readout needs the polar transform in JS (not yet shipped)
 end
 
 """
@@ -141,7 +142,7 @@ function _axis_transform(id, ax, scaling, out_h)
         (fo[1], fo[1] + fw[1]), (fo[2], fo[2] + fw[2]),
         _scalesym(ax.xscale[]), _scalesym(ax.yscale[]),
         vpx, ax.xreversed[], ax.yreversed[],
-        _cats(ax.dim1_conversion[]), _cats(ax.dim2_conversion[]), nothing, false
+        _cats(ax.dim1_conversion[]), _cats(ax.dim2_conversion[]), nothing, false, false
     )
 end
 
@@ -156,7 +157,20 @@ function _axis3_transform(id, ax, scaling, out_h)
     vpx = (o[1] * scaling, out_h - (o[2] + wv[2]) * scaling, wv[1] * scaling, wv[2] * scaling)
     return AxisTransform(
         id, (0.0, 1.0), (0.0, 1.0), :identity, :identity,
-        vpx, false, false, nothing, nothing, nothing, true
+        vpx, false, false, nothing, nothing, nothing, true, false
+    )
+end
+
+# A PolarAxis's transform carries its pixel viewport and ispolar=true. Discrete element hits
+# project in Julia through the shared closure (Makie.Polar lives in transform_func). Continuous
+# θ/r readout needs that polar transform serialized to JS — not shipped yet — so lims are
+# degenerate and Axis/Threshold/ROI fail loud in validate() on ispolar (same shape as is3d).
+function _polar_transform(id, ax, scaling, out_h)
+    vp = ax.scene.viewport[]; o = vp.origin; wv = vp.widths
+    vpx = (o[1] * scaling, out_h - (o[2] + wv[2]) * scaling, wv[1] * scaling, wv[2] * scaling)
+    return AxisTransform(
+        id, (0.0, 1.0), (0.0, 1.0), :identity, :identity,
+        vpx, false, false, nothing, nothing, nothing, false, true
     )
 end
 
@@ -174,8 +188,8 @@ function _colorbar_transform(id, cb, scaling, out_h)
     sc = _scalesym(cb.scale[])
     vertical = cb.vertical[]
     if vertical
-        return AxisTransform(id, (0.0, 1.0), (lo, hi), :identity, sc, vpx, false, false, nothing, nothing, :y, false)
+        return AxisTransform(id, (0.0, 1.0), (lo, hi), :identity, sc, vpx, false, false, nothing, nothing, :y, false, false)
     else
-        return AxisTransform(id, (lo, hi), (0.0, 1.0), sc, :identity, vpx, false, false, nothing, nothing, :x, false)
+        return AxisTransform(id, (lo, hi), (0.0, 1.0), sc, :identity, vpx, false, false, nothing, nothing, :x, false, false)
     end
 end

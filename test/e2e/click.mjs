@@ -7,8 +7,8 @@
 // InteractionEvent. It deliberately stops at bond emission — the click→kernel→re-render mile is
 // generic Pluto machinery, not Holo code.
 //
-// Two cases share the flow: the 2D scatter page and the Axis3 page (WS-3D) — the latter asserts
-// the 3D-projected hit geometry + {index,x,y,z} payload survive the wire in a real browser.
+// Two cases share the flow: the 2D scatter page, the Axis3 page (WS-3D), and the PolarAxis
+// page — the latter asserts polar-projected hit geometry + {index,x,y} survive the wire.
 //
 // The WebGL canvas may fail to init in headless (no GPU) — that's expected and irrelevant: the
 // base-agnostic overlay hit-tests via manifest.width + the canvas rect, independent of GL pixels.
@@ -26,6 +26,7 @@ if (!dir) { console.error("usage: node click.mjs <artifact-dir>"); process.exit(
 const CASES = [
   { name: "2D", page: "page.html", expected: "expected.json", captured: "captured.json" },
   { name: "Axis3", page: "page3d.html", expected: "expected3d.json", captured: "captured3d.json" },
+  { name: "PolarAxis", page: "pagepolar.html", expected: "expectedpolar.json", captured: "capturedpolar.json" },
 ];
 
 async function runCase(browser, c) {
