@@ -436,8 +436,9 @@ inversion is undefined on a 3D axis (a screen pixel is a ray), so `is3d` transfo
 degenerate lims and `Axis`/`Threshold`/`ROI` interactables fail loud. **`PolarAxis` discrete
 overlays ship on both backends** (shared projection applies `Makie.Polar` via `transform_func`;
 `ispolar` transforms + the same continuous-consumer gates; Scatter/Lines/LineSegments/
-ScatterLines auto-extract). Continuous θ/r readout still needs the polar transform serialized
-to JS — deferred. `LScene` remains guarded (own camera/scoping look). The **Holo-wide** non-goals (every backend, by design) are the
+ScatterLines auto-extract). WGL scene JSON scrubs non-finite floats in GPU buffers for
+transport only — Holo hit geometry stays Julia-projected. Continuous θ/r readout still needs
+the polar transform serialized to JS — deferred. `LScene` remains guarded (own camera/scoping look). The **Holo-wide** non-goals (every backend, by design) are the
 **client-side GPU camera** — a JS-driven camera the kernel never hears about, which would desync
 the Julia-projected overlay and can only ever exist on one backend — and **GPU-pick occlusion**.
 **Occlusion policy (document-and-accept, backend-symmetric):** every projected vertex is

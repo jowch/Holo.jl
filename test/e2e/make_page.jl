@@ -128,6 +128,7 @@ scalep = wp.display_css / wp.manifest["width"]
 expectedp = Dict(
     "cssX" => gp[1] * scalep, "cssY" => gp[2] * scalep,
     "layer" => layerp["id"], "index" => 0,
+    "ispolar" => true,
     "markersPx" => [Dict("x" => gp[3k + 1], "y" => gp[3k + 2], "r" => gp[3k + 3]) for k in 0:3],
 )
 write(joinpath(outdir, "expectedpolar.json"), JSON3.write(expectedp))
