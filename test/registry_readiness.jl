@@ -1,29 +1,51 @@
 # General-registry readiness for the 0.1.0 freeze (after drag-to-pan, not sliders-only).
-# These are file-level gates — no backend, no figure — so they run in every GROUP.
+# File-level gates — no backend, no figure — so they run in every GROUP.
+# Parsed without the TOML stdlib: Pkg.test's sandbox does not load undeclared stdlibs.
 using Test
-using TOML
 
 const ROOT = joinpath(@__DIR__, "..")
 
+function _toml_section(path, name)
+    vals = Dict{String, String}()
+    insec = name === nothing
+    for raw in eachline(path)
+        s = strip(raw)
+        (isempty(s) || startswith(s, "#")) && continue
+        if startswith(s, "[")
+            insec = s == "[$name]"
+            continue
+        end
+        insec || continue
+        m = match(r"^([A-Za-z0-9_]+) = \"(.*)\"$", s)
+        m === nothing && continue
+        vals[m.captures[1]] = m.captures[2]
+    end
+    return vals
+end
+
 @testset "General registry readiness" begin
-    proj = TOML.parsefile(joinpath(ROOT, "Project.toml"))
+    proj_path = joinpath(ROOT, "Project.toml")
+    ident = _toml_section(proj_path, nothing)
+    deps = _toml_section(proj_path, "deps")
+    weakdeps = _toml_section(proj_path, "weakdeps")
+    compat = _toml_section(proj_path, "compat")
     changelog = read(joinpath(ROOT, "CHANGELOG.md"), String)
     readme = read(joinpath(ROOT, "README.md"), String)
+    proj_text = read(proj_path, String)
 
     @testset "Project.toml identity" begin
-        @test proj["name"] == "Holo"
-        @test proj["uuid"] == "82b01fb5-7eeb-4559-83ea-8d75f85d4328"
-        @test proj["version"] == "0.1.0"
-        @test !isempty(get(proj, "authors", String[]))
+        @test ident["name"] == "Holo"
+        @test ident["uuid"] == "82b01fb5-7eeb-4559-83ea-8d75f85d4328"
+        @test ident["version"] == "0.1.0"
+        @test occursin("authors", proj_text)
     end
 
     @testset "compat covers deps, weakdeps, and julia" begin
-        compat = proj["compat"]
         @test haskey(compat, "julia")
-        for dep in keys(proj["deps"])
+        for dep in keys(deps)
             @test haskey(compat, dep)
         end
-        for dep in keys(get(proj, "weakdeps", Dict{String, Any}()))
+        for dep in keys(weakdeps)
             @test haskey(compat, dep)
         end
     end
