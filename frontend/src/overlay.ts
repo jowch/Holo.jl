@@ -1,8 +1,8 @@
 // DOM layer: builds a shadow-root overlay over the (light-DOM) base image, wires hover/click,
 // draws highlights, and round-trips clicks through the @bind element. Stateless across re-render.
-import { hitTest, invertAxis, resolvePayload, findBin } from "./geometry"
+import { hitTest, invertAxis, resolvePayload, findBin, panLimits, orbitAngles } from "./geometry"
 import { renderTemplate, renderAutoTable, esc } from "./template"
-import type { AxisTransform, Hit, HitLayer, Manifest, ThresholdGeometry, ROIGeometry, GridGeometry } from "./types"
+import type { AxisTransform, Hit, HitLayer, Manifest, ThresholdGeometry, ROIGeometry, GridGeometry, ViewGeometry } from "./types"
 
 const SVG_NS = "http://www.w3.org/2000/svg"
 
@@ -155,10 +155,27 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     type Drag =
         | { kind: "threshold"; id: string; line: SVGLineElement; tg: ThresholdGeometry; t: AxisTransform }
         | { kind: "roi"; id: string; box: ROIBox; mode: { corner: number } | { move: true }; ax: number; ay: number; target?: HitLayer }
+        | { kind: "view"; id: string; g: ViewGeometry; t: AxisTransform; x0: number; y0: number }
     let drag: Drag | null = null
     let justDragged = false
+    const VIEW_MIN_PX = 3 // image-px; ignore accidental micro-drags
     const clampX = (t: AxisTransform, x: number) => Math.max(t.viewport[0], Math.min(t.viewport[0] + t.viewport[2], x))
     const clampY = (t: AxisTransform, y: number) => Math.max(t.viewport[1], Math.min(t.viewport[1] + t.viewport[3], y))
+
+    const startViewDrag = (layer: HitLayer, p: { x: number; y: number }) => {
+        drag = {
+            kind: "view", id: layer.id, g: layer.geometry as ViewGeometry,
+            t: manifest.transforms[layer.axis], x0: p.x, y0: p.y,
+        }
+    }
+    const viewTip = (d: Extract<Drag, { kind: "view" }>, p: { x: number; y: number }) => {
+        if (d.g.mode === "orbit") {
+            const o = orbitAngles(d.g, d.x0, d.y0, p.x, p.y)
+            return `az=${fmt(o.azimuth)} el=${fmt(o.elevation)}`
+        }
+        const lim = panLimits(d.t, d.x0, d.y0, p.x, p.y)
+        return `x:[${fmt(lim.xmin)}, ${fmt(lim.xmax)}] y:[${fmt(lim.ymin)}, ${fmt(lim.ymax)}]`
+    }
 
     const clearHi = () => { while (hiGroup.firstChild) hiGroup.removeChild(hiGroup.firstChild) }
     const clearSel = () => { while (selGroup.firstChild) selGroup.removeChild(selGroup.firstChild) }
@@ -188,16 +205,40 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     const onMove = (e: MouseEvent) => {
         if (drag) return // window-level onDrag owns the pointer mid-drag
         const p = imgPx(e)
-        if (hitTest(manifest, p.x, p.y, "drag")) { clearHi(); tip.style.display = "none"; surface.classList.add("grab"); surface.classList.remove("hot"); return }
+        const dragHit = hitTest(manifest, p.x, p.y, "drag")
+        // Full-viewport :view must not suppress element hover — only sparse Tier-0
+        // drag targets (threshold / ROI) take the grab early-return.
+        if (dragHit && dragHit.layer.kind !== "view") {
+            clearHi(); tip.style.display = "none"
+            surface.classList.add("grab"); surface.classList.remove("hot")
+            return
+        }
         surface.classList.remove("grab")
         const hit = hitTest(manifest, p.x, p.y, "hover")
-        if (hit) { drawHi(hit); showTip(hit, p.x, p.y, e); surface.classList.add("hot") }
-        else { clearHi(); tip.style.display = "none"; surface.classList.remove("hot") }
+        if (hit) {
+            drawHi(hit); showTip(hit, p.x, p.y, e); surface.classList.add("hot")
+        } else {
+            clearHi(); tip.style.display = "none"; surface.classList.remove("hot")
+            if (dragHit?.layer.kind === "view") surface.classList.add("grab")
+        }
     }
     const onLeave = () => { clearHi(); tip.style.display = "none" }
     const onDown = (e: MouseEvent) => {
         justDragged = false
         const p = imgPx(e)
+        // Shift+drag forces view (arbitration vs box-select / ROI / threshold).
+        if (e.shiftKey) {
+            const viewLayer = manifest.layers.find((l) => {
+                if (l.kind !== "view" || !l.events.includes("drag")) return false
+                return hitTest({ ...manifest, layers: [l] }, p.x, p.y, "drag") !== null
+            })
+            if (viewLayer) {
+                startViewDrag(viewLayer, p)
+                surface.classList.add("grabbing")
+                e.preventDefault()
+                return
+            }
+        }
         const hit = hitTest(manifest, p.x, p.y, "drag")
         if (!hit) return
         if (hit.layer.kind === "threshold") {
@@ -216,6 +257,8 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
                 const opp = c[(k + 2) % 4]
                 drag = { kind: "roi", id: hit.layer.id, box, mode: { corner: k }, ax: opp[0], ay: opp[1], target }
             }
+        } else if (hit.layer.kind === "view") {
+            startViewDrag(hit.layer, p)
         } else return
         surface.classList.add("grabbing")
         e.preventDefault()
@@ -228,6 +271,8 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
             setLine(drag.line, drag.tg, pos)
             const v = invertAxis(drag.t, clampX(drag.t, p.x), clampY(drag.t, p.y))
             tip.textContent = fmt(drag.tg.orientation === "h" ? v.y : v.x)
+        } else if (drag.kind === "view") {
+            tip.textContent = viewTip(drag, p)
         } else {
             const box = drag.box, [vx, vy, vw, vh] = box.t.viewport
             if ("move" in drag.mode) {
@@ -257,16 +302,34 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
             const sel = computeSelection(drag.box.g, drag.target, manifest.transforms[drag.target.axis])
             drawSelection(sel.hits)
             ;(host as unknown as { value: unknown }).value = { items: sel.items }
+            host.dispatchEvent(new CustomEvent("input"))
         } else if (drag.kind === "threshold") {
             const v = invertAxis(drag.t, clampX(drag.t, p.x), clampY(drag.t, p.y))
             const payload = drag.tg.orientation === "h" ? v.y : v.x
             ;(host as unknown as { value: unknown }).value = { layer: drag.id, index: 0, payload }
+            host.dispatchEvent(new CustomEvent("input"))
+        } else if (drag.kind === "view") {
+            const dist = Math.hypot(p.x - drag.x0, p.y - drag.y0)
+            if (dist >= VIEW_MIN_PX) {
+                const payload = drag.g.mode === "orbit"
+                    ? orbitAngles(drag.g, drag.x0, drag.y0, p.x, p.y)
+                    : panLimits(drag.t, drag.x0, drag.y0, p.x, p.y)
+                ;(host as unknown as { value: unknown }).value = { layer: drag.id, index: 0, payload }
+                host.dispatchEvent(new CustomEvent("input"))
+            }
         } else {
             ;(host as unknown as { value: unknown }).value = { layer: drag.id, index: 0, payload: roiBounds(drag.box) }
+            host.dispatchEvent(new CustomEvent("input"))
         }
-        host.dispatchEvent(new CustomEvent("input"))
         tip.style.display = "none"; surface.classList.remove("grabbing")
-        justDragged = true
+        // :view micro-drags (below VIEW_MIN_PX) intentionally skip commit — don't swallow
+        // the synthesized click that follows, so co-mounted click layers still fire.
+        if (drag.kind === "view") {
+            const dist = Math.hypot(p.x - drag.x0, p.y - drag.y0)
+            justDragged = dist >= VIEW_MIN_PX
+        } else {
+            justDragged = true
+        }
         drag = null
     }
     const onClick = (e: MouseEvent) => {

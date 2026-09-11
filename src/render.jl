@@ -92,7 +92,7 @@ function _layer_n_elements(kind::Symbol, geometry)
     elseif kind === :grid
         Int(geometry["ncols"]) * Int(geometry["nrows"])
     else
-        0   # :axis / :threshold / :roi — not element-indexed for selected=
+        0   # :axis / :threshold / :roi / :view — not element-indexed for selected=
     end
 end
 
@@ -186,6 +186,10 @@ function build_manifest(interactables, ctx::InteractionContext; selected = nothi
         end
     end
     _validate_selectors(interactables, layers)
+    # View (pan/orbit) layers are catch-all viewport hits — keep them after Tier-0
+    # threshold/ROI so ordinary drag still wins without a modifier. Shift+drag still
+    # forces view in the overlay (see frontend overlay.ts).
+    sort!(layers; by = (d) -> (d["kind"] == "view", 0), alg = Base.Sort.DEFAULT_STABLE)
     m = Dict{String, Any}(
         "width" => ctx.width, "height" => ctx.height, "scaling" => ctx.scaling,
         "layers" => layers,

@@ -1,5 +1,5 @@
 // Pure hit-test math — no DOM. All coordinates are image pixels. Unit-tested in test/geometry.test.ts.
-import type { AxisTransform, GridGeometry, Hit, HitLayer, Manifest, ThresholdGeometry, ROIGeometry } from "./types"
+import type { AxisTransform, GridGeometry, Hit, HitLayer, Manifest, ThresholdGeometry, ROIGeometry, ViewGeometry } from "./types"
 
 const HIT_TOL = 4 // px slack for circles/rects
 const SEG_TOL = 8 // px slack for segments/polylines
@@ -144,7 +144,49 @@ export function hitLayer(layer: HitLayer, px: number, py: number): Omit<Hit, "la
             }
             return { index: -1, axis: layer.axis } // catch-all when no bbox (AxisInteractable)
         }
+        case "view": {
+            const vg = g as ViewGeometry
+            if (px < vg.x || px > vg.x + vg.w || py < vg.y || py > vg.y + vg.h) return null
+            return { index: 0 }
+        }
     }
+}
+
+// Shift axis limits by a fractional viewport delta (grab pan). Works for identity + log scales.
+export function shiftLims(lims: [number, number], scale: string, df: number): [number, number] {
+    if (scale === "log10" || scale === "log") {
+        const a = Math.log10(lims[0]), b = Math.log10(lims[1]), w = b - a
+        return [Math.pow(10, a - df * w), Math.pow(10, b - df * w)]
+    }
+    const w = lims[1] - lims[0]
+    return [lims[0] - df * w, lims[1] - df * w]
+}
+
+/** 2D pan: keep the point under the cursor fixed → shift lims opposite the drag (fractional). */
+export function panLimits(
+    t: AxisTransform, x0: number, y0: number, x1: number, y1: number,
+): { xmin: number; xmax: number; ymin: number; ymax: number } {
+    const [vx, vy, vw, vh] = t.viewport
+    let fx0 = (x0 - vx) / vw, fx1 = (x1 - vx) / vw
+    let fy0 = 1 - (y0 - vy) / vh, fy1 = 1 - (y1 - vy) / vh
+    if (t.xreversed) { fx0 = 1 - fx0; fx1 = 1 - fx1 }
+    if (t.yreversed) { fy0 = 1 - fy0; fy1 = 1 - fy1 }
+    const [xmin, xmax] = shiftLims(t.xlims, t.xscale, fx1 - fx0)
+    const [ymin, ymax] = shiftLims(t.ylims, t.yscale, fy1 - fy0)
+    return { xmin, xmax, ymin, ymax }
+}
+
+/** Axis3 orbit: pixel Δ → azimuth/elevation (radians). Elevation clamped away from ±π/2. */
+export function orbitAngles(
+    g: ViewGeometry, x0: number, y0: number, x1: number, y1: number,
+): { azimuth: number; elevation: number } {
+    const sens = Math.PI / Math.max(1, g.w)
+    const az0 = g.azimuth ?? 0
+    const el0 = g.elevation ?? 0
+    const az = az0 - (x1 - x0) * sens
+    const elMax = Math.PI / 2 - 0.01
+    const el = Math.max(-elMax, Math.min(elMax, el0 + (y1 - y0) * sens))
+    return { azimuth: az, elevation: el }
 }
 
 // first layer (in manifest order) with a hit for the given event; null if none

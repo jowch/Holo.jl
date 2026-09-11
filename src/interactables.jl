@@ -10,7 +10,7 @@ a hit to an element index + payload. Compact by design (a heatmap ships edges, n
 """
 struct HitLayer
     id::Symbol
-    kind::Symbol          # :circles|:polyline|:segments|:rects|:grid|:polygons|:axis|:threshold
+    kind::Symbol          # :circles|:polyline|:segments|:rects|:grid|:polygons|:axis|:threshold|:roi|:view
     geometry::Any
     payloads::Vector{Any}
     axis::Symbol
@@ -345,6 +345,50 @@ function hitlayers(i::ColorbarInteractable, ctx)
     vp = ctx.transforms[aid].viewport
     bbox = Real[vp[1], vp[2], vp[3], vp[4]]
     return [HitLayer(i.id, :axis, bbox, Any[], aid, events(i))]
+end
+
+# ============================ ViewInteractable =============================
+# Drag-to-pan (2D Axis) / drag-to-rotate (Axis3). Commit-on-release: the overlay tracks
+# the gesture locally; mouse-up emits new view params via @bind and Julia re-renders.
+# Live drag *preview* (per-frame re-render) shares the animation payload gate — not here.
+# Modifier arbitration: Shift+drag forces view even over a Tier-0 ROI/threshold hit.
+struct ViewInteractable <: AbstractInteractable
+    ax; id::Symbol
+end
+ViewInteractable(ax; id = :view) = ViewInteractable(ax, id)
+events(::ViewInteractable) = (:drag,)
+function validate(i::ViewInteractable, ctx::InteractionContext)
+    t = ctx.transforms[axis_id(ctx, i.ax)]
+    t.ispolar && return "ViewInteractable: PolarAxis view gestures need continuous θ/r " *
+        "transforms (not yet shipped). Use element interactables for discrete hits."
+    t.valueaxis !== nothing && return "ViewInteractable: a Colorbar has no pan/orbit view; " *
+        "key ViewInteractable to an Axis or Axis3."
+    if t.is3d
+        # Axis3: azimuth/elevation are read from the live axis in hitlayers — nothing else to gate.
+        return nothing
+    end
+    (t.xcats === nothing && t.ycats === nothing) ||
+        return "ViewInteractable: pan needs continuous numeric axes; a categorical axis has " *
+        "no numeric limits to shift (use AxisInteractable for categorical readout)."
+    (t.xscale in _JS_INVERTIBLE && t.yscale in _JS_INVERTIBLE) ||
+        return "ViewInteractable: pan needs client-side invertible x and y scales " *
+        "(x=$(t.xscale), y=$(t.yscale); supported: identity/log10/log)."
+    return nothing
+end
+function hitlayers(i::ViewInteractable, ctx)
+    t = ctx.transforms[axis_id(ctx, i.ax)]
+    vx, vy, vw, vh = t.viewport
+    geom = Dict{String, Any}(
+        "x" => Float32(vx), "y" => Float32(vy),
+        "w" => Float32(vw), "h" => Float32(vh),
+        "mode" => t.is3d ? "orbit" : "pan",
+    )
+    if t.is3d
+        # Current camera — JS computes the committed (azimuth, elevation) from the pixel delta.
+        geom["azimuth"] = Float64(i.ax.azimuth[])
+        geom["elevation"] = Float64(i.ax.elevation[])
+    end
+    return [HitLayer(i.id, :view, geom, Any[], axis_id(ctx, i.ax), events(i))]
 end
 
 # ============================ ThresholdInteractable ========================
