@@ -65,6 +65,9 @@ end
     @test w.scene isa Dict{String, Any}
     @test (w.width, w.height) == (400, 300)
 
+    # scene must be JSON3-safe (Makie can emit NaN in transformed-position buffers; _plain scrubs them)
+    @test JSON3.write(w.scene) isa String
+
     # self-contained HTML (inline JSON instead of published_to_js) — the integration points
     html = sprint(
         show, MIME"text/html"(),
