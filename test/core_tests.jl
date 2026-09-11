@@ -757,6 +757,10 @@ end
         @test [L["kind"] for L in m["layers"]] == ["circles", "axis"]
         @test haskey(m["transforms"], "ax1")
 
+        # inspector ink (first polish PR): hoverstyle default + shipped layer.style
+        @test Holo.hoverstyle(PointInteractable(bax, pts; id = :scatter), 1).stroke == "#3A6F7C"
+        @test m["layers"][1]["style"]["stroke"] == "#3A6F7C"
+
         # selection round-trip: pre-highlight indices ride the manifest keyed by layer id
         @test !haskey(m["layers"][1], "selected")                       # absent when unselected
         ms = build_manifest([PointInteractable(bax, pts; id = :scatter)], bctx; selected = Dict(:scatter => [0, 2]))
@@ -769,19 +773,14 @@ end
         )   # empty omitted
         @test holo(bfig, PointInteractable(bax, pts; id = :scatter); selected = Dict(:scatter => [1])).manifest["layers"][1]["selected"] == [1]
 
-        # selected= fail-loud (issue #39): unsupported kinds and OOB indices must throw at
-        # build_manifest, same doctrine as wrong-length payloads= (_check_payloads).
+        # selected= fail-loud (issue #39): still-unsupported kinds (grid/axis/…) and OOB
+        # indices throw at build_manifest. Open kinds (segments/polyline) now accept
+        # selected= so the overlay can draw the selected-ring recipe.
         @testset "selected= fails loud on unsupported kinds and OOB indices" begin
             segs = SegmentInteractable(bax, [(1.0, 1.0), (2.0, 2.0), (3.0, 3.0), (4.0, 4.0)]; mode = :pairs, id = :segs)
-            @test_throws ArgumentError build_manifest([segs], bctx; selected = Dict(:segs => [0]))
-            err_seg = try
-                build_manifest([segs], bctx; selected = Dict(:segs => [0])); nothing
-            catch e
-                e
-            end
-            @test err_seg isa ArgumentError
-            @test occursin(r"selected"i, sprint(showerror, err_seg))
-            @test occursin("segments", sprint(showerror, err_seg))
+            ms_seg = build_manifest([segs], bctx; selected = Dict(:segs => [0]))
+            @test ms_seg["layers"][1]["selected"] == [0]
+            @test ms_seg["layers"][1]["kind"] == "segments"
 
             grid_i = RectInteractable(bax; grid = (0.5:1:3.5, 0.5:1:3.5, rand(3, 3)), id = :heat)
             @test_throws ArgumentError build_manifest([grid_i], bctx; selected = Dict(:heat => [0]))
@@ -812,13 +811,17 @@ end
             @test occursin(r"selected"i, sprint(showerror, err_oob))
             @test occursin(r"5|out of range|elements"i, sprint(showerror, err_oob))
 
-            # supported kinds still accept in-range indices (rects list + polygons)
+            # supported kinds still accept in-range indices (rects list + polygons + polyline)
             rects = RectInteractable(bax; rects = [(1.0, 1.0, 0.5, 0.5), (2.0, 2.0, 0.5, 0.5)], id = :boxes)
             mr = build_manifest([rects], bctx; selected = Dict(:boxes => [1]))
             @test mr["layers"][1]["selected"] == [1]
             polys = PolygonInteractable(bax, [[(0.0, 0.0), (1.0, 0.0), (0.5, 1.0)]]; id = :poly)
             mp = build_manifest([polys], bctx; selected = Dict(:poly => [0]))
             @test mp["layers"][1]["selected"] == [0]
+            poly = SegmentInteractable(bax, [(1.0, 1.0), (2.0, 2.0), (3.0, 1.5)]; mode = :polyline, id = :line)
+            ml = build_manifest([poly], bctx; selected = Dict(:line => [1]))
+            @test ml["layers"][1]["selected"] == [1]
+            @test ml["layers"][1]["kind"] == "polyline"
         end
 
         w = holo(bfig, PointInteractable(bax, pts; id = :scatter))

@@ -6,6 +6,14 @@ import type { AxisTransform, Hit, HitLayer, Manifest, ThresholdGeometry, ROIGeom
 
 const SVG_NS = "http://www.w3.org/2000/svg"
 
+// Inspector ink — locked first-polish default (visual-design.md). Not a theming API.
+const INSPECTOR_INK = "#3A6F7C"
+const DEFAULT_STYLE = { stroke: INSPECTOR_INK, width: 2 }
+const SELECTED_WASH = "rgba(58, 111, 124, 0.12)"
+const TIP_GAP = 8
+const TIP_OFFSET = 10
+const MOTION_MS = 100 // 80–120 ms window; prefers-reduced-motion disables below
+
 const STYLE = `
 :host { position: absolute; inset: 0; }
 .surface { position: absolute; inset: 0; cursor: crosshair; }
@@ -13,24 +21,39 @@ const STYLE = `
 .surface.grab { cursor: grab; }
 .surface.grabbing { cursor: grabbing; }
 svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.holo-tip { position: absolute; display: none; pointer-events: none; z-index: 10;
+g.hi > *, g.sel > * { animation: holo-in ${MOTION_MS}ms ease-out; }
+@keyframes holo-in { from { opacity: 0 } to { opacity: 1 } }
+.holo-tip { position: absolute; opacity: 0; pointer-events: none; z-index: 10;
        padding: var(--holo-tip-padding, 8px 12px); border-radius: var(--holo-tip-radius, 4px);
        background: var(--holo-tip-bg, #ffffff); color: var(--holo-tip-color, #1a1a1a);
        border: 1px solid var(--holo-tip-border, rgba(0,0,0,0.1));
        box-shadow: var(--holo-tip-shadow, 0 2px 4px rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.08));
        font: var(--holo-tip-font-size, 11px)/1.4 var(--holo-tip-font, system-ui, -apple-system, sans-serif);
-       max-width: var(--holo-tip-maxwidth, 320px); white-space: normal; transform: translate(10px, 10px); }
+       max-width: var(--holo-tip-maxwidth, 320px); white-space: normal;
+       transition: opacity ${MOTION_MS}ms ease-out; }
+.holo-tip.show { opacity: 1; }
 .holo-tip::before { content: ""; position: absolute; top: -5px; left: 8px;
        border: 5px solid transparent; border-top: none; border-bottom-color: var(--holo-tip-bg, #ffffff);
        display: var(--holo-tip-caret, block); }
+.holo-tip.flip-y::before { top: auto; bottom: -5px; border-bottom: none;
+       border-top: 5px solid var(--holo-tip-bg, #ffffff); }
+.holo-tip.flip-x::before { left: auto; right: 8px; }
 .holo-tip-row { display: flex; gap: 8px; justify-content: space-between; }
 .holo-tip-key { color: var(--holo-tip-accent, #6b7280); }
 .holo-tip-val { font-variant-numeric: tabular-nums; }
+/* TODO(pluto-theme): if Pluto ships a notebook theme toggle / documented JS
+   signal (html/body class, data-theme, or event), follow that first and keep
+   prefers-color-scheme as the fallback below. Do not scrape Pluto chrome. */
 @media (prefers-color-scheme: dark) {
   .holo-tip { background: var(--holo-tip-bg, #1e1e1e); color: var(--holo-tip-color, #e8e8e8);
        border-color: var(--holo-tip-border, rgba(255,255,255,0.15));
        box-shadow: var(--holo-tip-shadow, 0 2px 4px rgba(0,0,0,0.4), 0 8px 16px rgba(0,0,0,0.3)); }
   .holo-tip::before { border-bottom-color: var(--holo-tip-bg, #1e1e1e); }
+  .holo-tip.flip-y::before { border-top-color: var(--holo-tip-bg, #1e1e1e); }
+}
+@media (prefers-reduced-motion: reduce) {
+  g.hi > *, g.sel > * { animation: none; }
+  .holo-tip { transition: none; }
 }
 `
 
@@ -98,7 +121,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         const tg = layer.geometry as ThresholdGeometry
         const line = document.createElementNS(SVG_NS, "line")
         setLine(line, tg, tg.pos)
-        const st = layer.style ?? { stroke: "#ff3b30", width: 3 }
+        const st = layer.style ?? DEFAULT_STYLE
         line.setAttribute("stroke", st.stroke); line.setAttribute("stroke-width", String(st.width))
         line.setAttribute("vector-effect", "non-scaling-stroke")
         svg.appendChild(line) // sibling of hiGroup → never hover-cleared
@@ -128,7 +151,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     for (const layer of manifest.layers) {
         if (layer.kind !== "roi") continue
         const rg = layer.geometry as ROIGeometry
-        const st = layer.style ?? { stroke: "#ff3b30", width: 3 }
+        const st = layer.style ?? DEFAULT_STYLE
         const rect = document.createElementNS(SVG_NS, "rect")
         rect.setAttribute("fill", "none"); rect.setAttribute("stroke", st.stroke)
         rect.setAttribute("stroke-width", String(st.width)); rect.setAttribute("vector-effect", "non-scaling-stroke")
@@ -179,12 +202,36 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
 
     const clearHi = () => { while (hiGroup.firstChild) hiGroup.removeChild(hiGroup.firstChild) }
     const clearSel = () => { while (selGroup.firstChild) selGroup.removeChild(selGroup.firstChild) }
-    const drawHi = (hit: Hit) => { clearHi(); const el = makeHiElement(hit); if (el) hiGroup.appendChild(el) }
-    const drawSelection = (hits: Hit[]) => { clearSel(); for (const h of hits) { const el = makeHiElement(h); if (el) selGroup.appendChild(el) } }
+    const drawHi = (hit: Hit) => { clearHi(); const el = makeHiElement(hit, "hover"); if (el) hiGroup.appendChild(el) }
+    const drawSelection = (hits: Hit[]) => { clearSel(); for (const h of hits) { const el = makeHiElement(h, "selected"); if (el) selGroup.appendChild(el) } }
+
+    const hideTip = () => { tip.classList.remove("show", "flip-x", "flip-y") }
+    const tipOffset = (e: MouseEvent) => {
+        const r = surface.getBoundingClientRect()
+        if (r.width > 0 && r.height > 0) return { x: e.clientX - r.left, y: e.clientY - r.top }
+        return { x: e.offsetX || e.clientX, y: e.offsetY || e.clientY }
+    }
+    const placeTip = (ox: number, oy: number) => {
+        const tw = tip.offsetWidth, th = tip.offsetHeight
+        const hw = surface.clientWidth, hh = surface.clientHeight
+        tip.classList.remove("flip-x", "flip-y")
+        if (tw <= 0 || th <= 0 || hw <= 0 || hh <= 0) {
+            tip.style.left = `${ox + TIP_OFFSET}px`
+            tip.style.top = `${oy + TIP_OFFSET}px`
+            return
+        }
+        let left = ox + TIP_OFFSET, top = oy + TIP_OFFSET
+        const flipX = left + tw > hw - TIP_GAP
+        const flipY = top + th > hh - TIP_GAP
+        if (flipX) { left = ox - tw - TIP_OFFSET; tip.classList.add("flip-x") }
+        if (flipY) { top = oy - th - TIP_OFFSET; tip.classList.add("flip-y") }
+        tip.style.left = `${Math.max(TIP_GAP, Math.min(left, hw - tw - TIP_GAP))}px`
+        tip.style.top = `${Math.max(TIP_GAP, Math.min(top, hh - th - TIP_GAP))}px`
+    }
 
     const showTip = (hit: Hit, x: number, y: number, e: MouseEvent) => {
         const layer = hit.layer
-        if (layer.tooltip === false) { tip.style.display = "none"; return }
+        if (layer.tooltip === false) { hideTip(); return }
         let html: string
         if (layer.template) {
             html = renderTemplate(layer.template, resolvePayload(hit, manifest, x, y))
@@ -197,9 +244,9 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
             html = renderAutoTable(hit.layer.payloads[hit.index])
         }
         tip.innerHTML = html
-        tip.style.display = "block"
-        tip.style.left = `${e.offsetX}px`
-        tip.style.top = `${e.offsetY}px`
+        tip.classList.add("show")
+        const p = tipOffset(e)
+        placeTip(p.x, p.y)
     }
 
     const onMove = (e: MouseEvent) => {
@@ -209,7 +256,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         // Full-viewport :view must not suppress element hover — only sparse Tier-0
         // drag targets (threshold / ROI) take the grab early-return.
         if (dragHit && dragHit.layer.kind !== "view") {
-            clearHi(); tip.style.display = "none"
+            clearHi(); hideTip()
             surface.classList.add("grab"); surface.classList.remove("hot")
             return
         }
@@ -218,11 +265,11 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         if (hit) {
             drawHi(hit); showTip(hit, p.x, p.y, e); surface.classList.add("hot")
         } else {
-            clearHi(); tip.style.display = "none"; surface.classList.remove("hot")
+            clearHi(); hideTip(); surface.classList.remove("hot")
             if (dragHit?.layer.kind === "view") surface.classList.add("grab")
         }
     }
-    const onLeave = () => { clearHi(); tip.style.display = "none" }
+    const onLeave = () => { clearHi(); hideTip() }
     const onDown = (e: MouseEvent) => {
         justDragged = false
         const p = imgPx(e)
@@ -293,7 +340,9 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
                 tip.textContent = `x:[${fmt(b.xmin)}, ${fmt(b.xmax)}] y:[${fmt(b.ymin)}, ${fmt(b.ymax)}]`
             }
         }
-        tip.style.display = "block"; tip.style.left = `${e.offsetX}px`; tip.style.top = `${e.offsetY}px`
+        tip.classList.add("show")
+        const tp = tipOffset(e)
+        placeTip(tp.x, tp.y)
     }
     const onUp = (e: MouseEvent) => {
         if (!drag) return
@@ -321,7 +370,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
             ;(host as unknown as { value: unknown }).value = { layer: drag.id, index: 0, payload: roiBounds(drag.box) }
             host.dispatchEvent(new CustomEvent("input"))
         }
-        tip.style.display = "none"; surface.classList.remove("grabbing")
+        hideTip(); surface.classList.remove("grabbing")
         // :view micro-drags (below VIEW_MIN_PX) intentionally skip commit — don't swallow
         // the synthesized click that follows, so co-mounted click layers still fire.
         if (drag.kind === "view") {
@@ -380,9 +429,35 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
 const fmt = (v: unknown) => (typeof v === "number" ? v.toPrecision(4) : String(v))
 
 // --- highlight element factory (shared by hover drawHi and box-selection selGroup) ---
-function makeHiElement(hit: Hit): SVGElement | null {
+type HiMode = "hover" | "selected"
+
+function colorWithAlpha(stroke: string, a: number): string {
+    const m = /^#([0-9a-f]{6})$/i.exec(stroke.trim())
+    if (!m) return SELECTED_WASH
+    const n = parseInt(m[1], 16)
+    return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${a})`
+}
+
+function makeRing(shape: SVGElement, stroke: string): SVGGElement {
+    const g = document.createElementNS(SVG_NS, "g")
+    const inner = shape
+    const outer = shape.cloneNode(true) as SVGElement
+    for (const el of [inner, outer]) {
+        el.setAttribute("fill", "none")
+        el.setAttribute("stroke", stroke)
+        el.setAttribute("vector-effect", "non-scaling-stroke")
+    }
+    inner.setAttribute("stroke-width", "2")
+    inner.setAttribute("stroke-opacity", "1")
+    outer.setAttribute("stroke-width", "4")
+    outer.setAttribute("stroke-opacity", "0.25")
+    g.append(outer, inner) // outer under inner so the 2px stroke stays crisp
+    return g
+}
+
+function makeHiElement(hit: Hit, mode: HiMode = "hover"): SVGElement | null {
     if (!hit.geom) return null
-    const st = hit.layer.style ?? { stroke: "#ff3b30", width: 3 }
+    const st = hit.layer.style ?? DEFAULT_STYLE
     const g = hit.geom as [string, ...number[]] | [string, number[]]
     let el: SVGElement | null = null
     if (g[0] === "circle") {
@@ -405,10 +480,19 @@ function makeHiElement(hit: Hit): SVGElement | null {
         el.setAttribute("points", pts.trim())
     }
     if (!el) return null
-    el.setAttribute("fill", "none")
-    el.setAttribute("stroke", st.stroke)
-    el.setAttribute("stroke-width", String(st.width))
+    const open = g[0] === "seg"
+    if (mode === "selected" && open) return makeRing(el, st.stroke)
     el.setAttribute("vector-effect", "non-scaling-stroke")
+    el.setAttribute("stroke", st.stroke)
+    if (mode === "hover") {
+        el.setAttribute("fill", "none")
+        el.setAttribute("stroke-width", "2")
+        el.setAttribute("stroke-opacity", "0.85")
+    } else {
+        el.setAttribute("fill", colorWithAlpha(st.stroke, 0.12))
+        el.setAttribute("stroke-width", "2.5")
+        el.setAttribute("stroke-opacity", "1")
+    }
     return el
 }
 
@@ -470,7 +554,8 @@ function computeSelection(
 }
 
 // Kinds that can be drawn as a persistent pre-highlight (mirrors Julia `_SELECTED_KINDS`).
-const SELECTED_KINDS = new Set(["circles", "rects", "polygons"])
+// Open kinds (segments / polyline) use the selected-ring recipe; closed kinds use the wash.
+const SELECTED_KINDS = new Set(["circles", "rects", "polygons", "segments", "polyline"])
 
 function layerNElements(layer: import("./types").HitLayer): number {
     const g = layer.geometry
@@ -492,7 +577,7 @@ function hitLayerByIndex(layer: import("./types").HitLayer, index: number): Omit
     if (!SELECTED_KINDS.has(layer.kind)) {
         throw new Error(
             `selected: layer ${layer.id} has kind ${layer.kind}, which does not support pre-highlight ` +
-                `(supported: circles, rects, polygons)`,
+                `(supported: circles, rects, polygons, segments, polyline)`,
         )
     }
     const n = layerNElements(layer)
@@ -511,6 +596,14 @@ function hitLayerByIndex(layer: import("./types").HitLayer, index: number): Omit
         const a = g as number[]
         return { index, geom: ["rect", a[4 * index], a[4 * index + 1], a[4 * index + 2], a[4 * index + 3]] }
     }
-    // polygons (only remaining SELECTED_KINDS entry)
+    if (layer.kind === "segments" && Array.isArray(g)) {
+        const a = g as number[]
+        return { index, geom: ["seg", a[4 * index], a[4 * index + 1], a[4 * index + 2], a[4 * index + 3]] }
+    }
+    if (layer.kind === "polyline" && Array.isArray(g)) {
+        const a = g as number[]
+        return { index, geom: ["seg", a[2 * index], a[2 * index + 1], a[2 * index + 2], a[2 * index + 3]] }
+    }
+    // polygons (only remaining closed SELECTED_KINDS entry)
     return { index, geom: ["poly", (g as number[][])[index]] }
 }

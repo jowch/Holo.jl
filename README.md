@@ -69,7 +69,11 @@ sel === nothing ? "click a point" : "you picked $(sel.payload)"
 ```
 
 Hover shows a tooltip (purely client-side, no Julia round-trip); a click sets `sel` and
-re-runs downstream cells. Clicks on empty space are a no-op.
+re-runs downstream cells. Clicks on empty space are a no-op. The tooltip card follows
+`prefers-color-scheme` today — the same OS/browser signal Pluto itself uses (Pluto 1.0
+has no notebook theme toggle). If Pluto later ships a documented theme signal, the
+overlay will follow that first and keep OS as the fallback; pin `tooltip_*` to lock
+colors. See [`docs/tooltips.md`](docs/tooltips.md).
 
 ## What's interactable (v1)
 
@@ -135,9 +139,10 @@ finalize step Makie performs at display time).
   (see `_resolve_backend` in [`src/render.jl`](src/render.jl)).
 - **`selected`** — a `layer_id => indices` map (e.g. `Dict(:scatter => [0, 2])`) that
   pre-highlights elements on mount. Indices are 0-based and match `InteractionEvent.index`.
-  Supported kinds: `circles` / `rects` / `polygons`. Unsupported kinds (`segments`, `grid`, …)
-  or out-of-range indices throw `ArgumentError` at build time (fail loud, like wrong-length
-  `payloads=`). Feed a bond value back into it to keep clicked elements highlighted across
+  Supported kinds: `circles` / `rects` / `polygons` (selected wash) and `segments` /
+  `polyline` (selected ring). Unsupported kinds (`grid`, `axis`, …) or out-of-range
+  indices throw `ArgumentError` at build time (fail loud, like wrong-length `payloads=`).
+  Feed a bond value back into it to keep clicked elements highlighted across
   re-renders, flicker-free (see [Selection round-trip](#selection-round-trip)). Keys are layer
   ids: for the single-layer kinds that's the interactable's `id`, but `RegionInteractable`
   splits into suffixed layers (`:id_c` circles / `:id_r` rects / `:id_p` polygons) — key on those.

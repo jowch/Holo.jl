@@ -385,7 +385,7 @@ describe("tooltips (mount/showTip)", () => {
         const shadow = shadowOf(host)
         const tip = shadow.querySelector(".holo-tip") as HTMLElement
         hoverMarker(shadow)
-        expect(tip.style.display).toBe("block")
+        expect(tip.classList.contains("show")).toBe(true)
         expect(tip.innerHTML).toBe("<b>&lt;x&gt;</b>")   // the <b> stays live; the payload value is escaped
     })
 
@@ -395,7 +395,7 @@ describe("tooltips (mount/showTip)", () => {
         const shadow = shadowOf(host)
         const tip = shadow.querySelector(".holo-tip") as HTMLElement
         hoverMarker(shadow)
-        expect(tip.style.display).toBe("block")
+        expect(tip.classList.contains("show")).toBe(true)
         expect(tip.innerHTML).toContain("holo-tip-row")
         expect(tip.innerHTML).toContain("Tokyo")
     })
@@ -406,7 +406,7 @@ describe("tooltips (mount/showTip)", () => {
         const shadow = shadowOf(host)
         const tip = shadow.querySelector(".holo-tip") as HTMLElement
         hoverMarker(shadow)
-        expect(tip.style.display).toBe("none")
+        expect(tip.classList.contains("show")).toBe(false)
     })
 
     it("colorbar axis hover shows formatted value not x=undefined", () => {
@@ -424,7 +424,7 @@ describe("tooltips (mount/showTip)", () => {
         // client (110,150) → image px (220,300); inside bbox; fy=0.5 → value=5.0; fmt(5)="5.000"
         ;(shadow.querySelector(".surface") as HTMLElement)
             .dispatchEvent(new MouseEvent("mousemove", { clientX: 110, clientY: 150, bubbles: true }))
-        expect(tip.style.display).toBe("block")
+        expect(tip.classList.contains("show")).toBe(true)
         expect(tip.innerHTML).toBe("5.000")
         expect(tip.innerHTML).not.toContain("undefined")
     })
@@ -443,7 +443,7 @@ describe("tooltips (mount/showTip)", () => {
         const tip = shadow.querySelector(".holo-tip") as HTMLElement
         ;(shadow.querySelector(".surface") as HTMLElement)
             .dispatchEvent(new MouseEvent("mousemove", { clientX: 200, clientY: 200, bubbles: true }))
-        expect(tip.style.display).toBe("block")
+        expect(tip.classList.contains("show")).toBe(true)
         expect(tip.innerHTML).toContain("x=")
         expect(tip.innerHTML).toContain("y=")
         expect(tip.innerHTML).not.toContain("undefined")
@@ -474,9 +474,9 @@ describe("tooltips (mount/showTip)", () => {
     })
 
     // issue #39: selected= fail-loud on unsupported kinds / OOB (mirror Julia build_manifest)
-    it("selected= on segments fails loud at mount (no silent empty g.sel)", () => {
-        const { script } = setup()
-        const bad: Manifest = {
+    it("selected= on segments draws a ring (open-kind fallback)", () => {
+        const { host, script } = setup()
+        const segs: Manifest = {
             width: 1200, height: 800, scaling: 2, transforms: {},
             layers: [{
                 id: "segs", kind: "segments", geometry: [0, 0, 100, 100, 200, 200, 300, 300],
@@ -484,7 +484,9 @@ describe("tooltips (mount/showTip)", () => {
                 selected: [0],
             }],
         }
-        expect(() => mount(script, bad)).toThrow(/selected/i)
+        mount(script, segs)
+        const node = shadowOf(host).querySelector("g.sel")!.firstElementChild as SVGElement
+        expect(node.querySelectorAll("line").length).toBe(2)
     })
 
     it("selected= on grid fails loud at mount", () => {
@@ -601,11 +603,11 @@ describe("tooltips (mount/showTip)", () => {
         const tip = shadow.querySelector(".holo-tip") as HTMLElement
         // hover over the point (client 300,200 → image 600,400)
         surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
-        expect(tip.style.display).toBe("block")
+        expect(tip.classList.contains("show")).toBe(true)
         expect(surface.classList.contains("hot")).toBe(true)
         // empty area: grab cursor from view, no hover tip
         surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 50, clientY: 50, bubbles: true }))
-        expect(tip.style.display).toBe("none")
+        expect(tip.classList.contains("show")).toBe(false)
         expect(surface.classList.contains("grab")).toBe(true)
         // tiny mousedown/up over the point must not swallow the subsequent click
         let clicked: { layer: string; index: number } | null = null
@@ -654,5 +656,128 @@ describe("tooltips (mount/showTip)", () => {
         // image Δx = 600; sens = π/1200 → Δaz = −π/2
         expect(committed!.payload.azimuth).toBeCloseTo(0.4 - Math.PI / 2)
         expect(committed!.payload.elevation).toBeCloseTo(0.5)
+    })
+})
+
+// First overlay visual-polish PR (locked recipes in visual-design.md):
+// inspector ink, hover = stroke only, selected = wash / ring, tip motion + edge clamp.
+describe("overlay visual polish", () => {
+    const ink = "#3A6F7C"
+    const wash = "rgba(58, 111, 124, 0.12)"
+
+    it("hover is stroke-only inspector ink (2px, opacity 0.85, fill none)", () => {
+        const { host, script } = setup()
+        mount(script, manifest)
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
+        const el = shadow.querySelector("g.hi")!.firstElementChild as SVGElement
+        expect(el.tagName.toLowerCase()).toBe("circle")
+        expect(el.getAttribute("fill")).toBe("none")
+        expect(el.getAttribute("stroke")).toBe(ink)
+        expect(el.getAttribute("stroke-width")).toBe("2")
+        expect(el.getAttribute("stroke-opacity")).toBe("0.85")
+    })
+
+    it("selected closed geometry gets a wash fill + 2.5px stroke", () => {
+        const { host, script } = setup()
+        mount(script, {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [{
+                id: "pts", kind: "circles", geometry: [300, 200, 20],
+                payloads: [{ i: 0 }], axis: "ax1", events: ["click", "hover"], selected: [0],
+            }],
+        })
+        const el = shadowOf(host).querySelector("g.sel")!.firstElementChild as SVGElement
+        expect(el.tagName.toLowerCase()).toBe("circle")
+        expect(el.getAttribute("fill")).toBe(wash)
+        expect(el.getAttribute("stroke")).toBe(ink)
+        expect(el.getAttribute("stroke-width")).toBe("2.5")
+        expect(el.getAttribute("stroke-opacity") ?? "1").toBe("1")
+    })
+
+    it("selected open geometry gets a ring (inner 2px + outer ~4px, fill none)", () => {
+        const { host, script } = setup()
+        mount(script, {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [{
+                id: "segs", kind: "segments", geometry: [100, 100, 400, 200],
+                payloads: [{ i: 0 }], axis: "ax1", events: ["click", "hover"], selected: [0],
+            }],
+        })
+        const node = shadowOf(host).querySelector("g.sel")!.firstElementChild as SVGElement
+        const lines = node.tagName.toLowerCase() === "g"
+            ? [...node.querySelectorAll("line")]
+            : [node]
+        expect(lines.length).toBe(2)
+        expect(lines.every((ln) => ln.getAttribute("fill") === "none")).toBe(true)
+        expect(lines.every((ln) => ln.getAttribute("stroke") === ink)).toBe(true)
+        const widths = lines.map((ln) => ln.getAttribute("stroke-width")).sort()
+        expect(widths).toEqual(["2", "4"])
+        const outer = lines.find((ln) => ln.getAttribute("stroke-width") === "4")!
+        expect(outer.getAttribute("stroke-opacity")).toBe("0.25")
+    })
+
+    it("threshold chrome falls back to inspector ink when style is missing", () => {
+        const { host, script } = setup()
+        mount(script, {
+            width: 1200, height: 800, scaling: 2,
+            transforms: { ax1: { xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
+                viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false } },
+            layers: [{ id: "thr", kind: "threshold", axis: "ax1", events: ["drag"], payloads: [],
+                geometry: { orientation: "h", pos: 400, span: [0, 1200] } }],
+        })
+        const line = shadowOf(host).querySelector("line") as SVGLineElement
+        expect(line.getAttribute("stroke")).toBe(ink)
+    })
+
+    it("tooltip show/hide uses a class so opacity can fade", () => {
+        const { host, script } = setup()
+        mount(script, manifest)
+        const shadow = shadowOf(host)
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        expect(tip.classList.contains("show")).toBe(false)
+        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(tip.classList.contains("show")).toBe(true)
+        surface.dispatchEvent(new MouseEvent("mouseleave", { bubbles: true }))
+        expect(tip.classList.contains("show")).toBe(false)
+    })
+
+    it("overlay CSS honors prefers-reduced-motion", () => {
+        const { host, script } = setup()
+        mount(script, manifest)
+        const css = shadowOf(host).querySelector("style")!.textContent!
+        expect(css).toMatch(/prefers-reduced-motion:\s*reduce/)
+        expect(css).toMatch(/opacity/)
+    })
+
+    it("clamps the tip and flips the caret near the bottom-right edge", () => {
+        const { host, script } = setup()
+        // axis layer: hover anywhere inside the viewport so we can park the cursor at the edge
+        mount(script, {
+            width: 1200, height: 800, scaling: 2,
+            transforms: { ax1: { xlims: [0, 10], ylims: [0, 10], xscale: "identity", yscale: "identity",
+                viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false } },
+            layers: [{ id: "axis", kind: "axis", geometry: null, payloads: [], axis: "ax1", events: ["hover"] }],
+        })
+        const shadow = shadowOf(host)
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        Object.defineProperty(tip, "offsetWidth", { configurable: true, value: 220 })
+        Object.defineProperty(tip, "offsetHeight", { configurable: true, value: 80 })
+        Object.defineProperty(surface, "clientWidth", { configurable: true, value: 600 })
+        Object.defineProperty(surface, "clientHeight", { configurable: true, value: 400 })
+        // client (580, 380) is inside the axis viewport and near the 600×400 surface corner
+        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 580, clientY: 380, bubbles: true }))
+        expect(tip.classList.contains("show")).toBe(true)
+        expect(tip.classList.contains("flip-x")).toBe(true)
+        expect(tip.classList.contains("flip-y")).toBe(true)
+        const left = parseFloat(tip.style.left)
+        const top = parseFloat(tip.style.top)
+        expect(left + 220).toBeLessThanOrEqual(600)
+        expect(top + 80).toBeLessThanOrEqual(400)
+        expect(left).toBeGreaterThanOrEqual(0)
+        expect(top).toBeGreaterThanOrEqual(0)
     })
 })

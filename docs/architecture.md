@@ -150,7 +150,7 @@ events(::AbstractInteractable)::Tuple = (:click, :hover)   # which events the ov
 # constructor (nothing → auto-table, Markup → template, false → suppress).
 # The per-element `tooltip(interactable, idx, payload)` dispatch is retired (M2.3).
 # See docs/tooltips.md.
-hoverstyle(::AbstractInteractable, idx::Int)::NamedTuple = (; stroke="#ff3b30", width=3)
+hoverstyle(::AbstractInteractable, idx::Int)::NamedTuple = (; stroke="#3A6F7C", width=3)
 ```
 
 **`validate` is per-capability, not a global scale gate** (fixes a latent silent-coordinate bug).

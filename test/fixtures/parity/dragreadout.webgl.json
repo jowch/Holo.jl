@@ -17,7 +17,7 @@
             "axis": "ax1",
             "style": {
                 "width": 3,
-                "stroke": "#ff3b30"
+                "stroke": "#3A6F7C"
             },
             "events": [
                 "drag"
@@ -38,7 +38,7 @@
             "axis": "ax1",
             "style": {
                 "width": 3,
-                "stroke": "#ff3b30"
+                "stroke": "#3A6F7C"
             },
             "events": [
                 "drag"
@@ -53,7 +53,7 @@
             "axis": "ax1",
             "style": {
                 "width": 3,
-                "stroke": "#ff3b30"
+                "stroke": "#3A6F7C"
             },
             "events": [
                 "click",
