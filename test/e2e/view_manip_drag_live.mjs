@@ -98,14 +98,28 @@ try {
   }
 
   async function dragHost(idx, dxCss, dyCss) {
-    const box = await page.locator(".ip-host").nth(idx).boundingBox();
-    if (!box) throw new Error(`no host ${idx}`);
-    const x0 = box.x + box.width * 0.45;
-    const y0 = box.y + box.height * 0.55;
-    await page.mouse.move(x0, y0);
-    await page.mouse.down();
-    await page.mouse.move(x0 + dxCss, y0 + dyCss, { steps: 12 });
-    await page.mouse.up();
+    const ok = await page.evaluate(([i, dx, dy]) => {
+      const host = [...document.querySelectorAll(".ip-host")][i];
+      if (!host) return false;
+      let sr = null;
+      host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
+      const surface = sr?.querySelector(".surface");
+      const media = host.querySelector("img, canvas");
+      if (!surface || !media) return false;
+      const b = media.getBoundingClientRect();
+      const ax = b.x + b.width * 0.45, ay = b.y + b.height * 0.55;
+      const bx = ax + dx, by = ay + dy;
+      surface.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, composed: true, cancelable: true, clientX: ax, clientY: ay }));
+      for (let t = 0.25; t <= 1.0; t += 0.25) {
+        window.dispatchEvent(new MouseEvent("mousemove", {
+          bubbles: true, cancelable: true,
+          clientX: ax + (bx - ax) * t, clientY: ay + (by - ay) * t,
+        }));
+      }
+      window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, clientX: bx, clientY: by }));
+      return true;
+    }, [idx, dxCss, dyCss]);
+    if (!ok) throw new Error(`dragHost(${idx}) failed — no surface`);
   }
 
   async function waitChange(sel, before, label, ms = 120000) {
