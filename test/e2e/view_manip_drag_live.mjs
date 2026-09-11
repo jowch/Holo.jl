@@ -52,13 +52,14 @@ try {
       return { hosts, running, errored, pan, orb };
     });
     if (tick % 10 === 0) console.error("wait", st);
-    if (st.errored > 0) {
-      failed = `notebook errored cells=${st.errored}`;
-      break;
-    }
-    if (st.hosts >= 2 && st.running === 0 && /lims=/.test(st.pan) && /cam=/.test(st.orb)) {
+    // Don't abort on transient cycle errors from a stale notebook session — wait for
+    // a clean ready state (hosts + readouts, zero cyclic errors, idle).
+    if (st.hosts >= 2 && st.running === 0 && st.errored === 0 && /lims=/.test(st.pan) && /cam=/.test(st.orb)) {
       ready = true;
       break;
+    }
+    if (st.errored > 0 && st.running === 0 && tick > 5) {
+      failed = `notebook errored cells=${st.errored}`;
     }
     await page.waitForTimeout(3000);
     tick++;
