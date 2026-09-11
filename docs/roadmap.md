@@ -70,14 +70,14 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
       `LineSegments`' converted (data space, spike-verified; includes the triangulation diagonals
       a grid-edge reconstruction would miss). Both graduate out of the Axis3 introspection gate;
       rendered-pixel unit tests + through-Pluto live-verify.
-- [ ] **Axis3 per-type extraction — Arrows3D** — **premise corrected (2026-07-02):** the planned
-      "Segment/:pairs base→tip from data" is WRONG — `arrows3d` autoscales (resolved
-      `arrowscale` ≈ 2.84 on the spike scene) and renders via three `MeshScatter` children whose
-      positions/rotations/markersizes live in a **normalized, anisotropically-scaled space** (data
-      (1,1,1) → child (−0.909,−0.909,−0.606)), so raw pos→pos+dir matches the drawn pixels for
-      some arrows and misses others. A real recipe must reconstruct shaft+tip extents from the
-      children (quaternion rotation × markersize.z along the shaft axis) or resolve the scaling
-      chain — its own arc. Until then arrows3d skip-warns (no `_plotbase` entry).
+- [x] **Axis3 per-type extraction — Arrows3D** *(delivered 2026-09-11)*: premise from
+      2026-07-02 stands — raw `pos→pos+dir` is wrong under `lengthscale`/`align` and children
+      live in float32convert space — but the fix is to read Makie's processed
+      `startpoints`/`endpoints` (DATA space; the span the shaft+tip MeshScatter children cover
+      after `arrowscale`). Emits `SegmentInteractable(:pairs)` with `{index,x,y,z,u,v,w}`
+      payloads. Unit tests cover anisotropic limits + `lengthscale=0.5` (raw midpoints miss;
+      processed midpoints hit). Dual-backend Pluto+browser live-verify **PASS** (Cairo +
+      WebGL; evidence in PR #43 / store `docs/arrows3d-arc.md`).
 - [ ] **Axis3 per-type extraction — `Surface` (deferred)** — unbounded per-cell payload +
       occlusion, same class as the heatmap `values[]` hole. Occlusion policy for all 3D types:
       **document-and-accept on both backends** (no `:webgl`-only GPU-pick); upgrade path = a

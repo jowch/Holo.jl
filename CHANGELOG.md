@@ -35,6 +35,10 @@ Initial implementation — not yet released or registered.
   API, demonstrated in `examples/view_manip.jl` (CI-run); live-verified on `:cairo` (this
   example) and on the `:webgl` slider path (the PR #37 instrumented sweep).
   Drag gestures remain roadmap scope.
+- `Arrows3D` auto-extraction on `Axis3`: `SegmentInteractable(:pairs)` from processed
+  `startpoints`/`endpoints` (DATA space), with `{index,x,y,z,u,v,w}` payloads. Raw
+  `pos→pos+dir` is intentionally not used — it misses under `lengthscale`/`align` and the
+  MeshScatter children live in float32convert space (premise from #36).
 
 ### Fixed
 - `selected=` now fails loud at `build_manifest` (and at overlay mount) for unsupported
@@ -61,7 +65,9 @@ Initial implementation — not yet released or registered.
   lims; `Axis`/`Threshold`/`ROI` interactables fail loud on a 3D axis, where a screen pixel is a
   ray). `MeshScatter` (depth-correct per-element hit radii from its data-space `markersize`, via
   the new `PointInteractable` `radius3d=` option) and `Wireframe` (rendered edge segments from
-  its child) are auto-extracted too; `Arrows3D` and `Surface` remain roadmap scope.
+  its child) are auto-extracted too; `Arrows3D` emits start→end segments from processed
+  `startpoints`/`endpoints` (not raw `pos→pos+dir` — that misses under `lengthscale`/`align`).
+  `Surface` remains roadmap scope.
 - `PolarAxis` discrete overlay parity: Scatter/Lines(/LineSegments/ScatterLines) hit geometry on
   both backends via the shared projection (`Makie.Polar` in `transform_func`); `ispolar`
   transforms ship degenerate lims so continuous θ/r consumers fail loud until the polar

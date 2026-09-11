@@ -391,7 +391,7 @@ end
         @test only(gints) isa PointInteractable
     end
 
-    @testset "Axis3 per-type extraction: MeshScatter + Wireframe" begin
+    @testset "Axis3 per-type extraction: MeshScatter + Wireframe + Arrows3D" begin
         isredc(c) = Float64(Makie.red(c)) > 0.6 && Float64(Makie.green(c)) < 0.4 && Float64(Makie.blue(c)) < 0.4
         isbluec(c) = Float64(Makie.blue(c)) > 0.4 && Float64(Makie.red(c)) < 0.5 && Float64(Makie.green(c)) < 0.5
         function color_near(pred, img, cx, cy; tol = 5)
@@ -488,16 +488,80 @@ end
             @test color_near(isbluec, imgw, mx, my; tol = 3)
         end
 
-        # Arrows3D stays skipped (deferred): its rendered geometry is autoscaled into a
-        # normalized child space — raw pos→pos+dir does NOT match the drawn pixels (spike
-        # 2026-07-02), so extracting it needs its own recipe, not a pass-through. It has no
-        # _plotbase entry, so it takes the generic no-recipe warn path.
+        # Arrows3D: SegmentInteractable(:pairs) from processed startpoints→endpoints (DATA
+        # space). Raw pos→pos+dir is wrong under lengthscale/align (spike 2026-07-02 + 2026-09-11):
+        # Makie autoscales into a normalized child MeshScatter space; startpoints/endpoints are
+        # the post-align/lengthscale ends that the shaft+tip children span. Child quaternion ×
+        # markersize.z reconstructs the same span in that child space — we read the data-space
+        # ends so Holo's project closure (which applies float32convert) lands on drawn pixels.
         fa = Figure(; size = (600, 450))
-        axa = Axis3(fa[1, 1])
-        arrows3d!(axa, Makie.Point3f[(1, 1, 1)], Makie.Vec3f[(1, 0, 0)])
+        axa = Axis3(fa[1, 1]; azimuth = 0.4, elevation = 0.5)
+        apts = Makie.Point3f[(1, 1, 1), (3, 2, 1), (2, 4, 3)]
+        adirs = Makie.Vec3f[(1, 0, 0), (0, 1, 0.5), (-0.5, 0, 1)]
+        arrows3d!(axa, apts, adirs; color = :red)
         Makie.update_state_before_display!(fa)
-        aints = @test_logs (:warn, r"skipping"i) auto_interactables(fa)
-        @test isempty(aints)
+        aints = @test_logs auto_interactables(fa)       # no logs: arrows3d must NOT re-gate
+        ai = only(aints)
+        @test ai isa SegmentInteractable && ai.mode === :pairs
+        @test length(ai.vertices) == 6                  # 3 arrows × (start, end)
+        @test ai.payloads[1] == (; index = 0, x = 1.0, y = 1.0, z = 1.0, u = 1.0, v = 0.0, w = 0.0)
+        _, ppua, ctxa = ctx_for(fa)
+        imga = Makie.colorbuffer(fa; px_per_unit = ppua)
+        La = only(hitlayers(ai, ctxa))
+        @test La.kind === :segments && length(La.geometry) == 12
+        for k in 0:2
+            mx = (La.geometry[4k + 1] + La.geometry[4k + 3]) / 2
+            my = (La.geometry[4k + 2] + La.geometry[4k + 4]) / 2
+            @test color_near(isredc, imga, mx, my; tol = 3)
+        end
+
+        # lengthscale ≠ 1: raw pos→pos+dir overshoots the drawn arrow; processed ends must hit
+        fls = Figure(; size = (600, 450))
+        axls = Axis3(fls[1, 1]; azimuth = 0.4, elevation = 0.5)
+        arrows3d!(axls, apts, Makie.Vec3f[(2, 0, 0), (0, 2, 1), (-1, 0, 2)]; lengthscale = 0.5f0, color = :red)
+        Makie.update_state_before_display!(fls)
+        li = only(@test_logs auto_interactables(fls))
+        _, ppuls, ctxls = ctx_for(fls)
+        imgls = Makie.colorbuffer(fls; px_per_unit = ppuls)
+        Lls = only(hitlayers(li, ctxls))
+        for k in 0:2
+            mx = (Lls.geometry[4k + 1] + Lls.geometry[4k + 3]) / 2
+            my = (Lls.geometry[4k + 2] + Lls.geometry[4k + 4]) / 2
+            @test color_near(isredc, imgls, mx, my; tol = 3)
+        end
+        # regression: a midpoint of raw pos→pos+dir (ignoring lengthscale) must NOT be required
+        # to hit — at least one overshoots past the tip (proves we didn't use the raw recipe)
+        raw_miss = false
+        for k in 1:3
+            raw_end = apts[k] .+ Makie.Vec3f[(2, 0, 0), (0, 2, 1), (-1, 0, 2)][k]
+            q = data_to_image_px(ctxls, axls, (apts[k] .+ raw_end) ./ 2)
+            # sample near the far end of the raw segment (t=0.9) — past the scaled tip
+            qfar = data_to_image_px(ctxls, axls, apts[k] .+ 0.9 .* (raw_end .- apts[k]))
+            raw_miss |= !color_near(isredc, imgls, qfar[1], qfar[2]; tol = 3)
+        end
+        @test raw_miss
+
+        # anisotropic Axis3 limits: equal data-norm dirs get unequal world lengths; data-space
+        # start→end still projects onto the drawn shafts (the child-space trap)
+        fan = Figure(; size = (600, 450))
+        axan = Axis3(fan[1, 1]; azimuth = 0.4, elevation = 0.5)
+        limits!(axan, 0, 10, 0, 2, 0, 2)
+        arrows3d!(
+            axan,
+            Makie.Point3f[(2, 1, 1), (5, 0.5, 0.5), (2, 1, 0.5)],
+            Makie.Vec3f[(2, 0, 0), (0, 1, 0), (0, 0, 1)];
+            color = :red,
+        )
+        Makie.update_state_before_display!(fan)
+        ani = only(@test_logs auto_interactables(fan))
+        _, ppuan, ctxan = ctx_for(fan)
+        imgan = Makie.colorbuffer(fan; px_per_unit = ppuan)
+        Lan = only(hitlayers(ani, ctxan))
+        for k in 0:2
+            mx = (Lan.geometry[4k + 1] + Lan.geometry[4k + 3]) / 2
+            my = (Lan.geometry[4k + 2] + Lan.geometry[4k + 4]) / 2
+            @test color_near(isredc, imgan, mx, my; tol = 4)
+        end
     end
 
     @testset "Polygon geometry projects per ring" begin
