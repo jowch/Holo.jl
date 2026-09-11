@@ -57,28 +57,37 @@ function Holo.context(b::CairoBackend, fig, ppu)
     project = Holo._project_closure(scaling, out_h)
 
     # Fail loud, never silently wrong: an axis-like block Holo doesn't build transforms for
-    # (PolarAxis/LScene) would be silently dropped here, then interactables would project
-    # against the wrong axis. Reject it up front. (roadmap.md M3: PolarAxis/LScene
-    # disposition is an open decision item; Axis3 is supported since WS-3D.)
-    unsupported = unique(typeof.(c for c in fig.content if c isa Makie.AbstractAxis && !(c isa Union{Makie.Axis, Makie.Axis3})))
+    # (LScene today) would be silently dropped here, then interactables would project against
+    # the wrong axis. Reject it up front. Axis3 since WS-3D; PolarAxis discrete overlays ship
+    # here (roadmap.md M3); LScene remains deferred.
+    unsupported = unique(
+        typeof.(
+            c for c in fig.content if c isa Makie.AbstractAxis &&
+                !(c isa Union{Makie.Axis, Makie.Axis3, Makie.PolarAxis})
+        ),
+    )
     isempty(unsupported) || throw(
         ArgumentError(
-            "Holo's CairoMakie backend supports `Makie.Axis` and `Makie.Axis3` only; found " *
+            "Holo's CairoMakie backend supports `Makie.Axis`, `Makie.Axis3`, and `Makie.PolarAxis`; found " *
                 "unsupported $(join(unsupported, ", ")). This is Holo's own scoping guard, not a " *
-                "CairoMakie limit — PolarAxis/LScene support is an open roadmap decision " *
-                "(docs/roadmap.md M3). Today: restart this session with `using WGLMakie` (instead " *
-                "of `using CairoMakie`) to render these live (Holo builds no overlays for them on " *
-                "either backend).",
+                "CairoMakie limit — `LScene` support is still deferred (docs/roadmap.md M3). " *
+                "Today: restart this session with `using WGLMakie` (instead of `using CairoMakie`) " *
+                "to render `LScene` live (Holo builds no overlays for it on either backend).",
         ),
     )
 
-    axes = [c for c in fig.content if c isa Union{Makie.Axis, Makie.Axis3}]
+    axes = [c for c in fig.content if c isa Union{Makie.Axis, Makie.Axis3, Makie.PolarAxis}]
     ids = IdDict{Any, Symbol}()
     transforms = Dict{Symbol, AxisTransform}()
     for (k, ax) in enumerate(axes)
         id = Symbol("ax", k); ids[ax] = id
-        transforms[id] = ax isa Makie.Axis3 ? Holo._axis3_transform(id, ax, scaling, out_h) :
+        transforms[id] = if ax isa Makie.Axis3
+            Holo._axis3_transform(id, ax, scaling, out_h)
+        elseif ax isa Makie.PolarAxis
+            Holo._polar_transform(id, ax, scaling, out_h)
+        else
             Holo._axis_transform(id, ax, scaling, out_h)
+        end
     end
     cbs = [c for c in fig.content if c isa Makie.Colorbar]
     for (k, cb) in enumerate(cbs)

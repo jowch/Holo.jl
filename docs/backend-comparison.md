@@ -8,8 +8,8 @@
 > contract (parity is CI-enforced by the golden-manifest harness, `test/fixtures/parity/`).
 > Both backends ship `Axis3` overlays (WS-3D core, 2026-07-02) — static base on `:cairo`, live on
 > `:webgl` — with identical manifests (the `axis3` parity goldens are byte-identical). View
-> manipulation is planned as **backend-symmetric `@bind` re-render**; only the client-side GPU
-> camera is out of scope (see §1†).
+> manipulation **ships** as **backend-symmetric `@bind` re-render** (sliders + `ViewInteractable` drag);
+> only the client-side GPU camera is out of scope (see §1†).
 >
 > **Numbers reproduce** via `julia --project=. bench/vs_cairo.jl` (WebGL measured live in this
 > process, both sides `Random.seed!(0)`; Cairo measured in a subprocess, since Holo supports only
@@ -33,8 +33,8 @@ camera is deliberately not client-driven on either backend (§1†).
 
 | interaction | `:cairo` | `:webgl` |
 |---|---|---|
-| pan / zoom | planned: `@bind` re-render of `limits` (†) | planned: same (†) — re-render churn is upstream-managed, no context gate |
-| rotate a 3D plot | planned: `@bind` re-render of `azimuth`/`elevation` (†) — static `Axis3` overlays ship today | planned: same (†) — renders `Axis3` live today, same overlays |
+| pan / zoom | `@bind` re-render of `limits` (sliders + `ViewInteractable` drag) | same — re-render churn is upstream-managed, no context gate |
+| rotate a 3D plot | `@bind` re-render of `azimuth`/`elevation` (sliders + `ViewInteractable` drag) | same — renders `Axis3` live today, same overlays |
 | hover tooltip | overlay hit-test (client) | overlay hit-test (client) — same |
 | click → `@bind` | client hit-test + bind | client hit-test + bind — same |
 | data update (`@bind` drives the data) | **full** server render + encode + PNG re-ship | server serialize + client redraw |
@@ -42,10 +42,10 @@ camera is deliberately not client-driven on either backend (§1†).
 
 The rows that **match** are the current story: both backends do hover/click/`@bind` the same way
 (`Axis3` included — same overlays, same `{index,x,y,z}` payloads); `:webgl`'s edge is rendering
-**cost** (cheap re-renders; live rather than static 3D). Live pan/zoom/rotate is **not shipped on
-either backend yet** — and when it lands it lands on both, as server-authoritative re-render (†).
+**cost** (cheap re-renders; live rather than static 3D). Live pan/zoom/rotate **ships on both
+backends** as server-authoritative `@bind` re-render (sliders + `ViewInteractable` drag) (†).
 
-> **(†) View manipulation: planned as backend-symmetric `@bind` re-render; the client-side GPU
+> **(†) View manipulation: shipped as backend-symmetric `@bind` re-render; the client-side GPU
 > camera stays out (a Holo-wide non-goal, alongside GPU-pick occlusion).** What is true today, verified from source: the widget
 > deliberately gates the client camera off — the shim sets `can_send_to_julia:()=>true` (needed for
 > the client-side camera/uniform *observable* animation path), so WGLMakie's
@@ -65,9 +65,9 @@ either backend yet** — and when it lands it lands on both, as server-authorita
 > (2026-07-02 — figures and mechanism in `perf-findings.md` §"WGL context lifecycle"): re-init
 > per step is a *cost* (the camera-only resident-scene patch is the planned optimization), not
 > a feasibility gate. Continuous *smooth* drag on large scenes remains expensive on both — a
-> shared cost wall, not a capability split. Status: **planned, unbuilt** — sliders work today
-> on both (verified live); drag after; 3D rotation additionally needs the Axis3 parity item
-> (`docs/roadmap.md` M3, same milestone as view manipulation).
+> shared cost wall, not a capability split. Status: **shipped** — sliders and `ViewInteractable`
+> drag-to-pan/rotate (commit-on-release) on both backends; live drag *preview* deferred with
+> animation.
 
 ## 2. Wire + server cost — the measurable half
 

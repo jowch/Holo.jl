@@ -65,6 +65,9 @@ end
     @test w.scene isa Dict{String, Any}
     @test (w.width, w.height) == (400, 300)
 
+    # scene must be JSON3-safe (Makie can emit NaN in transformed-position buffers; _plain scrubs them)
+    @test JSON3.write(w.scene) isa String
+
     # self-contained HTML (inline JSON instead of published_to_js) — the integration points
     html = sprint(
         show, MIME"text/html"(),
@@ -81,6 +84,17 @@ end
     @test occursin("createObjectURL", html)      # blob delivery (no server / no file://)
     @test occursin("window.__HoloWGL", html)     # M2: bundle/shim blob URLs cached once per notebook
     @test occursin("window.Holo.mount", html)    # Holo's overlay reused verbatim
+end
+
+@testset "PolarAxis scene is JSON3-safe (pagepolar e2e)" begin
+    import JSON3
+    fig = Figure(; size = (400, 300))
+    ax = PolarAxis(fig[1, 1])
+    scatter!(ax, Point2f[(0.0, 1.0), (π / 2, 2.0)]; markersize = 14, color = :red)
+    w = holo(fig)
+    @test w.manifest["transforms"]["ax1"]["ispolar"] === true
+    @test JSON3.write(w.scene) isa String
+    @test JSON3.write(w.manifest) isa String
 end
 
 @testset "context populates per-axis transforms (axis-keyed interactable)" begin

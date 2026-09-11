@@ -1,65 +1,9 @@
 {
-    "transforms": {
-        "cb1": {
-            "xscale": "identity",
-            "xreversed": false,
-            "yscale": "identity",
-            "ylims": [
-                4,
-                19
-            ],
-            "xlims": [
-                0,
-                1
-            ],
-            "yreversed": false,
-            "xcats": null,
-            "is3d": false,
-            "ycats": null,
-            "viewport": [
-                1096.864013671875,
-                32.0,
-                24.0,
-                689.3800048828125
-            ],
-            "valueaxis": "y"
-        },
-        "ax1": {
-            "xscale": "identity",
-            "xreversed": false,
-            "yscale": "identity",
-            "ylims": [
-                0.5,
-                5.5
-            ],
-            "xlims": [
-                0.5,
-                4.5
-            ],
-            "yreversed": false,
-            "xcats": null,
-            "is3d": false,
-            "ycats": null,
-            "viewport": [
-                66,
-                32,
-                994,
-                690
-            ],
-            "valueaxis": null
-        }
-    },
-    "scaling": 2,
     "height": 800,
-    "width": 1200,
     "layers": [
         {
-            "events": [
-                "click",
-                "hover"
-            ],
             "kind": "grid",
-            "axis": "ax1",
+            "id": "cells",
             "geometry": {
                 "yedges": [
                     722,
@@ -69,7 +13,7 @@
                     170,
                     32
                 ],
-                "nrows": 5,
+                "ncols": 4,
                 "values": [
                     4,
                     5,
@@ -99,23 +43,23 @@
                     812,
                     1060
                 ],
-                "ncols": 4
-            },
-            "id": "cells",
-            "style": {
-                "stroke": "#ff3b30",
-                "width": 3
+                "nrows": 5
             },
             "payloads": [
-            ]
-        },
-        {
+            ],
+            "axis": "ax1",
+            "style": {
+                "width": 3,
+                "stroke": "#ff3b30"
+            },
             "events": [
                 "click",
                 "hover"
-            ],
+            ]
+        },
+        {
             "kind": "circles",
-            "axis": "ax1",
+            "id": "scatter",
             "geometry": [
                 190,
                 584,
@@ -127,11 +71,6 @@
                 170,
                 9
             ],
-            "id": "scatter",
-            "style": {
-                "stroke": "#ff3b30",
-                "width": 3
-            },
             "payloads": [
                 {
                     "index": 0,
@@ -148,15 +87,20 @@
                     "x": 4,
                     "y": 4.5
                 }
-            ]
-        },
-        {
+            ],
+            "axis": "ax1",
+            "style": {
+                "width": 3,
+                "stroke": "#ff3b30"
+            },
             "events": [
                 "click",
                 "hover"
-            ],
+            ]
+        },
+        {
             "kind": "polyline",
-            "axis": "ax1",
+            "id": "lines",
             "geometry": [
                 190,
                 239,
@@ -167,11 +111,6 @@
                 936,
                 653
             ],
-            "id": "lines",
-            "style": {
-                "stroke": "#ff3b30",
-                "width": 3
-            },
             "payloads": [
                 {
                     "segment_index": 0
@@ -182,28 +121,91 @@
                 {
                     "segment_index": 2
                 }
-            ]
-        },
-        {
+            ],
+            "axis": "ax1",
+            "style": {
+                "width": 3,
+                "stroke": "#ff3b30"
+            },
             "events": [
                 "click",
                 "hover"
-            ],
+            ]
+        },
+        {
             "kind": "axis",
-            "axis": "cb1",
+            "id": "colorbar",
             "geometry": [
                 1096.864013671875,
                 32.0,
                 24.0,
                 689.3800048828125
             ],
-            "id": "colorbar",
-            "style": {
-                "stroke": "#ff3b30",
-                "width": 3
-            },
             "payloads": [
+            ],
+            "axis": "cb1",
+            "style": {
+                "width": 3,
+                "stroke": "#ff3b30"
+            },
+            "events": [
+                "click",
+                "hover"
             ]
         }
-    ]
+    ],
+    "transforms": {
+        "ax1": {
+            "xscale": "identity",
+            "ylims": [
+                0.5,
+                5.5
+            ],
+            "xlims": [
+                0.5,
+                4.5
+            ],
+            "valueaxis": null,
+            "is3d": false,
+            "xreversed": false,
+            "ycats": null,
+            "xcats": null,
+            "yreversed": false,
+            "yscale": "identity",
+            "viewport": [
+                66,
+                32,
+                994,
+                690
+            ],
+            "ispolar": false
+        },
+        "cb1": {
+            "xscale": "identity",
+            "ylims": [
+                4,
+                19
+            ],
+            "xlims": [
+                0,
+                1
+            ],
+            "valueaxis": "y",
+            "is3d": false,
+            "xreversed": false,
+            "ycats": null,
+            "xcats": null,
+            "yreversed": false,
+            "yscale": "identity",
+            "viewport": [
+                1096.864013671875,
+                32.0,
+                24.0,
+                689.3800048828125
+            ],
+            "ispolar": false
+        }
+    },
+    "width": 1200,
+    "scaling": 2
 }

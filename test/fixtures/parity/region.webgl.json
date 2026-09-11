@@ -1,84 +1,52 @@
 {
-    "transforms": {
-        "ax1": {
-            "xscale": "identity",
-            "xreversed": false,
-            "yscale": "identity",
-            "ylims": [
-                -0.5000000074505806,
-                10.50000000745058
-            ],
-            "xlims": [
-                -0.5000000074505806,
-                10.50000000745058
-            ],
-            "yreversed": false,
-            "xcats": null,
-            "is3d": false,
-            "ycats": null,
-            "viewport": [
-                82,
-                32,
-                1086,
-                690
-            ],
-            "valueaxis": null
-        }
-    },
-    "scaling": 2,
     "height": 800,
-    "width": 1200,
     "layers": [
         {
-            "events": [
-                "click",
-                "hover"
-            ],
             "kind": "circles",
-            "axis": "ax1",
+            "id": "region_c",
             "geometry": [
                 329,
                 565,
                 24
             ],
-            "id": "region_c",
-            "style": {
-                "stroke": "#ff3b30",
-                "width": 3
-            },
             "payloads": [
                 "c"
-            ]
-        },
-        {
+            ],
+            "axis": "ax1",
+            "style": {
+                "width": 3,
+                "stroke": "#ff3b30"
+            },
             "events": [
                 "click",
                 "hover"
-            ],
+            ]
+        },
+        {
             "kind": "rects",
-            "axis": "ax1",
+            "id": "region_r",
             "geometry": [
                 625,
                 377,
                 197,
                 63
             ],
-            "id": "region_r",
-            "style": {
-                "stroke": "#ff3b30",
-                "width": 3
-            },
             "payloads": [
                 "r"
-            ]
-        },
-        {
+            ],
+            "axis": "ax1",
+            "style": {
+                "width": 3,
+                "stroke": "#ff3b30"
+            },
             "events": [
                 "click",
                 "hover"
-            ],
+            ]
+        },
+        {
             "kind": "polygons",
-            "axis": "ax1",
+            "id": "region_p",
             "geometry": [
                 [
                     822,
@@ -89,14 +57,47 @@
                     502
                 ]
             ],
-            "id": "region_p",
-            "style": {
-                "stroke": "#ff3b30",
-                "width": 3
-            },
             "payloads": [
                 "p"
+            ],
+            "axis": "ax1",
+            "style": {
+                "width": 3,
+                "stroke": "#ff3b30"
+            },
+            "events": [
+                "click",
+                "hover"
             ]
         }
-    ]
+    ],
+    "transforms": {
+        "ax1": {
+            "xscale": "identity",
+            "ylims": [
+                -0.5000000074505806,
+                10.50000000745058
+            ],
+            "xlims": [
+                -0.5000000074505806,
+                10.50000000745058
+            ],
+            "valueaxis": null,
+            "is3d": false,
+            "xreversed": false,
+            "ycats": null,
+            "xcats": null,
+            "yreversed": false,
+            "yscale": "identity",
+            "viewport": [
+                82,
+                32,
+                1086,
+                690
+            ],
+            "ispolar": false
+        }
+    },
+    "width": 1200,
+    "scaling": 2
 }

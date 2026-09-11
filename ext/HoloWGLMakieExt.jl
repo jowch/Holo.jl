@@ -48,7 +48,11 @@ Holo._ppu(b::WebGLBackend, _fig) = b.px_per_unit
 #   1-D buffer  -> {__t__, d}            (JS rebuilds a TypedArray)
 #   N-D array   -> {array, size}         (JS recurses; .array becomes a TypedArray)
 # Symbols -> strings, closures -> dropped. This is the ENTIRE data bridge.
+# Non-finite floats (NaN/±Inf) are scrubbed: JSON3 (and the self-contained e2e HTML path that
+# uses it) rejects NaN, and Makie occasionally emits NaN in transformed-position buffers for
+# decorative/empty slots. Zero is a safe GPU placeholder (those slots are not drawn as data).
 # ---------------------------------------------------------------------------
+_json_float(x::Real) = (f = Float32(x); isfinite(f) ? f : Float32(0))
 function _plain(x)
     if x isa Observable
         return Dict{String, Any}("__obs__" => _plain(x[]))
@@ -73,11 +77,21 @@ function _plain(x)
         # Everything else (Float32/16/64, Int64 indices, N0f8, …) -> Float32: matches WebGL, which is
         # f32-only, so this is the renderer's own precision. Lossy for Int64 indices / Float64 beyond
         # ~7 digits — fine for plot coordinates, which is all serialize_scene emits here.
-        return Dict{String, Any}("__t__" => "f32", "d" => Vector{Float32}(x))
+        # Scrub non-finite so JSON3.write(scene) (e2e / unit HTML) never trips "NaN not allowed".
+        # Build a plain Base.Vector (not StaticArrays) — same force as Vector{Float32}(x).
+        d = Vector{Float32}(undef, length(x))
+        @inbounds for (i, v) in enumerate(x)
+            d[i] = _json_float(v)
+        end
+        return Dict{String, Any}("__t__" => "f32", "d" => d)
     elseif x isa AbstractVector
         return Any[_plain(v) for v in x]
+    elseif x isa AbstractFloat
+        return isfinite(x) ? x : Float32(0)
     else
-        return x   # Number / String / Bool / Nothing
+        # Drop anything published_to_js / JSON3 can't carry (Enums, Colorants, custom structs).
+        # Scalars that are already JSON-safe pass through.
+        return x isa Union{Real, AbstractString, Bool, Nothing} ? x : nothing
     end
 end
 
@@ -130,7 +144,7 @@ function Holo.context(b::WebGLBackend, fig, ppu)
 
     project = Holo._project_closure(scaling, out_h)
 
-    axes = [c for c in fig.content if c isa Union{Makie.Axis, Makie.Axis3}]
+    axes = [c for c in fig.content if c isa Union{Makie.Axis, Makie.Axis3, Makie.PolarAxis}]
     ids = IdDict{Any, Symbol}()
     transforms = Dict{Symbol, Holo.AxisTransform}()
     for (k, ax) in enumerate(axes)
@@ -141,9 +155,14 @@ function Holo.context(b::WebGLBackend, fig, ppu)
         # (interactables.jl indexes ctx.transforms[axis_id]). We call the shared constructors
         # directly (both backends share them, per src/backend.jl) rather than duplicating the
         # loop — CairoBackend now lives in a sibling extension we can't (and don't need to)
-        # reach from here.
-        transforms[id] = ax isa Makie.Axis3 ? Holo._axis3_transform(id, ax, scaling, out_h) :
+        # reach from here. PolarAxis rides `_polar_transform` (ispolar; continuous θ/r deferred).
+        transforms[id] = if ax isa Makie.Axis3
+            Holo._axis3_transform(id, ax, scaling, out_h)
+        elseif ax isa Makie.PolarAxis
+            Holo._polar_transform(id, ax, scaling, out_h)
+        else
             Holo._axis_transform(id, ax, scaling, out_h)
+        end
     end
     # Colorbar transforms, exactly as CairoBackend builds them. This loop was missing
     # (the one-sided context() divergence the parity goldens now pin): a ColorbarInteractable

@@ -10,6 +10,8 @@ map), `frontend-delivery.md` (build/delivery). Priorities, not promises — reor
 - **No parallel server**; inspection survives offline/static-export, clicks need a kernel.
 - **Fail loud, never silently wrong** (per-capability `validate`).
 - **YAGNI**: build a surface/feature when a real use pulls for it, not preemptively.
+- **Live-verify on every supported backend** (today CairoMakie + WGLMakie / `:webgl`; same rule
+  for any future backend) before calling a user-facing change done — see `CLAUDE.md`.
 
 ## Status — v0.1 (done)
 Backend seam (CairoBackend) · `AbstractInteractable` + `HitLayer` · 5 built-ins
@@ -23,7 +25,7 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 ## M1 — Harden v1 (finish what exists) ✅ *done*
 *Goal: every shipped feature is real and demonstrated. No new surfaces.*
 
-- [x] **Live-verify the remaining kinds** in Pluto: Segment, Rect(list+grid/heatmap), Polygon, Axis-readout. (Machinery is proven for circles; this closes the per-kind gap.) *Done: `examples/demo.jl` exercises all five live; verified via headless Pluto + Playwright.*
+- [x] **Live-verify the remaining kinds** in Pluto: Segment, Rect(list+grid/heatmap), Polygon, Axis-readout. (Machinery is proven for circles; this closes the per-kind gap.) *Done: `examples/demo.jl` exercises all five live on `:cairo` (headless Pluto + Playwright); standing practice is every backend — `:webgl` covered by later sweeps / `webgl_demo.jl`.*
 - [x] **Selection round-trip → re-highlight.** Wire the designed loop: bond value → Julia marks selected indices on the manifest → overlay pre-highlights on mount (`HitLayer.selected` already exists in the TS). *Done: `selected` keyword on `holo`/`build_manifest`; clicked points re-highlight flicker-free (verified live).*
 - [x] **`examples/` notebook** — self-contained Pluto notebook (`examples/demo.jl`) that devs the package via a checkout-relative `@__DIR__` path. *Done: opens and runs clean from a fresh checkout; a CI job runs it headlessly so it can't rot.* (Used Pluto's self-contained notebook env, not a sidecar `Project.toml`.)
 - [x] **Docs**: expanded README API section (`holo`, each interactable, custom paths, payload-is-`Dict` contract, selection round-trip). Documenter site deferred to M5 (pre-registration → YAGNI).
@@ -49,8 +51,8 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
       Point/Segment/Polygon storage + the shared projection closure widened to 3D (`Point3f`,
       z=0 for 2-coord input — every pre-existing golden value-identical modulo the new `is3d`
       transform key, so the widen provably didn't move 2D); `:cairo` guard lifted (`Axis3`
-      collected on both backends; `PolarAxis`/`LScene` still rejected pending their decision
-      item below); `is3d` `AxisTransform` (degenerate lims — `Axis`/`Threshold`/`ROI`
+      collected on both backends; `LScene` still rejected pending its decision item below;
+      `PolarAxis` discrete overlays since the PolarAxis parity item); `is3d` `AxisTransform` (degenerate lims — `Axis`/`Threshold`/`ROI`
       interactables fail loud: a screen pixel on a 3D axis is a ray, not a data point); z-aware
       `{index,x,y,z}` payloads; 3-coord `Scatter`/`Lines` introspection; `axis3` parity-corpus
       figure (goldens **byte-identical across backends**); an Axis3 case in the real-browser
@@ -68,14 +70,14 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
       `LineSegments`' converted (data space, spike-verified; includes the triangulation diagonals
       a grid-edge reconstruction would miss). Both graduate out of the Axis3 introspection gate;
       rendered-pixel unit tests + through-Pluto live-verify.
-- [ ] **Axis3 per-type extraction — Arrows3D** — **premise corrected (2026-07-02):** the planned
-      "Segment/:pairs base→tip from data" is WRONG — `arrows3d` autoscales (resolved
-      `arrowscale` ≈ 2.84 on the spike scene) and renders via three `MeshScatter` children whose
-      positions/rotations/markersizes live in a **normalized, anisotropically-scaled space** (data
-      (1,1,1) → child (−0.909,−0.909,−0.606)), so raw pos→pos+dir matches the drawn pixels for
-      some arrows and misses others. A real recipe must reconstruct shaft+tip extents from the
-      children (quaternion rotation × markersize.z along the shaft axis) or resolve the scaling
-      chain — its own arc. Until then arrows3d skip-warns (no `_plotbase` entry).
+- [x] **Axis3 per-type extraction — Arrows3D** *(delivered 2026-09-11)*: premise from
+      2026-07-02 stands — raw `pos→pos+dir` is wrong under `lengthscale`/`align` and children
+      live in float32convert space — but the fix is to read Makie's processed
+      `startpoints`/`endpoints` (DATA space; the span the shaft+tip MeshScatter children cover
+      after `arrowscale`). Emits `SegmentInteractable(:pairs)` with `{index,x,y,z,u,v,w}`
+      payloads. Unit tests cover anisotropic limits + `lengthscale=0.5` (raw midpoints miss;
+      processed midpoints hit). Dual-backend Pluto+browser live-verify **PASS** (Cairo +
+      WebGL; evidence in PR #43 / store `docs/arrows3d-arc.md`).
 - [ ] **Axis3 per-type extraction — `Surface` (deferred)** — unbounded per-cell payload +
       occlusion, same class as the heatmap `values[]` hole. Occlusion policy for all 3D types:
       **document-and-accept on both backends** (no `:webgl`-only GPU-pick); upgrade path = a
@@ -94,20 +96,25 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
       `perf-findings.md` §"WGL context lifecycle"; re-runnable via `test/e2e/ctx_growth.mjs`).
       What remains on `:webgl` is per-step context+scene re-init *cost* — the camera-only
       resident-scene patch is the planned optimization, no longer a feasibility gate.
-      Remaining in this item — drag-to-pan/rotate is the
-      follow-on (commit-on-release; a live drag *preview* shares the Animation/scrubbing item's
-      payload gate — M4, below; modifier-key arbitration vs box-select drag). The **client-side GPU camera stays out** (Holo-wide
+      Remaining in this item — ~~drag-to-pan/rotate~~ **shipped** (`ViewInteractable`,
+      commit-on-release; Shift+drag vs box-select/ROI; live drag *preview* still shares the
+      Animation/scrubbing item's payload gate — M4, below). The **client-side GPU camera stays out** (Holo-wide
       non-goal): a camera Julia never hears about desyncs the Julia-projected overlay and is
       structurally one-backend-only. 3D rotation additionally depends on the Axis3 item above.
-- [ ] **`PolarAxis` + `LScene` disposition (a decision item, not yet a feature commitment)** —
-      the `:cairo` guard rejects both alongside `Axis3`, and `:webgl` renders them live but builds
-      no overlay transforms for them (interactables keyed to them fail loud). The parity doctrine
-      allows no third state: each must become a scheduled parity item (overlays on both —
-      `PolarAxis`'s discrete hit geometry looks tractable now that the shared projection closure
-      applies `transform_func`, where the polar map lives, though its *continuous* axis readout
-      would still need the polar transform serialized to JS; `LScene` needs its own camera/scoping
-      look) or an explicit Holo-wide non-goal. Until decided, this is the known interim
-      per-backend gap.
+- [x] **`PolarAxis` overlay parity — discrete hits** *(delivered)*:
+      `:cairo` guard lifted for `PolarAxis` (both backends collect it); shared projection
+      closure already applies `Makie.Polar` via `transform_func`, so Scatter/Lines hit
+      geometry lands on rendered markers; `ispolar` `AxisTransform` (degenerate lims —
+      `Axis`/`Threshold`/`ROI` fail loud until continuous θ/r ships); auto-extract gate
+      (Scatter/Lines/LineSegments/ScatterLines; separable-grid/rect recipes warn-and-skip);
+      `polaraxis` parity-corpus figure; real-browser E2E click. Continuous θ/r readout
+      (polar transform serialized to JS) remains follow-up; `LScene` stays deferred.
+- [ ] **`LScene` disposition** — needs its own camera/scoping look (parity item or Holo-wide
+      non-goal). Until then `:cairo` rejects it; `:webgl` may render live but builds no
+      overlay transforms (interactables keyed to it fail loud).
+- [ ] **`PolarAxis` continuous θ/r readout** — ship `Makie.Polar` (+ letterboxed scene lims)
+      to JS `invertAxis` so `AxisInteractable` works on polar axes; gated by the discrete
+      hits item above.
 
 ## M4 — Interaction depth (new capabilities, not new surfaces)
 *Goal: the Tier-0/Tier-1 interactions the architecture already supports.*
@@ -153,9 +160,8 @@ limit on both backends, not a capability split.
 Per-backend there are no *feature* non-goals, only substrate facts: `:cairo` ships a static base
 (its former "3D needs a browser-side renderer" note was wrong — CairoMakie renders static 3D
 natively; the `Axis3` guard **lifted 2026-07-02** with the M3 Axis3 core item, so `Axis3`
-overlays now ship on both backends; the guard still rejects `PolarAxis`/`LScene`, whose
-disposition — parity item or Holo-wide non-goal — is an explicit M3 decision item and the one
-known interim gap), and
+overlays now ship on both backends; **`PolarAxis` discrete overlays** ship too — continuous θ/r
+readout and `LScene` remain the open M3 follow-ups), and
 `:webgl` ships a live canvas (so it renders 3D live today and re-renders cheaply). Backends
 differ in **cost**, never in the interaction contract — enforced by the parity golden harness
 (`test/fixtures/parity/`).

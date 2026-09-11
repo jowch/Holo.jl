@@ -220,13 +220,88 @@ end
     end
 
     @testset "fail loud on unsupported axis types" begin
-        for mk in (Makie.PolarAxis, LScene)           # Axis3 is supported since WS-3D
-            fu = Figure(); mk(fu[1, 1])
-            err = (@test_throws ArgumentError ctx_for(fu)).value
-            @test occursin("supports `Makie.Axis` and `Makie.Axis3` only", err.msg)
-            @test occursin("WGLMakie", err.msg)       # steers to the backend that renders these today
-            @test occursin("scoping guard", err.msg)  # framing: Holo scoping, not a CairoMakie capability limit
+        # PolarAxis is supported since this PR; LScene remains deferred (roadmap M3).
+        fu = Figure(); LScene(fu[1, 1])
+        err = (@test_throws ArgumentError ctx_for(fu)).value
+        @test occursin("supports `Makie.Axis`, `Makie.Axis3`, and `Makie.PolarAxis`", err.msg)
+        @test occursin("WGLMakie", err.msg)       # steers to the backend that renders LScene today
+        @test occursin("scoping guard", err.msg)  # framing: Holo scoping, not a CairoMakie capability limit
+        @test occursin("LScene", err.msg)
+    end
+
+    @testset "PolarAxis: context + projection + payloads + gates" begin
+        # Discrete hits project through the shared closure (Makie.Polar in transform_func).
+        # Continuous θ/r readout is deferred — ispolar transforms + validate gates.
+        fp = Figure(; size = (600, 450))
+        axp = PolarAxis(fp[1, 1])
+        # (θ, r) data coords — four cardinal points so the projection hinge is unambiguous
+        ptsp = [
+            Point2f(0.0, 1.0), Point2f(π / 2, 2.0),
+            Point2f(π, 1.5), Point2f(3π / 2, 2.5),
+        ]
+        scatter!(axp, ptsp; color = :red, markersize = 14)
+        lines!(axp, range(0, 2π; length = 64), fill(1.2, 64))
+        _, ppup, ctxp = ctx_for(fp)
+
+        tp = ctxp.transforms[IP.axis_id(ctxp, axp)]
+        @test tp.ispolar
+        @test !tp.is3d
+        @test tp.viewport[3] > 0 && tp.viewport[4] > 0
+        @test IP._transform_dict(tp)["ispolar"] === true
+
+        # projected :circles land on the rendered markers (red-pixel hinge, same as Axis3/log)
+        isred(c) = Float64(Makie.red(c)) > 0.6 && Float64(Makie.green(c)) < 0.4 && Float64(Makie.blue(c)) < 0.4
+        function red_near_in(img, cx, cy; tol = 8)
+            ih, iw = size(img)
+            x, y = round(Int, cx), round(Int, cy)
+            for dy in -tol:tol, dx in -tol:tol
+                xx, yy = x + dx, y + dy
+                (1 <= xx <= iw && 1 <= yy <= ih) || continue
+                isred(img[yy, xx]) && return true
+            end
+            return false
         end
+        imgp = Makie.colorbuffer(fp; px_per_unit = ppup)
+        Lp = only(hitlayers(PointInteractable(axp, ptsp; radius = 7), ctxp))
+        @test Lp.kind === :circles && length(Lp.geometry) == 12
+        for k in 0:3
+            @test red_near_in(imgp, Lp.geometry[3k + 1], Lp.geometry[3k + 2])
+        end
+
+        # continuous consumers fail loud on ispolar (polar transform not yet in JS)
+        for bad in (
+                AxisInteractable(axp),
+                ThresholdInteractable(axp; orientation = :horizontal, value = 1.0),
+                ROIInteractable(axp; bounds = (0.0, 1.0, 0.5, 1.5)),
+            )
+            msg = validate(bad, ctxp)
+            @test msg !== nothing && occursin("PolarAxis", msg)
+            @test_throws ArgumentError build_manifest([bad], ctxp)
+        end
+
+        # auto-extract: Scatter + Lines ride; heatmap-on-polar warn-and-skips
+        fpi = Figure(; size = (600, 450))
+        axpi = PolarAxis(fpi[1, 1])
+        scatter!(axpi, [0.0, π / 2], [1.0, 2.0]; markersize = 10)
+        lines!(axpi, [0.0, π], [1.0, 1.5])
+        Makie.update_state_before_display!(fpi)
+        ints = auto_interactables(fpi)
+        @test any(i -> i isa PointInteractable, ints)
+        @test any(i -> i isa SegmentInteractable, ints)
+        _, _, ctxpi = ctx_for(fpi)
+        mp = build_manifest(ints, ctxpi)
+        @test mp["transforms"]["ax1"]["ispolar"] === true
+        @test length(mp["layers"]) == 2
+
+        fpg = Figure(; size = (600, 450))
+        axpg = PolarAxis(fpg[1, 1])
+        # heatmap on PolarAxis is a supported Makie recipe but not a polar-valid Holo extraction
+        heatmap!(axpg, 0:0.5:π, 1:3, rand(7, 3))
+        scatter!(axpg, [0.0], [1.0]; markersize = 10)
+        Makie.update_state_before_display!(fpg)
+        gints = @test_logs (:warn, r"on PolarAxis"i) auto_interactables(fpg)
+        @test length(gints) == 1
+        @test only(gints) isa PointInteractable
     end
 
     @testset "Axis3: context + projection + payloads + gates (WS-3D core)" begin
@@ -316,7 +391,7 @@ end
         @test only(gints) isa PointInteractable
     end
 
-    @testset "Axis3 per-type extraction: MeshScatter + Wireframe" begin
+    @testset "Axis3 per-type extraction: MeshScatter + Wireframe + Arrows3D" begin
         isredc(c) = Float64(Makie.red(c)) > 0.6 && Float64(Makie.green(c)) < 0.4 && Float64(Makie.blue(c)) < 0.4
         isbluec(c) = Float64(Makie.blue(c)) > 0.4 && Float64(Makie.red(c)) < 0.5 && Float64(Makie.green(c)) < 0.5
         function color_near(pred, img, cx, cy; tol = 5)
@@ -413,16 +488,80 @@ end
             @test color_near(isbluec, imgw, mx, my; tol = 3)
         end
 
-        # Arrows3D stays skipped (deferred): its rendered geometry is autoscaled into a
-        # normalized child space — raw pos→pos+dir does NOT match the drawn pixels (spike
-        # 2026-07-02), so extracting it needs its own recipe, not a pass-through. It has no
-        # _plotbase entry, so it takes the generic no-recipe warn path.
+        # Arrows3D: SegmentInteractable(:pairs) from processed startpoints→endpoints (DATA
+        # space). Raw pos→pos+dir is wrong under lengthscale/align (spike 2026-07-02 + 2026-09-11):
+        # Makie autoscales into a normalized child MeshScatter space; startpoints/endpoints are
+        # the post-align/lengthscale ends that the shaft+tip children span. Child quaternion ×
+        # markersize.z reconstructs the same span in that child space — we read the data-space
+        # ends so Holo's project closure (which applies float32convert) lands on drawn pixels.
         fa = Figure(; size = (600, 450))
-        axa = Axis3(fa[1, 1])
-        arrows3d!(axa, Makie.Point3f[(1, 1, 1)], Makie.Vec3f[(1, 0, 0)])
+        axa = Axis3(fa[1, 1]; azimuth = 0.4, elevation = 0.5)
+        apts = Makie.Point3f[(1, 1, 1), (3, 2, 1), (2, 4, 3)]
+        adirs = Makie.Vec3f[(1, 0, 0), (0, 1, 0.5), (-0.5, 0, 1)]
+        arrows3d!(axa, apts, adirs; color = :red)
         Makie.update_state_before_display!(fa)
-        aints = @test_logs (:warn, r"skipping"i) auto_interactables(fa)
-        @test isempty(aints)
+        aints = @test_logs auto_interactables(fa)       # no logs: arrows3d must NOT re-gate
+        ai = only(aints)
+        @test ai isa SegmentInteractable && ai.mode === :pairs
+        @test length(ai.vertices) == 6                  # 3 arrows × (start, end)
+        @test ai.payloads[1] == (; index = 0, x = 1.0, y = 1.0, z = 1.0, u = 1.0, v = 0.0, w = 0.0)
+        _, ppua, ctxa = ctx_for(fa)
+        imga = Makie.colorbuffer(fa; px_per_unit = ppua)
+        La = only(hitlayers(ai, ctxa))
+        @test La.kind === :segments && length(La.geometry) == 12
+        for k in 0:2
+            mx = (La.geometry[4k + 1] + La.geometry[4k + 3]) / 2
+            my = (La.geometry[4k + 2] + La.geometry[4k + 4]) / 2
+            @test color_near(isredc, imga, mx, my; tol = 3)
+        end
+
+        # lengthscale ≠ 1: raw pos→pos+dir overshoots the drawn arrow; processed ends must hit
+        fls = Figure(; size = (600, 450))
+        axls = Axis3(fls[1, 1]; azimuth = 0.4, elevation = 0.5)
+        arrows3d!(axls, apts, Makie.Vec3f[(2, 0, 0), (0, 2, 1), (-1, 0, 2)]; lengthscale = 0.5f0, color = :red)
+        Makie.update_state_before_display!(fls)
+        li = only(@test_logs auto_interactables(fls))
+        _, ppuls, ctxls = ctx_for(fls)
+        imgls = Makie.colorbuffer(fls; px_per_unit = ppuls)
+        Lls = only(hitlayers(li, ctxls))
+        for k in 0:2
+            mx = (Lls.geometry[4k + 1] + Lls.geometry[4k + 3]) / 2
+            my = (Lls.geometry[4k + 2] + Lls.geometry[4k + 4]) / 2
+            @test color_near(isredc, imgls, mx, my; tol = 3)
+        end
+        # regression: a midpoint of raw pos→pos+dir (ignoring lengthscale) must NOT be required
+        # to hit — at least one overshoots past the tip (proves we didn't use the raw recipe)
+        raw_miss = false
+        for k in 1:3
+            raw_end = apts[k] .+ Makie.Vec3f[(2, 0, 0), (0, 2, 1), (-1, 0, 2)][k]
+            q = data_to_image_px(ctxls, axls, (apts[k] .+ raw_end) ./ 2)
+            # sample near the far end of the raw segment (t=0.9) — past the scaled tip
+            qfar = data_to_image_px(ctxls, axls, apts[k] .+ 0.9 .* (raw_end .- apts[k]))
+            raw_miss |= !color_near(isredc, imgls, qfar[1], qfar[2]; tol = 3)
+        end
+        @test raw_miss
+
+        # anisotropic Axis3 limits: equal data-norm dirs get unequal world lengths; data-space
+        # start→end still projects onto the drawn shafts (the child-space trap)
+        fan = Figure(; size = (600, 450))
+        axan = Axis3(fan[1, 1]; azimuth = 0.4, elevation = 0.5)
+        limits!(axan, 0, 10, 0, 2, 0, 2)
+        arrows3d!(
+            axan,
+            Makie.Point3f[(2, 1, 1), (5, 0.5, 0.5), (2, 1, 0.5)],
+            Makie.Vec3f[(2, 0, 0), (0, 1, 0), (0, 0, 1)];
+            color = :red,
+        )
+        Makie.update_state_before_display!(fan)
+        ani = only(@test_logs auto_interactables(fan))
+        _, ppuan, ctxan = ctx_for(fan)
+        imgan = Makie.colorbuffer(fan; px_per_unit = ppuan)
+        Lan = only(hitlayers(ani, ctxan))
+        for k in 0:2
+            mx = (Lan.geometry[4k + 1] + Lan.geometry[4k + 3]) / 2
+            my = (Lan.geometry[4k + 2] + Lan.geometry[4k + 4]) / 2
+            @test color_near(isredc, imgan, mx, my; tol = 4)
+        end
     end
 
     @testset "Polygon geometry projects per ring" begin
@@ -523,6 +662,55 @@ end
         @test isempty(mt["payloads"]) && !haskey(mt, "tooltips")   # computed client-side, no payloads/tooltips
     end
 
+    @testset "ViewInteractable (drag-to-pan / orbit)" begin
+        v = ViewInteractable(ax)
+        @test events(v) == (:drag,)
+        @test validate(v, ctx) === nothing
+        Lv = only(hitlayers(v, ctx))
+        @test Lv.kind === :view
+        @test Lv.geometry["mode"] == "pan"
+        @test Lv.geometry["w"] ≈ ctx.transforms[Lv.axis].viewport[3]
+        @test !haskey(Lv.geometry, "azimuth")
+        # view layers sort after ROI/threshold in the manifest (hit-test arbitration)
+        roi = ROIInteractable(ax; bounds = (1.0, 2.0, 1.0, 2.0), id = :roi)
+        morder = build_manifest([v, roi], ctx)["layers"]
+        @test morder[1]["kind"] == "roi"
+        @test morder[2]["kind"] == "view"
+        # categorical / Axis3: pan fails loud on categories; Axis3 is orbit
+        fc = Figure(); axc = Axis(fc[1, 1]; dim1_conversion = Makie.CategoricalConversion())
+        scatter!(axc, ["a", "b", "c"], [1.0, 2.0, 3.0])
+        _, _, ctxc = ctx_for(fc)
+        @test validate(ViewInteractable(axc), ctxc) isa String
+        f3 = Figure(); ax3 = Axis3(f3[1, 1]; azimuth = 0.4, elevation = 0.5)
+        scatter!(ax3, Makie.Point3f[(1, 2, 3), (4, 5, 6)])
+        _, _, ctx3 = ctx_for(f3)
+        @test validate(ViewInteractable(ax3), ctx3) === nothing
+        L3 = only(hitlayers(ViewInteractable(ax3), ctx3))
+        @test L3.geometry["mode"] == "orbit"
+        @test L3.geometry["azimuth"] ≈ 0.4
+        @test L3.geometry["elevation"] ≈ 0.5
+        # bond payload round-trip (pan + orbit shapes)
+        tv = Holo.APD.Bonds.transform_value
+        w = Holo.HoloWidget("", Dict{String, Any}(), 100)
+        evp = tv(w, Dict("layer" => "view", "index" => 0, "payload" => Dict("xmin" => 1.0, "xmax" => 5.0, "ymin" => 0.0, "ymax" => 10.0)))
+        @test evp isa InteractionEvent && evp.layer === :view
+        @test evp.payload["xmin"] == 1.0 && evp.payload["ymax"] == 10.0
+        evo = tv(w, Dict("layer" => "view", "index" => 0, "payload" => Dict("azimuth" => 0.9, "elevation" => 0.3)))
+        @test evo.payload["azimuth"] == 0.9 && evo.payload["elevation"] == 0.3
+        # PolarAxis / Colorbar: view gestures rejected (no continuous polar inversion; colorbar is 1-D)
+        fp = Figure(); axp = PolarAxis(fp[1, 1])
+        scatter!(axp, [Point2f(0.0, 1.0), Point2f(π / 2, 2.0)])
+        _, _, ctxp = ctx_for(fp)
+        msgp = validate(ViewInteractable(axp), ctxp)
+        @test msgp !== nothing && occursin("PolarAxis", msgp)
+        fcb = Figure(); axcb = Axis(fcb[1, 1]); hm = heatmap!(axcb, rand(4, 4))
+        cb = Colorbar(fcb[1, 2], hm)
+        Makie.update_state_before_display!(fcb)
+        _, _, ctxcb = ctx_for(fcb)
+        msgcb = validate(ViewInteractable(cb), ctxcb)
+        @test msgcb !== nothing && occursin("Colorbar", msgcb)
+    end
+
     @testset "ROIInteractable (M4 drag cut 2)" begin
         r = ROIInteractable(ax; bounds = (1.0, 3.0, 2.0, 8.0))
         @test events(r) == (:drag,)
@@ -580,6 +768,58 @@ end
             )["layers"][1], "selected"
         )   # empty omitted
         @test holo(bfig, PointInteractable(bax, pts; id = :scatter); selected = Dict(:scatter => [1])).manifest["layers"][1]["selected"] == [1]
+
+        # selected= fail-loud (issue #39): unsupported kinds and OOB indices must throw at
+        # build_manifest, same doctrine as wrong-length payloads= (_check_payloads).
+        @testset "selected= fails loud on unsupported kinds and OOB indices" begin
+            segs = SegmentInteractable(bax, [(1.0, 1.0), (2.0, 2.0), (3.0, 3.0), (4.0, 4.0)]; mode = :pairs, id = :segs)
+            @test_throws ArgumentError build_manifest([segs], bctx; selected = Dict(:segs => [0]))
+            err_seg = try
+                build_manifest([segs], bctx; selected = Dict(:segs => [0])); nothing
+            catch e
+                e
+            end
+            @test err_seg isa ArgumentError
+            @test occursin(r"selected"i, sprint(showerror, err_seg))
+            @test occursin("segments", sprint(showerror, err_seg))
+
+            grid_i = RectInteractable(bax; grid = (0.5:1:3.5, 0.5:1:3.5, rand(3, 3)), id = :heat)
+            @test_throws ArgumentError build_manifest([grid_i], bctx; selected = Dict(:heat => [0]))
+            err_grid = try
+                build_manifest([grid_i], bctx; selected = Dict(:heat => [0])); nothing
+            catch e
+                e
+            end
+            @test err_grid isa ArgumentError
+            @test occursin(r"selected"i, sprint(showerror, err_grid))
+            @test occursin("grid", sprint(showerror, err_grid))
+
+            # 3 pts → valid indices 0:2; index 5 and -1 must fail
+            @test_throws ArgumentError build_manifest(
+                [PointInteractable(bax, pts; id = :scatter)], bctx; selected = Dict(:scatter => [5])
+            )
+            @test_throws ArgumentError build_manifest(
+                [PointInteractable(bax, pts; id = :scatter)], bctx; selected = Dict(:scatter => [-1])
+            )
+            err_oob = try
+                build_manifest(
+                    [PointInteractable(bax, pts; id = :scatter)], bctx; selected = Dict(:scatter => [5])
+                ); nothing
+            catch e
+                e
+            end
+            @test err_oob isa ArgumentError
+            @test occursin(r"selected"i, sprint(showerror, err_oob))
+            @test occursin(r"5|out of range|elements"i, sprint(showerror, err_oob))
+
+            # supported kinds still accept in-range indices (rects list + polygons)
+            rects = RectInteractable(bax; rects = [(1.0, 1.0, 0.5, 0.5), (2.0, 2.0, 0.5, 0.5)], id = :boxes)
+            mr = build_manifest([rects], bctx; selected = Dict(:boxes => [1]))
+            @test mr["layers"][1]["selected"] == [1]
+            polys = PolygonInteractable(bax, [[(0.0, 0.0), (1.0, 0.0), (0.5, 1.0)]]; id = :poly)
+            mp = build_manifest([polys], bctx; selected = Dict(:poly => [0]))
+            @test mp["layers"][1]["selected"] == [0]
+        end
 
         w = holo(bfig, PointInteractable(bax, pts; id = :scatter))
         @test w isa HoloWidget
@@ -1437,17 +1677,18 @@ end
     # a normal axis transform defaults valueaxis = nothing → serializes to nothing
     t = AxisTransform(
         :ax1, (0.0, 1.0), (0.0, 2.0), :identity, :identity,
-        (0.0, 0.0, 10.0, 20.0), false, false, nothing, nothing, nothing, false
+        (0.0, 0.0, 10.0, 20.0), false, false, nothing, nothing, nothing, false, false
     )
     @test t.valueaxis === nothing
     d = _transform_dict(t)
     @test haskey(d, "valueaxis")
     @test d["valueaxis"] === nothing
     @test d["is3d"] === false
+    @test d["ispolar"] === false
     # a colorbar-style transform tags the value axis
     tc = AxisTransform(
         :cb1, (0.0, 1.0), (0.0, 2.0), :identity, :log10,
-        (0.0, 0.0, 10.0, 20.0), false, false, nothing, nothing, :y, false
+        (0.0, 0.0, 10.0, 20.0), false, false, nothing, nothing, :y, false, false
     )
     @test _transform_dict(tc)["valueaxis"] == "y"
 end

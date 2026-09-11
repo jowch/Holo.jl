@@ -15,10 +15,10 @@ instead and the same `holo`/`@bind` contract drives a **live**, browser-GPU back
 animation, large/live data, and live 3D — see [3D, animation, and large data](#3d-animation-and-large-data-wglmakie)
 below. Exactly one backend may be loaded per Pluto session.
 
-> **Status: early / experimental (v0.1).** Validated end-to-end in real Pluto — all five
-> interactable kinds and the selection round-trip are exercised live by
-> [`examples/demo.jl`](examples/demo.jl) (CI runs it headlessly on every change). APIs may
-> still change.
+> **Status: early / experimental (v0.1).** Validated end-to-end in real Pluto on every supported
+> backend — CairoMakie via [`examples/demo.jl`](examples/demo.jl), WGLMakie via
+> [`examples/webgl_demo.jl`](examples/webgl_demo.jl) (CI runs both headlessly). APIs may still
+> change.
 
 ## Why
 
@@ -82,28 +82,32 @@ Declare interactables explicitly (geometry in data space):
 - `AxisInteractable` — the whole axis: click anywhere → data `(x, y)` (linear + log)
 - `ThresholdInteractable` — a draggable horizontal/vertical line; drag for a live readout, commit the data value on mouse-up
 - `ROIInteractable` — a draggable + resizable rectangle; drag the interior to move, a corner to resize; commit the data-space bounds on mouse-up
+- `ViewInteractable` — drag-to-pan (2D `Axis` → new `limits`) / drag-to-rotate (`Axis3` → `azimuth`/`elevation`); commit on mouse-up; Shift+drag wins over ROI/threshold
 - `RegionInteractable` / `FunctionInteractable` — custom interactions, no JavaScript required
 
 Linear, log, and categorical axes; single or multiple axes; linked selection via shared
 payloads through Pluto's reactive graph. `Axis3` gets the same treatment on both backends: 3D
 scatter/lines carry point/segment overlays with `{index, x, y, z}` payloads, meshscatter gets
-depth-correct per-marker hit radii from its data-space `markersize`, and wireframe's rendered
-edges are hoverable — all projected at build time through the shared closure — static base on
+depth-correct per-marker hit radii from its data-space `markersize`, wireframe's rendered
+edges are hoverable, and `arrows3d` shafts hit as start→end segments (processed ends, not raw
+`pos→dir`) — all projected at build time through the shared closure — static base on
 `:cairo`, live on `:webgl` (see
 [3D, animation, and large data](#3d-animation-and-large-data-wglmakie)). Continuous pixel→data
 readout (`AxisInteractable`/`ThresholdInteractable`/`ROIInteractable`) fails loud on a 3D axis
 (a screen pixel is a ray, not a data point), and high-frequency live redraw is a shared cost
-limit on both backends. Unsupported axis blocks (`PolarAxis`/`LScene`) fail loud at `holo()` time.
+limit on both backends. `PolarAxis` gets the same discrete point/segment overlays on both
+backends (projected through `Makie.Polar` in the shared closure); continuous θ/r readout is
+deferred. Unsupported `LScene` blocks fail loud at `holo()` time.
 
 [`examples/demo.jl`](examples/demo.jl) is a runnable gallery of every kind below plus the
 selection round-trip.
 
-**Pan, zoom, and 3D rotation need no Holo API**: `@bind` a slider to the view parameter
-(`limits` for 2D, `azimuth`/`elevation` for `Axis3`) and rebuild the figure — `holo`
-re-renders with a freshly projected overlay, so hit regions never drift, and a `selected=`
-feedback keeps selections highlighted across view changes.
-[`examples/view_manip.jl`](examples/view_manip.jl) demonstrates all three (drag gestures are
-roadmap scope — see `docs/roadmap.md` M3).
+**Pan, zoom, and 3D rotation** use the same server-authoritative `@bind` re-render model on
+both backends: change `limits` (2D) or `azimuth`/`elevation` (`Axis3`) and rebuild — `holo`
+re-projects the overlay so hit regions never drift. Drive those params with PlutoUI sliders
+(no Holo API) or with **`ViewInteractable`** drag-to-pan / drag-to-rotate (commit-on-release;
+Shift+drag arbitrates vs box-select/ROI).
+[`examples/view_manip.jl`](examples/view_manip.jl) demonstrates sliders and gestures.
 
 ## API reference
 
@@ -131,10 +135,12 @@ finalize step Makie performs at display time).
   (see `_resolve_backend` in [`src/render.jl`](src/render.jl)).
 - **`selected`** — a `layer_id => indices` map (e.g. `Dict(:scatter => [0, 2])`) that
   pre-highlights elements on mount. Indices are 0-based and match `InteractionEvent.index`.
-  Feed a bond value back into it to keep clicked elements highlighted across re-renders,
-  flicker-free (see [Selection round-trip](#selection-round-trip)). Keys are layer ids: for
-  the single-layer kinds that's the interactable's `id`, but `RegionInteractable` splits into
-  suffixed layers (`:id_c` circles / `:id_r` rects / `:id_p` polygons) — key on those.
+  Supported kinds: `circles` / `rects` / `polygons`. Unsupported kinds (`segments`, `grid`, …)
+  or out-of-range indices throw `ArgumentError` at build time (fail loud, like wrong-length
+  `payloads=`). Feed a bond value back into it to keep clicked elements highlighted across
+  re-renders, flicker-free (see [Selection round-trip](#selection-round-trip)). Keys are layer
+  ids: for the single-layer kinds that's the interactable's `id`, but `RegionInteractable`
+  splits into suffixed layers (`:id_c` circles / `:id_r` rects / `:id_p` polygons) — key on those.
 
 ### `InteractionEvent`
 
@@ -168,10 +174,12 @@ Every interactable takes an `Axis` and geometry in **data space** (projected in 
 | `AxisInteractable(ax; id = :axis)` | the whole axis: a click anywhere returns the data coordinate | `Dict("x" => …, "y" => …)` |
 | `ThresholdInteractable(ax; orientation = :horizontal, value, id = :threshold)` | a draggable line (`:horizontal` = constant-y, dragged vertically; `:vertical` = constant-x); live readout while dragging, commit on mouse-up | scalar data coord (client-side, on release) |
 | `ROIInteractable(ax; bounds = (xmin, xmax, ymin, ymax), id = :roi)` | a draggable + resizable box; move (interior) / resize (corner); commit on mouse-up | `Dict("xmin"=>…, "xmax"=>…, "ymin"=>…, "ymax"=>…)` (client-side, on release) |
+| `ViewInteractable(ax; id = :view)` | drag-to-pan (2D) or drag-to-rotate (Axis3); commit on mouse-up; Shift+drag forces view over ROI/threshold | 2D: `Dict("xmin"=>…, "xmax"=>…, "ymin"=>…, "ymax"=>…)`; 3D: `Dict("azimuth"=>…, "elevation"=>…)` |
 
 `AxisInteractable`, `ThresholdInteractable`, and `ROIInteractable` invert pixels→data client-side, so they support `identity` / `log10` /
 `log` scales; any other scale fails loud at `holo()` time. Categorical axes are fine for `AxisInteractable`/`ThresholdInteractable` (which
-read a category), but `ROIInteractable` rejects them — its numeric bounds have no meaning on categories.
+read a category), but `ROIInteractable` rejects them — its numeric bounds have no meaning on categories. `ViewInteractable` pan needs the
+same invertible continuous scales; orbit mode is Axis3-only.
 
 ### From a plot object (no hand-written geometry)
 

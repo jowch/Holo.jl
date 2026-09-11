@@ -1,9 +1,69 @@
 {
+    "height": 800,
+    "layers": [
+        {
+            "kind": "threshold",
+            "id": "threshold",
+            "geometry": {
+                "pos": 455.40915,
+                "orientation": "h",
+                "span": [
+                    88,
+                    1168
+                ]
+            },
+            "payloads": [
+            ],
+            "axis": "ax1",
+            "style": {
+                "width": 3,
+                "stroke": "#ff3b30"
+            },
+            "events": [
+                "drag"
+            ]
+        },
+        {
+            "kind": "roi",
+            "id": "roi",
+            "geometry": {
+                "w": 490.90915,
+                "handle": 16,
+                "h": 313.63632,
+                "y": 298.59097,
+                "x": 382.54544
+            },
+            "payloads": [
+            ],
+            "axis": "ax1",
+            "style": {
+                "width": 3,
+                "stroke": "#ff3b30"
+            },
+            "events": [
+                "drag"
+            ]
+        },
+        {
+            "kind": "axis",
+            "id": "axis",
+            "geometry": null,
+            "payloads": [
+            ],
+            "axis": "ax1",
+            "style": {
+                "width": 3,
+                "stroke": "#ff3b30"
+            },
+            "events": [
+                "click",
+                "hover"
+            ]
+        }
+    ],
     "transforms": {
         "ax1": {
             "xscale": "identity",
-            "xreversed": false,
-            "yscale": "identity",
             "ylims": [
                 0.5999999940395355,
                 9.400000005960464
@@ -12,81 +72,22 @@
                 0.8999999985098839,
                 3.100000001490116
             ],
-            "yreversed": false,
-            "xcats": null,
+            "valueaxis": null,
             "is3d": false,
+            "xreversed": false,
             "ycats": null,
+            "xcats": null,
+            "yreversed": false,
+            "yscale": "identity",
             "viewport": [
                 88,
                 32,
                 1080,
                 690
             ],
-            "valueaxis": null
+            "ispolar": false
         }
     },
-    "scaling": 2,
-    "height": 800,
     "width": 1200,
-    "layers": [
-        {
-            "events": [
-                "drag"
-            ],
-            "kind": "threshold",
-            "axis": "ax1",
-            "geometry": {
-                "span": [
-                    88,
-                    1168
-                ],
-                "orientation": "h",
-                "pos": 455.40915
-            },
-            "id": "threshold",
-            "style": {
-                "stroke": "#ff3b30",
-                "width": 3
-            },
-            "payloads": [
-            ]
-        },
-        {
-            "events": [
-                "drag"
-            ],
-            "kind": "roi",
-            "axis": "ax1",
-            "geometry": {
-                "w": 490.90915,
-                "x": 382.54544,
-                "handle": 16,
-                "h": 313.63632,
-                "y": 298.59097
-            },
-            "id": "roi",
-            "style": {
-                "stroke": "#ff3b30",
-                "width": 3
-            },
-            "payloads": [
-            ]
-        },
-        {
-            "events": [
-                "click",
-                "hover"
-            ],
-            "kind": "axis",
-            "axis": "ax1",
-            "geometry": null,
-            "id": "axis",
-            "style": {
-                "stroke": "#ff3b30",
-                "width": 3
-            },
-            "payloads": [
-            ]
-        }
-    ]
+    "scaling": 2
 }

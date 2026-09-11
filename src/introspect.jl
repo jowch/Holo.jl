@@ -73,6 +73,43 @@ SegmentInteractable(ax, p::Makie.LineSegments; id = :segments, payloads = nothin
 SegmentInteractable(ax, p::Makie.Wireframe; id = :wireframe, payloads = nothing, tol = 6) =
     SegmentInteractable(ax, _conv(_childof(p, Makie.LineSegments))[1]; mode = :pairs, id, payloads, tol)
 
+# ---- Arrows3D -> SegmentInteractable(:pairs) ----
+# Premise (corrected 2026-07-02): raw `pos → pos+dir` is WRONG — arrows3d autoscales
+# (`arrowscale` from data bbox when `markerscale = automatic`) and renders via three
+# MeshScatter children (tail/shaft/tip) whose positions/rotations/markersizes live in a
+# normalized, anisotropically-scaled (float32convert) space. Child quaternion × markersize.z
+# recovers shaft+tip extents in that space, but Holo's project closure expects DATA coords
+# (it applies float32convert itself). The recipe therefore reads the processed
+# `startpoints`/`endpoints` — post-align/lengthscale/normalize ends that the children span
+# (spike-verified 2026-09-11: midpoints land on drawn pixels under anisotropic limits and
+# `lengthscale ≠ 1`; raw pos+dir misses). Payloads carry the input anchor + direction.
+function SegmentInteractable(ax, p::Makie.Arrows3D; id = :arrows3d, payloads = nothing, tol = 6)
+    starts, ends_ = p.startpoints[], p.endpoints[]
+    length(starts) == length(ends_) || error(
+        "Arrows3D introspection: startpoints/endpoints length mismatch ($(length(starts)) vs $(length(ends_)))"
+    )
+    verts = Makie.Point3f[]
+    sizehint!(verts, 2 * length(starts))
+    for (a, b) in zip(starts, ends_)
+        push!(verts, Makie.Point3f(a...), Makie.Point3f(b...))
+    end
+    if payloads === nothing
+        pts, dirs = p.points[], p.directions[]
+        length(pts) == length(starts) || error(
+            "Arrows3D introspection: points/startpoints length mismatch ($(length(pts)) vs $(length(starts)))"
+        )
+        payloads = [
+            (;
+                index = k - 1,
+                x = Float64(pts[k][1]), y = Float64(pts[k][2]), z = Float64(pts[k][3]),
+                u = Float64(dirs[k][1]), v = Float64(dirs[k][2]), w = Float64(dirs[k][3]),
+            )
+                for k in eachindex(pts)
+        ]
+    end
+    return SegmentInteractable(ax, verts; mode = :pairs, id, payloads, tol)
+end
+
 # ---- Heatmap / Image -> RectInteractable(:grid) ----
 # converted gives (x, y, values). Makie converts cell *centers* to an edge vector (length n+1);
 # the coordinate-free form gives `EndPoints` (length 2) which we expand to n+1 uniform edges.
@@ -105,8 +142,8 @@ function _bar_payloads(rects, direction)
     vert = direction === :y
     return Any[
         let (cx, cy, w, h) = r
-                lo, hi = vert ? (cy - h / 2, cy + h / 2) : (cx - w / 2, cx + w / 2)
-                (; low = Float64(lo), high = Float64(hi), value = Float64(hi - lo))
+            lo, hi = vert ? (cy - h / 2, cy + h / 2) : (cx - w / 2, cx + w / 2)
+            (; low = Float64(lo), high = Float64(hi), value = Float64(hi - lo))
         end
             for r in rects
     ]
@@ -164,7 +201,7 @@ function _contourf_payloads(p, poly)
     colors = Float64.(poly.color[])
     return Any[
         let k = argmin(abs.(mids .- c))
-                (; low = edges[k], high = edges[k + 1])
+            (; low = edges[k], high = edges[k + 1])
         end
             for c in colors
     ]
@@ -187,8 +224,8 @@ function _violin_payloads(p, rings)
     cats = sort(unique(Float64.(_conv(p)[1])))
     return Any[
         let xs = [Float64(pt[1]) for pt in ring]
-                ctr = (minimum(xs) + maximum(xs)) / 2
-                (; x = cats[argmin(abs.(cats .- ctr))])
+            ctr = (minimum(xs) + maximum(xs)) / 2
+            (; x = cats[argmin(abs.(cats .- ctr))])
         end
             for ring in rings
     ]
@@ -365,9 +402,9 @@ function _hist_payloads(rects, direction)
     vert = direction === :y
     return Any[
         let (cx, cy, w, h) = r
-                cnt = vert ? h : w                                                  # bar height = bin value
-                lo, hi = vert ? (cx - w / 2, cx + w / 2) : (cy - h / 2, cy + h / 2)  # category axis = bin range
-                (; value = Float64(cnt), low = Float64(lo), high = Float64(hi))
+            cnt = vert ? h : w                                                  # bar height = bin value
+            lo, hi = vert ? (cx - w / 2, cx + w / 2) : (cy - h / 2, cy + h / 2)  # category axis = bin range
+            (; value = Float64(cnt), low = Float64(lo), high = Float64(hi))
         end
             for r in rects
     ]
@@ -376,7 +413,7 @@ function _waterfall_payloads(p, rects)
     deltas = p.converted[][1]                      # Point2 per bar: (x, signed delta)
     return Any[
         let (cx, cy, w, h) = rects[k]
-                (; low = Float64(cy - h / 2), high = Float64(cy + h / 2), value = Float64(deltas[k][2]))
+            (; low = Float64(cy - h / 2), high = Float64(cy + h / 2), value = Float64(deltas[k][2]))
         end
             for k in eachindex(rects)
     ]
@@ -479,6 +516,7 @@ function _plotbase(p)
     p isa Makie.Lines && return :lines
     p isa Makie.LineSegments && return :segments
     p isa Makie.Wireframe && return :wireframe
+    p isa Makie.Arrows3D && return :arrows3d
     (p isa Makie.Heatmap || p isa Makie.Image) && return :cells
     p isa Makie.BarPlot && return :bars
     p isa Makie.Poly && return :poly
@@ -510,7 +548,8 @@ end
 function _construct(ax, p, id)
     p isa Makie.Scatter && return [PointInteractable(ax, p; id)]
     p isa Makie.MeshScatter && return [PointInteractable(ax, p; id)]
-    (p isa Makie.Lines || p isa Makie.LineSegments || p isa Makie.Wireframe) && return [SegmentInteractable(ax, p; id)]
+    (p isa Makie.Lines || p isa Makie.LineSegments || p isa Makie.Wireframe || p isa Makie.Arrows3D) &&
+        return [SegmentInteractable(ax, p; id)]
     (
         p isa Makie.Stairs || p isa Makie.Errorbars || p isa Makie.Rangebars ||
             p isa Makie.HLines || p isa Makie.VLines
@@ -537,13 +576,17 @@ end
 """
     auto_interactables(fig) -> Vector{AbstractInteractable}
 
-Introspect a Makie `Figure`: for every supported plot in every `Axis` or `Axis3`, build the
-interactable its M2.1 constructor would (on `Axis3`: `Scatter`/`Lines`/`LineSegments` ride the
-widened constructors, `MeshScatter` gets depth-correct per-element hit radii from its data-space
-`markersize`, and `Wireframe` reads its child's rendered edge segments; other 3D plot kinds are
-skipped with a warning pending their own extraction recipes, see docs/roadmap.md M3). Layer ids are
-the plot kind (`:scatter`, `:lines`, …), suffixed `_2`, `_3`, … when a kind repeats. Returns
-the same concrete vector you could pass to [`holo`](@ref) yourself — edit or extend it freely.
+Introspect a Makie `Figure`: for every supported plot in every `Axis`, `Axis3`, or `PolarAxis`,
+build the interactable its M2.1 constructor would (on `Axis3`: `Scatter`/`Lines`/`LineSegments`
+ride the widened constructors, `MeshScatter` gets depth-correct per-element hit radii from its
+data-space `markersize`, `Wireframe` reads its child's rendered edge segments, and `Arrows3D`
+emits start→end segments from its processed `startpoints`/`endpoints`; other 3D plot kinds are
+skipped with a warning pending their own extraction recipes, see docs/roadmap.md M3.
+On `PolarAxis`: `Scatter`/`Lines`/`LineSegments`/`ScatterLines` project through the shared
+`transform_func` closure — continuous θ/r readout and separable-grid recipes are deferred).
+Layer ids are the plot kind (`:scatter`, `:lines`, …), suffixed `_2`, `_3`, … when a kind
+repeats. Returns the same concrete vector you could pass to [`holo`](@ref) yourself — edit or
+extend it freely.
 
 Note: each interactable inherits M1's default per-element payloads (e.g. a `Scatter` materializes
 one `(; index, x, y)` per point), so the zero-config path on a very large plot allocates one
@@ -553,7 +596,7 @@ function auto_interactables(fig)
     ints = AbstractInteractable[]
     seen = Dict{Symbol, Int}()
     for ax in fig.content
-        ax isa Union{Makie.Axis, Makie.Axis3} || continue
+        ax isa Union{Makie.Axis, Makie.Axis3, Makie.PolarAxis} || continue
         for p in ax.scene.plots
             base = _plotbase(p)
             if base === nothing
@@ -565,10 +608,25 @@ function auto_interactables(fig)
             # axis-aligned rects, 2D anchors) that a perspective projection silently
             # misaligns — the silent-wrong class, so skip LOUDLY rather than construct.
             # (roadmap M3 per-type extraction graduates kinds out of this gate.)
-            if ax isa Makie.Axis3 && !(p isa Union{Makie.Scatter, Makie.Lines, Makie.LineSegments, Makie.MeshScatter, Makie.Wireframe})
+            if ax isa Makie.Axis3 && !(
+                    p isa Union{
+                        Makie.Scatter, Makie.Lines, Makie.LineSegments,
+                        Makie.MeshScatter, Makie.Wireframe, Makie.Arrows3D,
+                    }
+                )
                 @warn "holo: skipping $(typeof(p).name.name) on Axis3 — only Scatter/Lines/" *
-                    "LineSegments/MeshScatter/Wireframe have 3D-valid extraction today; other " *
-                    "kinds are roadmap scope (docs/roadmap.md M3 per-type extraction)" maxlog = 16
+                    "LineSegments/MeshScatter/Wireframe/Arrows3D have 3D-valid extraction today; " *
+                    "other kinds are roadmap scope (docs/roadmap.md M3 per-type extraction)" maxlog = 16
+                continue
+            end
+            # PolarAxis gate: separable-edge / axis-aligned rect recipes assume Cartesian
+            # pixel geometry (heatmap grids, bars, spans). Polar maps those into arcs and
+            # radial wedges — constructing AABB/grid hit layers would be silently wrong.
+            # Point/segment recipes project per-vertex through transform_func and are fine.
+            if ax isa Makie.PolarAxis && !(p isa Union{Makie.Scatter, Makie.Lines, Makie.LineSegments, Makie.ScatterLines})
+                @warn "holo: skipping $(typeof(p).name.name) on PolarAxis — only Scatter/Lines/" *
+                    "LineSegments/ScatterLines have polar-valid extraction today; continuous " *
+                    "θ/r readout and grid/rect recipes are roadmap scope (docs/roadmap.md M3)" maxlog = 16
                 continue
             end
             n = get(seen, base, 0) + 1

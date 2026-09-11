@@ -30,29 +30,49 @@ Initial implementation — not yet released or registered.
   enforces exactly one backend per session (errors loudly if neither or both are loaded — never
   silently switches). See the README's "3D, animation, and large data" section and
   `docs/backend-comparison.md`.
-- View manipulation via `@bind` re-render (sliders): 2D `limits` zoom, 3D `azimuth`/`elevation`
-  rotation, and selection persistence across view re-renders (`selected=` feedback) — no new
-  API, demonstrated in `examples/view_manip.jl` (CI-run); live-verified on `:cairo` (this
-  example) and on the `:webgl` slider path (the PR #37 instrumented sweep).
-  Drag gestures remain roadmap scope.
+- View manipulation via `@bind` re-render: 2D `limits` zoom/pan, 3D `azimuth`/`elevation`
+  rotation, and selection persistence across view re-renders (`selected=` feedback).
+  Sliders need no Holo API; **drag-to-pan / drag-to-rotate** use `ViewInteractable`
+  (commit-on-release; Shift+drag arbitrates vs box-select/ROI). Demonstrated in
+  `examples/view_manip.jl` (CI-run); live-verified on `:cairo` and `:webgl`.
+  Live drag *preview* (high-frequency redraw) remains deferred with animation.
+- `Arrows3D` auto-extraction on `Axis3`: `SegmentInteractable(:pairs)` from processed
+  `startpoints`/`endpoints` (DATA space), with `{index,x,y,z,u,v,w}` payloads. Raw
+  `pos→pos+dir` is intentionally not used — it misses under `lengthscale`/`align` and the
+  MeshScatter children live in float32convert space (premise from #36).
 
 ### Fixed
+- `selected=` now fails loud at `build_manifest` (and at overlay mount) for unsupported
+  layer kinds (`segments`/`grid`/…) and out-of-range indices — same doctrine as wrong-length
+  `payloads=` (`_check_payloads`). Pre-highlight remains supported for `circles`/`rects`/
+  `polygons`. Mount-time `selected=` sharing `g.sel` with box-select is covered by a unit
+  test (ROI commit replaces pre-highlights — one selection at a time). Closes #39.
 - `selected=` pre-highlights are now genuinely persistent: they draw into the overlay's
   persistent selection group instead of the transient hover group, so they survive hovers and
   all selected indices render (previously the first hover erased them and only the last index
   showed — an M1.2 leftover from before box-select introduced the persistent group).
 
 ### Notes
-- Validated end-to-end in real Pluto for `PointInteractable`; other interactable kinds are
-  unit-tested (geometry + manifest) but not all exercised live yet.
+- Every overlay interaction path is now exercised live in a real Pluto + browser on **every
+  supported backend** (today `:cairo` and `:webgl`): the `:cairo` gallery (`examples/demo.jl`)
+  plus per-feature live-verifies, and a `:webgl` sweep (`test/e2e/webgl_sweep.mjs`, local tool)
+  driving `examples/webgl_demo.jl`'s kitchen-sink section — template tooltips, grid `(i,j)=value`
+  readout, colorbar 1-D value, polygon/region/text clicks, threshold drag, whole-axis readout,
+  `selected=` pre-highlight, and `selects`-ROI box-select, all against the live canvas (12 paths,
+  zero divergences).
 - `Axis3` parity (WS-3D core): 3D `Scatter`/`Lines` get the same point/segment overlays with
   `{index, x, y, z}` payloads on **both** backends — static base on `:cairo`, live on `:webgl` —
   projected at build time through the shared closure (`is3d` axis transforms ship degenerate
   lims; `Axis`/`Threshold`/`ROI` interactables fail loud on a 3D axis, where a screen pixel is a
   ray). `MeshScatter` (depth-correct per-element hit radii from its data-space `markersize`, via
   the new `PointInteractable` `radius3d=` option) and `Wireframe` (rendered edge segments from
-  its child) are auto-extracted too; `Arrows3D` and `Surface` remain roadmap scope.
-- Current `:cairo` scoping: `PolarAxis`/`LScene` are rejected at `holo()` time — a Holo
-  guard, not a CairoMakie limit (their disposition — parity item or Holo-wide non-goal — is an
-  explicit roadmap decision item). High-frequency live redraw is a shared cost limit on both
-  backends.
+  its child) are auto-extracted too; `Arrows3D` emits start→end segments from processed
+  `startpoints`/`endpoints` (not raw `pos→pos+dir` — that misses under `lengthscale`/`align`).
+  `Surface` remains roadmap scope.
+- `PolarAxis` discrete overlay parity: Scatter/Lines(/LineSegments/ScatterLines) hit geometry on
+  both backends via the shared projection (`Makie.Polar` in `transform_func`); `ispolar`
+  transforms ship degenerate lims so continuous θ/r consumers fail loud until the polar
+  transform is serialized to JS. Separable-grid/rect recipes on polar warn-and-skip.
+- Current `:cairo` scoping: `LScene` is rejected at `holo()` time — a Holo guard, not a
+  CairoMakie limit (`LScene` disposition remains a roadmap decision item). High-frequency live
+  redraw is a shared cost limit on both backends.

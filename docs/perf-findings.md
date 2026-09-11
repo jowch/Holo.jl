@@ -262,6 +262,10 @@ float16; lossy >2048px). Keep `AxisTransform` lims `Float64` (drag inversion) �
 - **SVG output path** — out of this bench (raster only). The roadmap already gates SVG behind a
   primitive-count viability spike; the PNG floor here (~50 KB even for 10 points) is the number
   SVG must *beat* to be worth it for sparse plots.
+- **`ViewInteractable` / `:view` kind** *(drag-to-pan/orbit, this PR)* — one full-viewport bbox
+  layer + mode/`azimuth`/`elevation` fields. Envelope impact is noise relative to PNG + per-element
+  geometry (same order as a single ROI layer). Full `bench/payload_envelope.jl` re-run deferred;
+  reconcile on the next manifest-shape change that adds per-element or frame payload.
 - **Multi-select / box-select** *(delivered, M4 commit `d05318f`)* — the M4 wire change is a
   single small `selects` string per selector ROI layer (added to the outbound manifest); the
   selection vector or region descriptor is the **inbound** `@bind` return value, not part of the

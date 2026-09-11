@@ -407,7 +407,8 @@ profile shows JS hit-test *specifically* is the bottleneck.
 
 **M4 (shipped):** `ThresholdInteractable` (draggable threshold line, Tier 0); `ROIInteractable`
 (draggable + resizable box, Tier 0 bounds + M4 box-select); `AbstractSelector` /
-`selects`-ROI — `Vector{InteractionEvent}` bond, Design-D contract (§5); gallery recipes
+`selects`-ROI — `Vector{InteractionEvent}` bond, Design-D contract (§5); `ViewInteractable`
+(drag-to-pan / drag-to-orbit, commit-on-release); gallery recipes
 (box-select scatter, image ROI per-channel stats).
 
 **Phase 2a (shipped):** Hist, Waterfall, CrossBar, HSpan, VSpan — all extracted as `:rects`; shared bar payload schema (semantic, no `index`); span viewport-clamp; uniform `_check_payloads` validation on Segment/Rect/Polygon interactables.
@@ -433,9 +434,12 @@ spike-verified exact on the Cairo raster *and* on the live `:webgl` canvas, stat
 after an `azimuth`/`elevation` change; figures in `perf-findings.md` §"Axis3 projection hinge
 spike"), and the `axis3` parity goldens are byte-identical across backends. Continuous pixel→data
 inversion is undefined on a 3D axis (a screen pixel is a ray), so `is3d` transforms ship
-degenerate lims and `Axis`/`Threshold`/`ROI` interactables fail loud. `PolarAxis`/`LScene` remain
-guarded, pending an explicit disposition — parity item or Holo-wide non-goal — tracked as a
-roadmap M3 decision item. The **Holo-wide** non-goals (every backend, by design) are the
+degenerate lims and `Axis`/`Threshold`/`ROI` interactables fail loud. **`PolarAxis` discrete
+overlays ship on both backends** (shared projection applies `Makie.Polar` via `transform_func`;
+`ispolar` transforms + the same continuous-consumer gates; Scatter/Lines/LineSegments/
+ScatterLines auto-extract). WGL scene JSON scrubs non-finite floats in GPU buffers for
+transport only — Holo hit geometry stays Julia-projected. Continuous θ/r readout still needs
+the polar transform serialized to JS — deferred. `LScene` remains guarded (own camera/scoping look). The **Holo-wide** non-goals (every backend, by design) are the
 **client-side GPU camera** — a JS-driven camera the kernel never hears about, which would desync
 the Julia-projected overlay and can only ever exist on one backend — and **GPU-pick occlusion**.
 **Occlusion policy (document-and-accept, backend-symmetric):** every projected vertex is
