@@ -662,6 +662,43 @@ end
         @test isempty(mt["payloads"]) && !haskey(mt, "tooltips")   # computed client-side, no payloads/tooltips
     end
 
+    @testset "ViewInteractable (drag-to-pan / orbit)" begin
+        v = ViewInteractable(ax)
+        @test events(v) == (:drag,)
+        @test validate(v, ctx) === nothing
+        Lv = only(hitlayers(v, ctx))
+        @test Lv.kind === :view
+        @test Lv.geometry["mode"] == "pan"
+        @test Lv.geometry["w"] ≈ ctx.transforms[Lv.axis].viewport[3]
+        @test !haskey(Lv.geometry, "azimuth")
+        # view layers sort after ROI/threshold in the manifest (hit-test arbitration)
+        roi = ROIInteractable(ax; bounds = (1.0, 2.0, 1.0, 2.0), id = :roi)
+        morder = build_manifest([v, roi], ctx)["layers"]
+        @test morder[1]["kind"] == "roi"
+        @test morder[2]["kind"] == "view"
+        # categorical / Axis3: pan fails loud on categories; Axis3 is orbit
+        fc = Figure(); axc = Axis(fc[1, 1]; dim1_conversion = Makie.CategoricalConversion())
+        scatter!(axc, ["a", "b", "c"], [1.0, 2.0, 3.0])
+        _, _, ctxc = ctx_for(fc)
+        @test validate(ViewInteractable(axc), ctxc) isa String
+        f3 = Figure(); ax3 = Axis3(f3[1, 1]; azimuth = 0.4, elevation = 0.5)
+        scatter!(ax3, Makie.Point3f[(1, 2, 3), (4, 5, 6)])
+        _, _, ctx3 = ctx_for(f3)
+        @test validate(ViewInteractable(ax3), ctx3) === nothing
+        L3 = only(hitlayers(ViewInteractable(ax3), ctx3))
+        @test L3.geometry["mode"] == "orbit"
+        @test L3.geometry["azimuth"] ≈ 0.4
+        @test L3.geometry["elevation"] ≈ 0.5
+        # bond payload round-trip (pan + orbit shapes)
+        tv = Holo.APD.Bonds.transform_value
+        w = Holo.HoloWidget("", Dict{String, Any}(), 100)
+        evp = tv(w, Dict("layer" => "view", "index" => 0, "payload" => Dict("xmin" => 1.0, "xmax" => 5.0, "ymin" => 0.0, "ymax" => 10.0)))
+        @test evp isa InteractionEvent && evp.layer === :view
+        @test evp.payload["xmin"] == 1.0 && evp.payload["ymax"] == 10.0
+        evo = tv(w, Dict("layer" => "view", "index" => 0, "payload" => Dict("azimuth" => 0.9, "elevation" => 0.3)))
+        @test evo.payload["azimuth"] == 0.9 && evo.payload["elevation"] == 0.3
+    end
+
     @testset "ROIInteractable (M4 drag cut 2)" begin
         r = ROIInteractable(ax; bounds = (1.0, 3.0, 2.0, 8.0))
         @test events(r) == (:drag,)

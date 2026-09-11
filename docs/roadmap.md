@@ -96,9 +96,9 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
       `perf-findings.md` §"WGL context lifecycle"; re-runnable via `test/e2e/ctx_growth.mjs`).
       What remains on `:webgl` is per-step context+scene re-init *cost* — the camera-only
       resident-scene patch is the planned optimization, no longer a feasibility gate.
-      Remaining in this item — drag-to-pan/rotate is the
-      follow-on (commit-on-release; a live drag *preview* shares the Animation/scrubbing item's
-      payload gate — M4, below; modifier-key arbitration vs box-select drag). The **client-side GPU camera stays out** (Holo-wide
+      Remaining in this item — ~~drag-to-pan/rotate~~ **shipped** (`ViewInteractable`,
+      commit-on-release; Shift+drag vs box-select/ROI; live drag *preview* still shares the
+      Animation/scrubbing item's payload gate — M4, below). The **client-side GPU camera stays out** (Holo-wide
       non-goal): a camera Julia never hears about desyncs the Julia-projected overlay and is
       structurally one-backend-only. 3D rotation additionally depends on the Axis3 item above.
 - [x] **`PolarAxis` overlay parity — discrete hits** *(delivered)*:

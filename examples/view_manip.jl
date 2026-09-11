@@ -152,12 +152,81 @@ HTML("<span id=\"rotout\">ROT=$(repr(rot_sel)) az=$(rot_az) el=$(rot_el)</span>"
 
 # ╔═╡ 50000000-0000-0000-0000-000000000040
 md"""
-## What's next
+## Drag-to-pan (2D) — commit on release
 
-Drag-to-pan/rotate (mouse gestures instead of sliders) is roadmap scope — same
-server-authoritative mechanism, commit-on-release. See `docs/roadmap.md` (M3 view
-manipulation).
+`ViewInteractable` turns an empty-plot drag into new `limits`. The overlay tracks the
+gesture locally; mouse-up emits `(; xmin, xmax, ymin, ymax)` and Julia rebuilds the
+figure — same re-render contract as the slider above. **Shift+drag** forces pan even
+over a Tier-0 ROI/threshold (box-select arbitration).
 """
+
+# ╔═╡ 50000000-0000-0000-0000-000000000041
+pan_lims = Ref((0.0, 8.0, 0.0, 40.0))
+
+# ╔═╡ 50000000-0000-0000-0000-000000000042
+# Soft @bind cycle: remember lims in a Ref so a post-rebuild `nothing` bond doesn't reset the view.
+pan_now = begin
+    if (
+            @isdefined(pan_ev) && pan_ev !== nothing && pan_ev isa InteractionEvent &&
+                pan_ev.layer === :view
+        )
+        pl = pan_ev.payload
+        pan_lims[] = (Float64(pl["xmin"]), Float64(pl["xmax"]), Float64(pl["ymin"]), Float64(pl["ymax"]))
+    end
+    pan_lims[]
+end
+
+# ╔═╡ 50000000-0000-0000-0000-000000000043
+begin
+    pan_fig = Figure(size = (500, 320))
+    pan_ax = Axis(pan_fig[1, 1]; limits = pan_now, title = "drag to pan — commit on release")
+    scatter!(pan_ax, first.(zoom_data), last.(zoom_data); color = :dodgerblue, markersize = 18)
+    pan_pts = PointInteractable(pan_ax, zoom_data; id = :scatter)
+    pan_view = ViewInteractable(pan_ax)
+end
+
+# ╔═╡ 50000000-0000-0000-0000-000000000044
+@bind pan_ev holo(pan_fig, pan_pts, pan_view)
+
+# ╔═╡ 50000000-0000-0000-0000-000000000045
+HTML("<span id=\"panout\">PAN=$(repr(pan_ev)) lims=$(pan_now)</span>")
+
+# ╔═╡ 50000000-0000-0000-0000-000000000050
+md"""
+## Drag-to-rotate (Axis3) — commit on release
+
+Same gesture on `Axis3`: drag emits `(; azimuth, elevation)` for the next re-render.
+"""
+
+# ╔═╡ 50000000-0000-0000-0000-000000000051
+orbit_cam = Ref((0.4, 0.5))
+
+# ╔═╡ 50000000-0000-0000-0000-000000000052
+orbit_now = begin
+    if (
+            @isdefined(orb_ev) && orb_ev !== nothing && orb_ev isa InteractionEvent &&
+                orb_ev.layer === :view
+        )
+        op = orb_ev.payload
+        orbit_cam[] = (Float64(op["azimuth"]), Float64(op["elevation"]))
+    end
+    orbit_cam[]
+end
+
+# ╔═╡ 50000000-0000-0000-0000-000000000053
+begin
+    orb_az, orb_el = orbit_now
+    orb_fig = Figure(size = (500, 380))
+    orb_ax = Axis3(orb_fig[1, 1]; azimuth = orb_az, elevation = orb_el, title = "drag to rotate")
+    scatter!(orb_ax, Makie.Point3f[(1, 2, 3), (4, 5, 6), (7, 8, 2)]; color = :crimson, markersize = 16)
+    orb_view = ViewInteractable(orb_ax)
+end
+
+# ╔═╡ 50000000-0000-0000-0000-000000000054
+@bind orb_ev holo(orb_fig, orb_view)
+
+# ╔═╡ 50000000-0000-0000-0000-000000000055
+HTML("<span id=\"orbout\">ORB=$(repr(orb_ev)) cam=$(orbit_now)</span>")
 
 # ╔═╡ Cell order:
 # ╠═50000000-0000-0000-0000-000000000001
@@ -184,3 +253,14 @@ manipulation).
 # ╠═50000000-0000-0000-0000-000000000034
 # ╠═50000000-0000-0000-0000-000000000035
 # ╟─50000000-0000-0000-0000-000000000040
+# ╠═50000000-0000-0000-0000-000000000041
+# ╠═50000000-0000-0000-0000-000000000042
+# ╠═50000000-0000-0000-0000-000000000043
+# ╠═50000000-0000-0000-0000-000000000044
+# ╠═50000000-0000-0000-0000-000000000045
+# ╟─50000000-0000-0000-0000-000000000050
+# ╠═50000000-0000-0000-0000-000000000051
+# ╠═50000000-0000-0000-0000-000000000052
+# ╠═50000000-0000-0000-0000-000000000053
+# ╠═50000000-0000-0000-0000-000000000054
+# ╠═50000000-0000-0000-0000-000000000055

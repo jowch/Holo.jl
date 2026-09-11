@@ -11,6 +11,7 @@ export type Kind =
     | "axis"      // geometry: null  — continuous, rides the axis transform
     | "threshold" // geometry: ThresholdGeometry — a draggable h/v line; value computed via AxisTransform on drag
     | "roi"       // geometry: ROIGeometry — a draggable+resizable rect; bounds computed via AxisTransform
+    | "view"      // geometry: ViewGeometry — drag-to-pan (2D) / drag-to-orbit (Axis3); commit on mouse-up
 
 export interface GridGeometry {
     xedges: number[]
@@ -32,6 +33,16 @@ export interface ROIGeometry {
     w: number
     h: number
     handle: number // corner-handle half-size, image px
+}
+
+export interface ViewGeometry {
+    x: number      // axis viewport bbox, image px
+    y: number
+    w: number
+    h: number
+    mode: "pan" | "orbit"
+    azimuth?: number    // radians; orbit only (current Axis3 camera)
+    elevation?: number  // radians; orbit only
 }
 
 export interface AxisTransform {
@@ -63,7 +74,7 @@ export type TemplateSegment = string | { f: string; spec?: string }
 export interface HitLayer {
     id: string
     kind: Kind
-    geometry: number[] | number[][] | GridGeometry | ThresholdGeometry | ROIGeometry | null
+    geometry: number[] | number[][] | GridGeometry | ThresholdGeometry | ROIGeometry | ViewGeometry | null
     payloads: unknown[]
     axis: string
     events: string[] // "click" | "hover" | "drag"

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { distToSegment, pointInPolygon, findBin, invertAxis, hitLayer, hitTest, resolvePayload } from "../src/geometry"
+import { distToSegment, pointInPolygon, findBin, invertAxis, hitLayer, hitTest, resolvePayload, panLimits, orbitAngles } from "../src/geometry"
 import type { AxisTransform, HitLayer, Manifest } from "../src/types"
 
 describe("primitives", () => {
@@ -103,6 +103,44 @@ describe("roi hit-test", () => {
         expect(hitLayer(roi, 300, 170)).toMatchObject({ roiPart: { corner: 2 } })  // BR (x+w, y+h)
         expect(hitLayer(roi, 200, 110)).toMatchObject({ roiPart: { move: true } }) // interior
         expect(hitLayer(roi, 50, 50)).toBeNull()                                    // outside
+    })
+})
+
+describe("view pan / orbit math", () => {
+    const t: AxisTransform = {
+        xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
+        viewport: [0, 0, 1000, 500], xreversed: false, yreversed: false,
+    }
+    it("panLimits shifts lims opposite the drag (grab metaphor)", () => {
+        // drag right by 100 image-px (= 0.1 of viewport) → xlims move left by 1
+        const lim = panLimits(t, 100, 250, 200, 250)
+        expect(lim.xmin).toBeCloseTo(-1)
+        expect(lim.xmax).toBeCloseTo(9)
+        expect(lim.ymin).toBeCloseTo(0)
+        expect(lim.ymax).toBeCloseTo(100)
+    })
+    it("panLimits respects log scales in fractional space", () => {
+        const logT: AxisTransform = { ...t, xlims: [1, 100], xscale: "log10" }
+        const lim = panLimits(logT, 0, 250, 500, 250) // half viewport → one decade
+        expect(lim.xmin).toBeCloseTo(0.1, 6)
+        expect(lim.xmax).toBeCloseTo(10, 6)
+    })
+    it("orbitAngles maps dx/dy to azimuth/elevation and clamps elevation", () => {
+        const g = { x: 0, y: 0, w: 1000, h: 500, mode: "orbit" as const, azimuth: 1.0, elevation: 0.5 }
+        const o = orbitAngles(g, 0, 0, 1000, 0) // full-width drag right → −π azimuth
+        expect(o.azimuth).toBeCloseTo(1.0 - Math.PI)
+        expect(o.elevation).toBeCloseTo(0.5)
+        const clamped = orbitAngles(g, 0, 0, 0, 1e6)
+        expect(clamped.elevation).toBeLessThan(Math.PI / 2)
+        expect(clamped.elevation).toBeGreaterThan(-Math.PI / 2)
+    })
+    it("view hit-test is the viewport bbox", () => {
+        const layer: HitLayer = {
+            id: "view", kind: "view", axis: "ax1", events: ["drag"], payloads: [],
+            geometry: { x: 100, y: 50, w: 200, h: 120, mode: "pan" },
+        }
+        expect(hitLayer(layer, 150, 100)).toMatchObject({ index: 0 })
+        expect(hitLayer(layer, 10, 10)).toBeNull()
     })
 })
 

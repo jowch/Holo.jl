@@ -30,11 +30,12 @@ Initial implementation — not yet released or registered.
   enforces exactly one backend per session (errors loudly if neither or both are loaded — never
   silently switches). See the README's "3D, animation, and large data" section and
   `docs/backend-comparison.md`.
-- View manipulation via `@bind` re-render (sliders): 2D `limits` zoom, 3D `azimuth`/`elevation`
-  rotation, and selection persistence across view re-renders (`selected=` feedback) — no new
-  API, demonstrated in `examples/view_manip.jl` (CI-run); live-verified on `:cairo` (this
-  example) and on the `:webgl` slider path (the PR #37 instrumented sweep).
-  Drag gestures remain roadmap scope.
+- View manipulation via `@bind` re-render: 2D `limits` zoom/pan, 3D `azimuth`/`elevation`
+  rotation, and selection persistence across view re-renders (`selected=` feedback).
+  Sliders need no Holo API; **drag-to-pan / drag-to-rotate** use `ViewInteractable`
+  (commit-on-release; Shift+drag arbitrates vs box-select/ROI). Demonstrated in
+  `examples/view_manip.jl` (CI-run); live-verified on `:cairo` and `:webgl`.
+  Live drag *preview* (high-frequency redraw) remains deferred with animation.
 - `Arrows3D` auto-extraction on `Axis3`: `SegmentInteractable(:pairs)` from processed
   `startpoints`/`endpoints` (DATA space), with `{index,x,y,z,u,v,w}` payloads. Raw
   `pos→pos+dir` is intentionally not used — it misses under `lengthscale`/`align` and the

@@ -538,4 +538,84 @@ describe("tooltips (mount/showTip)", () => {
         window.dispatchEvent(new MouseEvent("mouseup", { clientX: 200, clientY: 200, bubbles: true }))
         expect(sel.children.length).toBe(2)
     })
+
+    it("drag-to-pan commits new limits on mouse-up (commit-on-release)", () => {
+        const m: Manifest = {
+            width: 1200, height: 800, scaling: 2,
+            transforms: { ax1: { xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
+                viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false } },
+            layers: [{ id: "view", kind: "view", axis: "ax1", events: ["drag"], payloads: [],
+                geometry: { x: 0, y: 0, w: 1200, h: 800, mode: "pan" } }],
+        }
+        const { host, script } = setup()
+        mount(script, m)
+        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        let committed: { layer: string; payload: { xmin: number; xmax: number; ymin: number; ymax: number } } | null = null
+        host.addEventListener("input", () => {
+            committed = (host as unknown as { value: typeof committed }).value
+        })
+        // display scale 2: client Δx=100 → image Δx=200 → 200/1200 of lims = 10/6 ≈ 1.667
+        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 100, clientY: 200, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 200, clientY: 200, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 200, clientY: 200, bubbles: true }))
+        expect(committed).toMatchObject({ layer: "view" })
+        expect(committed!.payload.xmin).toBeCloseTo(-10 * 200 / 1200)
+        expect(committed!.payload.xmax).toBeCloseTo(10 - 10 * 200 / 1200)
+    })
+
+    it("tiny view drag does not commit", () => {
+        const m: Manifest = {
+            width: 1200, height: 800, scaling: 2,
+            transforms: { ax1: { xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
+                viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false } },
+            layers: [{ id: "view", kind: "view", axis: "ax1", events: ["drag"], payloads: [],
+                geometry: { x: 0, y: 0, w: 1200, h: 800, mode: "pan" } }],
+        }
+        const { host, script } = setup()
+        mount(script, m)
+        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        let fired = false
+        host.addEventListener("input", () => { fired = true })
+        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 100, clientY: 100, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 101, clientY: 100, bubbles: true })) // 2 image-px
+        expect(fired).toBe(false)
+    })
+
+    it("drag-to-orbit commits azimuth/elevation; Shift+drag beats ROI", () => {
+        const m: Manifest = {
+            width: 1200, height: 800, scaling: 2,
+            transforms: {
+                ax1: { xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
+                    viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false },
+                ax3: { xlims: [0, 1], ylims: [0, 1], xscale: "identity", yscale: "identity",
+                    viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false, is3d: true },
+            },
+            layers: [
+                { id: "roi", kind: "roi", axis: "ax1", events: ["drag"], payloads: [],
+                    geometry: { x: 200, y: 200, w: 400, h: 400, handle: 16 } },
+                { id: "view", kind: "view", axis: "ax3", events: ["drag"], payloads: [],
+                    geometry: { x: 0, y: 0, w: 1200, h: 800, mode: "orbit", azimuth: 0.4, elevation: 0.5 } },
+            ],
+        }
+        const { host, script } = setup()
+        mount(script, m)
+        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        let committed: { layer: string; payload: { azimuth: number; elevation: number } } | null = null
+        host.addEventListener("input", () => {
+            committed = (host as unknown as { value: typeof committed }).value
+        })
+        // without Shift: ROI wins over view (layer order)
+        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 200, clientY: 200, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 250, clientY: 200, bubbles: true }))
+        expect(committed!.layer).toBe("roi")
+        // with Shift: view orbit wins even over ROI interior
+        committed = null
+        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 200, clientY: 200, bubbles: true, shiftKey: true }))
+        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 500, clientY: 200, bubbles: true, shiftKey: true }))
+        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 500, clientY: 200, bubbles: true, shiftKey: true }))
+        expect(committed!.layer).toBe("view")
+        // image Δx = 600; sens = π/1200 → Δaz = −π/2
+        expect(committed!.payload.azimuth).toBeCloseTo(0.4 - Math.PI / 2)
+        expect(committed!.payload.elevation).toBeCloseTo(0.5)
+    })
 })
