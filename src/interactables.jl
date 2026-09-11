@@ -311,6 +311,9 @@ function validate(i::AxisInteractable, ctx::InteractionContext)
     t.is3d && return "AxisInteractable: continuous pixel→data readout is undefined on an Axis3 " *
         "(a screen pixel is a ray, not a data point). Use element interactables " *
         "(points/segments/polygons) on 3D axes."
+    t.ispolar && return "AxisInteractable: continuous θ/r readout on PolarAxis needs the polar " *
+        "transform serialized to JS (not yet shipped). Use element interactables " *
+        "(points/segments) on PolarAxis for discrete hits."
     (t.xscale in _JS_INVERTIBLE && t.yscale in _JS_INVERTIBLE) ||
         return "AxisInteractable: scale (x=$(t.xscale), y=$(t.yscale)) is not invertible client-side; " *
         "supported: identity/log10/log (categorical is fine)."
@@ -361,6 +364,8 @@ function validate(i::ThresholdInteractable, ctx::InteractionContext)
     t = ctx.transforms[axis_id(ctx, i.ax)]
     t.is3d && return "ThresholdInteractable: drag inverts a pixel to a data scalar via the axis " *
         "transform, which is undefined on an Axis3 (a screen pixel is a ray, not a data value)."
+    t.ispolar && return "ThresholdInteractable: drag inverts a pixel via Cartesian axis scales; " *
+        "PolarAxis continuous θ/r inversion is not yet shipped. Use element interactables for discrete hits."
     sc = i.orientation === :horizontal ? t.yscale : t.xscale
     sc in _JS_INVERTIBLE || return "ThresholdInteractable: $(i.orientation) drag needs a client-side " *
         "invertible $(i.orientation === :horizontal ? "y" : "x")-scale ($(sc) is not; supported: identity/log10/log)."
@@ -401,6 +406,8 @@ function validate(i::ROIInteractable, ctx::InteractionContext)
     t = ctx.transforms[axis_id(ctx, i.ax)]
     t.is3d && return "ROIInteractable: drag inverts pixel corners to data-space bounds via the axis " *
         "transform, which is undefined on an Axis3 (a screen pixel is a ray, not a data point)."
+    t.ispolar && return "ROIInteractable: drag inverts pixel corners via Cartesian axis scales; " *
+        "PolarAxis continuous θ/r inversion is not yet shipped. Use element interactables for discrete hits."
     (t.xscale in _JS_INVERTIBLE && t.yscale in _JS_INVERTIBLE) ||
         return "ROIInteractable: drag needs client-side invertible x and y scales " *
         "(x=$(t.xscale), y=$(t.yscale); supported: identity/log10/log)."

@@ -220,13 +220,88 @@ end
     end
 
     @testset "fail loud on unsupported axis types" begin
-        for mk in (Makie.PolarAxis, LScene)           # Axis3 is supported since WS-3D
-            fu = Figure(); mk(fu[1, 1])
-            err = (@test_throws ArgumentError ctx_for(fu)).value
-            @test occursin("supports `Makie.Axis` and `Makie.Axis3` only", err.msg)
-            @test occursin("WGLMakie", err.msg)       # steers to the backend that renders these today
-            @test occursin("scoping guard", err.msg)  # framing: Holo scoping, not a CairoMakie capability limit
+        # PolarAxis is supported since this PR; LScene remains deferred (roadmap M3).
+        fu = Figure(); LScene(fu[1, 1])
+        err = (@test_throws ArgumentError ctx_for(fu)).value
+        @test occursin("supports `Makie.Axis`, `Makie.Axis3`, and `Makie.PolarAxis`", err.msg)
+        @test occursin("WGLMakie", err.msg)       # steers to the backend that renders LScene today
+        @test occursin("scoping guard", err.msg)  # framing: Holo scoping, not a CairoMakie capability limit
+        @test occursin("LScene", err.msg)
+    end
+
+    @testset "PolarAxis: context + projection + payloads + gates" begin
+        # Discrete hits project through the shared closure (Makie.Polar in transform_func).
+        # Continuous θ/r readout is deferred — ispolar transforms + validate gates.
+        fp = Figure(; size = (600, 450))
+        axp = PolarAxis(fp[1, 1])
+        # (θ, r) data coords — four cardinal points so the projection hinge is unambiguous
+        ptsp = [
+            Point2f(0.0, 1.0), Point2f(π / 2, 2.0),
+            Point2f(π, 1.5), Point2f(3π / 2, 2.5),
+        ]
+        scatter!(axp, ptsp; color = :red, markersize = 14)
+        lines!(axp, range(0, 2π; length = 64), fill(1.2, 64))
+        _, ppup, ctxp = ctx_for(fp)
+
+        tp = ctxp.transforms[IP.axis_id(ctxp, axp)]
+        @test tp.ispolar
+        @test !tp.is3d
+        @test tp.viewport[3] > 0 && tp.viewport[4] > 0
+        @test IP._transform_dict(tp)["ispolar"] === true
+
+        # projected :circles land on the rendered markers (red-pixel hinge, same as Axis3/log)
+        isred(c) = Float64(Makie.red(c)) > 0.6 && Float64(Makie.green(c)) < 0.4 && Float64(Makie.blue(c)) < 0.4
+        function red_near_in(img, cx, cy; tol = 8)
+            ih, iw = size(img)
+            x, y = round(Int, cx), round(Int, cy)
+            for dy in -tol:tol, dx in -tol:tol
+                xx, yy = x + dx, y + dy
+                (1 <= xx <= iw && 1 <= yy <= ih) || continue
+                isred(img[yy, xx]) && return true
+            end
+            return false
         end
+        imgp = Makie.colorbuffer(fp; px_per_unit = ppup)
+        Lp = only(hitlayers(PointInteractable(axp, ptsp; radius = 7), ctxp))
+        @test Lp.kind === :circles && length(Lp.geometry) == 12
+        for k in 0:3
+            @test red_near_in(imgp, Lp.geometry[3k + 1], Lp.geometry[3k + 2])
+        end
+
+        # continuous consumers fail loud on ispolar (polar transform not yet in JS)
+        for bad in (
+                AxisInteractable(axp),
+                ThresholdInteractable(axp; orientation = :horizontal, value = 1.0),
+                ROIInteractable(axp; bounds = (0.0, 1.0, 0.5, 1.5)),
+            )
+            msg = validate(bad, ctxp)
+            @test msg !== nothing && occursin("PolarAxis", msg)
+            @test_throws ArgumentError build_manifest([bad], ctxp)
+        end
+
+        # auto-extract: Scatter + Lines ride; heatmap-on-polar warn-and-skips
+        fpi = Figure(; size = (600, 450))
+        axpi = PolarAxis(fpi[1, 1])
+        scatter!(axpi, [0.0, π / 2], [1.0, 2.0]; markersize = 10)
+        lines!(axpi, [0.0, π], [1.0, 1.5])
+        Makie.update_state_before_display!(fpi)
+        ints = auto_interactables(fpi)
+        @test any(i -> i isa PointInteractable, ints)
+        @test any(i -> i isa SegmentInteractable, ints)
+        _, _, ctxpi = ctx_for(fpi)
+        mp = build_manifest(ints, ctxpi)
+        @test mp["transforms"]["ax1"]["ispolar"] === true
+        @test length(mp["layers"]) == 2
+
+        fpg = Figure(; size = (600, 450))
+        axpg = PolarAxis(fpg[1, 1])
+        # heatmap on PolarAxis is a supported Makie recipe but not a polar-valid Holo extraction
+        heatmap!(axpg, 0:0.5:π, 1:3, rand(7, 3))
+        scatter!(axpg, [0.0], [1.0]; markersize = 10)
+        Makie.update_state_before_display!(fpg)
+        gints = @test_logs (:warn, r"on PolarAxis"i) auto_interactables(fpg)
+        @test length(gints) == 1
+        @test only(gints) isa PointInteractable
     end
 
     @testset "Axis3: context + projection + payloads + gates (WS-3D core)" begin
@@ -1489,17 +1564,18 @@ end
     # a normal axis transform defaults valueaxis = nothing → serializes to nothing
     t = AxisTransform(
         :ax1, (0.0, 1.0), (0.0, 2.0), :identity, :identity,
-        (0.0, 0.0, 10.0, 20.0), false, false, nothing, nothing, nothing, false
+        (0.0, 0.0, 10.0, 20.0), false, false, nothing, nothing, nothing, false, false
     )
     @test t.valueaxis === nothing
     d = _transform_dict(t)
     @test haskey(d, "valueaxis")
     @test d["valueaxis"] === nothing
     @test d["is3d"] === false
+    @test d["ispolar"] === false
     # a colorbar-style transform tags the value axis
     tc = AxisTransform(
         :cb1, (0.0, 1.0), (0.0, 2.0), :identity, :log10,
-        (0.0, 0.0, 10.0, 20.0), false, false, nothing, nothing, :y, false
+        (0.0, 0.0, 10.0, 20.0), false, false, nothing, nothing, :y, false, false
     )
     @test _transform_dict(tc)["valueaxis"] == "y"
 end

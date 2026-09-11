@@ -144,7 +144,7 @@ function Holo.context(b::WebGLBackend, fig, ppu)
 
     project = Holo._project_closure(scaling, out_h)
 
-    axes = [c for c in fig.content if c isa Union{Makie.Axis, Makie.Axis3}]
+    axes = [c for c in fig.content if c isa Union{Makie.Axis, Makie.Axis3, Makie.PolarAxis}]
     ids = IdDict{Any, Symbol}()
     transforms = Dict{Symbol, Holo.AxisTransform}()
     for (k, ax) in enumerate(axes)
@@ -155,9 +155,14 @@ function Holo.context(b::WebGLBackend, fig, ppu)
         # (interactables.jl indexes ctx.transforms[axis_id]). We call the shared constructors
         # directly (both backends share them, per src/backend.jl) rather than duplicating the
         # loop — CairoBackend now lives in a sibling extension we can't (and don't need to)
-        # reach from here.
-        transforms[id] = ax isa Makie.Axis3 ? Holo._axis3_transform(id, ax, scaling, out_h) :
+        # reach from here. PolarAxis rides `_polar_transform` (ispolar; continuous θ/r deferred).
+        transforms[id] = if ax isa Makie.Axis3
+            Holo._axis3_transform(id, ax, scaling, out_h)
+        elseif ax isa Makie.PolarAxis
+            Holo._polar_transform(id, ax, scaling, out_h)
+        else
             Holo._axis_transform(id, ax, scaling, out_h)
+        end
     end
     # Colorbar transforms, exactly as CairoBackend builds them. This loop was missing
     # (the one-sided context() divergence the parity goldens now pin): a ColorbarInteractable

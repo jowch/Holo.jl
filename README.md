@@ -93,7 +93,9 @@ edges are hoverable — all projected at build time through the shared closure �
 [3D, animation, and large data](#3d-animation-and-large-data-wglmakie)). Continuous pixel→data
 readout (`AxisInteractable`/`ThresholdInteractable`/`ROIInteractable`) fails loud on a 3D axis
 (a screen pixel is a ray, not a data point), and high-frequency live redraw is a shared cost
-limit on both backends. Unsupported axis blocks (`PolarAxis`/`LScene`) fail loud at `holo()` time.
+limit on both backends. `PolarAxis` gets the same discrete point/segment overlays on both
+backends (projected through `Makie.Polar` in the shared closure); continuous θ/r readout is
+deferred. Unsupported `LScene` blocks fail loud at `holo()` time.
 
 [`examples/demo.jl`](examples/demo.jl) is a runnable gallery of every kind below plus the
 selection round-trip.

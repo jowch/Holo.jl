@@ -146,5 +146,22 @@ function _parity_corpus()
         end
     )
 
+    # 8. PolarAxis: discrete hits via shared projection (Makie.Polar in transform_func) +
+    # ispolar transform. Deterministic (θ, r) markers; continuous θ/r readout deferred.
+    push!(
+        corpus, "polaraxis" => function ()
+            fig = Figure(size = (600, 450))
+            axp = PolarAxis(fig[1, 1])
+            sc = scatter!(
+                axp,
+                Point2f[(0.0, 1.0), (π / 2, 2.0), (π, 1.5), (3π / 2, 2.5)];
+                markersize = 14,
+            )
+            ln = lines!(axp, range(0, 2π; length = 32), fill(1.2, 32))
+            Makie.update_state_before_display!(fig)
+            return (fig, [PointInteractable(axp, sc), SegmentInteractable(axp, ln)])
+        end
+    )
+
     return corpus
 end

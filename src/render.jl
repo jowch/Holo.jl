@@ -158,6 +158,7 @@ _transform_dict(t::AxisTransform) = Dict{String, Any}(
     "xcats" => t.xcats, "ycats" => t.ycats,
     "valueaxis" => t.valueaxis === nothing ? nothing : string(t.valueaxis),
     "is3d" => t.is3d,
+    "ispolar" => t.ispolar,
 )
 
 """

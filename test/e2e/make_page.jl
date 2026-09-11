@@ -95,4 +95,42 @@ expected3 = Dict(
 )
 write(joinpath(outdir, "expected3d.json"), JSON3.write(expected3))
 
+# --- PolarAxis case: discrete hits via shared projection (Makie.Polar in transform_func).
+# Clicking marker 0 asserts the polar-projected hit geometry + {index,x,y} payload survive
+# the wire. Continuous θ/r readout is deferred (ispolar transform; validate gates).
+figp = Figure(; size = (400, 300))
+axp = PolarAxis(figp[1, 1])
+scatter!(
+    axp,
+    Point2f[(0.0, 1.0), (π / 2, 2.0), (π, 1.5), (3π / 2, 2.5)];
+    markersize = 16, color = :red,
+)
+wp = holo(figp)
+
+innerp = sprint(
+    show, MIME"text/html"(),
+    _WGLExt._widget_html(
+        wp;
+        scene_expr = JavaScript(JSON3.write(wp.scene)),
+        manifest_expr = JavaScript(JSON3.write(wp.manifest)),
+        bundle_js = JavaScript(JSON3.write(_WGLExt._bundle_text())),
+        shim_js = JavaScript(JSON3.write(_WGLExt._shim_text())),
+    ),
+)
+write(
+    joinpath(outdir, "pagepolar.html"),
+    "<!doctype html><html><head><meta charset=\"utf-8\"></head><body>\n$innerp\n</body></html>",
+)
+
+layerp = only(wp.manifest["layers"])
+gp = layerp["geometry"]
+scalep = wp.display_css / wp.manifest["width"]
+expectedp = Dict(
+    "cssX" => gp[1] * scalep, "cssY" => gp[2] * scalep,
+    "layer" => layerp["id"], "index" => 0,
+    "ispolar" => true,
+    "markersPx" => [Dict("x" => gp[3k + 1], "y" => gp[3k + 2], "r" => gp[3k + 3]) for k in 0:3],
+)
+write(joinpath(outdir, "expectedpolar.json"), JSON3.write(expectedp))
+
 println(outdir)   # the runner reads this line to find the artifacts

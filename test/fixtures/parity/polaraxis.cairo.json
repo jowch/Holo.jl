@@ -1,0 +1,257 @@
+{
+    "height": 900,
+    "layers": [
+        {
+            "kind": "circles",
+            "id": "scatter",
+            "geometry": [
+                743,
+                450,
+                14,
+                600,
+                163,
+                14,
+                385,
+                450,
+                14,
+                600,
+                809,
+                14
+            ],
+            "payloads": [
+                {
+                    "index": 0,
+                    "x": 0,
+                    "y": 1
+                },
+                {
+                    "index": 1,
+                    "x": 1.5707963705062866,
+                    "y": 2
+                },
+                {
+                    "index": 2,
+                    "x": 3.1415927410125732,
+                    "y": 1.5
+                },
+                {
+                    "index": 3,
+                    "x": 4.71238899230957,
+                    "y": 2.5
+                }
+            ],
+            "axis": "ax1",
+            "style": {
+                "width": 3,
+                "stroke": "#ff3b30"
+            },
+            "events": [
+                "click",
+                "hover"
+            ]
+        },
+        {
+            "kind": "polyline",
+            "id": "lines",
+            "geometry": [
+                772,
+                450,
+                769,
+                415,
+                758,
+                382,
+                741,
+                352,
+                719,
+                325,
+                691,
+                304,
+                660,
+                289,
+                626,
+                280,
+                591,
+                278,
+                557,
+                283,
+                524,
+                295,
+                495,
+                314,
+                469,
+                338,
+                449,
+                366,
+                436,
+                398,
+                429,
+                433,
+                429,
+                467,
+                436,
+                502,
+                449,
+                534,
+                469,
+                562,
+                495,
+                586,
+                524,
+                605,
+                557,
+                617,
+                591,
+                622,
+                626,
+                620,
+                660,
+                611,
+                691,
+                596,
+                719,
+                575,
+                741,
+                548,
+                758,
+                518,
+                769,
+                485,
+                772,
+                450
+            ],
+            "payloads": [
+                {
+                    "segment_index": 0
+                },
+                {
+                    "segment_index": 1
+                },
+                {
+                    "segment_index": 2
+                },
+                {
+                    "segment_index": 3
+                },
+                {
+                    "segment_index": 4
+                },
+                {
+                    "segment_index": 5
+                },
+                {
+                    "segment_index": 6
+                },
+                {
+                    "segment_index": 7
+                },
+                {
+                    "segment_index": 8
+                },
+                {
+                    "segment_index": 9
+                },
+                {
+                    "segment_index": 10
+                },
+                {
+                    "segment_index": 11
+                },
+                {
+                    "segment_index": 12
+                },
+                {
+                    "segment_index": 13
+                },
+                {
+                    "segment_index": 14
+                },
+                {
+                    "segment_index": 15
+                },
+                {
+                    "segment_index": 16
+                },
+                {
+                    "segment_index": 17
+                },
+                {
+                    "segment_index": 18
+                },
+                {
+                    "segment_index": 19
+                },
+                {
+                    "segment_index": 20
+                },
+                {
+                    "segment_index": 21
+                },
+                {
+                    "segment_index": 22
+                },
+                {
+                    "segment_index": 23
+                },
+                {
+                    "segment_index": 24
+                },
+                {
+                    "segment_index": 25
+                },
+                {
+                    "segment_index": 26
+                },
+                {
+                    "segment_index": 27
+                },
+                {
+                    "segment_index": 28
+                },
+                {
+                    "segment_index": 29
+                },
+                {
+                    "segment_index": 30
+                }
+            ],
+            "axis": "ax1",
+            "style": {
+                "width": 3,
+                "stroke": "#ff3b30"
+            },
+            "events": [
+                "click",
+                "hover"
+            ]
+        }
+    ],
+    "transforms": {
+        "ax1": {
+            "xscale": "identity",
+            "ylims": [
+                0,
+                1
+            ],
+            "xlims": [
+                0,
+                1
+            ],
+            "valueaxis": null,
+            "is3d": false,
+            "xreversed": false,
+            "ycats": null,
+            "xcats": null,
+            "yreversed": false,
+            "yscale": "identity",
+            "viewport": [
+                32,
+                32,
+                1136,
+                836
+            ],
+            "ispolar": true
+        }
+    },
+    "width": 1200,
+    "scaling": 2
+}

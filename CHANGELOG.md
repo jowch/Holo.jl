@@ -61,7 +61,10 @@ Initial implementation — not yet released or registered.
   ray). `MeshScatter` (depth-correct per-element hit radii from its data-space `markersize`, via
   the new `PointInteractable` `radius3d=` option) and `Wireframe` (rendered edge segments from
   its child) are auto-extracted too; `Arrows3D` and `Surface` remain roadmap scope.
-- Current `:cairo` scoping: `PolarAxis`/`LScene` are rejected at `holo()` time — a Holo
-  guard, not a CairoMakie limit (their disposition — parity item or Holo-wide non-goal — is an
-  explicit roadmap decision item). High-frequency live redraw is a shared cost limit on both
-  backends.
+- `PolarAxis` discrete overlay parity: Scatter/Lines(/LineSegments/ScatterLines) hit geometry on
+  both backends via the shared projection (`Makie.Polar` in `transform_func`); `ispolar`
+  transforms ship degenerate lims so continuous θ/r consumers fail loud until the polar
+  transform is serialized to JS. Separable-grid/rect recipes on polar warn-and-skip.
+- Current `:cairo` scoping: `LScene` is rejected at `holo()` time — a Holo guard, not a
+  CairoMakie limit (`LScene` disposition remains a roadmap decision item). High-frequency live
+  redraw is a shared cost limit on both backends.

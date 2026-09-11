@@ -48,3 +48,11 @@ ev3.index == 0 || error("3D index mismatch: $(ev3.index)")
     error("Axis3 payload missing z (got $(ev3.payload)) — the {index,x,y,z} payload was dropped on the wire")
 
 println("seam OK (Axis3) — browser host.value -> ", ev3)
+
+# PolarAxis case: same seam; payload is 2-D {index,x,y} (θ,r as x,y) — no continuous inversion.
+capturedp = JSON3.read(read(joinpath(dir, "capturedpolar.json"), String), Dict{String, Any})
+evp = APD.Bonds.transform_value(w, capturedp)
+evp isa Holo.InteractionEvent || error("transform_value (polar) did not return an InteractionEvent: $(typeof(evp))")
+evp.layer === :scatter || error("polar layer mismatch: $(evp.layer)")
+evp.index == 0 || error("polar index mismatch: $(evp.index)")
+println("seam OK (PolarAxis) — browser host.value -> ", evp)

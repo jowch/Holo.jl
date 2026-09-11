@@ -537,13 +537,16 @@ end
 """
     auto_interactables(fig) -> Vector{AbstractInteractable}
 
-Introspect a Makie `Figure`: for every supported plot in every `Axis` or `Axis3`, build the
-interactable its M2.1 constructor would (on `Axis3`: `Scatter`/`Lines`/`LineSegments` ride the
-widened constructors, `MeshScatter` gets depth-correct per-element hit radii from its data-space
-`markersize`, and `Wireframe` reads its child's rendered edge segments; other 3D plot kinds are
-skipped with a warning pending their own extraction recipes, see docs/roadmap.md M3). Layer ids are
-the plot kind (`:scatter`, `:lines`, …), suffixed `_2`, `_3`, … when a kind repeats. Returns
-the same concrete vector you could pass to [`holo`](@ref) yourself — edit or extend it freely.
+Introspect a Makie `Figure`: for every supported plot in every `Axis`, `Axis3`, or `PolarAxis`,
+build the interactable its M2.1 constructor would (on `Axis3`: `Scatter`/`Lines`/`LineSegments`
+ride the widened constructors, `MeshScatter` gets depth-correct per-element hit radii from its
+data-space `markersize`, and `Wireframe` reads its child's rendered edge segments; other 3D plot
+kinds are skipped with a warning pending their own extraction recipes, see docs/roadmap.md M3.
+On `PolarAxis`: `Scatter`/`Lines`/`LineSegments`/`ScatterLines` project through the shared
+`transform_func` closure — continuous θ/r readout and separable-grid recipes are deferred).
+Layer ids are the plot kind (`:scatter`, `:lines`, …), suffixed `_2`, `_3`, … when a kind
+repeats. Returns the same concrete vector you could pass to [`holo`](@ref) yourself — edit or
+extend it freely.
 
 Note: each interactable inherits M1's default per-element payloads (e.g. a `Scatter` materializes
 one `(; index, x, y)` per point), so the zero-config path on a very large plot allocates one
@@ -553,7 +556,7 @@ function auto_interactables(fig)
     ints = AbstractInteractable[]
     seen = Dict{Symbol, Int}()
     for ax in fig.content
-        ax isa Union{Makie.Axis, Makie.Axis3} || continue
+        ax isa Union{Makie.Axis, Makie.Axis3, Makie.PolarAxis} || continue
         for p in ax.scene.plots
             base = _plotbase(p)
             if base === nothing
@@ -569,6 +572,16 @@ function auto_interactables(fig)
                 @warn "holo: skipping $(typeof(p).name.name) on Axis3 — only Scatter/Lines/" *
                     "LineSegments/MeshScatter/Wireframe have 3D-valid extraction today; other " *
                     "kinds are roadmap scope (docs/roadmap.md M3 per-type extraction)" maxlog = 16
+                continue
+            end
+            # PolarAxis gate: separable-edge / axis-aligned rect recipes assume Cartesian
+            # pixel geometry (heatmap grids, bars, spans). Polar maps those into arcs and
+            # radial wedges — constructing AABB/grid hit layers would be silently wrong.
+            # Point/segment recipes project per-vertex through transform_func and are fine.
+            if ax isa Makie.PolarAxis && !(p isa Union{Makie.Scatter, Makie.Lines, Makie.LineSegments, Makie.ScatterLines})
+                @warn "holo: skipping $(typeof(p).name.name) on PolarAxis — only Scatter/Lines/" *
+                    "LineSegments/ScatterLines have polar-valid extraction today; continuous " *
+                    "θ/r readout and grid/rect recipes are roadmap scope (docs/roadmap.md M3)" maxlog = 16
                 continue
             end
             n = get(seen, base, 0) + 1

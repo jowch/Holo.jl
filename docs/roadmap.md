@@ -49,8 +49,8 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
       Point/Segment/Polygon storage + the shared projection closure widened to 3D (`Point3f`,
       z=0 for 2-coord input — every pre-existing golden value-identical modulo the new `is3d`
       transform key, so the widen provably didn't move 2D); `:cairo` guard lifted (`Axis3`
-      collected on both backends; `PolarAxis`/`LScene` still rejected pending their decision
-      item below); `is3d` `AxisTransform` (degenerate lims — `Axis`/`Threshold`/`ROI`
+      collected on both backends; `LScene` still rejected pending its decision item below;
+      `PolarAxis` discrete overlays since the PolarAxis parity item); `is3d` `AxisTransform` (degenerate lims — `Axis`/`Threshold`/`ROI`
       interactables fail loud: a screen pixel on a 3D axis is a ray, not a data point); z-aware
       `{index,x,y,z}` payloads; 3-coord `Scatter`/`Lines` introspection; `axis3` parity-corpus
       figure (goldens **byte-identical across backends**); an Axis3 case in the real-browser
@@ -99,15 +99,20 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
       payload gate — M4, below; modifier-key arbitration vs box-select drag). The **client-side GPU camera stays out** (Holo-wide
       non-goal): a camera Julia never hears about desyncs the Julia-projected overlay and is
       structurally one-backend-only. 3D rotation additionally depends on the Axis3 item above.
-- [ ] **`PolarAxis` + `LScene` disposition (a decision item, not yet a feature commitment)** —
-      the `:cairo` guard rejects both alongside `Axis3`, and `:webgl` renders them live but builds
-      no overlay transforms for them (interactables keyed to them fail loud). The parity doctrine
-      allows no third state: each must become a scheduled parity item (overlays on both —
-      `PolarAxis`'s discrete hit geometry looks tractable now that the shared projection closure
-      applies `transform_func`, where the polar map lives, though its *continuous* axis readout
-      would still need the polar transform serialized to JS; `LScene` needs its own camera/scoping
-      look) or an explicit Holo-wide non-goal. Until decided, this is the known interim
-      per-backend gap.
+- [x] **`PolarAxis` overlay parity — discrete hits** *(delivered)*:
+      `:cairo` guard lifted for `PolarAxis` (both backends collect it); shared projection
+      closure already applies `Makie.Polar` via `transform_func`, so Scatter/Lines hit
+      geometry lands on rendered markers; `ispolar` `AxisTransform` (degenerate lims —
+      `Axis`/`Threshold`/`ROI` fail loud until continuous θ/r ships); auto-extract gate
+      (Scatter/Lines/LineSegments/ScatterLines; separable-grid/rect recipes warn-and-skip);
+      `polaraxis` parity-corpus figure; real-browser E2E click. Continuous θ/r readout
+      (polar transform serialized to JS) remains follow-up; `LScene` stays deferred.
+- [ ] **`LScene` disposition** — needs its own camera/scoping look (parity item or Holo-wide
+      non-goal). Until then `:cairo` rejects it; `:webgl` may render live but builds no
+      overlay transforms (interactables keyed to it fail loud).
+- [ ] **`PolarAxis` continuous θ/r readout** — ship `Makie.Polar` (+ letterboxed scene lims)
+      to JS `invertAxis` so `AxisInteractable` works on polar axes; gated by the discrete
+      hits item above.
 
 ## M4 — Interaction depth (new capabilities, not new surfaces)
 *Goal: the Tier-0/Tier-1 interactions the architecture already supports.*
@@ -153,9 +158,8 @@ limit on both backends, not a capability split.
 Per-backend there are no *feature* non-goals, only substrate facts: `:cairo` ships a static base
 (its former "3D needs a browser-side renderer" note was wrong — CairoMakie renders static 3D
 natively; the `Axis3` guard **lifted 2026-07-02** with the M3 Axis3 core item, so `Axis3`
-overlays now ship on both backends; the guard still rejects `PolarAxis`/`LScene`, whose
-disposition — parity item or Holo-wide non-goal — is an explicit M3 decision item and the one
-known interim gap), and
+overlays now ship on both backends; **`PolarAxis` discrete overlays** ship too — continuous θ/r
+readout and `LScene` remain the open M3 follow-ups), and
 `:webgl` ships a live canvas (so it renders 3D live today and re-renders cheaply). Backends
 differ in **cost**, never in the interaction contract — enforced by the parity golden harness
 (`test/fixtures/parity/`).
