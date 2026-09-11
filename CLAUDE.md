@@ -38,7 +38,9 @@ bond payload → it gets a live check on every backend.)
   it with Playwright (hover/click), and confirm the actual on-screen result — tooltip text,
   highlight, `@bind` round-trip, no console errors — matches intent. Inspect the real
   `published_to_js` manifest in-page when the change is about payload shape (a thing the unit
-  tests can't reach — they never call `show`).
+  tests can't reach — they never call `show`). Overlay chrome: run the boxes in
+  `docs/live-interaction-checklist.md` (Try Live + `test/e2e/polish_verify.mjs`). Overlay chrome: run the boxes in
+ `docs/live-interaction-checklist.md` (Try Live + `test/e2e/polish_verify.mjs`).
 - **Skip only** pure-internal refactors with zero observable delta (and say so). When unsure, it's
   user-facing — verify on all backends.
 - Mechanics below. Reuse each backend's demo env cell (`examples/demo.jl` for `:cairo`,

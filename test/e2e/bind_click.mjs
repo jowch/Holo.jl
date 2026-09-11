@@ -121,8 +121,10 @@ try {
     const MARKER0 = { x: 113, y: 500 };
     const outW = sr.querySelector("svg").viewBox.baseVal.width;
     const clickOpts = () => {
-      const b = host.getBoundingClientRect();
-      const scale = host.clientWidth / outW;   // == display_css / out_w
+      // Scale through the BASE (img/canvas), not the host — they can disagree on WGL/DPR.
+      const base = host.querySelector("img, canvas");
+      const b = base.getBoundingClientRect();
+      const scale = b.width / outW;
       return {
         bubbles: true, composed: true, cancelable: true,
         clientX: b.x + MARKER0.x * scale, clientY: b.y + MARKER0.y * scale,

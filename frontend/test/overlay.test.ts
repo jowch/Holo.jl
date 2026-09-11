@@ -471,6 +471,7 @@ describe("tooltips (mount/showTip)", () => {
         surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 10, clientY: 10, bubbles: true }))
         expect(sel.children.length).toBe(2)                 // pre-selection survived the hovers
         expect((shadow.querySelector("g.hi") as SVGGElement).children.length).toBe(0)
+        expect(sel.querySelector("circle")!.getAttribute("fill")).toBe("rgba(58, 111, 124, 0.12)")
     })
 
     // issue #39: selected= fail-loud on unsupported kinds / OOB (mirror Julia build_manifest)
@@ -710,6 +711,75 @@ describe("overlay visual polish", () => {
         expect(el.getAttribute("stroke")).toBe(ink)
         expect(el.getAttribute("stroke-width")).toBe("2.5")
         expect(el.getAttribute("stroke-opacity") ?? "1").toBe("1")
+        // visual-design.md: halo sits just outside the marker (r + 2), not flush or undersized
+        expect(el.getAttribute("r")).toBe("22")
+        expect(el.getAttribute("cx")).toBe("300")
+        expect(el.getAttribute("cy")).toBe("200")
+    })
+
+    it("hover halo is the same r+2, concentric with the marker", () => {
+        const { host, script } = setup()
+        mount(script, manifest)
+        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
+        const el = shadowOf(host).querySelector("g.hi")!.firstElementChild as SVGElement
+        expect(el.getAttribute("r")).toBe("22") // geometry r=20
+        expect(el.getAttribute("cx")).toBe("600")
+        expect(el.getAttribute("cy")).toBe("400")
+    })
+
+    it("pins the overlay box to the base, not a smaller host (WGL/DPR offset)", () => {
+        // Live bug: WGLMakie can size the <canvas> wider than .ip-host. Overlay was inset:0
+        // on the host, so g.sel sat left of the marker. Pin to the base rect.
+        const host = document.createElement("div")
+        host.getBoundingClientRect = () =>
+            ({ left: 10, top: 20, width: 680, height: 320, right: 690, bottom: 340, x: 10, y: 20, toJSON() {} }) as DOMRect
+        const canvas = document.createElement("canvas")
+        canvas.getBoundingClientRect = () =>
+            ({ left: 10, top: 20, width: 720, height: 320, right: 730, bottom: 340, x: 10, y: 20, toJSON() {} }) as DOMRect
+        const script = document.createElement("script")
+        host.append(canvas, script)
+        document.body.append(host)
+        mount(script, {
+            width: 1440, height: 640, scaling: 2, transforms: {},
+            layers: [{
+                id: "pts", kind: "circles", geometry: [100, 100, 20],
+                payloads: [{ i: 0 }], axis: "ax1", events: ["click", "hover"], selected: [0],
+            }],
+        })
+        const overlay = host.lastElementChild as HTMLElement
+        expect(overlay.style.width).toBe("720px")
+        expect(overlay.style.height).toBe("320px")
+        expect(overlay.style.left).toBe("0px")
+        expect(overlay.style.top).toBe("0px")
+        const sel = shadowOf(host).querySelector("g.sel")!.firstElementChild as SVGElement
+        expect(sel.getAttribute("cx")).toBe("100")
+        expect(sel.getAttribute("cy")).toBe("100")
+    })
+
+    it("remount with a new selected= paints g.sel for the new index (click → bond → selected=)", () => {
+        const { host, script } = setup()
+        const layer = (sel: number[]): HitLayer => ({
+            id: "pts", kind: "circles", geometry: [300, 200, 20, 600, 400, 20],
+            payloads: [{ i: 0 }, { i: 1 }], axis: "ax1", events: ["click", "hover"], selected: [sel[0]],
+        })
+        const m = (sel: number[]): Manifest =>
+            ({ width: 1200, height: 800, scaling: 2, transforms: {}, layers: [layer(sel)] })
+        let resolve!: () => void
+        const inval = new Promise<void>((r) => { resolve = r })
+        mount(script, m([0]), inval)
+        expect(shadowOf(host).querySelector("g.sel")!.firstElementChild!.getAttribute("cx")).toBe("300")
+        resolve()
+        return inval.then(() => Promise.resolve()).then(() => {
+            const script2 = document.createElement("script")
+            host.append(script2)
+            mount(script2, m([1]))
+            const el = shadowOf(host).querySelector("g.sel")!.firstElementChild as SVGElement
+            expect(el.getAttribute("cx")).toBe("600")
+            expect(el.getAttribute("cy")).toBe("400")
+            expect(el.getAttribute("fill")).toBe(wash)
+            expect(el.getAttribute("r")).toBe("22")
+        })
     })
 
     it("selected open geometry gets a ring (inner 2px + outer ~4px, fill none)", () => {

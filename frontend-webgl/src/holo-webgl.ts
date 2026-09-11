@@ -92,6 +92,10 @@ export async function mountWebGL({ canvas, wglBundleUrl, scene, width, height, p
         30,                    // framerate
         obs(false),            // done_init
     )
+    // setup_scene_init may write canvas CSS to the framebuffer size (wider than
+    // `.ip-host`). Keep the element display-sized so the overlay can pin to it.
+    canvas.style.width = "100%"
+    canvas.style.height = "auto"
     // Return WGL so an animation driver can do BOTH tiers without re-importing:
     //  - uniforms/camera: find the live observable in `scene` and .notify(v)
     //  - data (positions): WGL.find_plots([uuid])[0].geometry.attributes.wgl_positions

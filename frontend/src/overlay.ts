@@ -15,8 +15,8 @@ const TIP_OFFSET = 10
 const MOTION_MS = 100 // 80–120 ms window; prefers-reduced-motion disables below
 
 const STYLE = `
-:host { position: absolute; inset: 0; }
-.surface { position: absolute; inset: 0; cursor: crosshair; }
+:host { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
+.surface { position: absolute; inset: 0; cursor: crosshair; pointer-events: auto; }
 .surface.hot { cursor: pointer; }
 .surface.grab { cursor: grab; }
 .surface.grabbing { cursor: grabbing; }
@@ -98,6 +98,30 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     shadow.append(style, svg, surface, tip)
     host.appendChild(shadowHost)
     if (manifest.tipStyle) for (const [k, v] of Object.entries(manifest.tipStyle)) shadowHost.style.setProperty(k, v)
+
+    // Pin the overlay to the BASE (img/canvas), not the host. WGLMakie can size the
+    // <canvas> differently from `.ip-host` (DPR / setup_scene_init), which left g.sel
+    // sitting beside the marker when the SVG was `inset:0` on the host.
+    const syncOverlayToBase = () => {
+        const hr = host.getBoundingClientRect()
+        const br = base.getBoundingClientRect()
+        if (!(br.width > 0 && br.height > 0)) return
+        shadowHost.style.left = `${br.left - hr.left}px`
+        shadowHost.style.top = `${br.top - hr.top}px`
+        shadowHost.style.width = `${br.width}px`
+        shadowHost.style.height = `${br.height}px`
+    }
+    syncOverlayToBase()
+    const overlayRO = typeof ResizeObserver !== "undefined" ? new ResizeObserver(syncOverlayToBase) : null
+    overlayRO?.observe(host)
+    overlayRO?.observe(base)
+    window.addEventListener("resize", syncOverlayToBase)
+    let overlayFrames = 0
+    const overlayTick = () => {
+        syncOverlayToBase()
+        if (++overlayFrames < 24) requestAnimationFrame(overlayTick)
+    }
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(overlayTick)
 
     const imgPx = (e: MouseEvent) => {
         const r = base.getBoundingClientRect()
@@ -417,6 +441,9 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         surface.removeEventListener("mousedown", onDown)
         window.removeEventListener("mousemove", onDrag)
         window.removeEventListener("mouseup", onUp)
+        window.removeEventListener("resize", syncOverlayToBase)
+        overlayRO?.disconnect()
+        overlayFrames = 24
         shadowHost.remove()
     }
     invalidation?.then(cleanup)
