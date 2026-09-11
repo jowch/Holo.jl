@@ -6,7 +6,12 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
-Initial implementation — not yet released or registered.
+## [0.1.0] - 2026-09-11
+
+First release. Frozen **after** drag-to-pan / drag-to-rotate (`ViewInteractable`)
+shipped — not a sliders-only shortcut. Registration path: CHANGELOG freeze →
+CI-green `main` commit (in-tree bundle) → `@JuliaRegistrator register` → TagBot
+`v0.1.0` tag. See [`docs/releasing.md`](docs/releasing.md).
 
 ### Added
 - `holo(fig, interactables)` — a Pluto `@bind` widget that overlays interactivity on a
@@ -76,3 +81,6 @@ Initial implementation — not yet released or registered.
 - Current `:cairo` scoping: `LScene` is rejected at `holo()` time — a Holo guard, not a
   CairoMakie limit (`LScene` disposition remains a roadmap decision item). High-frequency live
   redraw is a shared cost limit on both backends.
+
+[Unreleased]: https://github.com/jowch/Holo.jl/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/jowch/Holo.jl/releases/tag/v0.1.0

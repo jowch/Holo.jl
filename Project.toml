@@ -20,6 +20,7 @@ HoloWGLMakieExt = "WGLMakie"
 
 [compat]
 AbstractPlutoDingetjes = "1"
+Base64 = "1.10"
 CairoMakie = "0.15"
 FileIO = "1"
 HypertextLiteral = "0.9, 1"
