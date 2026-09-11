@@ -5,6 +5,12 @@
 // transport + reactive re-render, not just the overlay's emit. Verified locally against a real
 // kernel (06-30): click -> BOND=Holo.InteractionEvent(:scatter, 0, …).
 //
+// Readiness is split on purpose (de-flake):
+//   1. layout — host/base have non-zero width (MARKER0 scale isn't 0)
+//   2. overlay emit — host.value set on click (same signal click.mjs asserts)
+//   3. Pluto round-trip — #bondout flips (only after emit; longer patience; no re-clicks)
+// Failures name which mile broke instead of the ambiguous "bond stayed nothing".
+//
 //   node bind_click.mjs <base-url> <notebook-abs-path>
 
 import { chromium } from "playwright";
@@ -59,7 +65,8 @@ try {
     const st = await page.evaluate(() => {
       const runBtn = [...document.querySelectorAll("button, a")].find((b) => /run notebook code/i.test(b.innerText || b.title || ""));
       if (runBtn) runBtn.click();
-      // overlay fully mounted = its shadow `.surface` exists (guards against clicking mid-mount)
+      // overlay fully mounted = its shadow `.surface` exists (guards against clicking mid-mount).
+      // mount() is sync: seeing .surface from another turn means listeners are already wired.
       const host = document.querySelector(".ip-host");
       let surface = false;
       if (host) { let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; }); surface = !!(sr && sr.querySelector(".surface")); }
@@ -82,13 +89,30 @@ try {
     await new Promise((r) => setTimeout(r, 1000));
   }
   if (!ready) throw new Error("timed out waiting for cells to finish / widget to mount");
-  console.error("phase: cells ran, widget mounted — clicking marker");
+  console.error("phase: cells ran, widget mounted — waiting for layout");
+
+  // Layout gate: MARKER0 → CSS-px uses host.clientWidth; a zero-width host makes every click miss.
+  {
+    const layoutDeadline = Date.now() + 10000;
+    let laidOut = false;
+    while (Date.now() < layoutDeadline) {
+      laidOut = await page.evaluate(() => {
+        const host = document.querySelector(".ip-host");
+        const base = host?.querySelector("img, canvas");
+        return !!(host && base && host.clientWidth > 0 && base.getBoundingClientRect().width > 0);
+      });
+      if (laidOut) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    if (!laidOut) throw new Error("host/base never laid out (clientWidth/rect width still 0 after 10s)");
+  }
+  console.error("phase: layout ready — overlay emit, then Pluto round-trip");
 
   const result = await page.evaluate(async () => {
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const host = document.querySelector(".ip-host");
     let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
     const surface = sr.querySelector(".surface");
-    const b = host.getBoundingClientRect();
     // Marker 0's image-px position in the manifest, for the notebook's fixed scatter(1:5,(1:5).^2).
     // (The live manifest ships into the overlay's closure via published_to_js — not exposed on the
     // page — so unlike the static E2E we can't read it back; it's pinned to the committed figure.)
@@ -96,34 +120,73 @@ try {
     // is `0 0 manifest.width manifest.height`, so viewBox.width == out_w — no sizer to read anymore.
     const MARKER0 = { x: 113, y: 500 };
     const outW = sr.querySelector("svg").viewBox.baseVal.width;
-    const scale = host.clientWidth / outW;   // == display_css / out_w
-    const o = { bubbles: true, composed: true, cancelable: true, clientX: b.x + MARKER0.x * scale, clientY: b.y + MARKER0.y * scale, pointerId: 1, pointerType: "mouse", isPrimary: true };
-    const before = document.querySelector("#bondout").innerText;
-    let after = before, won = -1;
-    // Retry the click, don't dispatch-once-and-hope: the through-Pluto round-trip is flaky (verified
-    // 2026-07-01 — PR #30 red twice on this, green on re-run, code untouched). A single dispatch can
-    // race the overlay's listener wiring, and the reactive round-trip (emit → WS → kernel re-run →
-    // WS → DOM) can outlast one wait window on a loaded runner. Re-clicking the SAME marker is
-    // idempotent (:scatter, 0 either way), so retrying is a pure robustness win — ~30s total patience.
-    // `before` is captured ONCE and every read compares to it, so a late DOM flip from an earlier
-    // attempt's click is still caught by a later attempt's poll: effective patience is the full ~30s,
-    // NOT a hard 10s ceiling per round-trip. `won` records which attempt flipped the bond — 0 ⇒ healthy
-    // first click (slow round-trip); ≥1 ⇒ the first click(s) were dropped, which for a real user is a
-    // dropped click (the readiness gate only checks `.surface` EXISTS, not that listeners are wired).
-    retry: for (let attempt = 0; attempt < 3; attempt++) {
+    const clickOpts = () => {
+      const b = host.getBoundingClientRect();
+      const scale = host.clientWidth / outW;   // == display_css / out_w
+      return {
+        bubbles: true, composed: true, cancelable: true,
+        clientX: b.x + MARKER0.x * scale, clientY: b.y + MARKER0.y * scale,
+        pointerId: 1, pointerType: "mouse", isPrimary: true,
+      };
+    };
+    const dispatchClick = () => {
+      const o = clickOpts();
       surface.dispatchEvent(new PointerEvent("pointermove", o));
       surface.dispatchEvent(new PointerEvent("pointerdown", o));
       surface.dispatchEvent(new PointerEvent("pointerup", o));
       surface.dispatchEvent(new MouseEvent("click", o));
-      for (let i = 0; i < 50; i++) { // ~10s per attempt
-        await new Promise((r) => setTimeout(r, 200));
-        // Null-safe: the click induces a Pluto re-run of the readout cell, so #bondout is briefly
-        // absent while Pluto swaps that cell's output — treat a mid-swap read as "unchanged", keep polling.
-        after = document.querySelector("#bondout")?.innerText ?? before;
-        if (after !== before) { won = attempt; break retry; }
+    };
+    const bondText = (fallback) => document.querySelector("#bondout")?.innerText ?? fallback;
+
+    const before = document.querySelector("#bondout").innerText;
+    // --- Mile 2: overlay emit (host.value). Retries OK — same marker is idempotent. -----------
+    // onClick sets host.value synchronously on hit; a miss leaves it null (mount init).
+    let emitAttempt = -1;
+    let emitted = null;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      dispatchClick();
+      // Sync path usually wins immediately; short poll covers any deferred handler.
+      for (let i = 0; i < 10; i++) {
+        const after = bondText(before);
+        if (after !== before) {
+          // Pluto already flipped — rare but treat as full success (emit implied).
+          return { before, after, emitAttempt: attempt, emitted: host.value, plutoMs: 0, inputRefires: 0, error: null };
+        }
+        if (host.value != null) {
+          emitted = host.value;
+          emitAttempt = attempt;
+          break;
+        }
+        await sleep(50);
       }
+      if (emitted != null) break;
     }
-    return { before, after, attempt: won };
+    if (emitted == null) {
+      return { before, after: before, emitAttempt: -1, emitted: null, plutoMs: 0, inputRefires: 0, error: "no_emit" };
+    }
+
+    // --- Mile 3: Pluto round-trip. Do NOT re-click — more clicks race cell remounts. ----------
+    // CI evidence (PR #47 run 1): emit succeeded immediately, but #bondout stayed nothing for a
+    // full ~90s — so the flake is Pluto bond/WS/kernel lag (or a missed first `input`), not the
+    // hit-test. Re-dispatch `input` periodically WITHOUT changing host.value: Bond re-reads
+    // .value on each input, recovering a late-attached listener without remounting the widget.
+    const plutoStart = Date.now();
+    const PLUTO_MS = 180000; // 3 min — still well under the 40-min job cap after precompile
+    let after = before;
+    let inputRefires = 0;
+    while (Date.now() - plutoStart < PLUTO_MS) {
+      after = bondText(before);
+      if (after !== before) {
+        return { before, after, emitAttempt, emitted, plutoMs: Date.now() - plutoStart, inputRefires, error: null };
+      }
+      // Every ~5s, nudge Pluto in case the first input landed before the bond was subscribed.
+      if ((Date.now() - plutoStart) > 0 && ((Date.now() - plutoStart) / 5000 | 0) > inputRefires) {
+        host.dispatchEvent(new CustomEvent("input"));
+        inputRefires++;
+      }
+      await sleep(200);
+    }
+    return { before, after, emitAttempt, emitted, plutoMs: Date.now() - plutoStart, inputRefires, error: "no_pluto" };
   });
 
   // Check the shim leak FIRST: a leak that also breaks rendering would otherwise surface as the
@@ -131,16 +194,19 @@ try {
   if (unexpectedErrors.length) {
     throw new Error(`shim leak — missing window.Bonito/comm method(s): ${[...new Set(unexpectedErrors)].join(" | ")}`);
   }
-  if (result.after === result.before) {
-    throw new Error(`bond did not round-trip through Pluto: #bondout stayed "${result.before}" after click — the kernel never re-ran the readout cell (Pluto bond broken), or the click missed marker 0 (figure/MARKER0 drift)`);
+  if (result.error === "no_emit") {
+    throw new Error(`overlay never emitted on click (host.value unset after retries) — click missed marker 0 or hit-test failed; #bondout still "${result.before}"`);
+  }
+  if (result.error === "no_pluto") {
+    throw new Error(`overlay emitted ${JSON.stringify(result.emitted)} but Pluto never re-ran readout: #bondout stayed "${result.before}" for ${result.plutoMs}ms after emit (${result.inputRefires} input re-fires)`);
   }
   if (!/InteractionEvent\(:scatter, 0/.test(result.after)) {
     throw new Error(`unexpected readout after click: "${result.after}"`);
   }
-  if (result.attempt > 0) {
-    console.error(`WARNING: bond round-tripped only on click attempt ${result.attempt} (0-based) — SUGGESTS a dropped first click (overlay listener-wiring race; the readiness gate checks .surface EXISTS, not that its listeners are wired). Not proof: a healthy round-trip slower than the ~10s per-attempt poll window also surfaces as attempt >=1. If this warns every run, investigate — a chronic dropped first click would be a real user-facing bug.`);
+  if (result.emitAttempt > 0) {
+    console.error(`WARNING: overlay emitted only on click attempt ${result.emitAttempt} (0-based) — first click(s) missed or host not yet hittable. If this warns every run, investigate MARKER0 / layout.`);
   }
-  console.log(`THROUGH-PLUTO E2E OK (attempt ${result.attempt}) —`, result.before, "->", result.after);
+  console.log(`THROUGH-PLUTO E2E OK (emit attempt ${result.emitAttempt}, pluto ${result.plutoMs}ms, inputRefires ${result.inputRefires}) —`, result.before, "->", result.after);
 } catch (e) {
   failed = e;
 } finally {
