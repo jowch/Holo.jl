@@ -19,21 +19,18 @@ function record(name, ok, detail) {
   console.error(`${ok ? "PASS" : "FAIL"} ${name}: ${typeof detail === "string" ? detail : JSON.stringify(detail)}`);
 }
 
-function readMids() {
-  // Prefer data-json (survives display:none / innerText quirks); fall back to textContent.
-  const el = document.querySelector("#mids");
-  if (!el) throw new Error("#mids missing");
-  const raw = el.getAttribute("data-json") || el.textContent || "";
-  const mids = JSON.parse(raw.trim());
-  if (!Array.isArray(mids) || !mids.length) throw new Error(`bad mids: ${raw.slice(0, 120)}`);
-  return mids;
+async function shotWidget(page, file) {
+  const host = page.locator(".ip-host").first();
+  await host.scrollIntoViewIfNeeded();
+  await host.screenshot({ path: file });
 }
 
 const browser = await chromium.launch({ headless: true });
 let failed = null;
+let page = null;
 try {
   const context = await browser.newContext({ locale: "en-US", timezoneId: "UTC" });
-  const page = await context.newPage();
+  page = await context.newPage();
   const pageErrors = [];
   page.on("pageerror", (e) => pageErrors.push(e.message));
 
@@ -97,7 +94,7 @@ try {
     await new Promise((r) => setTimeout(r, 1000));
   }
   if (!ready) throw new Error(`timed out waiting for widget; last=${JSON.stringify(lastSt)}`);
-  await page.screenshot({ path: path.join(evidence, "01-ready.png") });
+  await shotWidget(page, path.join(evidence, "01-ready.png"));
 
   const hover = await page.evaluate(async () => {
     const host = document.querySelector(".ip-host");
@@ -135,7 +132,7 @@ try {
     }
     return { tipText, tipVisible, mx, my, scale };
   });
-  await page.screenshot({ path: path.join(evidence, "02-hover.png") });
+  await shotWidget(page, path.join(evidence, "02-hover.png"));
   const tipOk =
     hover.tipVisible &&
     (/index/i.test(hover.tipText) || /\bu\b/i.test(hover.tipText) || /\bx\b/i.test(hover.tipText));
@@ -150,11 +147,22 @@ try {
     const surface = sr.querySelector(".surface");
     const midEl = document.querySelector("#arrows3d_mids");
     const mids = JSON.parse((midEl.textContent || "").trim());
-    const [mx, my] = mids[0];
     const media = host.querySelector("img, canvas");
     const b = media.getBoundingClientRect();
     const outW = sr.querySelector("svg").viewBox.baseVal.width;
     const scale = b.width / outW;
+    const before0 = document.querySelector("#bondout").textContent;
+    // Prefer an index whose payload is not already in #bondout (Pluto may reuse a
+    // prior session for the same notebook path — before===after would false-fail).
+    let idx = 0;
+    for (let i = 0; i < mids.length; i++) {
+      if (!new RegExp(`index\\s*[=:]?\\s*${i}|:arrows3d,\\s*${i}`).test(before0)) {
+        idx = i;
+        break;
+      }
+      if (i === mids.length - 1) idx = (i + 1) % mids.length; // all present — force flip
+    }
+    const [mx, my] = mids[idx];
     const o = {
       bubbles: true,
       composed: true,
@@ -175,20 +183,20 @@ try {
       for (let i = 0; i < 50; i++) {
         await new Promise((r) => setTimeout(r, 200));
         after = document.querySelector("#bondout")?.textContent ?? before;
-        if (after !== before) {
+        if (after !== before && new RegExp(`:arrows3d,\\s*${idx}`).test(after)) {
           won = attempt;
           break retry;
         }
       }
     }
     const hi = sr.querySelectorAll("g.hi > *").length;
-    return { before, after, attempt: won, hi };
+    return { before, after, attempt: won, hi, idx };
   });
-  await page.screenshot({ path: path.join(evidence, "03-click.png") });
+  await shotWidget(page, path.join(evidence, "03-click.png"));
   const bondOk =
     click.after !== click.before &&
     /arrows3d/i.test(click.after) &&
-    (/\b0\b/.test(click.after) || /index\s*=\s*0/.test(click.after));
+    new RegExp(`:arrows3d,\\s*${click.idx}`).test(click.after);
   record("click-bind", bondOk, click);
 
   const interesting = pageErrors.filter(
@@ -196,10 +204,13 @@ try {
   );
   record("console-clean", interesting.length === 0, interesting);
 
-  await page.screenshot({ path: path.join(evidence, "99-final.png") });
+  await shotWidget(page, path.join(evidence, "99-final.png"));
 } catch (e) {
   failed = e;
   console.error("LIVE-VERIFY FAIL:", e.message);
+  try {
+    await page.screenshot({ path: path.join(evidence, "99-fail.png"), fullPage: true });
+  } catch (_) {}
 } finally {
   await browser.close();
 }
