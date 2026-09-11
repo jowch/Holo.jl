@@ -43,8 +43,12 @@ Initial implementation — not yet released or registered.
   showed — an M1.2 leftover from before box-select introduced the persistent group).
 
 ### Notes
-- Validated end-to-end in real Pluto for `PointInteractable`; other interactable kinds are
-  unit-tested (geometry + manifest) but not all exercised live yet.
+- Every overlay interaction path is now exercised live in a real Pluto + browser on **both**
+  backends: the `:cairo` gallery (`examples/demo.jl`) plus per-feature live-verifies, and a
+  `:webgl` sweep (`test/e2e/webgl_sweep.mjs`, local tool) driving `examples/webgl_demo.jl`'s
+  kitchen-sink section — template tooltips, grid `(i,j)=value` readout, colorbar 1-D value,
+  polygon/region/text clicks, threshold drag, whole-axis readout, `selected=` pre-highlight,
+  and `selects`-ROI box-select, all against the live canvas (12 paths, zero divergences).
 - `Axis3` parity (WS-3D core): 3D `Scatter`/`Lines` get the same point/segment overlays with
   `{index, x, y, z}` payloads on **both** backends — static base on `:cairo`, live on `:webgl` —
   projected at build time through the shared closure (`is3d` axis transforms ship degenerate
