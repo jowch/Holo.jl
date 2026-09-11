@@ -10,6 +10,8 @@ map), `frontend-delivery.md` (build/delivery). Priorities, not promises — reor
 - **No parallel server**; inspection survives offline/static-export, clicks need a kernel.
 - **Fail loud, never silently wrong** (per-capability `validate`).
 - **YAGNI**: build a surface/feature when a real use pulls for it, not preemptively.
+- **Live-verify on every supported backend** (today CairoMakie + WGLMakie / `:webgl`; same rule
+  for any future backend) before calling a user-facing change done — see `CLAUDE.md`.
 
 ## Status — v0.1 (done)
 Backend seam (CairoBackend) · `AbstractInteractable` + `HitLayer` · 5 built-ins
@@ -23,7 +25,7 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 ## M1 — Harden v1 (finish what exists) ✅ *done*
 *Goal: every shipped feature is real and demonstrated. No new surfaces.*
 
-- [x] **Live-verify the remaining kinds** in Pluto: Segment, Rect(list+grid/heatmap), Polygon, Axis-readout. (Machinery is proven for circles; this closes the per-kind gap.) *Done: `examples/demo.jl` exercises all five live; verified via headless Pluto + Playwright.*
+- [x] **Live-verify the remaining kinds** in Pluto: Segment, Rect(list+grid/heatmap), Polygon, Axis-readout. (Machinery is proven for circles; this closes the per-kind gap.) *Done: `examples/demo.jl` exercises all five live on `:cairo` (headless Pluto + Playwright); standing practice is every backend — `:webgl` covered by later sweeps / `webgl_demo.jl`.*
 - [x] **Selection round-trip → re-highlight.** Wire the designed loop: bond value → Julia marks selected indices on the manifest → overlay pre-highlights on mount (`HitLayer.selected` already exists in the TS). *Done: `selected` keyword on `holo`/`build_manifest`; clicked points re-highlight flicker-free (verified live).*
 - [x] **`examples/` notebook** — self-contained Pluto notebook (`examples/demo.jl`) that devs the package via a checkout-relative `@__DIR__` path. *Done: opens and runs clean from a fresh checkout; a CI job runs it headlessly so it can't rot.* (Used Pluto's self-contained notebook env, not a sidecar `Project.toml`.)
 - [x] **Docs**: expanded README API section (`holo`, each interactable, custom paths, payload-is-`Dict` contract, selection round-trip). Documenter site deferred to M5 (pre-registration → YAGNI).
