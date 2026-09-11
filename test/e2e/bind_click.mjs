@@ -150,7 +150,7 @@ try {
         const after = bondText(before);
         if (after !== before) {
           // Pluto already flipped — rare but treat as full success (emit implied).
-          return { before, after, emitAttempt: attempt, emitted: host.value, plutoMs: 0, error: null };
+          return { before, after, emitAttempt: attempt, emitted: host.value, plutoMs: 0, inputRefires: 0, error: null };
         }
         if (host.value != null) {
           emitted = host.value;
@@ -166,18 +166,27 @@ try {
     }
 
     // --- Mile 3: Pluto round-trip. Do NOT re-click — more clicks race cell remounts. ----------
-    // Budget is deliberately larger than the old combined ~30s: once emit is proven, the only
-    // remaining uncertainty is WS → kernel → DOM on a loaded runner.
+    // CI evidence (PR #47 run 1): emit succeeded immediately, but #bondout stayed nothing for a
+    // full ~90s — so the flake is Pluto bond/WS/kernel lag (or a missed first `input`), not the
+    // hit-test. Re-dispatch `input` periodically WITHOUT changing host.value: Bond re-reads
+    // .value on each input, recovering a late-attached listener without remounting the widget.
     const plutoStart = Date.now();
+    const PLUTO_MS = 180000; // 3 min — still well under the 40-min job cap after precompile
     let after = before;
-    for (let i = 0; i < 450; i++) { // ~90s
-      await sleep(200);
+    let inputRefires = 0;
+    while (Date.now() - plutoStart < PLUTO_MS) {
       after = bondText(before);
       if (after !== before) {
-        return { before, after, emitAttempt, emitted, plutoMs: Date.now() - plutoStart, error: null };
+        return { before, after, emitAttempt, emitted, plutoMs: Date.now() - plutoStart, inputRefires, error: null };
       }
+      // Every ~5s, nudge Pluto in case the first input landed before the bond was subscribed.
+      if ((Date.now() - plutoStart) > 0 && ((Date.now() - plutoStart) / 5000 | 0) > inputRefires) {
+        host.dispatchEvent(new CustomEvent("input"));
+        inputRefires++;
+      }
+      await sleep(200);
     }
-    return { before, after, emitAttempt, emitted, plutoMs: Date.now() - plutoStart, error: "no_pluto" };
+    return { before, after, emitAttempt, emitted, plutoMs: Date.now() - plutoStart, inputRefires, error: "no_pluto" };
   });
 
   // Check the shim leak FIRST: a leak that also breaks rendering would otherwise surface as the
