@@ -46,10 +46,14 @@ end
 @bind ev arrow_widget
 
 # ╔═╡ b0000000-0000-0000-0000-000000000012
+HTML("<span id=\"bondout\">BOND=$(repr(ev))</span>")
+
+# ╔═╡ b0000000-0000-0000-0000-000000000013
 HTML(
-    "<span id=\"bondout\">BOND=$(repr(ev))</span>" *
-        "<span id=\"mids\" data-json='$(JSON3.write(mids))' style=\"display:none\"></span>" *
-        "<span id=\"backend\">webgl</span>"
+    "<span id=\"backend\">webgl</span>" *
+        "<pre id=\"arrows3d_mids\" style=\"position:absolute;left:-10000px;top:0;width:1px;height:1px;overflow:hidden\">" *
+        JSON3.write(mids) *
+        "</pre>"
 )
 
 # ╔═╡ Cell order:
@@ -57,3 +61,4 @@ HTML(
 # ╠═b0000000-0000-0000-0000-000000000010
 # ╠═b0000000-0000-0000-0000-000000000011
 # ╠═b0000000-0000-0000-0000-000000000012
+# ╠═b0000000-0000-0000-0000-000000000013

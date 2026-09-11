@@ -60,10 +60,9 @@ try {
         });
         surface = !!(sr && sr.querySelector(".surface"));
       }
-      const midEl = document.querySelector("#mids");
-      const midRaw = midEl
-        ? (midEl.getAttribute("data-json") || midEl.textContent || "").trim()
-        : "";
+      const midEl = document.querySelector("#arrows3d_mids");
+      // textContent (not innerText): more reliable for off-screen nodes
+      const midRaw = midEl ? (midEl.textContent || "").trim() : "";
       let midsOk = false;
       try {
         const m = JSON.parse(midRaw);
@@ -77,7 +76,8 @@ try {
         surface,
         bondout: !!document.querySelector("#bondout"),
         midsOk,
-        midRaw: midRaw.slice(0, 80),
+        midEl: !!midEl,
+        midRaw: midRaw.slice(0, 120),
         backend: document.querySelector("#backend")?.textContent?.trim() || "",
         errText: [...document.querySelectorAll("pluto-cell.errored")]
           .map((c) => c.innerText)
@@ -106,8 +106,8 @@ try {
       if (el.shadowRoot) sr = el.shadowRoot;
     });
     const surface = sr.querySelector(".surface");
-    const midEl = document.querySelector("#mids");
-    const mids = JSON.parse((midEl.getAttribute("data-json") || midEl.textContent || "").trim());
+    const midEl = document.querySelector("#arrows3d_mids");
+    const mids = JSON.parse((midEl.textContent || "").trim());
     const [mx, my] = mids[0];
     const media = host.querySelector("img, canvas");
     const b = media.getBoundingClientRect();
@@ -148,8 +148,8 @@ try {
       if (el.shadowRoot) sr = el.shadowRoot;
     });
     const surface = sr.querySelector(".surface");
-    const midEl = document.querySelector("#mids");
-    const mids = JSON.parse((midEl.getAttribute("data-json") || midEl.textContent || "").trim());
+    const midEl = document.querySelector("#arrows3d_mids");
+    const mids = JSON.parse((midEl.textContent || "").trim());
     const [mx, my] = mids[0];
     const media = host.querySelector("img, canvas");
     const b = media.getBoundingClientRect();

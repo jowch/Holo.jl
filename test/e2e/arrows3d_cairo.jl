@@ -37,7 +37,6 @@ begin
     arrows3d!(ax, apts, adirs; color = :red)
     ints = auto_interactables(fig)
     arrow_widget = holo(fig, ints)
-    # Midpoints from the LIVE manifest (same path the overlay hits) — no duplicated figure math
     L = only(arrow_widget.manifest["layers"])
     g = L["geometry"]
     mids = [[(g[4k + 1] + g[4k + 3]) / 2, (g[4k + 2] + g[4k + 4]) / 2] for k in 0:2]
@@ -47,10 +46,15 @@ end
 @bind ev arrow_widget
 
 # ╔═╡ a0000000-0000-0000-0000-000000000012
+HTML("<span id=\"bondout\">BOND=$(repr(ev))</span>")
+
+# ╔═╡ a0000000-0000-0000-0000-000000000013
+# Unique id; off-screen (not display:none — Chromium zeros textContent/innerText there in some paths)
 HTML(
-    "<span id=\"bondout\">BOND=$(repr(ev))</span>" *
-        "<span id=\"mids\" data-json='$(JSON3.write(mids))' style=\"display:none\"></span>" *
-        "<span id=\"backend\">cairo</span>"
+    "<span id=\"backend\">cairo</span>" *
+        "<pre id=\"arrows3d_mids\" style=\"position:absolute;left:-10000px;top:0;width:1px;height:1px;overflow:hidden\">" *
+        JSON3.write(mids) *
+        "</pre>"
 )
 
 # ╔═╡ Cell order:
@@ -58,3 +62,4 @@ HTML(
 # ╠═a0000000-0000-0000-0000-000000000010
 # ╠═a0000000-0000-0000-0000-000000000011
 # ╠═a0000000-0000-0000-0000-000000000012
+# ╠═a0000000-0000-0000-0000-000000000013
