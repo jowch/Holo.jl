@@ -162,7 +162,7 @@ try {
       if (emitted != null) break;
     }
     if (emitted == null) {
-      return { before, after: before, emitAttempt: -1, emitted: null, plutoMs: 0, error: "no_emit" };
+      return { before, after: before, emitAttempt: -1, emitted: null, plutoMs: 0, inputRefires: 0, error: "no_emit" };
     }
 
     // --- Mile 3: Pluto round-trip. Do NOT re-click — more clicks race cell remounts. ----------
@@ -198,10 +198,7 @@ try {
     throw new Error(`overlay never emitted on click (host.value unset after retries) — click missed marker 0 or hit-test failed; #bondout still "${result.before}"`);
   }
   if (result.error === "no_pluto") {
-    throw new Error(`overlay emitted ${JSON.stringify(result.emitted)} but Pluto never re-ran readout: #bondout stayed "${result.before}" for ${result.plutoMs}ms after emit`);
-  }
-  if (result.after === result.before) {
-    throw new Error(`bond did not round-trip through Pluto: #bondout stayed "${result.before}" after click`);
+    throw new Error(`overlay emitted ${JSON.stringify(result.emitted)} but Pluto never re-ran readout: #bondout stayed "${result.before}" for ${result.plutoMs}ms after emit (${result.inputRefires} input re-fires)`);
   }
   if (!/InteractionEvent\(:scatter, 0/.test(result.after)) {
     throw new Error(`unexpected readout after click: "${result.after}"`);
@@ -209,7 +206,7 @@ try {
   if (result.emitAttempt > 0) {
     console.error(`WARNING: overlay emitted only on click attempt ${result.emitAttempt} (0-based) — first click(s) missed or host not yet hittable. If this warns every run, investigate MARKER0 / layout.`);
   }
-  console.log(`THROUGH-PLUTO E2E OK (emit attempt ${result.emitAttempt}, pluto ${result.plutoMs}ms) —`, result.before, "->", result.after);
+  console.log(`THROUGH-PLUTO E2E OK (emit attempt ${result.emitAttempt}, pluto ${result.plutoMs}ms, inputRefires ${result.inputRefires}) —`, result.before, "->", result.after);
 } catch (e) {
   failed = e;
 } finally {
