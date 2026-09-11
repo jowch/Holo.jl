@@ -138,7 +138,7 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 ## M5 — Scale & polish
 - [ ] **Spatial acceleration** (quadtree/grid) for large-N hit-testing — only when the documented O(n) ceiling is actually hit (`log()` the cap until then). *Phase 0 reframe:* hit-test is ~0 ms; the wall is manifest **payload size** (~290 ms serialize+transfer at 4.78 MB), so wire-encoding (int-pixel coords / capping `values[]`) outranks a quadtree (see Phase 4).
 - [x] **Perf benchmarking**: the unmeasured Q5 envelope — base64 size + click latency knee; confirm MsgPack fast-path engages. *Done (`bench/payload_envelope.jl` → `docs/perf-findings.md`): single plots 50–400 KB, manifest O(N) elements, heatmaps O(cells), animation = frames × PNG (the hard ceiling, 5.5–22 MB). MsgPack confirmed (generic maps, not the TypedArray fast-path). Full click round-trip measured live (headless Pluto + Chromium): ~65 ms median — render-bound, browser overhead negligible. Editor-lag knee (editor stutter, distinct from latency) deferred.*
-- [ ] **Theming**: respect Pluto light/dark for highlight/tooltip styling (shadow-DOM scoped). *(Tooltip styling already landed in M2.3 — shadow-DOM `--holo-tip-*` + `prefers-color-scheme` dark mode; what remains is following Pluto's explicit light/dark toggle and the marker-highlight styling.)*
+- [ ] **Theming**: marker-highlight styling (`highlight_*` / `--holo-hi-*`, shadow-DOM scoped). *(Tooltip card already matches official Pluto: both use `prefers-color-scheme`. Official Pluto has no notebook light/dark toggle — Settings → Dark mode is help text. Remaining work is highlight theming, not a Pluto theme hook.)*
 - [ ] **GLMakie-static backend**: GPU offscreen → PNG, same `AbstractBackend` contract (for envs with a GPU).
 - [ ] **Register in General** once the API stabilizes (CHANGELOG → 0.1.0 tag → Registrator/TagBot).
 - [x] **Distribution decision**: folded into `ext/HoloWGLMakieExt.jl` — see
@@ -295,9 +295,9 @@ These three are independent and can run concurrently.
     worth the manifest-shape rewrite. `Float16` is a non-starter (no msgpack float16; lossy >2048px).
 
 ### Phase 5 — Polish & release
-- **Theming** (Pluto light/dark, shadow-DOM scoped) — overlay can theme freely (shadow root +
-  bundled CSS already in place); the opaque base PNG can't follow the theme without a re-render —
-  scope accordingly.
+- **Theming** — tooltip card already matches official Pluto (`prefers-color-scheme`; no
+  notebook toggle). Remaining work is marker-highlight theming. The opaque base PNG
+  can't follow the theme without a re-render — scope accordingly.
 - **GLMakie-static backend** — first do the prerequisite seam refactor (move
   `data_to_image_px`/projection onto the rendercontext so it isn't hard-bound to CairoMakie),
   then the backend slots in behind the same contract. Must stay static→PNG (no 3D/live). Optional.

@@ -12,10 +12,10 @@ All notable changes to this project are documented here. The format is based on
   selected closed geometry gets a wash fill; selected open kinds (segments /
   polylines) get a two-stroke ring. Tip show/hide and highlight mount fade in
   100 ms and honor `prefers-reduced-motion`. The tooltip card is edge-clamped
-  with caret flip. Tooltip dark follows `prefers-color-scheme` (the same signal
-  Pluto 1.0 uses; no notebook toggle yet) and will follow a documented Pluto
-  theme hook if one ships. `selected=` now accepts `segments` / `polyline` so the
-  ring recipe is reachable; `grid` / `axis` / … still fail loud.
+  with caret flip. Tooltip dark follows `prefers-color-scheme` (official Pluto's
+  theme signal; there is no notebook toggle). `selected=` now accepts `segments`
+  / `polyline` so the ring recipe is reachable; `grid` / `axis` / … still fail
+  loud.
 
 ### Added
 - `holo(fig, interactables)` — a Pluto `@bind` widget that overlays interactivity on a

@@ -41,9 +41,6 @@ g.hi > *, g.sel > * { animation: holo-in ${MOTION_MS}ms ease-out; }
 .holo-tip-row { display: flex; gap: 8px; justify-content: space-between; }
 .holo-tip-key { color: var(--holo-tip-accent, #6b7280); }
 .holo-tip-val { font-variant-numeric: tabular-nums; }
-/* TODO(pluto-theme): if Pluto ships a notebook theme toggle / documented JS
-   signal (html/body class, data-theme, or event), follow that first and keep
-   prefers-color-scheme as the fallback below. Do not scrape Pluto chrome. */
 @media (prefers-color-scheme: dark) {
   .holo-tip { background: var(--holo-tip-bg, #1e1e1e); color: var(--holo-tip-color, #e8e8e8);
        border-color: var(--holo-tip-border, rgba(255,255,255,0.15));

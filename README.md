@@ -70,10 +70,8 @@ sel === nothing ? "click a point" : "you picked $(sel.payload)"
 
 Hover shows a tooltip (purely client-side, no Julia round-trip); a click sets `sel` and
 re-runs downstream cells. Clicks on empty space are a no-op. The tooltip card follows
-`prefers-color-scheme` today — the same OS/browser signal Pluto itself uses (Pluto 1.0
-has no notebook theme toggle). If Pluto later ships a documented theme signal, the
-overlay will follow that first and keep OS as the fallback; pin `tooltip_*` to lock
-colors. See [`docs/tooltips.md`](docs/tooltips.md).
+`prefers-color-scheme` — the same OS/browser signal official Pluto uses (there is no
+notebook theme toggle). Pin `tooltip_*` to lock colors. See [`docs/tooltips.md`](docs/tooltips.md).
 
 ## What's interactable (v1)
 

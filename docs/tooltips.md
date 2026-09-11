@@ -163,13 +163,13 @@ corners, a drop shadow, and a small CSS triangle (caret) pointing toward the hov
 `prefers-color-scheme: dark` media query inverts the card automatically. No author
 action required.
 
-Pluto 1.0 has **no notebook theme toggle** — Settings explains that Pluto itself
-follows the system/browser scheme, and there is no documented `data-theme` / class /
-JS event for a notebook-level override. The overlay uses the same OS fallback today,
-so the card matches Pluto chrome. If Pluto later ships a documented theme signal, the
-overlay will follow that first and keep `prefers-color-scheme` as the fallback (see
-the `TODO(pluto-theme)` in `frontend/src/overlay.ts`). Do not scrape Pluto chrome.
-Pin `tooltip_bg` / `tooltip_color` on `holo()` to lock the card regardless of theme.
+Official Pluto has **no notebook light/dark toggle** — Settings → Dark mode is help
+text (`component: null`). Pluto's theme CSS and CodeMirror use the same
+`prefers-color-scheme` query, so the card already matches stock Pluto. There is
+no `html`/`body` class, `data-theme`, JS event, or Julia API to follow. Revisit
+only if Pluto later ships a real override with a stable signal. Pin `tooltip_bg`
+/ `tooltip_color` to lock the card. Third-party skins or “force dark” extensions
+can desync chrome from the OS; that is not Holo's contract.
 
 ### Layer 2 — `tooltip_*` kwargs on `holo()`
 
@@ -309,4 +309,4 @@ require breaking changes to add.
 | Compile-time field validation (`@generated`) | Deferred | No-op on heterogeneous payloads; build-time Phase 2 runs for `NamedTuple` payloads |
 | Caret edge-flipping / viewport-collision clamping | **Shipped** (first overlay polish PR) | Card stays inside the overlay; caret flips via `.flip-x` / `.flip-y` |
 | Inline date formatting | Deferred (would add `d3-time-format`) | Format dates in Julia into a payload string field |
-| Following a Pluto notebook theme toggle | **TODO** — follow a documented signal when one exists; OS fallback ships now | Pluto 1.0 has no toggle (Settings is explanatory only). Do not scrape chrome. See §5 and `TODO(pluto-theme)` in `frontend/src/overlay.ts` |
+| Following a Pluto notebook theme toggle | **N/A** — official Pluto has none | OS `prefers-color-scheme` *is* Pluto's theme (Settings is help text; no class / `data-theme` / JS event). See §5. Revisit only if Pluto ships a real override with a stable signal. |
