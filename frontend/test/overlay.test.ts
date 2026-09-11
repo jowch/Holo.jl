@@ -489,6 +489,22 @@ describe("tooltips (mount/showTip)", () => {
         expect(node.querySelectorAll("line").length).toBe(2)
     })
 
+    it("selected= on polyline counts vertices-1 (not 0) and draws a ring", () => {
+        const { host, script } = setup()
+        // 3 vertices → 2 segments; Julia `_layer_n_elements(:polyline)` is length÷2 - 1
+        const poly: Manifest = {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [{
+                id: "line", kind: "polyline", geometry: [0, 0, 100, 100, 200, 50],
+                payloads: [{ i: 0 }, { i: 1 }], axis: "ax1", events: ["click", "hover"],
+                selected: [0],
+            }],
+        }
+        mount(script, poly)
+        const node = shadowOf(host).querySelector("g.sel")!.firstElementChild as SVGElement
+        expect(node.querySelectorAll("line").length).toBe(2)
+    })
+
     it("selected= on grid fails loud at mount", () => {
         const { script } = setup()
         const bad: Manifest = {

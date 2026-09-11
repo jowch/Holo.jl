@@ -560,6 +560,7 @@ function layerNElements(layer: import("./types").HitLayer): number {
     if (layer.kind === "rects" && Array.isArray(g)) return Math.floor((g as number[]).length / 4)
     if (layer.kind === "polygons" && Array.isArray(g)) return (g as number[][]).length
     if (layer.kind === "segments" && Array.isArray(g)) return Math.floor((g as number[]).length / 4)
+    if (layer.kind === "polyline" && Array.isArray(g)) return Math.max(0, Math.floor((g as number[]).length / 2) - 1)
     if (layer.kind === "grid" && g && typeof g === "object" && "ncols" in (g as object)) {
         const gg = g as import("./types").GridGeometry
         return gg.ncols * gg.nrows
