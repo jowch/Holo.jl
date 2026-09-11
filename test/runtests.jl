@@ -1,5 +1,7 @@
 using Test
 
+include("registry_readiness.jl")
+
 # Holo has two backend extensions (CairoMakie, WGLMakie) that are mutually exclusive by
 # design (holo() rejects a session with both loaded). Each suite below needs a specific,
 # non-overlapping set of packages loaded, so they run as separate GROUPs rather than one

@@ -20,7 +20,7 @@
 | **JS testing** | **vitest** for hit-test geometry math; the **Pluto + Playwright** harness (see `spike/`) for browser integration in CI. | Geometry is unit-testable in Node; the round-trip/export behavior needs a real browser. |
 | **Dependencies** | **Julia hard deps:** `AbstractPlutoDingetjes` + `HypertextLiteral` (no package extension). **JS runtime dep (bundled):** `d3-format` v3 (M2.3; first runtime JS dep; bundle-size delta in `perf-findings.md`). | For a Pluto-targeted widget the extension only buys "core usable headless," which isn't a real use case here — it'd be ceremony. JS deps are bundled into `assets/overlay.js` — no CDN, works offline. |
 | **CI** | A GitHub Action is the **sole author** of the committed bundle: builds + commits on push to `main` (loop-safe via `GITHUB_TOKEN`); test jobs build-before-test; fork-PR fallback is `git diff --exit-code`. | Main head bundle is never stale; agents committing their local build becomes optional. Activates once the repo is on GitHub. |
-| **Release** | CI gate only for now; release automation (Registrator/TagBot or GitHub-only tagging) deferred. | Sufficient until we publish. Tag a CI-built commit when we do. |
+| **Release** | CHANGELOG freeze at `0.1.0` (after drag-to-pan, not sliders-only) → `@JuliaRegistrator register` on a **CI-green `main` commit** (CI is the sole author of `assets/overlay.js`) → TagBot creates the `v0.1.0` git tag. | Julia ships the registered git tree. Tagging a pre-bundle-commit would publish a stale overlay. Human steps in `docs/releasing.md`. |
 
 ## Export-survival spike (verified)
 
