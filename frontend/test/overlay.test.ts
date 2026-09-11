@@ -581,6 +581,43 @@ describe("tooltips (mount/showTip)", () => {
         expect(fired).toBe(false)
     })
 
+    it("points+view: hover and click still work over the full-viewport view layer", () => {
+        // Regression: :view used to win every drag hitTest and suppress element hover/click.
+        const m: Manifest = {
+            width: 1200, height: 800, scaling: 2,
+            transforms: { ax1: { xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
+                viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false } },
+            layers: [
+                { id: "pts", kind: "circles", geometry: [600, 400, 20], payloads: [{ i: 0 }],
+                    axis: "ax1", events: ["click", "hover"] },
+                { id: "view", kind: "view", axis: "ax1", events: ["drag"], payloads: [],
+                    geometry: { x: 0, y: 0, w: 1200, h: 800, mode: "pan" } },
+            ],
+        }
+        const { host, script } = setup()
+        mount(script, m)
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        // hover over the point (client 300,200 → image 600,400)
+        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(tip.style.display).toBe("block")
+        expect(surface.classList.contains("hot")).toBe(true)
+        // empty area: grab cursor from view, no hover tip
+        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 50, clientY: 50, bubbles: true }))
+        expect(tip.style.display).toBe("none")
+        expect(surface.classList.contains("grab")).toBe(true)
+        // tiny mousedown/up over the point must not swallow the subsequent click
+        let clicked: { layer: string; index: number } | null = null
+        host.addEventListener("input", () => {
+            clicked = (host as unknown as { value: typeof clicked }).value
+        })
+        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 300, clientY: 200, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 301, clientY: 200, bubbles: true })) // 2 image-px
+        surface.dispatchEvent(new MouseEvent("click", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(clicked).toMatchObject({ layer: "pts", index: 0 })
+    })
+
     it("drag-to-orbit commits azimuth/elevation; Shift+drag beats ROI", () => {
         const m: Manifest = {
             width: 1200, height: 800, scaling: 2,

@@ -697,6 +697,18 @@ end
         @test evp.payload["xmin"] == 1.0 && evp.payload["ymax"] == 10.0
         evo = tv(w, Dict("layer" => "view", "index" => 0, "payload" => Dict("azimuth" => 0.9, "elevation" => 0.3)))
         @test evo.payload["azimuth"] == 0.9 && evo.payload["elevation"] == 0.3
+        # PolarAxis / Colorbar: view gestures rejected (no continuous polar inversion; colorbar is 1-D)
+        fp = Figure(); axp = PolarAxis(fp[1, 1])
+        scatter!(axp, [Point2f(0.0, 1.0), Point2f(π / 2, 2.0)])
+        _, _, ctxp = ctx_for(fp)
+        msgp = validate(ViewInteractable(axp), ctxp)
+        @test msgp !== nothing && occursin("PolarAxis", msgp)
+        fcb = Figure(); axcb = Axis(fcb[1, 1]); hm = heatmap!(axcb, rand(4, 4))
+        cb = Colorbar(fcb[1, 2], hm)
+        Makie.update_state_before_display!(fcb)
+        _, _, ctxcb = ctx_for(fcb)
+        msgcb = validate(ViewInteractable(cb), ctxcb)
+        @test msgcb !== nothing && occursin("Colorbar", msgcb)
     end
 
     @testset "ROIInteractable (M4 drag cut 2)" begin

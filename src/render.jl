@@ -92,7 +92,7 @@ function _layer_n_elements(kind::Symbol, geometry)
     elseif kind === :grid
         Int(geometry["ncols"]) * Int(geometry["nrows"])
     else
-        0   # :axis / :threshold / :roi — not element-indexed for selected=
+        0   # :axis / :threshold / :roi / :view — not element-indexed for selected=
     end
 end
 

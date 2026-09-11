@@ -8,8 +8,8 @@
 > contract (parity is CI-enforced by the golden-manifest harness, `test/fixtures/parity/`).
 > Both backends ship `Axis3` overlays (WS-3D core, 2026-07-02) — static base on `:cairo`, live on
 > `:webgl` — with identical manifests (the `axis3` parity goldens are byte-identical). View
-> manipulation is planned as **backend-symmetric `@bind` re-render**; only the client-side GPU
-> camera is out of scope (see §1†).
+> manipulation **ships** as **backend-symmetric `@bind` re-render** (sliders + `ViewInteractable` drag);
+> only the client-side GPU camera is out of scope (see §1†).
 >
 > **Numbers reproduce** via `julia --project=. bench/vs_cairo.jl` (WebGL measured live in this
 > process, both sides `Random.seed!(0)`; Cairo measured in a subprocess, since Holo supports only
@@ -45,7 +45,7 @@ The rows that **match** are the current story: both backends do hover/click/`@bi
 **cost** (cheap re-renders; live rather than static 3D). Live pan/zoom/rotate **ships on both
 backends** as server-authoritative `@bind` re-render (sliders + `ViewInteractable` drag) (†).
 
-> **(†) View manipulation: planned as backend-symmetric `@bind` re-render; the client-side GPU
+> **(†) View manipulation: shipped as backend-symmetric `@bind` re-render; the client-side GPU
 > camera stays out (a Holo-wide non-goal, alongside GPU-pick occlusion).** What is true today, verified from source: the widget
 > deliberately gates the client camera off — the shim sets `can_send_to_julia:()=>true` (needed for
 > the client-side camera/uniform *observable* animation path), so WGLMakie's

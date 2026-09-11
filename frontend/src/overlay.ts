@@ -205,11 +205,22 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     const onMove = (e: MouseEvent) => {
         if (drag) return // window-level onDrag owns the pointer mid-drag
         const p = imgPx(e)
-        if (hitTest(manifest, p.x, p.y, "drag")) { clearHi(); tip.style.display = "none"; surface.classList.add("grab"); surface.classList.remove("hot"); return }
+        const dragHit = hitTest(manifest, p.x, p.y, "drag")
+        // Full-viewport :view must not suppress element hover — only sparse Tier-0
+        // drag targets (threshold / ROI) take the grab early-return.
+        if (dragHit && dragHit.layer.kind !== "view") {
+            clearHi(); tip.style.display = "none"
+            surface.classList.add("grab"); surface.classList.remove("hot")
+            return
+        }
         surface.classList.remove("grab")
         const hit = hitTest(manifest, p.x, p.y, "hover")
-        if (hit) { drawHi(hit); showTip(hit, p.x, p.y, e); surface.classList.add("hot") }
-        else { clearHi(); tip.style.display = "none"; surface.classList.remove("hot") }
+        if (hit) {
+            drawHi(hit); showTip(hit, p.x, p.y, e); surface.classList.add("hot")
+        } else {
+            clearHi(); tip.style.display = "none"; surface.classList.remove("hot")
+            if (dragHit?.layer.kind === "view") surface.classList.add("grab")
+        }
     }
     const onLeave = () => { clearHi(); tip.style.display = "none" }
     const onDown = (e: MouseEvent) => {
@@ -311,7 +322,14 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
             host.dispatchEvent(new CustomEvent("input"))
         }
         tip.style.display = "none"; surface.classList.remove("grabbing")
-        justDragged = true
+        // :view micro-drags (below VIEW_MIN_PX) intentionally skip commit — don't swallow
+        // the synthesized click that follows, so co-mounted click layers still fire.
+        if (drag.kind === "view") {
+            const dist = Math.hypot(p.x - drag.x0, p.y - drag.y0)
+            justDragged = dist >= VIEW_MIN_PX
+        } else {
+            justDragged = true
+        }
         drag = null
     }
     const onClick = (e: MouseEvent) => {
