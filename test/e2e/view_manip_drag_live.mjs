@@ -45,7 +45,7 @@ try {
       const hosts = document.querySelectorAll(".ip-host").length;
       const running = document.querySelectorAll(".running, .queued").length;
       const errored = [...document.querySelectorAll("pluto-cell.errored, .errored")].filter((e) =>
-        /Cyclic reference|Error message/i.test(e.innerText || "")
+        /Cyclic reference/i.test(e.innerText || "")
       ).length;
       const pan = document.querySelector("#panout")?.textContent || "";
       const orb = document.querySelector("#orbout")?.textContent || "";
