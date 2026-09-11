@@ -105,8 +105,8 @@ function _bar_payloads(rects, direction)
     vert = direction === :y
     return Any[
         let (cx, cy, w, h) = r
-                lo, hi = vert ? (cy - h / 2, cy + h / 2) : (cx - w / 2, cx + w / 2)
-                (; low = Float64(lo), high = Float64(hi), value = Float64(hi - lo))
+            lo, hi = vert ? (cy - h / 2, cy + h / 2) : (cx - w / 2, cx + w / 2)
+            (; low = Float64(lo), high = Float64(hi), value = Float64(hi - lo))
         end
             for r in rects
     ]
@@ -164,7 +164,7 @@ function _contourf_payloads(p, poly)
     colors = Float64.(poly.color[])
     return Any[
         let k = argmin(abs.(mids .- c))
-                (; low = edges[k], high = edges[k + 1])
+            (; low = edges[k], high = edges[k + 1])
         end
             for c in colors
     ]
@@ -187,8 +187,8 @@ function _violin_payloads(p, rings)
     cats = sort(unique(Float64.(_conv(p)[1])))
     return Any[
         let xs = [Float64(pt[1]) for pt in ring]
-                ctr = (minimum(xs) + maximum(xs)) / 2
-                (; x = cats[argmin(abs.(cats .- ctr))])
+            ctr = (minimum(xs) + maximum(xs)) / 2
+            (; x = cats[argmin(abs.(cats .- ctr))])
         end
             for ring in rings
     ]
@@ -365,9 +365,9 @@ function _hist_payloads(rects, direction)
     vert = direction === :y
     return Any[
         let (cx, cy, w, h) = r
-                cnt = vert ? h : w                                                  # bar height = bin value
-                lo, hi = vert ? (cx - w / 2, cx + w / 2) : (cy - h / 2, cy + h / 2)  # category axis = bin range
-                (; value = Float64(cnt), low = Float64(lo), high = Float64(hi))
+            cnt = vert ? h : w                                                  # bar height = bin value
+            lo, hi = vert ? (cx - w / 2, cx + w / 2) : (cy - h / 2, cy + h / 2)  # category axis = bin range
+            (; value = Float64(cnt), low = Float64(lo), high = Float64(hi))
         end
             for r in rects
     ]
@@ -376,7 +376,7 @@ function _waterfall_payloads(p, rects)
     deltas = p.converted[][1]                      # Point2 per bar: (x, signed delta)
     return Any[
         let (cx, cy, w, h) = rects[k]
-                (; low = Float64(cy - h / 2), high = Float64(cy + h / 2), value = Float64(deltas[k][2]))
+            (; low = Float64(cy - h / 2), high = Float64(cy + h / 2), value = Float64(deltas[k][2]))
         end
             for k in eachindex(rects)
     ]

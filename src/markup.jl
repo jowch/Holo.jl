@@ -155,10 +155,10 @@ end
 function markup_segments(m::Markup)
     return Any[
         if seg isa Field
-                seg.spec === nothing ? Dict("f" => string(seg.name)) :
+            seg.spec === nothing ? Dict("f" => string(seg.name)) :
                 Dict("f" => string(seg.name), "spec" => seg.spec)
         else
-                seg
+            seg
         end
             for seg in m.segments
     ]
