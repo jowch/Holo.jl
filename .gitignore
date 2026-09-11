@@ -1,5 +1,6 @@
 # Julia
 /Manifest.toml
+.cursor/sysimage/Manifest.toml
 *.jl.cov
 *.jl.*.cov
 *.jl.mem
