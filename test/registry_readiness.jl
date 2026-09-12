@@ -79,14 +79,46 @@ function _extract_registry_toml(tarball::AbstractString)
     return isempty(strip(text)) ? nothing : text
 end
 
-function _general_registry_index()
-    regs = joinpath(homedir(), ".julia", "registries")
-    unpacked = joinpath(regs, "General", "Registry.toml")
-    isfile(unpacked) && return read(unpacked, String)
-    tarball = joinpath(regs, "General.tar.gz")
-    extracted = _extract_registry_toml(tarball)
-    extracted === nothing || return extracted
+# Pkg.test / Julia 1.x CI often resolve via the package server and never
+# unpack General. Search every depot, then fetch upstream Registry.toml.
+const _GENERAL_REGISTRY_TOML_URL =
+    "https://raw.githubusercontent.com/JuliaRegistries/General/master/Registry.toml"
+
+function _registry_roots()
+    roots = String[]
+    for depot in DEPOT_PATH
+        isempty(depot) && continue
+        push!(roots, joinpath(depot, "registries"))
+    end
+    push!(roots, joinpath(homedir(), ".julia", "registries"))
+    return unique(roots)
+end
+
+function _fetch_upstream_registry_toml()
+    io = IOBuffer()
+    try
+        run(pipeline(`curl -fsSL $_GENERAL_REGISTRY_TOML_URL`; stdout = io))
+    catch
+        return nothing
+    end
+    text = String(take!(io))
+    return _is_package_index(text) ? text : nothing
+end
+
+function _local_general_registry_index()
+    for regs in _registry_roots()
+        unpacked = joinpath(regs, "General", "Registry.toml")
+        isfile(unpacked) && return read(unpacked, String)
+        extracted = _extract_registry_toml(joinpath(regs, "General.tar.gz"))
+        extracted === nothing || return extracted
+    end
     return nothing
+end
+
+function _general_registry_index()
+    local_idx = _local_general_registry_index()
+    local_idx === nothing || return local_idx
+    return _fetch_upstream_registry_toml()
 end
 
 @testset "General registry readiness" begin
@@ -109,13 +141,22 @@ end
     end
 
     @testset "name and UUID are free in depot General" begin
+        @test !isempty(_registry_roots())
+        fetched = _fetch_upstream_registry_toml()
+        @test fetched !== nothing
+        @test _is_package_index(fetched)
+        @test _package_named(fetched, "HoloProcessing")
+        @test !_package_named(fetched, HOLO_NAME)
+
         index = _general_registry_index()
         @test index !== nothing
-        @test _is_package_index(index)
-        # Nearby name must be visible — otherwise we are not reading packages.
-        @test _package_named(index, "HoloProcessing")
-        @test !_package_named(index, HOLO_NAME)
-        @test !_uuid_registered(index, HOLO_UUID)
+        if index !== nothing
+            @test _is_package_index(index)
+            # Nearby name must be visible — otherwise we are not reading packages.
+            @test _package_named(index, "HoloProcessing")
+            @test !_package_named(index, HOLO_NAME)
+            @test !_uuid_registered(index, HOLO_UUID)
+        end
     end
 
     @testset "Project.toml identity" begin
