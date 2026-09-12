@@ -1,7 +1,8 @@
 // :webgl live-verify sweep (LOCAL tool — deliberately not wired into CI): drives every distinct
 // overlay code path against the live-canvas backend in a real Pluto kernel, per the standing
 // live-verify doctrine (every supported backend — today :cairo and :webgl; this file is the
-// :webgl half).
+// :webgl path extra). Agents still run docs/live-interaction-checklist.md
+// (kind_sweep + polish_verify) for interaction AND visual — this sweep is not that playbook.
 // Covered: template tooltip · auto payload click · grid (i,j)=value readout · colorbar 1-D value
 // readout · polygon / region / text clicks · threshold drag commit · whole-axis readout click ·
 // selects-ROI box-select drag · selected= pre-highlight on mount.

@@ -37,7 +37,8 @@ end
 md"""
 # Kind sweep — `:webgl` (agent live-verify)
 
-One widget per interactable kind. Agents drive this with `test/e2e/kind_sweep.mjs`.
+One widget per interactable kind. Agents drive this with `test/e2e/kind_sweep.mjs`
+and `test/e2e/polish_verify.mjs` (interaction **and** visual).
 Not a human Try Live notebook.
 """
 
@@ -122,6 +123,15 @@ HTML(
         "<span id=\"coords_polar\" style=\"display:none\">$(JSON3.write(sweep.polar.manifest["layers"]))</span>",
 )
 
+# ╔═╡ d1000000-0000-0000-0000-000000000036
+@bind ev_scatter_dark sweep.scatter_dark
+
+# ╔═╡ d1000000-0000-0000-0000-000000000037
+HTML(
+    "<span id=\"out_scatter_dark\">SCATTER_DARK=$(repr(ev_scatter_dark))</span>" *
+        "<span id=\"coords_scatter_dark\" style=\"display:none\">$(JSON3.write(sweep.scatter_dark.manifest["layers"]))</span>",
+)
+
 # ╔═╡ d1000000-0000-0000-0000-000000000026
 @bind ev_arrows3d sweep.arrows3d
 
@@ -194,6 +204,8 @@ HTML(
 # ╠═d1000000-0000-0000-0000-000000000023
 # ╠═d1000000-0000-0000-0000-000000000024
 # ╠═d1000000-0000-0000-0000-000000000025
+# ╠═d1000000-0000-0000-0000-000000000036
+# ╠═d1000000-0000-0000-0000-000000000037
 # ╠═d1000000-0000-0000-0000-000000000026
 # ╠═d1000000-0000-0000-0000-000000000027
 # ╠═d1000000-0000-0000-0000-000000000028

@@ -37,8 +37,8 @@ end
 md"""
 # Kind sweep — `:cairo` (agent live-verify)
 
-One widget per interactable kind. Agents drive this with `test/e2e/kind_sweep.mjs`.
-Not a human Try Live notebook.
+One widget per interactable kind. Agents drive this with `test/e2e/kind_sweep.mjs`
+and `test/e2e/polish_verify.mjs` (interaction **and** visual). Not a human Try Live notebook.
 """
 
 # ╔═╡ c1000000-0000-0000-0000-000000000003
@@ -122,6 +122,15 @@ HTML(
         "<span id=\"coords_polar\" style=\"display:none\">$(JSON3.write(sweep.polar.manifest["layers"]))</span>",
 )
 
+# ╔═╡ c1000000-0000-0000-0000-000000000036
+@bind ev_scatter_dark sweep.scatter_dark
+
+# ╔═╡ c1000000-0000-0000-0000-000000000037
+HTML(
+    "<span id=\"out_scatter_dark\">SCATTER_DARK=$(repr(ev_scatter_dark))</span>" *
+        "<span id=\"coords_scatter_dark\" style=\"display:none\">$(JSON3.write(sweep.scatter_dark.manifest["layers"]))</span>",
+)
+
 # ╔═╡ c1000000-0000-0000-0000-000000000026
 @bind ev_arrows3d sweep.arrows3d
 
@@ -194,6 +203,8 @@ HTML(
 # ╠═c1000000-0000-0000-0000-000000000023
 # ╠═c1000000-0000-0000-0000-000000000024
 # ╠═c1000000-0000-0000-0000-000000000025
+# ╠═c1000000-0000-0000-0000-000000000036
+# ╠═c1000000-0000-0000-0000-000000000037
 # ╠═c1000000-0000-0000-0000-000000000026
 # ╠═c1000000-0000-0000-0000-000000000027
 # ╠═c1000000-0000-0000-0000-000000000028
