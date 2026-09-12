@@ -60,7 +60,7 @@ end
     fig = Figure(; size = (400, 300))
     ax = Axis(fig[1, 1])
     scatter!(ax, 1:5, rand(5))
-    w = holo(fig, Holo.AbstractInteractable[])   # empty interactables -> still a valid base widget
+    w = holo(fig, Holo.AbstractInteractable[]; backend = _WGLExt.WebGLBackend())
     @test w isa _WGLExt.WebGLWidget
     @test w.scene isa Dict{String, Any}
     @test (w.width, w.height) == (400, 300)
@@ -91,7 +91,7 @@ end
     fig = Figure(; size = (400, 300))
     ax = PolarAxis(fig[1, 1])
     scatter!(ax, Point2f[(0.0, 1.0), (π / 2, 2.0)]; markersize = 14, color = :red)
-    w = holo(fig)
+    w = holo(fig; backend = _WGLExt.WebGLBackend())
     @test w.manifest["transforms"]["ax1"]["ispolar"] === true
     @test JSON3.write(w.scene) isa String
     @test JSON3.write(w.manifest) isa String
@@ -109,7 +109,7 @@ end
 
     # an axis-keyed interactable must build its manifest without KeyError now
     thr = Holo.ThresholdInteractable(ax; value = 10.0)
-    w = holo(fig, [thr])
+    w = holo(fig, [thr]; backend = _WGLExt.WebGLBackend())
     @test w isa _WGLExt.WebGLWidget
     @test !isempty(w.manifest["transforms"])
 end
@@ -172,7 +172,7 @@ end
 
     fig = Figure(; size = (400, 300)); ax = Axis(fig[1, 1])
     scatter!(ax, 1:5, (1:5) .^ 2)
-    w = holo(fig)                      # auto-extract -> a single :scatter circles layer
+    w = holo(fig; backend = _WGLExt.WebGLBackend())   # auto-extract -> one :scatter circles layer
     layer = only(w.manifest["layers"])
     @test layer["id"] == "scatter"
 
@@ -195,14 +195,13 @@ end
     @test length(evs) == 2 && evs[1].index == k && evs[2].index == 0
 end
 
-# MUST run last in this file: this loads CairoMakie on top of the already-loaded WGLMakie,
-# which (correctly) makes every *subsequent* implicit-backend holo() call in this process
-# fail with the both-loaded error. Nothing after this testset may rely on the WGLMakie-only
-# auto-resolution path.
+# MUST run last in this file: this loads CairoMakie on top of the already-loaded WGLMakie.
+# After that, implicit holo() defaults to Cairo (sysimage-safe) — nothing after this
+# testset may rely on the WGLMakie-only auto-resolution path.
 # ---- cross-backend parity harness: within-backend golden drift (:webgl half) ----
 # (JSON3 is already a hard dep of this GROUP — no guard needed; see core_tests.jl's
-# guarded twin for the regeneration discipline.) Runs BEFORE the "rejects both backends"
-# testset below loads CairoMakie: goldens come from a WGLMakie-only env, so the live
+# guarded twin for the regeneration discipline.) Runs BEFORE the both-loaded testset
+# below loads CairoMakie: goldens come from a WGLMakie-only env, so the live
 # manifests should be built in one too.
 include("parity_corpus.jl")
 @testset "parity goldens (:webgl drift)" begin
@@ -217,15 +216,17 @@ include("parity_corpus.jl")
     end
 end
 
-@testset "holo(fig) rejects both backends loaded" begin
+@testset "holo(fig) with both backends loaded defaults to Cairo" begin
     using CairoMakie
+    cairo_ext = Base.get_extension(Holo, :HoloCairoMakieExt)
     fig = Figure(; size = (300, 200)); ax = Axis(fig[1, 1]); scatter!(ax, 1:5, rand(5))
-    err = try
-        holo(fig)
-        nothing
-    catch e
-        e
-    end
-    @test err isa ArgumentError
-    @test occursin("exactly one rendering backend", err.msg)
+
+    implicit = holo(fig)
+    @test implicit isa Holo.HoloWidget
+
+    cairo = holo(fig; backend = cairo_ext.CairoBackend())
+    @test cairo isa Holo.HoloWidget
+
+    wgl = holo(fig; backend = _WGLExt.WebGLBackend())
+    @test wgl isa _WGLExt.WebGLWidget
 end

@@ -52,7 +52,7 @@ jobs:
   webgl:
     # The :webgl extension isn't covered by the `julia` job (GROUP=Core loads CairoMakie
     # only). Run its suite — incl. the WGLMakie/Bonito version-coupling guard and the
-    # both-loaded rejection — so a dependency bump that moves the wire format fails the
+    # both-loaded Cairo default — so a dependency bump that moves the wire format fails the
     # gate here instead of only on a manual local run. Pinned to 1.10, the compat floor
     # Task 4 verified.
     name: WGLMakie extension

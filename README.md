@@ -43,9 +43,10 @@ Holo isn't registered yet:
 julia> ] add https://github.com/jowch/Holo.jl
 ```
 
-You'll also want `Pluto`, plus exactly one Makie backend: `CairoMakie` for the default static
+You'll also want `Pluto`, plus a Makie backend: `CairoMakie` for the default static
 path, or `WGLMakie` for animation / large data / live 3D (see below) — a cost profile, not a
-feature fork — and never both in the same session.
+feature fork. Loading both is allowed (`backend=` wins; implicit `holo` defaults to Cairo);
+loading neither raises an `ArgumentError`.
 
 ## Quick start
 
@@ -131,8 +132,8 @@ finalize step Makie performs at display time).
   browser-GPU path (see [3D, animation, and large data](#3d-animation-and-large-data-wglmakie)).
   `max_width` is the display width to target (Pluto's column); render resolution is *derived*
   from it (~2× the display width for `CairoBackend` — retina-crisp, not wasteful — never a fixed
-  DPI). Loading both backend packages in one session, or neither, raises an `ArgumentError`
-  (see `_resolve_backend` in [`src/render.jl`](src/render.jl)).
+  DPI). Loading neither backend raises an `ArgumentError`. If both are loaded, `backend=`
+  wins and implicit `holo` defaults to Cairo (see `_resolve_backend` in [`src/render.jl`](src/render.jl)).
 - **`selected`** — a `layer_id => indices` map (e.g. `Dict(:scatter => [0, 2])`) that
   pre-highlights elements on mount. Indices are 0-based and match `InteractionEvent.index`.
   Supported kinds: `circles` / `rects` / `polygons`. Unsupported kinds (`segments`, `grid`, …)
@@ -310,9 +311,10 @@ scatter!(ax, x, y, z)
 [`examples/webgl_demo.jl`](examples/webgl_demo.jl) is a runnable gallery of the `:webgl` backend
 (CI runs it headlessly, same as `demo.jl`).
 
-Holo enforces **exactly one backend per session**: loading both `CairoMakie` and `WGLMakie` (or
-neither) raises an `ArgumentError` explaining which `using` line to keep — that check
-(`_resolve_backend` in [`src/render.jl`](src/render.jl)) is the authoritative, always-in-sync
+Holo resolves the backend from which extension is loaded (`_resolve_backend` in
+[`src/render.jl`](src/render.jl)): a missing `using` line raises an `ArgumentError`; if both
+`CairoMakie` and `WGLMakie` are loaded, `backend=` wins and implicit `holo` defaults to Cairo
+(so a fat sysimage is not fatal). That function is the authoritative, always-in-sync
 statement of when each backend applies, rather than a table here that could drift from the code.
 For the fuller picture — cost regimes, wire size, and latency at scale — see
 [`docs/backend-comparison.md`](docs/backend-comparison.md).
@@ -369,14 +371,16 @@ npm run build                                    # → ../assets/holo-webgl.js
 ```
 
 CI is the source of truth for both bundles (it rebuilds and commits on `main`), so committing
-your local build is optional. Julia tests are split into three `GROUP`s so `CairoMakie` and
-`WGLMakie` never both load in one test process (mirroring the one-backend-per-session rule);
-`GROUP` defaults to `Core`:
+your local build is optional. Julia tests are split into three `GROUP`s so each process has a
+known loaded-backend set (`Core` = Cairo only; `WebGL` = WGL first, then both at the end;
+`NoBackend` = neither). `GROUP` defaults to `Core`. Cloud `julia` may `-J` a Cairo-baked
+image — use `JULIA_NOSYSIMAGE=1` for WGL-only implicit `holo()` and for Holo source edits
+after a bake:
 
 ```bash
-julia --project=. -e 'using Pkg; Pkg.test()'                          # GROUP=Core (default)
-GROUP=NoBackend julia --project=. -e 'using Pkg; Pkg.test()'          # neither backend loaded
-GROUP=WebGL julia --project=. -e 'using Pkg; Pkg.test()'              # WGLMakie-only tests
+JULIA_NOSYSIMAGE=1 julia --project=. -e 'using Pkg; Pkg.test()'                 # GROUP=Core
+JULIA_NOSYSIMAGE=1 GROUP=NoBackend julia --project=. -e 'using Pkg; Pkg.test()' # neither backend
+JULIA_NOSYSIMAGE=1 GROUP=WebGL julia --project=. -e 'using Pkg; Pkg.test()'     # WGL then both
 ```
 
 Julia code is formatted with [Runic](https://github.com/fredrikekre/Runic.jl) (CI enforces it):

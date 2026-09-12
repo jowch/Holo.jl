@@ -26,9 +26,9 @@ Initial implementation — not yet released or registered.
   a browser WGLMakie `<canvas>` (client GPU) with the same overlay/`@bind` contract, making
   animation, large/live data, and live 3D cheap where `:cairo` would re-rasterize —
   a substrate/cost difference; the interaction contract is identical on both. `CairoMakie`/`WGLMakie` are both weak
-  dependencies gated behind package extensions; `holo(fig)` resolves whichever one is loaded and
-  enforces exactly one backend per session (errors loudly if neither or both are loaded — never
-  silently switches). See the README's "3D, animation, and large data" section and
+  dependencies gated behind package extensions; `holo(fig)` resolves whichever one is loaded
+  (errors if neither is). If both are loaded, `backend=` wins and implicit `holo` defaults to
+  Cairo. See the README's "3D, animation, and large data" section and
   `docs/backend-comparison.md`.
 - View manipulation via `@bind` re-render: 2D `limits` zoom/pan, 3D `azimuth`/`elevation`
   rotation, and selection persistence across view re-renders (`selected=` feedback).
@@ -40,6 +40,13 @@ Initial implementation — not yet released or registered.
   `startpoints`/`endpoints` (DATA space), with `{index,x,y,z,u,v,w}` payloads. Raw
   `pos→pos+dir` is intentionally not used — it misses under `lengthscale`/`align` and the
   MeshScatter children live in float32convert space (premise from #36).
+
+### Changed
+- Cloud sysimage bake is CairoMakie (+ Makie, Pluto, Holo workload) only — WGLMakie is
+  not preloaded. Default `julia` still uses `-J` that image; `JULIA_NOSYSIMAGE=1` is the
+  stock/WGL live-verify escape hatch.
+- `_resolve_backend` no longer throws when both backends are loaded: honor `backend=` or
+  default to Cairo. Still throws when no backend is loaded.
 
 ### Fixed
 - `selected=` now fails loud at `build_manifest` (and at overlay mount) for unsupported
