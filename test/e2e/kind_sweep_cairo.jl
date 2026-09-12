@@ -42,7 +42,7 @@ Not a human Try Live notebook.
 """
 
 # ╔═╡ c1000000-0000-0000-0000-000000000003
-include(joinpath(@__DIR__, "kind_sweep_figures.jl"))
+include(joinpath(@__DIR__, "kind_sweep_figures.jl"))  # kind-sweep figures v2
 
 # ╔═╡ c1000000-0000-0000-0000-000000000004
 begin
@@ -169,7 +169,7 @@ HTML(
 
 # ╔═╡ c1000000-0000-0000-0000-000000000040
 HTML(
-    "<span id=\"kind_meta\" style=\"display:none\">$(JSON3.write(KIND_META))</span>" *
+    "<span id=\"kind_meta\" style=\"display:none\">$(JSON3.write(kind_sweep_meta()))</span>" *
         "<span id=\"kind_backend\">cairo</span>",
 )
 

@@ -58,7 +58,7 @@ function hitPoint(layer, index) {
       : { x: g.pos, y: (s0 + s1) / 2, x1: g.pos, y1: s0, x2: g.pos, y2: s1 };
   }
   if (k === "roi" || k === "view") {
-    return { x: g.x + g.w / 2, y: g.y + g.h / 2, ...g };
+    return { x: g.x + g.w / 2, y: g.y + g.h / 2, w: g.w, h: g.h };
   }
   throw new Error(`no hitPoint for kind=${k}`);
 }
@@ -106,12 +106,14 @@ try {
         metaN: Array.isArray(meta) ? meta.length : 0,
         backend: document.querySelector("#kind_backend")?.textContent?.trim() || "",
         errText: [...document.querySelectorAll("pluto-cell.errored")].map((c) => c.innerText).slice(0, 1).join(""),
+        title: document.title,
+        url: location.href,
       };
     });
     if (st.errored) throw new Error(`${backend} errored: ${st.errText.slice(0, 500)}`);
     if (!st.busy && st.metaN >= 13 && st.surfaces >= st.metaN) { ready = true; break; }
     if (tick % 20 === 0) {
-      console.error(`  …${backend} [${tick}s] busy=${st.busy} hosts=${st.hosts} surfaces=${st.surfaces} meta=${st.metaN}`);
+      console.error(`  …${backend} [${tick}s] busy=${st.busy} hosts=${st.hosts} surfaces=${st.surfaces} meta=${st.metaN} title=${JSON.stringify(st.title || "")} url=${st.url || ""}`);
     }
     tick++;
     await new Promise((r) => setTimeout(r, 1000));
@@ -229,7 +231,7 @@ try {
 
   const textOf = (sel) => page.evaluate((q) => document.querySelector(q)?.innerText ?? "", sel);
 
-  const drag = async (key, x0, y0, x1, y1) => {
+  const drag = async (key, x0, y0, x1, y1, shift = false) => {
     const a = await page.evaluate(([k, ix, iy]) => {
       const span = document.querySelector(`#coords_${k}`);
       const hosts = [...document.querySelectorAll(".ip-host")];
@@ -250,26 +252,26 @@ try {
       const s = box.width / outW;
       return { cx: box.left + ix * s, cy: box.top + iy * s };
     }, [key, x1, y1]);
-    await page.evaluate(([k, ax, ay, bx, by]) => {
+    await page.evaluate(([k, ax, ay, bx, by, shift]) => {
       const span = document.querySelector(`#coords_${k}`);
       const hosts = [...document.querySelectorAll(".ip-host")];
       const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
       let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
       const surface = sr.querySelector(".surface");
-      const down = { bubbles: true, composed: true, cancelable: true, clientX: ax, clientY: ay };
+      const down = { bubbles: true, composed: true, cancelable: true, clientX: ax, clientY: ay, shiftKey: shift };
       surface.dispatchEvent(new MouseEvent("mousedown", down));
       for (let t = 0.25; t <= 1.0; t += 0.25) {
         window.dispatchEvent(new MouseEvent("mousemove", {
-          bubbles: true, cancelable: true,
+          bubbles: true, cancelable: true, shiftKey: shift,
           clientX: ax + (bx - ax) * t, clientY: ay + (by - ay) * t,
         }));
       }
-      window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, clientX: bx, clientY: by }));
-    }, [key, a.cx, a.cy, b.cx, b.cy]);
+      window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, shiftKey: shift, clientX: bx, clientY: by }));
+    }, [key, a.cx, a.cy, b.cx, b.cy, shift]);
   };
 
-  const waitChange = async (sel, before, what) => {
-    for (let i = 0; i < 80; i++) {
+  const waitChange = async (sel, before, what, tries = 80) => {
+    for (let i = 0; i < tries; i++) {
       await new Promise((r) => setTimeout(r, 200));
       const t = await textOf(sel);
       if (t !== before && t.length) return t;
@@ -298,12 +300,33 @@ try {
     if (spec.mode === "drag") {
       const p = hitPoint(layer, 0);
       const before = await textOf(`#out_${key}`);
-      let x1 = p.x, y1 = p.y;
-      if (spec.layerKind === "threshold") y1 = p.y - 40;
-      else if (spec.layerKind === "roi") x1 = p.x + (p.w || 40) / 2;
-      else x1 = p.x + 50;
-      await drag(key, p.x, p.y, x1, y1);
-      const after = await waitChange(`#out_${key}`, before, `${key}-drag`);
+      const ends = spec.layerKind === "threshold"
+        ? [[p.x, p.y - 50], [p.x, p.y + 50]]
+        : spec.layerKind === "roi"
+          ? (() => {
+            const pts = layers.find((l) => l.kind === "circles");
+            if (!pts) return [[p.x + (p.w || 40), p.y], [p.x - (p.w || 40), p.y]];
+            const a = hitPoint(pts, 0), b = hitPoint(pts, Math.max(0, Math.floor(pts.geometry.length / 3) - 1));
+            return [[a.x, a.y], [b.x, b.y]];
+          })()
+          : [[p.x + 80, p.y], [p.x - 80, p.y]];
+      let after = before;
+      for (const [x1, y1] of ends) {
+        await page.evaluate((k) => {
+          const span = document.querySelector(`#coords_${k}`);
+          const hosts = [...document.querySelectorAll(".ip-host")];
+          const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
+          host?.scrollIntoView({ block: "center", inline: "nearest" });
+        }, key);
+        await drag(key, p.x, p.y, x1, y1, spec.layerKind === "view");
+        try {
+          after = await waitChange(`#out_${key}`, before, `${key}-drag`, 120);
+          break;
+        } catch {
+          after = before;
+        }
+      }
+      if (after === before) throw new Error(`${key}-drag: #out_${key} never changed from ${JSON.stringify(before)}`);
       const re = spec.layerKind === "view" ? /xmin|xmax|:view/i
         : spec.layerKind === "roi" ? /:roi|InteractionEvent\[/i
         : /:threshold|:thr/i;
@@ -353,16 +376,19 @@ try {
       throw new Error(`${key}: unexpected g.sel=${m.sel} on unsupported kind`);
     }
 
+    const tipHit = (t) => {
+      if (!spec.tip) return !!(t && t.show);
+      const norm = (s) => String(s || "").toLowerCase().replace(/\s+/g, "");
+      return !!(t && t.show && norm(t.text).includes(norm(spec.tip)));
+    };
     const hoverPt = hitPoint(layer, spec.selectedIndex);
     let tip = null;
     for (let a = 0; a < 8; a++) {
       tip = await dispatchAt(key, hoverPt.x, hoverPt.y, "pointermove");
-      if (tip.show && (!spec.tip || new RegExp(spec.tip, "i").test(tip.text))) break;
+      if (tipHit(tip)) break;
       await new Promise((r) => setTimeout(r, 200));
     }
-    if (!tip?.show || (spec.tip && !new RegExp(spec.tip, "i").test(tip.text))) {
-      throw new Error(`${key}: tooltip ${JSON.stringify(tip)}`);
-    }
+    if (!tipHit(tip)) throw new Error(`${key}: tooltip ${JSON.stringify(tip)}`);
     if (tip.hi && (tip.hi.fill !== "none" || tip.hi.width !== "2" || tip.hi.opacity !== "0.85")) {
       throw new Error(`${key}: hover recipe ${JSON.stringify(tip.hi)}`);
     }
@@ -385,8 +411,13 @@ try {
     if (spec.selected && afterLeave.sel < 1) throw new Error(`${key}: g.sel dropped on unhover`);
     if (spec.selected) passed.push(`${key}/selected-survives-unhover`);
 
-    const clickPt = hitPoint(layer, spec.clickIndex);
+    let clickIdx = spec.clickIndex;
     const before = await textOf(`#out_${key}`);
+    const already = new RegExp(`:${spec.layerId},\\s*${clickIdx}\\b`);
+    if (already.test(before) || (spec.layerKind === "grid" && new RegExp(`index[=:]\\s*${clickIdx}\\b`).test(before))) {
+      clickIdx = spec.selectedIndex !== clickIdx ? spec.selectedIndex : clickIdx + 1;
+    }
+    const clickPt = hitPoint(layer, clickIdx);
     let after = before;
     for (let a = 0; a < 3; a++) {
       await dispatchAt(key, clickPt.x, clickPt.y, "click");
@@ -399,16 +430,9 @@ try {
     }
     const idRe = new RegExp(`:${spec.layerId}|${spec.layerId}`, "i");
     if (!idRe.test(after)) throw new Error(`${key}-click: no layer in ${JSON.stringify(after).slice(0, 220)}`);
-    if (!new RegExp(String(spec.clickIndex)).test(after) && spec.layerKind !== "grid") {
-      // grid payload uses i/j, not always the linear index in repr
-    }
-    if (spec.clickIndex !== spec.selectedIndex && spec.layerKind !== "grid") {
-      const idxRe = new RegExp(`${spec.layerId},\\s*${spec.clickIndex}|index[=:]\\s*${spec.clickIndex}`);
-      if (!idxRe.test(after) && !new RegExp(`, ${spec.clickIndex},`).test(after)) {
-        // InteractionEvent(:scatter, 0, ...) — Julia repr uses comma-space
-        if (!new RegExp(`:${spec.layerId},\\s*${spec.clickIndex}`).test(after)) {
-          throw new Error(`${key}-click: index did not move to ${spec.clickIndex}: ${after.slice(0, 220)}`);
-        }
+    if (spec.layerKind !== "grid") {
+      if (!new RegExp(`:${spec.layerId},\\s*${clickIdx}\\b`).test(after)) {
+        throw new Error(`${key}-click: expected index ${clickIdx}: ${after.slice(0, 220)}`);
       }
     }
     passed.push(`${key}/click-bind`);

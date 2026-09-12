@@ -3,7 +3,7 @@
 # (`circles`, `rects`, `polygons`, `segments`, `polyline`). Grid / threshold / roi / view
 # are hover-click or drag only.
 
-KIND_META = [
+kind_sweep_meta() = [
     Dict(
         "key" => "scatter", "layerId" => "scatter", "layerKind" => "circles",
         "selected" => "wash", "halo" => true, "selectedIndex" => 1, "clickIndex" => 0,
@@ -22,12 +22,12 @@ KIND_META = [
     Dict(
         "key" => "heatmap", "layerId" => "cells", "layerKind" => "grid",
         "selected" => nothing, "halo" => false, "selectedIndex" => 0, "clickIndex" => 0,
-        "tip" => "(0, 0)", "mode" => "element",
+        "tip" => "0,0", "mode" => "element",
     ),
     Dict(
         "key" => "image", "layerId" => "cells", "layerKind" => "grid",
         "selected" => nothing, "halo" => false, "selectedIndex" => 0, "clickIndex" => 0,
-        "tip" => "(0, 0)", "mode" => "element",
+        "tip" => "0,0", "mode" => "element",
     ),
     Dict(
         "key" => "barplot", "layerId" => "bars", "layerKind" => "rects",
