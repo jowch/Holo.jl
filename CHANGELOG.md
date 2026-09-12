@@ -41,6 +41,13 @@ Initial implementation — not yet released or registered.
   `pos→pos+dir` is intentionally not used — it misses under `lengthscale`/`align` and the
   MeshScatter children live in float32convert space (premise from #36).
 
+### Changed
+- Cloud sysimage bake is CairoMakie (+ Makie, Pluto, Holo workload) only — WGLMakie is
+  not preloaded. Default `julia` still uses `-J` that image; `JULIA_NOSYSIMAGE=1` is the
+  stock/WGL live-verify escape hatch.
+- `_resolve_backend` no longer throws when both backends are loaded: honor `backend=` or
+  default to Cairo. Still throws when no backend is loaded.
+
 ### Fixed
 - `selected=` now fails loud at `build_manifest` (and at overlay mount) for unsupported
   layer kinds (`segments`/`grid`/…) and out-of-range indices — same doctrine as wrong-length

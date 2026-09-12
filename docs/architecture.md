@@ -74,8 +74,9 @@ output this project set out to provide, and framed it as a different product rat
 deferred target. **Update:** the seam turned out to admit a live implementation cleanly after
 all — `WebGLBackend` implements the same `AbstractBackend` contract (`render`/`context`/`mount`)
 against a browser-GPU `<canvas>` instead of a PNG, shipped as the `HoloWGLMakieExt` weak-dep
-extension. The two backends are now co-equal peers, one loaded per session (`_resolve_backend`
-in `src/render.jl`); see `docs/backend-comparison.md` for the cost/regime tradeoff (the interaction
+extension. The two backends are now co-equal peers (`_resolve_backend` in `src/render.jl`
+picks the loaded one, honors `backend=`, and defaults to Cairo if both are present); see
+`docs/backend-comparison.md` for the cost/regime tradeoff (the interaction
 feature set is identical on both — parity is CI-enforced by the golden-manifest harness). The seam
 still also admits a future GLMakie-static backend (GPU offscreen → PNG, same contract) or a
 pure-image backend.

@@ -207,28 +207,19 @@ struct HoloWidget
     display_css::Int
 end
 
-# Exactly one rendering backend per session, resolved from which package extension is
-# active — never guessed from figure content. See
-# .superpowers/specs/2026-06-30-holo-backend-selection-design.md for why: Makie's
-# `current_backend()` is a bare global `Ref` that any loaded backend's `__init__` flips
-# unconditionally, so backend choice has to stay tied to the user's own `using` line, not
-# to per-call content sniffing. `explicit` is the caller's own `backend=` override, if
-# given — the both-loaded check still fires even then, since a stray second `using` line
-# elsewhere in the session is a problem regardless of what any one call pins.
+# Backend choice is tied to which package extension is active — never guessed from
+# figure content. See .superpowers/specs/2026-06-30-holo-backend-selection-design.md:
+# Makie's `current_backend()` is a bare global `Ref` that any loaded backend's `__init__`
+# flips unconditionally, so we do not sniff Makie state. `explicit` is the caller's
+# `backend=` override. A session with both extensions loaded (e.g. a fat sysimage) is
+# no longer fatal: honor `backend=` or default to Cairo. Still throw when *no* renderer
+# is loaded — that is a missing `using` line, not an ambiguous one.
 function _resolve_backend(explicit; max_width)
     cairo_ext = Base.get_extension(@__MODULE__, :HoloCairoMakieExt)
     wgl_ext = Base.get_extension(@__MODULE__, :HoloWGLMakieExt)
-    if cairo_ext !== nothing && wgl_ext !== nothing
-        throw(
-            ArgumentError(
-                "Holo supports exactly one rendering backend per session, but both CairoMakie " *
-                    "and WGLMakie are loaded. Restart the session with only one `using` line " *
-                    "(`using CairoMakie` for a static base, `using WGLMakie` for animation/large " *
-                    "or frequently re-rendered data) — mixing them in one session isn't supported.",
-            ),
-        )
-    end
     explicit !== nothing && return explicit
+    # Both loaded: prefer Cairo so a preloaded WGLMakie (sysimage, stray `using`) does
+    # not block the default static path. Callers who want WebGL pass `backend=`.
     cairo_ext !== nothing && return cairo_ext.CairoBackend(; max_width)
     wgl_ext !== nothing && return wgl_ext.WebGLBackend(; max_width)
     throw(
@@ -246,8 +237,9 @@ end
 
 Render `fig` and overlay JS hit-testing for the declared `interactables`. Use as a Pluto
 `@bind` source; the bond value is `nothing` until a click, then an [`InteractionEvent`](@ref).
-Requires exactly one rendering backend loaded: `using CairoMakie` for a static base, or
-`using WGLMakie` for animation/large or frequently re-rendered data. Both expose the same
+Needs a rendering backend loaded: `using CairoMakie` for a static base, or
+`using WGLMakie` for animation/large or frequently re-rendered data. If both are loaded
+(e.g. a fat sysimage), `backend=` wins and implicit calls default to Cairo. Both expose the same
 interaction feature set — the backend choice is a cost/substrate profile, not a capability fork
 (see `docs/backend-comparison.md`). `Axis3` works on both: static overlays on `:cairo`, live
 rendering on `:webgl`; element interactables (points/segments/polygons) project through the

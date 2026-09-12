@@ -131,8 +131,8 @@ finalize step Makie performs at display time).
   browser-GPU path (see [3D, animation, and large data](#3d-animation-and-large-data-wglmakie)).
   `max_width` is the display width to target (Pluto's column); render resolution is *derived*
   from it (~2× the display width for `CairoBackend` — retina-crisp, not wasteful — never a fixed
-  DPI). Loading both backend packages in one session, or neither, raises an `ArgumentError`
-  (see `_resolve_backend` in [`src/render.jl`](src/render.jl)).
+  DPI). Loading neither backend raises an `ArgumentError`. If both are loaded, `backend=`
+  wins and implicit `holo` defaults to Cairo (see `_resolve_backend` in [`src/render.jl`](src/render.jl)).
 - **`selected`** — a `layer_id => indices` map (e.g. `Dict(:scatter => [0, 2])`) that
   pre-highlights elements on mount. Indices are 0-based and match `InteractionEvent.index`.
   Supported kinds: `circles` / `rects` / `polygons`. Unsupported kinds (`segments`, `grid`, …)
@@ -310,9 +310,10 @@ scatter!(ax, x, y, z)
 [`examples/webgl_demo.jl`](examples/webgl_demo.jl) is a runnable gallery of the `:webgl` backend
 (CI runs it headlessly, same as `demo.jl`).
 
-Holo enforces **exactly one backend per session**: loading both `CairoMakie` and `WGLMakie` (or
-neither) raises an `ArgumentError` explaining which `using` line to keep — that check
-(`_resolve_backend` in [`src/render.jl`](src/render.jl)) is the authoritative, always-in-sync
+Holo resolves the backend from which extension is loaded (`_resolve_backend` in
+[`src/render.jl`](src/render.jl)): a missing `using` line raises an `ArgumentError`; if both
+`CairoMakie` and `WGLMakie` are loaded, `backend=` wins and implicit `holo` defaults to Cairo
+(so a fat sysimage is not fatal). That function is the authoritative, always-in-sync
 statement of when each backend applies, rather than a table here that could drift from the code.
 For the fuller picture — cost regimes, wire size, and latency at scale — see
 [`docs/backend-comparison.md`](docs/backend-comparison.md).

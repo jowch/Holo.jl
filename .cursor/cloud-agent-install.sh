@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Idempotent Cloud Agent install: Julia 1.10 + Makie/CairoMakie/WGLMakie/Pluto sysimage.
+# Idempotent Cloud Agent install: Julia 1.10 + CairoMakie/Holo/Pluto sysimage.
+# WGLMakie is *not* baked (a dual-backend image used to make holo() throw).
 # Artifacts live under $HOME/.julia (and juliaup) — never the Agent Store.
+# WGL live-verify / stock Julia: JULIA_NOSYSIMAGE=1 julia …
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -98,8 +100,8 @@ exec "\$REAL" "\$@"
 EOF
   chmod +x "$HOME/.local/bin/julia-holo"
 
-  # Optional default: make bare `julia` use the sysimage when present.
-  # Opt out with JULIA_NOSYSIMAGE=1 (used by install itself).
+  # Optional default: make bare `julia` use the Cairo+Holo sysimage when present.
+  # Opt out with JULIA_NOSYSIMAGE=1 (install itself, WGL live-verify, stock Julia).
   cat >"$HOME/.local/bin/julia" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
@@ -115,7 +117,9 @@ export PATH="\$HOME/.local/bin:\$HOME/.juliaup/bin:\$PATH"
 export HOLO_JULIA_SYSIMAGE="\${HOLO_JULIA_SYSIMAGE:-\$HOME/.julia/sysimages/holo-makie.so}"
 # Optional cloud project (Holo developed + CairoMakie/WGLMakie/Pluto):
 #   julia --project=@holo-dev
-# Bare \`julia\` / \`julia-holo\` uses the sysimage when present; JULIA_NOSYSIMAGE=1 skips it.
+# Bare \`julia\` / \`julia-holo\` uses the Cairo+Holo sysimage when present (\`-J\`).
+# JULIA_NOSYSIMAGE=1 skips -J: required for WGLMakie live-verify and stock Julia.
+# Also use it to pick up Holo source edits that landed after this image was baked.
 EOF
 
   # Ensure login shells pick this up once.
@@ -136,4 +140,5 @@ ensure_path
 
 echo "[holo-env] install complete"
 echo "[holo-env] sysimage: $HOLO_JULIA_SYSIMAGE ($(du -h "$HOLO_JULIA_SYSIMAGE" 2>/dev/null | cut -f1 || echo missing))"
-echo "[holo-env] use: julia / julia-holo  (or julia -J \"\$HOLO_JULIA_SYSIMAGE\"); JULIA_NOSYSIMAGE=1 for stock julia"
+echo "[holo-env] use: julia / julia-holo  (or julia -J \"\$HOLO_JULIA_SYSIMAGE\")"
+echo "[holo-env] JULIA_NOSYSIMAGE=1 for stock Julia / WGL live-verify (do not bake WGLMakie)"

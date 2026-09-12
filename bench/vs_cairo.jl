@@ -7,8 +7,8 @@
 #   - CROSSOVER N: renders after which cumulative WebGL (bundle + N·scene) < cumulative Cairo
 #     (N·PNG+manifest, re-shipped every render). Cairo has no bundle but re-rasterizes each time.
 #
-# Holo supports exactly one backend extension per session (see src/render.jl _resolve_backend), so
-# CairoMakie and WGLMakie can't both be `using`'d in this process — the Cairo half runs in a
+# Implicit holo() defaults to Cairo if both backends are loaded; this bench still runs the
+# Cairo half in a subprocess so each process has a single `using` line. See src/render.jl.
 # subprocess instead. PREREQ: the root env has both CairoMakie and WGLMakie available (both are
 # weak deps + `[extras]`/test deps in Project.toml — `Pkg.test()`'s test env resolves them, or
 # `Pkg.add` them into your own dev env). Numbers reconcile with docs/perf-findings.md's two

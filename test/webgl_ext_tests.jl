@@ -195,14 +195,13 @@ end
     @test length(evs) == 2 && evs[1].index == k && evs[2].index == 0
 end
 
-# MUST run last in this file: this loads CairoMakie on top of the already-loaded WGLMakie,
-# which (correctly) makes every *subsequent* implicit-backend holo() call in this process
-# fail with the both-loaded error. Nothing after this testset may rely on the WGLMakie-only
-# auto-resolution path.
+# MUST run last in this file: this loads CairoMakie on top of the already-loaded WGLMakie.
+# After that, implicit holo() defaults to Cairo (sysimage-safe) — nothing after this
+# testset may rely on the WGLMakie-only auto-resolution path.
 # ---- cross-backend parity harness: within-backend golden drift (:webgl half) ----
 # (JSON3 is already a hard dep of this GROUP — no guard needed; see core_tests.jl's
-# guarded twin for the regeneration discipline.) Runs BEFORE the "rejects both backends"
-# testset below loads CairoMakie: goldens come from a WGLMakie-only env, so the live
+# guarded twin for the regeneration discipline.) Runs BEFORE the both-loaded testset
+# below loads CairoMakie: goldens come from a WGLMakie-only env, so the live
 # manifests should be built in one too.
 include("parity_corpus.jl")
 @testset "parity goldens (:webgl drift)" begin
@@ -217,15 +216,17 @@ include("parity_corpus.jl")
     end
 end
 
-@testset "holo(fig) rejects both backends loaded" begin
+@testset "holo(fig) with both backends loaded defaults to Cairo" begin
     using CairoMakie
+    cairo_ext = Base.get_extension(Holo, :HoloCairoMakieExt)
     fig = Figure(; size = (300, 200)); ax = Axis(fig[1, 1]); scatter!(ax, 1:5, rand(5))
-    err = try
-        holo(fig)
-        nothing
-    catch e
-        e
-    end
-    @test err isa ArgumentError
-    @test occursin("exactly one rendering backend", err.msg)
+
+    implicit = holo(fig)
+    @test implicit isa Holo.HoloWidget
+
+    cairo = holo(fig; backend = cairo_ext.CairoBackend())
+    @test cairo isa Holo.HoloWidget
+
+    wgl = holo(fig; backend = _WGLExt.WebGLBackend())
+    @test wgl isa _WGLExt.WebGLWidget
 end
