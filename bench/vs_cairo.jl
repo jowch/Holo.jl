@@ -9,7 +9,7 @@
 #
 # Implicit holo() defaults to Cairo if both backends are loaded; this bench still runs the
 # Cairo half in a subprocess so each process has a single `using` line. See src/render.jl.
-# subprocess instead. PREREQ: the root env has both CairoMakie and WGLMakie available (both are
+# PREREQ: the root env has both CairoMakie and WGLMakie available (both are
 # weak deps + `[extras]`/test deps in Project.toml — `Pkg.test()`'s test env resolves them, or
 # `Pkg.add` them into your own dev env). Numbers reconcile with docs/perf-findings.md's two
 # envelopes (Cairo's main envelope + the `:webgl` section) and bench/stress.jl — re-run all three

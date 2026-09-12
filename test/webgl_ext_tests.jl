@@ -60,7 +60,7 @@ end
     fig = Figure(; size = (400, 300))
     ax = Axis(fig[1, 1])
     scatter!(ax, 1:5, rand(5))
-    w = holo(fig, Holo.AbstractInteractable[])   # empty interactables -> still a valid base widget
+    w = holo(fig, Holo.AbstractInteractable[]; backend = _WGLExt.WebGLBackend())
     @test w isa _WGLExt.WebGLWidget
     @test w.scene isa Dict{String, Any}
     @test (w.width, w.height) == (400, 300)
@@ -91,7 +91,7 @@ end
     fig = Figure(; size = (400, 300))
     ax = PolarAxis(fig[1, 1])
     scatter!(ax, Point2f[(0.0, 1.0), (π / 2, 2.0)]; markersize = 14, color = :red)
-    w = holo(fig)
+    w = holo(fig; backend = _WGLExt.WebGLBackend())
     @test w.manifest["transforms"]["ax1"]["ispolar"] === true
     @test JSON3.write(w.scene) isa String
     @test JSON3.write(w.manifest) isa String
@@ -109,7 +109,7 @@ end
 
     # an axis-keyed interactable must build its manifest without KeyError now
     thr = Holo.ThresholdInteractable(ax; value = 10.0)
-    w = holo(fig, [thr])
+    w = holo(fig, [thr]; backend = _WGLExt.WebGLBackend())
     @test w isa _WGLExt.WebGLWidget
     @test !isempty(w.manifest["transforms"])
 end
@@ -172,7 +172,7 @@ end
 
     fig = Figure(; size = (400, 300)); ax = Axis(fig[1, 1])
     scatter!(ax, 1:5, (1:5) .^ 2)
-    w = holo(fig)                      # auto-extract -> a single :scatter circles layer
+    w = holo(fig; backend = _WGLExt.WebGLBackend())   # auto-extract -> one :scatter circles layer
     layer = only(w.manifest["layers"])
     @test layer["id"] == "scatter"
 

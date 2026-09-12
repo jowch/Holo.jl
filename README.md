@@ -43,9 +43,10 @@ Holo isn't registered yet:
 julia> ] add https://github.com/jowch/Holo.jl
 ```
 
-You'll also want `Pluto`, plus exactly one Makie backend: `CairoMakie` for the default static
+You'll also want `Pluto`, plus a Makie backend: `CairoMakie` for the default static
 path, or `WGLMakie` for animation / large data / live 3D (see below) — a cost profile, not a
-feature fork — and never both in the same session.
+feature fork. Loading both is allowed (`backend=` wins; implicit `holo` defaults to Cairo);
+loading neither raises an `ArgumentError`.
 
 ## Quick start
 
@@ -370,14 +371,16 @@ npm run build                                    # → ../assets/holo-webgl.js
 ```
 
 CI is the source of truth for both bundles (it rebuilds and commits on `main`), so committing
-your local build is optional. Julia tests are split into three `GROUP`s so `CairoMakie` and
-`WGLMakie` never both load in one test process (mirroring the one-backend-per-session rule);
-`GROUP` defaults to `Core`:
+your local build is optional. Julia tests are split into three `GROUP`s so each process has a
+known loaded-backend set (`Core` = Cairo only; `WebGL` = WGL first, then both at the end;
+`NoBackend` = neither). `GROUP` defaults to `Core`. Cloud `julia` may `-J` a Cairo-baked
+image — use `JULIA_NOSYSIMAGE=1` for WGL-only implicit `holo()` and for Holo source edits
+after a bake:
 
 ```bash
-julia --project=. -e 'using Pkg; Pkg.test()'                          # GROUP=Core (default)
-GROUP=NoBackend julia --project=. -e 'using Pkg; Pkg.test()'          # neither backend loaded
-GROUP=WebGL julia --project=. -e 'using Pkg; Pkg.test()'              # WGLMakie-only tests
+JULIA_NOSYSIMAGE=1 julia --project=. -e 'using Pkg; Pkg.test()'                 # GROUP=Core
+JULIA_NOSYSIMAGE=1 GROUP=NoBackend julia --project=. -e 'using Pkg; Pkg.test()' # neither backend
+JULIA_NOSYSIMAGE=1 GROUP=WebGL julia --project=. -e 'using Pkg; Pkg.test()'     # WGL then both
 ```
 
 Julia code is formatted with [Runic](https://github.com/fredrikekre/Runic.jl) (CI enforces it):
