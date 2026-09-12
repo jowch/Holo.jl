@@ -449,7 +449,7 @@ describe("tooltips (mount/showTip)", () => {
         expect(tip.innerHTML).not.toContain("undefined")
     })
 
-    it("selected= pre-highlights are persistent: all indices drawn, and they survive hover", () => {
+    it("selected= pre-highlights are persistent: all indices drawn, and they survive hover", async () => {
         const { host, script } = setup()
         // two circles pre-selected — the view-manip persistence contract: Julia re-derives
         // `selected` each render; the overlay must keep it visible through transient hovers
@@ -469,6 +469,7 @@ describe("tooltips (mount/showTip)", () => {
         // hover a non-selected element, then empty space (empty space fades g.hi)
         surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
         surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 10, clientY: 10, bubbles: true }))
+        await new Promise<void>((r) => requestAnimationFrame(() => r()))
         expect(sel.children.length).toBe(2)                 // pre-selection survived the hovers
         const leaving = (shadow.querySelector("g.hi") as SVGGElement).firstElementChild
         expect(leaving === null || leaving.classList.contains("holo-leave")).toBe(true)
@@ -601,7 +602,7 @@ describe("tooltips (mount/showTip)", () => {
         expect(fired).toBe(false)
     })
 
-    it("points+view: hover and click still work over the full-viewport view layer", () => {
+    it("points+view: hover and click still work over the full-viewport view layer", async () => {
         // Regression: :view used to win every drag hitTest and suppress element hover/click.
         const m: Manifest = {
             width: 1200, height: 800, scaling: 2,
@@ -625,6 +626,7 @@ describe("tooltips (mount/showTip)", () => {
         expect(surface.classList.contains("hot")).toBe(true)
         // empty area: grab cursor from view, no hover tip
         surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 50, clientY: 50, bubbles: true }))
+        await new Promise<void>((r) => requestAnimationFrame(() => r()))
         expect(tip.classList.contains("show")).toBe(false)
         expect(surface.classList.contains("grab")).toBe(true)
         // tiny mousedown/up over the point must not swallow the subsequent click
@@ -918,6 +920,72 @@ describe("overlay visual polish", () => {
         expect(css).toMatch(/#e8e8e8/)
         expect(css).toMatch(/#ffffff/)
         expect(css).not.toMatch(/#ff3b30/)
+    })
+
+    const flushFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()))
+
+    it("does not rewrite tooltip HTML on same-hit mousemove", async () => {
+        const { host, script } = setup()
+        mount(script, manifest)
+        const shadow = shadowOf(host)
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(tip.classList.contains("show")).toBe(true)
+        const html = tip.innerHTML
+        let writes = 0
+        const desc = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML")!
+        Object.defineProperty(tip, "innerHTML", {
+            configurable: true,
+            get() { return html },
+            set(v: string) { writes++; desc.set!.call(this, v) },
+        })
+        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 301, clientY: 201, bubbles: true }))
+        await flushFrame()
+        expect(writes).toBe(0)
+        expect(tip.innerHTML).toBe(html)
+    })
+
+    it("does not remeasure the tip on same-hit mousemove", async () => {
+        const { host, script } = setup()
+        mount(script, manifest)
+        const shadow = shadowOf(host)
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
+        let sizeReads = 0
+        Object.defineProperty(tip, "offsetWidth", { configurable: true, get() { sizeReads++; return 120 } })
+        Object.defineProperty(tip, "offsetHeight", { configurable: true, get() { sizeReads++; return 40 } })
+        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 301, clientY: 201, bubbles: true }))
+        await flushFrame()
+        expect(sizeReads).toBe(0)
+    })
+
+    it("coalesces extra same-frame mousemove to the last event", async () => {
+        const { host, script } = setup()
+        mount(script, {
+            width: 1200, height: 800, scaling: 2,
+            transforms: { ax1: { xlims: [0, 5], ylims: [0, 5], xscale: "identity", yscale: "identity",
+                viewport: [100, 100, 400, 400], xreversed: false, yreversed: false } },
+            layers: [{ id: "axis", kind: "axis", geometry: null, payloads: [], axis: "ax1", events: ["hover"] }],
+        })
+        const shadow = shadowOf(host)
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        let writes = 0
+        const desc = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML")!
+        Object.defineProperty(tip, "innerHTML", {
+            configurable: true,
+            get() { return desc.get!.call(this) },
+            set(v: string) { writes++; desc.set!.call(this, v) },
+        })
+        for (let i = 0; i < 8; i++) {
+            surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 200 + i, clientY: 200, bubbles: true }))
+        }
+        expect(writes).toBeLessThan(8)
+        await new Promise<void>((r) => requestAnimationFrame(() => r()))
+        expect(tip.classList.contains("show")).toBe(true)
+        expect(tip.innerHTML).toContain("x=")
     })
 
     it("clamps the tip and flips the caret near the bottom-right edge", async () => {

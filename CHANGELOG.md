@@ -7,6 +7,9 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Changed
+- Overlay hover skips rewriting tooltip HTML and remeasuring tip size on
+  same-hit `mousemove`; extra pointer ticks coalesce to one animation frame.
+  The 100 ms fade and locked wash / ring recipes are unchanged.
 - Agent live-verify playbook (`docs/live-interaction-checklist.md`) now requires
   **visual** fidelity as well as interaction: wash / ring / halo / overlay-pin,
   remount fade (no pulse), Pluto/OS `prefers-color-scheme` (no notebook toggle),
