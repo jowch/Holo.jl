@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-12
+
+First General release. Frozen after drag-to-pan / drag-to-rotate
+(`ViewInteractable`, #48) and the overlay visual / live-verify playbook (#50,
+#52, #53) — not a sliders-only shortcut. Jonathan comments
+`@JuliaRegistrator register` on a CI-green `main` commit after the prep PR
+merges. See [`docs/releasing.md`](docs/releasing.md).
+
 ### Changed
 - Overlay hover skips rewriting tooltip HTML and remeasuring tip size on
   same-hit `mousemove`; extra pointer ticks coalesce to one animation frame.
@@ -101,3 +109,6 @@ All notable changes to this project are documented here. The format is based on
 - Current `:cairo` scoping: `LScene` is rejected at `holo()` time — a Holo guard, not a
   CairoMakie limit (`LScene` disposition remains a roadmap decision item). High-frequency live
   redraw is a shared cost limit on both backends.
+
+[Unreleased]: https://github.com/jowch/Holo.jl/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/jowch/Holo.jl/releases/tag/v0.1.0

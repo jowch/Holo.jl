@@ -1,5 +1,7 @@
 using Test
 
+include("registry_readiness.jl")
+
 # Holo has two backend extensions (CairoMakie, WGLMakie). Each suite below needs a
 # specific, non-overlapping set of packages loaded, so they run as separate GROUPs
 # rather than one file — see the plan/spec for why. Default GROUP is "Core".
