@@ -142,7 +142,13 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 - [x] **Perf benchmarking**: the unmeasured Q5 envelope — base64 size + click latency knee; confirm MsgPack fast-path engages. *Done (`bench/payload_envelope.jl` → `docs/perf-findings.md`): single plots 50–400 KB, manifest O(N) elements, heatmaps O(cells), animation = frames × PNG (the hard ceiling, 5.5–22 MB). MsgPack confirmed (generic maps, not the TypedArray fast-path). Full click round-trip measured live (headless Pluto + Chromium): ~65 ms median — render-bound, browser overhead negligible. Editor-lag knee (editor stutter, distinct from latency) deferred.*
 - [ ] **Theming**: marker-highlight styling (`highlight_*` / `--holo-hi-*`, shadow-DOM scoped). *(Tooltip card already matches official Pluto: both use `prefers-color-scheme`. Official Pluto has no notebook light/dark toggle — Settings → Dark mode is help text. Remaining work is highlight theming, not a Pluto theme hook.)*
 - [ ] **GLMakie-static backend**: GPU offscreen → PNG, same `AbstractBackend` contract (for envs with a GPU).
-- [ ] **Register in General** once the API stabilizes (CHANGELOG → 0.1.0 tag → Registrator/TagBot).
+- [x] **Register in General — path** *(prep)*: CHANGELOG frozen at `0.1.0` after
+      drag-to-pan / `ViewInteractable` and overlay polish; TagBot workflow;
+      `Base64` compat; README `] add Holo`. Remaining human step: Jonathan
+      comments `@JuliaRegistrator register` on a CI-green `main` commit
+      **after this merges** (not on the PR), then TagBot's `v0.1.0` tag. Name
+      is 4 letters → AutoMerge needs a human (guideline is ≥5). See
+      `docs/releasing.md`.
 - [x] **Distribution decision**: folded into `ext/HoloWGLMakieExt.jl` — see
       `.superpowers/specs/2026-06-30-holo-backend-selection-design.md`. (This also obsoletes the
       former `HoloWGL`'s own "General-registry readiness" item — there's no longer a second package
@@ -186,7 +192,10 @@ number — everything else is reorderable by demand.
 - **Multi-select → the bond contract.** `Vector{InteractionEvent}` is the forward-compatible
   extension v1 was shaped for (`architecture.md`:261). Land the contract change before stacking
   more surfaces on it. Preserve the "never `Nothing`" invariant (empty vector, not nothing).
-- **Everything → registration.** Last, after the API stops moving.
+- **Everything → registration.** Last, after the API stops moving. Path is now
+  ready (CHANGELOG `0.1.0` freeze); the remaining work is Jonathan's Registrator
+  comment on a CI-green `main` commit after the prep PR merges — see
+  `docs/releasing.md`.
 
 ### Phase 0 — Measure (front-loaded spike) ✅ *done*
 - **Perf benchmarking** — *Done. See `docs/perf-findings.md` (`bench/payload_envelope.jl` to
@@ -303,5 +312,7 @@ These three are independent and can run concurrently.
 - **GLMakie-static backend** — first do the prerequisite seam refactor (move
   `data_to_image_px`/projection onto the rendercontext so it isn't hard-bound to CairoMakie),
   then the backend slots in behind the same contract. Must stay static→PNG (no 3D/live). Optional.
-- **Register in General** — strictly last, after the API stabilizes. Needs the committed in-tree
-  bundle + CI-on-GitHub; CHANGELOG → 0.1.0 tag on a CI-built commit → Registrator/TagBot.
+- **Register in General** — path ready. Needs the committed in-tree bundle +
+  CI-on-GitHub; CHANGELOG frozen at 0.1.0; Jonathan comments
+  `@JuliaRegistrator register` on a CI-built `main` commit after the prep
+  merges → TagBot `v0.1.0`. See `docs/releasing.md`.

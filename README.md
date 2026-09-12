@@ -15,10 +15,11 @@ instead and the same `holo`/`@bind` contract drives a **live**, browser-GPU back
 animation, large/live data, and live 3D — see [3D, animation, and large data](#3d-animation-and-large-data-wglmakie)
 below. Exactly one backend may be loaded per Pluto session.
 
-> **Status: early / experimental (v0.1).** Validated end-to-end in real Pluto on every supported
-> backend — CairoMakie via [`examples/demo.jl`](examples/demo.jl), WGLMakie via
-> [`examples/webgl_demo.jl`](examples/webgl_demo.jl) (CI runs both headlessly). APIs may still
-> change.
+> **Status: v0.1.0.** First General registration, frozen after drag-to-pan / drag-to-rotate
+> (`ViewInteractable`) and overlay visual polish. Validated end-to-end in real Pluto on every
+> supported backend — CairoMakie via [`examples/demo.jl`](examples/demo.jl), WGLMakie via
+> [`examples/webgl_demo.jl`](examples/webgl_demo.jl) (CI runs both headlessly). `0.1.x` stays
+> additive; breaking changes go to `0.2`.
 
 ## Why
 
@@ -37,7 +38,11 @@ GPU — see [3D, animation, and large data (`WGLMakie`)](#3d-animation-and-large
 
 ## Install
 
-Holo isn't registered yet:
+```julia
+julia> ] add Holo
+```
+
+Until General indexes `v0.1.0`, the git URL still works:
 
 ```julia
 julia> ] add https://github.com/jowch/Holo.jl
@@ -46,7 +51,9 @@ julia> ] add https://github.com/jowch/Holo.jl
 You'll also want `Pluto`, plus a Makie backend: `CairoMakie` for the default static
 path, or `WGLMakie` for animation / large data / live 3D (see below) — a cost profile, not a
 feature fork. Loading both is allowed (`backend=` wins; implicit `holo` defaults to Cairo);
-loading neither raises an `ArgumentError`.
+loading neither raises an `ArgumentError`. First-registration steps (Jonathan comments
+Registrator on a CI-green `main` commit after the prep PR merges) are in
+[`docs/releasing.md`](docs/releasing.md).
 
 ## Quick start
 
