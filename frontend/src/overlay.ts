@@ -303,11 +303,11 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     const placeTip = (ox: number, oy: number) => {
         if (!tipSized) {
             tipW = tip.offsetWidth; tipH = tip.offsetHeight
-            tipSized = true
+            tipSized = tipW > 0 && tipH > 0
         }
         if (!surfaceSized) {
             surfaceW = surface.clientWidth; surfaceH = surface.clientHeight
-            surfaceSized = true
+            surfaceSized = surfaceW > 0 && surfaceH > 0
         }
         const tw = tipW, th = tipH, hw = surfaceW, hh = surfaceH
         tip.classList.remove("flip-x", "flip-y")
@@ -472,6 +472,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         placeTip(tp.x, tp.y)
     }
     const onUp = (e: MouseEvent) => {
+        cancelPendingMove()
         if (!drag) return
         const p = imgPx(e)
         if (drag.kind === "roi" && drag.target) {
