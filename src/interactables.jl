@@ -26,7 +26,7 @@ events(::AbstractInteractable) = (:click, :hover)
 # Per-LAYER tooltip spec (applies to every element of the interactable's layers):
 #   nothing → auto name/value table (default) · Markup → template · false → suppress.
 tooltip_spec(::AbstractInteractable) = nothing
-hoverstyle(::AbstractInteractable, ::Int) = (; stroke = "#ff3b30", width = 3)
+hoverstyle(::AbstractInteractable, ::Int) = (; stroke = "#3A6F7C", width = 2)
 
 abstract type AbstractSelector <: AbstractInteractable end
 

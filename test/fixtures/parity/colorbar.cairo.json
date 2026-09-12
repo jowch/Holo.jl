@@ -49,8 +49,8 @@
             ],
             "axis": "ax1",
             "style": {
-                "width": 3,
-                "stroke": "#ff3b30"
+                "width": 2,
+                "stroke": "#3A6F7C"
             },
             "events": [
                 "click",
@@ -90,8 +90,8 @@
             ],
             "axis": "ax1",
             "style": {
-                "width": 3,
-                "stroke": "#ff3b30"
+                "width": 2,
+                "stroke": "#3A6F7C"
             },
             "events": [
                 "click",
@@ -124,8 +124,8 @@
             ],
             "axis": "ax1",
             "style": {
-                "width": 3,
-                "stroke": "#ff3b30"
+                "width": 2,
+                "stroke": "#3A6F7C"
             },
             "events": [
                 "click",
@@ -145,8 +145,8 @@
             ],
             "axis": "cb1",
             "style": {
-                "width": 3,
-                "stroke": "#ff3b30"
+                "width": 2,
+                "stroke": "#3A6F7C"
             },
             "events": [
                 "click",

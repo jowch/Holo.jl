@@ -163,6 +163,14 @@ corners, a drop shadow, and a small CSS triangle (caret) pointing toward the hov
 `prefers-color-scheme: dark` media query inverts the card automatically. No author
 action required.
 
+Official Pluto has **no notebook light/dark toggle** — Settings → Dark mode is help
+text (`component: null`). Pluto's theme CSS and CodeMirror use the same
+`prefers-color-scheme` query, so the card already matches stock Pluto. There is
+no `html`/`body` class, `data-theme`, JS event, or Julia API to follow. Revisit
+only if Pluto later ships a real override with a stable signal. Pin `tooltip_bg`
+/ `tooltip_color` to lock the card. Third-party skins or “force dark” extensions
+can desync chrome from the OS; that is not Holo's contract.
+
 ### Layer 2 — `tooltip_*` kwargs on `holo()`
 
 Figure-level style overrides are keyword arguments to `holo()`:
@@ -208,9 +216,9 @@ property set on an ancestor element takes effect.
 ### Caret
 
 When `tooltip_caret = true` (the default), a speech-bubble tail is drawn between the
-card and the hovered data point. The caret is a fixed CSS triangle (`::before`)
-pointing toward the hovered point; the card is offset from the cursor by a fixed
-translate and is not clamped to the figure bounds.
+card and the hovered data point. The caret is a CSS triangle (`::before`). The card is
+offset from the cursor and **clamped** to the overlay bounds; near a figure edge the
+caret flips (`flip-x` / `flip-y`) so it still points at the hit.
 
 ### `--holo-tip-*` custom property reference
 
@@ -299,6 +307,6 @@ require breaking changes to add.
 | `$(field:raw)` — unescaped field interpolation | Deferred | Explicit opt-in marker (Bokeh `{safe}`-style); pre-render HTML into a payload field, inject unescaped |
 | Per-layer `tooltip_*` style override | Deferred | Non-breaking kwarg on the per-layer interactable constructor |
 | Compile-time field validation (`@generated`) | Deferred | No-op on heterogeneous payloads; build-time Phase 2 runs for `NamedTuple` payloads |
-| Caret edge-flipping / viewport-collision clamping | Deferred | Keep card inside viewport bounds on figure edges; auto-flip caret |
+| Caret edge-flipping / viewport-collision clamping | **Shipped** (first overlay polish PR) | Card stays inside the overlay; caret flips via `.flip-x` / `.flip-y` |
 | Inline date formatting | Deferred (would add `d3-time-format`) | Format dates in Julia into a payload string field |
-| Following Pluto's own dark-mode toggle | Deferred | Pluto exposes no stable JS event for this; `prefers-color-scheme` is the correct current default |
+| Following a Pluto notebook theme toggle | **N/A** — official Pluto has none | OS `prefers-color-scheme` *is* Pluto's theme (Settings is help text; no class / `data-theme` / JS event). See §5. Revisit only if Pluto ships a real override with a stable signal. |

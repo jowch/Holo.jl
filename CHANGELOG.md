@@ -6,7 +6,17 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
-Initial implementation — not yet released or registered.
+### Changed
+- Overlay chrome uses the locked inspector ink `#3A6F7C` (JS fallback + Julia
+  `hoverstyle` default) instead of iOS-alert red `#ff3b30`. Hover is stroke-only;
+  selected closed geometry gets a wash fill; selected open kinds (segments /
+  polylines) get a two-stroke ring. Tip show/hide and highlight mount fade in
+  100 ms on state change (not remounted on every pointer frame) and honor
+  `prefers-reduced-motion`. The tooltip card is edge-clamped
+  with caret flip. Tooltip dark follows `prefers-color-scheme` (official Pluto's
+  theme signal; there is no notebook toggle). `selected=` now accepts `segments`
+  / `polyline` so the ring recipe is reachable; `grid` / `axis` / … still fail
+  loud.
 
 ### Added
 - `holo(fig, interactables)` — a Pluto `@bind` widget that overlays interactivity on a

@@ -73,9 +73,10 @@ function _layer_dict(i, L::HitLayer)
 end
 
 # Kinds the overlay can draw as a persistent pre-highlight (`hitLayerByIndex` / `makeHiElement`).
-# Unsupported kinds (segments/grid/axis/…) with `selected=` used to silently draw nothing — fail loud
+# Closed kinds get the selected wash; open kinds (segments/polyline) get the ring fallback.
+# Unsupported kinds (grid/axis/…) with `selected=` used to silently draw nothing — fail loud
 # instead, same doctrine as wrong-length `payloads=` (`_check_payloads`).
-const _SELECTED_KINDS = (:circles, :rects, :polygons)
+const _SELECTED_KINDS = (:circles, :rects, :polygons, :segments, :polyline)
 
 # Element count for a HitLayer geometry, matching the JS layout in types.ts / hitLayerByIndex.
 function _layer_n_elements(kind::Symbol, geometry)
