@@ -18,8 +18,8 @@ no pulse on a same-hit remount. Tooltip dark follows OS `prefers-color-scheme` â
 Pluto has **no notebook light/dark toggle** (Settings â†’ Dark mode is help text; Pluto
 itself uses the same media query).
 
-Cite the store contract; do not re-litigate identity, wash vs ring, first-PR scope, or
-Pluto coupling: `/cursor/stores/bc-0e3b8442-81e1-47fb-99fb-aec1f218c09a/docs/visual-design.md`.
+Cite the locked recipes above; do not re-litigate identity, wash vs ring, first-PR
+scope, or Pluto coupling.
 
 ## How to run (you, not a human)
 
@@ -130,7 +130,7 @@ motion so fade is observable.
 
 - [ ] `kind_sweep.mjs` **PASS** on `:cairo` (every row, including `scatter_dark`)
 - [ ] `kind_sweep.mjs` **PASS** on `:webgl` (every row, including `scatter_dark`)
-- [ ] `polish_verify.mjs` **PASS** on `:cairo` (wash/ring/halo/pin + remount fade + color-scheme + no `#ff3b30`)
+- [ ] `polish_verify.mjs` **PASS** on `:cairo` (wash/ring/halo/pin + dark-figure wash + remount fade + color-scheme + no `#ff3b30`)
 - [ ] `polish_verify.mjs` **PASS** on `:webgl` (same boxes)
 - [ ] Every row in the table above was exercised (not a subset)
 - [ ] You did **not** ask the maintainer to click through plots

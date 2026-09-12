@@ -1,7 +1,8 @@
 // Agent kind-sweep live-verify (LOCAL — not CI). Drives docs/live-interaction-checklist.md
 // — interaction AND visual — across every interactable kind on one backend.
 // A 2-plot kitchen-sink is not enough. polish_verify.mjs is the required visual-chrome
-// sibling (fade + prefers-color-scheme); this file also asserts those on each kind.
+// sibling (fade + prefers-color-scheme). This file asserts fade / no-pulse per kind
+// and prefers-color-scheme once (scatter).
 //
 //   node kind_sweep.mjs <base-url> <notebook-abs-path> <cairo|webgl>
 import { chromium } from "playwright";
@@ -79,6 +80,7 @@ try {
     locale: "en-US", timezoneId: "UTC",
     viewport: { width: 1100, height: 1400 },
     deviceScaleFactor: 2,
+    reducedMotion: "no-preference",
   });
   const page = await context.newPage();
   page.on("pageerror", (e) => {
@@ -475,7 +477,8 @@ try {
   }
 
   const schemeSpec = meta.find((s) => s.key === "scatter") || meta.find((s) => s.mode === "element");
-  if (schemeSpec) {
+  if (!schemeSpec) throw new Error("no scatter/element spec for prefers-color-scheme");
+  {
     const slayers = await layersOf(schemeSpec.key);
     const slayer = findLayer(slayers, schemeSpec);
     const spt = hitPoint(slayer, schemeSpec.selectedIndex);

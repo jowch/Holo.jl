@@ -33,6 +33,7 @@ try {
     viewport: { width: 1000, height: 900 },
     deviceScaleFactor: 2,
     colorScheme: "light",
+    reducedMotion: "no-preference",
   });
   const page = await context.newPage();
   page.on("pageerror", (e) => {
@@ -66,7 +67,7 @@ try {
       };
     });
     if (st.errored) throw new Error(`${backend} errored: ${st.errText.slice(0, 400)}`);
-    if (!st.busy && st.surfaces >= 2 && st.scatter && st.lines) { ready = true; break; }
+    if (!st.busy && st.surfaces >= 3 && st.scatter && st.lines && st.dark) { ready = true; break; }
     if (tick % 20 === 0) console.error(`  …${backend} [${tick}s] busy=${st.busy} hosts=${st.hosts} surfaces=${st.surfaces}`);
     tick++;
     await new Promise((r) => setTimeout(r, 1000));
@@ -105,6 +106,8 @@ try {
       svg: { w: sb.width, h: sb.height, x: sb.x, y: sb.y },
       kids,
       css: sr.querySelector("style")?.textContent || "",
+      hi: sr.querySelector("g.hi")?.children.length ?? 0,
+      sel: sr.querySelector("g.sel")?.children.length ?? 0,
     };
   }, key);
 
@@ -171,15 +174,12 @@ try {
   assertRing(ring, "lines");
   passed.push("selected-ring");
 
-  const darkReady = await page.evaluate(() => !!document.querySelector("#coords_scatter_dark"));
-  if (darkReady) {
-    const dark = await inspect("scatter_dark");
-    pin(dark, "scatter_dark");
-    const dwash = dark.kids.find((k) => k.kind === "closed");
-    assertWash(dwash, "scatter_dark");
-    assertNoAlertRed(dark.kids, "scatter_dark");
-    passed.push("dark-figure-wash");
-  }
+  const dark = await inspect("scatter_dark");
+  pin(dark, "scatter_dark");
+  const dwash = dark.kids.find((k) => k.kind === "closed");
+  assertWash(dwash, "scatter_dark");
+  assertNoAlertRed(dark.kids, "scatter_dark");
+  passed.push("dark-figure-wash");
 
   const hx = pts.geometry[3], hy = pts.geometry[4];
   let tip = null;
@@ -236,6 +236,13 @@ try {
   assertLeaveFade(fade, "scatter");
   if (fade.sel < 1) throw new Error(`g.sel dropped on unhover: ${JSON.stringify(fade)}`);
   passed.push("remount-fade");
+  let afterLeave = await inspect("scatter");
+  for (let a = 0; a < 8 && afterLeave.hi !== 0; a++) {
+    await new Promise((r) => setTimeout(r, 25));
+    afterLeave = await inspect("scatter");
+  }
+  if (afterLeave.hi !== 0) throw new Error(`g.hi lingered ${afterLeave.hi}`);
+  if (afterLeave.sel < 1) throw new Error("g.sel dropped after fade");
   passed.push("selected-survives-unhover");
 
   await assertTooltipColorScheme(page, {

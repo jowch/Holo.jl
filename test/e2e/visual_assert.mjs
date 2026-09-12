@@ -15,7 +15,7 @@ function normRgb(s) {
 
 export function assertNoAlertRed(blob, where) {
   const s = typeof blob === "string" ? blob : JSON.stringify(blob);
-  if (/#ff3b30|rgb\(\s*255\s*,\s*59\s*,\s*48\s*\)/i.test(s)) {
+  if (/#ff3b30|rgba?\(\s*255[\s,]+59[\s,]+48(?:[\s,/][^)]*)?\)/i.test(s)) {
     throw new Error(`${where}: alert red ${ALERT_RED} leaked (want steel-teal ${INK})`);
   }
 }
@@ -34,19 +34,16 @@ export function assertRing(ring, where) {
     throw new Error(`${where}: ring recipe ${JSON.stringify(ring)}`);
   }
   const outer = ring.lines.find((l) => l.width === "4");
-  if (outer && outer.opacity != null && String(outer.opacity) !== "0.25") {
-    throw new Error(`${where}: ring outer opacity ${outer.opacity} (want 0.25)`);
+  if (!outer || String(outer.opacity) !== "0.25") {
+    throw new Error(`${where}: ring outer opacity ${outer?.opacity} (want 0.25)`);
   }
   assertNoAlertRed(ring, where);
 }
 
 export function assertHoverRecipe(hi, where) {
   if (!hi) throw new Error(`${where}: missing hover stroke`);
-  if (hi.fill !== "none" || hi.width !== "2" || hi.opacity !== "0.85") {
+  if (hi.fill !== "none" || hi.width !== "2" || hi.opacity !== "0.85" || hi.stroke !== INK) {
     throw new Error(`${where}: hover recipe ${JSON.stringify(hi)}`);
-  }
-  if (hi.stroke && hi.stroke !== INK) {
-    throw new Error(`${where}: hover stroke ${hi.stroke} (want ${INK})`);
   }
   assertNoAlertRed(hi, where);
 }
