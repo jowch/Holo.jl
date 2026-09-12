@@ -677,8 +677,10 @@ describe("tooltips (mount/showTip)", () => {
     })
 })
 
-// First overlay visual-polish PR (locked recipes in visual-design.md):
-// inspector ink, hover = stroke only, selected = wash / ring, tip motion + edge clamp.
+// Overlay visual recipes (locked — cite visual-design.md, do not reopen).
+// Units are necessary, not live-verify: agents still run
+// docs/live-interaction-checklist.md (kind_sweep.mjs + polish_verify.mjs)
+// on Cairo and WGL for interaction AND visual.
 describe("overlay visual polish", () => {
     const ink = "#3A6F7C"
     const wash = "rgba(58, 111, 124, 0.12)"
@@ -905,6 +907,17 @@ describe("overlay visual polish", () => {
         const css = shadowOf(host).querySelector("style")!.textContent!
         expect(css).toMatch(/prefers-reduced-motion:\s*reduce/)
         expect(css).toMatch(/opacity/)
+    })
+
+    it("tooltip CSS follows prefers-color-scheme (Pluto's only theme signal), not alert red", () => {
+        const { host, script } = setup()
+        mount(script, manifest)
+        const css = shadowOf(host).querySelector("style")!.textContent!
+        expect(css).toMatch(/prefers-color-scheme:\s*dark/)
+        expect(css).toMatch(/#1e1e1e/)
+        expect(css).toMatch(/#e8e8e8/)
+        expect(css).toMatch(/#ffffff/)
+        expect(css).not.toMatch(/#ff3b30/)
     })
 
     it("clamps the tip and flips the caret near the bottom-right edge", async () => {

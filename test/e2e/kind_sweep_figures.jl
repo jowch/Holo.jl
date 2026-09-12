@@ -1,7 +1,8 @@
 # Shared figures for the agent kind-sweep notebooks (Cairo / WGL).
-# Each widget is one interactable kind. `selected=` is baked only on supported kinds
-# (`circles`, `rects`, `polygons`, `segments`, `polyline`). Grid / threshold / roi / view
-# are hover-click or drag only.
+# Each widget is one interactable kind (interaction + visual). `selected=` is baked only
+# on supported kinds (`circles`, `rects`, `polygons`, `segments`, `polyline`).
+# Grid / threshold / roi / view are hover-click or drag only. `scatter_dark` is a dark
+# Makie figure so inspector ink is live-checked on dark axes.
 
 kind_sweep_meta() = [
     Dict(
@@ -43,6 +44,11 @@ kind_sweep_meta() = [
         "key" => "polar", "layerId" => "polar", "layerKind" => "circles",
         "selected" => "wash", "halo" => true, "selectedIndex" => 1, "clickIndex" => 0,
         "tip" => "north", "mode" => "element",
+    ),
+    Dict(
+        "key" => "scatter_dark", "layerId" => "scatter_dark", "layerKind" => "circles",
+        "selected" => "wash", "halo" => true, "selectedIndex" => 1, "clickIndex" => 0,
+        "tip" => "beta", "mode" => "element",
     ),
     Dict(
         "key" => "arrows3d", "layerId" => "arrows3d", "layerKind" => "segments",
@@ -174,6 +180,28 @@ function build_kind_sweep()
         )
     end
 
+    scatter_dark = let
+        pts = [(1.0, 1.0), (2.0, 2.0), (3.0, 1.2)]
+        fig = Figure(size = (480, 260); backgroundcolor = :gray12)
+        ax = Axis(
+            fig[1, 1];
+            title = "scatter-dark",
+            backgroundcolor = :gray20,
+            xtickcolor = :gray80,
+            ytickcolor = :gray80,
+            titlecolor = :gray90,
+        )
+        scatter!(ax, first.(pts), last.(pts); color = :gray, markersize = 22)
+        holo(
+            fig,
+            PointInteractable(
+                ax, pts; id = :scatter_dark,
+                payloads = [(; label = "alpha"), (; label = "beta"), (; label = "gamma")],
+            );
+            selected = Dict(:scatter_dark => [1]),
+        )
+    end
+
     arrows3d = let
         fig = Figure(size = (480, 320))
         ax = Axis3(fig[1, 1]; azimuth = 0.4, elevation = 0.5, title = "arrows3d")
@@ -223,6 +251,6 @@ function build_kind_sweep()
 
     return (;
         scatter, lines, segments, heatmap, image, barplot, poly,
-        polar, arrows3d, hlines, threshold, roi, view,
+        polar, scatter_dark, arrows3d, hlines, threshold, roi, view,
     )
 end

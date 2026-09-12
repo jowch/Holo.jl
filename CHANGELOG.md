@@ -7,6 +7,11 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Changed
+- Agent live-verify playbook (`docs/live-interaction-checklist.md`) now requires
+  **visual** fidelity as well as interaction: wash / ring / halo / overlay-pin,
+  remount fade (no pulse), Pluto/OS `prefers-color-scheme` (no notebook toggle),
+  and steel-teal `#3A6F7C` not `#ff3b30`. Agents run `kind_sweep.mjs` **and**
+  `polish_verify.mjs` on Cairo and WGL across the interactable kinds.
 - Overlay chrome uses the locked inspector ink `#3A6F7C` (JS fallback + Julia
   `hoverstyle` default) instead of iOS-alert red `#ff3b30`. Hover is stroke-only;
   selected closed geometry gets a wash fill; selected open kinds (segments /

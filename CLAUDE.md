@@ -26,32 +26,38 @@ plots in Pluto. Browser layer is TypeScript in `frontend/`, bundled by esbuild t
 
 ## Live verification (standing practice — not optional)
 Unit/frontend tests assert the manifest and the JS in isolation; they don't prove the rendered
-widget behaves for the user. **Any change that can alter what the user interacts with must be
-live-verified in a real Pluto + browser on every supported backend across the interactable
-kinds before it's called done** (today: CairoMakie and WGLMakie / `:webgl`; same rule for any
-future backend — all backends, not one). A 2-plot kitchen-sink is **not** enough. Agents run
-the playbook — do not ask the maintainer to click through plots.
+widget behaves for the user. **Any change that can alter what the user interacts with — or
+what they see — must be live-verified in a real Pluto + browser on every supported backend
+across the interactable kinds before it's called done** (today: CairoMakie and WGLMakie /
+`:webgl`; same rule for any future backend — all backends, not one). A 2-plot kitchen-sink
+is **not** enough. Agents run the playbook — do not ask the maintainer to click through
+plots.
 
 "User-facing" includes **backend/Julia-only changes**: the manifest shape, payload contents,
-hit-test geometry, projection/DPI, `@bind` value, hover/tooltip text, and overlay behavior all
-originate in Julia. The test passing is necessary, not sufficient. (E.g. the grid `values[]`
-cap is a pure-Julia change with no visible markup, yet it changes hover text and the bond
-payload → it gets a live check on every backend × the kinds it touches.)
+hit-test geometry, projection/DPI, `@bind` value, hover/tooltip text, overlay chrome, and
+visual recipes all originate in Julia. The test passing is necessary, not sufficient. (E.g.
+the grid `values[]` cap is a pure-Julia change with no visible markup, yet it changes hover
+text and the bond payload → it gets a live check on every backend × the kinds it touches.)
 - **What "live-verified" means:** on each backend, open the affected cases in headless Pluto,
   drive them with Playwright (hover/click/drag), and confirm the actual on-screen result —
-  tooltip text, highlight, `@bind` round-trip, geometry on the mark (not offset), no console
-  errors — matches intent. Inspect the real `published_to_js` manifest in-page when the change
-  is about payload shape (unit tests never call `show`). **Agents run**
-  `docs/live-interaction-checklist.md` via `test/e2e/kind_sweep.mjs` (Cairo **and** WGL) across
-  scatter, lines/segments, heatmap/image, barplot, poly, polar, arrows3d, hlines/vlines,
-  threshold, ROI, and view-pan — not `polish_verify.mjs` alone. Overlay recipes: inspector ink
-  `#3A6F7C`, hover = stroke only, selected closed = wash, selected open = ring, circle halo
-  `r + 2`.
+  tooltip text **and** tooltip theme, highlight recipe (wash / ring / halo), remount fade
+  (no pulse), `@bind` round-trip, geometry on the mark (not offset), no console errors —
+  matches intent. Inspect the real `published_to_js` manifest in-page when the change is
+  about payload shape (unit tests never call `show`). **Agents run**
+  `docs/live-interaction-checklist.md` via **both** `test/e2e/kind_sweep.mjs` **and**
+  `test/e2e/polish_verify.mjs` (Cairo **and** WGL) across scatter, lines/segments,
+  heatmap/image, barplot, poly, polar, dark-figure scatter, arrows3d, hlines/vlines,
+  threshold, ROI, and view-pan. Interaction without visual is unfinished; visual chrome
+  without the kind sweep is unfinished. Overlay recipes (locked — cite, do not reopen):
+  inspector ink `#3A6F7C` (not `#ff3b30`), hover = stroke only, selected closed = wash,
+  selected open = ring, circle halo `r + 2`, 80–120 ms fade, OS `prefers-color-scheme`
+  (official Pluto has no notebook toggle).
 - **Skip only** pure-internal refactors with zero observable delta (and say so). When unsure,
-  it's user-facing — verify all backends × the kinds the change can touch.
-- Mechanics below. Kind-sweep notebooks: `test/e2e/kind_sweep_cairo.jl` / `kind_sweep_webgl.jl`.
-  Demo envs (`examples/demo.jl`, `examples/webgl_demo.jl`) and `test/e2e/webgl_sweep.mjs` remain
-  useful extras, not a substitute for the kind sweep.
+  it's user-facing — verify all backends × the kinds the change can touch, interaction
+  **and** visual.
+- Mechanics below. Kind-sweep notebooks: `test/e2e/kind_sweep_cairo.jl` / `kind_sweep_webgl.jl`
+  (both drivers). Demo envs (`examples/demo.jl`, `examples/webgl_demo.jl`) and
+  `test/e2e/webgl_sweep.mjs` remain useful extras, not a substitute.
 
 ## Pluto integration testing (slow — minutes)
 - A fresh per-notebook env re-resolves + precompiles the Makie stack (~6 min first open).

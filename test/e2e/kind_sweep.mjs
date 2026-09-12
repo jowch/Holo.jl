@@ -1,8 +1,15 @@
 // Agent kind-sweep live-verify (LOCAL — not CI). Drives docs/live-interaction-checklist.md
-// across every interactable kind on one backend. A 2-plot kitchen-sink is not enough.
+// — interaction AND visual — across every interactable kind on one backend.
+// A 2-plot kitchen-sink is not enough. polish_verify.mjs is the required visual-chrome
+// sibling (fade + prefers-color-scheme). This file asserts fade / no-pulse per kind
+// and prefers-color-scheme once (scatter).
 //
 //   node kind_sweep.mjs <base-url> <notebook-abs-path> <cairo|webgl>
 import { chromium } from "playwright";
+import {
+  assertNoAlertRed, assertWash, assertRing, assertHoverRecipe,
+  assertRemountStable, assertLeaveFade, assertTooltipColorScheme,
+} from "./visual_assert.mjs";
 
 const [base, notebook, backend] = process.argv.slice(2);
 if (!base || !notebook || !backend) {
@@ -10,8 +17,6 @@ if (!base || !notebook || !backend) {
   process.exit(2);
 }
 
-const INK = "#3A6F7C";
-const WASH = "rgba(58, 111, 124, 0.12)";
 const SHIM_LEAK = /\b(?:Bonito|comm)\.\w+ is not a function/;
 const ALLOWED = [/Bonito\.decode_binary is not a function/, /Bonito\.fetch_binary is not a function/];
 
@@ -75,6 +80,7 @@ try {
     locale: "en-US", timezoneId: "UTC",
     viewport: { width: 1100, height: 1400 },
     deviceScaleFactor: 2,
+    reducedMotion: "no-preference",
   });
   const page = await context.newPage();
   page.on("pageerror", (e) => {
@@ -111,7 +117,7 @@ try {
       };
     });
     if (st.errored) throw new Error(`${backend} errored: ${st.errText.slice(0, 500)}`);
-    if (!st.busy && st.metaN >= 13 && st.surfaces >= st.metaN) { ready = true; break; }
+    if (!st.busy && st.metaN >= 14 && st.surfaces >= st.metaN) { ready = true; break; }
     if (tick % 20 === 0) {
       console.error(`  …${backend} [${tick}s] busy=${st.busy} hosts=${st.hosts} surfaces=${st.surfaces} meta=${st.metaN} title=${JSON.stringify(st.title || "")} url=${st.url || ""}`);
     }
@@ -211,6 +217,7 @@ try {
       hi: hi ? {
         tag: hi.tagName.toLowerCase(),
         fill: hi.getAttribute("fill"),
+        stroke: hi.getAttribute("stroke"),
         width: hi.getAttribute("stroke-width"),
         opacity: hi.getAttribute("stroke-opacity"),
         r: hi.getAttribute("r"), cx: hi.getAttribute("cx"), cy: hi.getAttribute("cy"),
@@ -220,14 +227,6 @@ try {
       sel: sr.querySelector("g.sel")?.children.length ?? 0,
     };
   }, [key, x, y, type]);
-
-  const leave = (key) => page.evaluate((k) => {
-    const span = document.querySelector(`#coords_${k}`);
-    const hosts = [...document.querySelectorAll(".ip-host")];
-    const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
-    let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
-    sr.querySelector(".surface").dispatchEvent(new MouseEvent("mouseleave", { bubbles: true }));
-  }, key);
 
   const textOf = (sel) => page.evaluate((q) => document.querySelector(q)?.innerText ?? "", sel);
 
@@ -338,9 +337,7 @@ try {
 
     if (spec.selected === "wash") {
       const wash = m.kids.find((k) => k.kind === "closed");
-      if (!wash || wash.fill !== WASH || wash.stroke !== INK || wash.width !== "2.5") {
-        throw new Error(`${key}: wash recipe ${JSON.stringify(wash)}`);
-      }
+      assertWash(wash, key);
       if (spec.halo) {
         const hp = hitPoint(layer, spec.selectedIndex);
         if (String(Number(wash.r)) !== String(hp.r + 2)) {
@@ -361,11 +358,7 @@ try {
       passed.push(`${key}/selected-wash`);
     } else if (spec.selected === "ring") {
       const ring = m.kids.find((k) => k.kind === "ring");
-      if (!ring || ring.lines.length !== 2) throw new Error(`${key}: ring ${JSON.stringify(ring)}`);
-      const widths = ring.lines.map((l) => l.width).sort().join(",");
-      if (widths !== "2,4" || !ring.lines.every((l) => l.fill === "none" && l.stroke === INK)) {
-        throw new Error(`${key}: ring recipe ${JSON.stringify(ring)}`);
-      }
+      assertRing(ring, key);
       const hp = hitPoint(layer, spec.selectedIndex);
       const ln = ring.lines[0];
       if (hp.x1 != null && (Math.abs(Number(ln.x1) - hp.x1) > 1.2 || Math.abs(Number(ln.y1) - hp.y1) > 1.2)) {
@@ -389,17 +382,13 @@ try {
       await new Promise((r) => setTimeout(r, 200));
     }
     if (!tipHit(tip)) throw new Error(`${key}: tooltip ${JSON.stringify(tip)}`);
-    if (!tip.hi) throw new Error(`${key}: missing hover stroke`);
-    if (tip.hi.fill !== "none" || tip.hi.width !== "2" || tip.hi.opacity !== "0.85") {
-      throw new Error(`${key}: hover recipe ${JSON.stringify(tip.hi)}`);
-    }
+    assertHoverRecipe(tip.hi, key);
+    assertNoAlertRed(m.kids, `${key}/sel`);
     const hiStable = await page.evaluate(([k, ix, iy]) => {
       const span = document.querySelector(`#coords_${k}`);
       const hosts = [...document.querySelectorAll(".ip-host")];
       const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
       let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
-      const first = sr.querySelector("g.hi")?.firstElementChild;
-      if (!first) return { ok: false, reason: "no hover node" };
       const b = host.querySelector("img, canvas").getBoundingClientRect();
       const outW = sr.querySelector("svg").viewBox.baseVal.width;
       const s = b.width / outW;
@@ -407,11 +396,22 @@ try {
         bubbles: true, composed: true, cancelable: true,
         clientX: b.left + ix * s, clientY: b.top + iy * s,
       };
-      sr.querySelector(".surface").dispatchEvent(new MouseEvent("mousemove", o));
+      const surface = sr.querySelector(".surface");
+      surface.dispatchEvent(new MouseEvent("mousemove", o));
+      const first = sr.querySelector("g.hi")?.firstElementChild;
+      if (!first) return { ok: false, reason: "no hover node", firstEnter: false };
+      surface.dispatchEvent(new MouseEvent("mousemove", {
+        ...o, clientX: o.clientX + 1, clientY: o.clientY + 1,
+      }));
       const second = sr.querySelector("g.hi")?.firstElementChild;
-      return { ok: first === second, reason: first === second ? "" : "hover remounted" };
+      return {
+        ok: first === second,
+        reason: first === second ? "" : "hover remounted",
+        firstEnter: first.classList.contains("holo-enter"),
+      };
     }, [key, hoverPt.x, hoverPt.y]);
-    if (!hiStable.ok) throw new Error(`${key}: hover node unstable (${hiStable.reason})`);
+    assertRemountStable(hiStable, key);
+    passed.push(`${key}/no-pulse`);
     if (spec.halo && tip.hi?.r != null) {
       const hp = hitPoint(layer, spec.selectedIndex);
       if (String(Number(tip.hi.r)) !== String(hp.r + 2)) {
@@ -425,7 +425,20 @@ try {
     passed.push(`${key}/tooltip`);
     passed.push(`${key}/hover`);
 
-    await leave(key);
+    const fade = await page.evaluate((k) => {
+      const span = document.querySelector(`#coords_${k}`);
+      const hosts = [...document.querySelectorAll(".ip-host")];
+      const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
+      let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
+      sr.querySelector(".surface").dispatchEvent(new MouseEvent("mouseleave", { bubbles: true }));
+      const hi = sr.querySelector("g.hi")?.firstElementChild;
+      return {
+        hi: sr.querySelector("g.hi")?.children.length ?? 0,
+        leaving: !!(hi && hi.classList.contains("holo-leave")),
+      };
+    }, key);
+    assertLeaveFade(fade, key);
+    passed.push(`${key}/remount-fade`);
     let afterLeave = await inspect(key);
     for (let a = 0; a < 8 && afterLeave.hi !== 0; a++) {
       await new Promise((r) => setTimeout(r, 25));
@@ -461,6 +474,36 @@ try {
     }
     passed.push(`${key}/click-bind`);
     console.error(`OK  ${key} — ${after.slice(0, 110)}`);
+  }
+
+  const schemeSpec = meta.find((s) => s.key === "scatter") || meta.find((s) => s.mode === "element");
+  if (!schemeSpec) throw new Error("no scatter/element spec for prefers-color-scheme");
+  {
+    const slayers = await layersOf(schemeSpec.key);
+    const slayer = findLayer(slayers, schemeSpec);
+    const spt = hitPoint(slayer, schemeSpec.selectedIndex);
+    await assertTooltipColorScheme(page, {
+      css: () => page.evaluate((k) => {
+        const span = document.querySelector(`#coords_${k}`);
+        const hosts = [...document.querySelectorAll(".ip-host")];
+        const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
+        let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
+        return sr.querySelector("style")?.textContent || "";
+      }, schemeSpec.key),
+      computed: async () => {
+        await dispatchAt(schemeSpec.key, spt.x, spt.y, "pointermove");
+        return page.evaluate((k) => {
+          const span = document.querySelector(`#coords_${k}`);
+          const hosts = [...document.querySelectorAll(".ip-host")];
+          const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
+          let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
+          const t = sr.querySelector(".holo-tip");
+          const cs = getComputedStyle(t);
+          return { bg: cs.backgroundColor, color: cs.color, show: t?.classList.contains("show") };
+        }, schemeSpec.key);
+      },
+    });
+    passed.push("prefers-color-scheme");
   }
 
   if (unexpected.length) throw new Error(`page errors: ${unexpected.join(" | ")}`);

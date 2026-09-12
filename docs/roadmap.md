@@ -11,7 +11,9 @@ map), `frontend-delivery.md` (build/delivery). Priorities, not promises — reor
 - **Fail loud, never silently wrong** (per-capability `validate`).
 - **YAGNI**: build a surface/feature when a real use pulls for it, not preemptively.
 - **Live-verify on every supported backend** (today CairoMakie + WGLMakie / `:webgl`; same rule
-  for any future backend) before calling a user-facing change done — see `CLAUDE.md`.
+  for any future backend) before calling a user-facing change done — **interaction and
+  visual**, across the interactable kinds, via `docs/live-interaction-checklist.md` (see
+  `CLAUDE.md`).
 
 ## Status — v0.1 (done)
 Backend seam (CairoBackend) · `AbstractInteractable` + `HitLayer` · 5 built-ins
