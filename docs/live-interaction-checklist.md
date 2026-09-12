@@ -62,6 +62,7 @@ hover/click or drag only.
 - Hover stroke **centered on the mark** (not offset onto the host)
 - Circles: halo **just outside** the marker (`r + 2`)
 - Hover is stroke-only (`fill: none`, 2px, opacity 0.85) — no wash
+- Hover node is the same DOM element across two moves on the same marker (no pulse)
 
 ### Unhover + selected persist (supported kinds)
 

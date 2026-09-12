@@ -9,7 +9,6 @@ const SVG_NS = "http://www.w3.org/2000/svg"
 // Inspector ink — locked first-polish default (visual-design.md). Not a theming API.
 const INSPECTOR_INK = "#3A6F7C"
 const DEFAULT_STYLE = { stroke: INSPECTOR_INK, width: 2 }
-const SELECTED_WASH = "rgba(58, 111, 124, 0.12)"
 const TIP_GAP = 8
 const TIP_OFFSET = 10
 const MOTION_MS = 100 // 80–120 ms window; prefers-reduced-motion disables below
@@ -21,8 +20,10 @@ const STYLE = `
 .surface.grab { cursor: grab; }
 .surface.grabbing { cursor: grabbing; }
 svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-g.hi > *, g.sel > * { animation: holo-in ${MOTION_MS}ms ease-out; }
+.holo-enter { animation: holo-in ${MOTION_MS}ms ease-out; }
+.holo-leave { animation: holo-out ${MOTION_MS}ms ease-in forwards; }
 @keyframes holo-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes holo-out { from { opacity: 1 } to { opacity: 0 } }
 .holo-tip { position: absolute; opacity: 0; pointer-events: none; z-index: 10;
        padding: var(--holo-tip-padding, 8px 12px); border-radius: var(--holo-tip-radius, 4px);
        background: var(--holo-tip-bg, #ffffff); color: var(--holo-tip-color, #1a1a1a);
@@ -49,7 +50,7 @@ g.hi > *, g.sel > * { animation: holo-in ${MOTION_MS}ms ease-out; }
   .holo-tip.flip-y::before { border-top-color: var(--holo-tip-bg, #1e1e1e); }
 }
 @media (prefers-reduced-motion: reduce) {
-  g.hi > *, g.sel > * { animation: none; }
+  .holo-enter, .holo-leave { animation: none; }
   .holo-tip { transition: none; }
 }
 `
@@ -221,12 +222,72 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         return `x:[${fmt(lim.xmin)}, ${fmt(lim.xmax)}] y:[${fmt(lim.ymin)}, ${fmt(lim.ymax)}]`
     }
 
-    const clearHi = () => { while (hiGroup.firstChild) hiGroup.removeChild(hiGroup.firstChild) }
-    const clearSel = () => { while (selGroup.firstChild) selGroup.removeChild(selGroup.firstChild) }
-    const drawHi = (hit: Hit) => { clearHi(); const el = makeHiElement(hit, "hover"); if (el) hiGroup.appendChild(el) }
-    const drawSelection = (hits: Hit[]) => { clearSel(); for (const h of hits) { const el = makeHiElement(h, "selected"); if (el) selGroup.appendChild(el) } }
+    const hitKey = (h: Hit) => `${h.layer.id}:${h.index}`
+    const prefersReducedMotion = () =>
+        typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches
+    let hiKey: string | null = null
+    let selKeys = new Set<string>()
+    let hiLeaveTimer: ReturnType<typeof setTimeout> | null = null
+    let tipFlipTimer: ReturnType<typeof setTimeout> | null = null
 
-    const hideTip = () => { tip.classList.remove("show", "flip-x", "flip-y") }
+    const clearHiImmediate = () => {
+        if (hiLeaveTimer != null) { clearTimeout(hiLeaveTimer); hiLeaveTimer = null }
+        hiKey = null
+        while (hiGroup.firstChild) hiGroup.removeChild(hiGroup.firstChild)
+    }
+    // Fade-out is hover-only (leave / miss). selects-ROI remounts g.sel every drag
+    // frame — a leave class there would wash the box-select on every pointer tick.
+    const clearHi = (fade = false) => {
+        if (!fade || !hiGroup.firstChild || prefersReducedMotion()) {
+            clearHiImmediate()
+            return
+        }
+        hiKey = null
+        for (const el of [...hiGroup.children]) {
+            el.classList.remove("holo-enter")
+            el.classList.add("holo-leave")
+        }
+        if (hiLeaveTimer != null) clearTimeout(hiLeaveTimer)
+        hiLeaveTimer = setTimeout(() => {
+            hiLeaveTimer = null
+            while (hiGroup.firstChild) hiGroup.removeChild(hiGroup.firstChild)
+        }, MOTION_MS)
+    }
+    const clearSel = () => { while (selGroup.firstChild) selGroup.removeChild(selGroup.firstChild) }
+    const drawHi = (hit: Hit) => {
+        const key = hitKey(hit)
+        const cur = hiGroup.firstElementChild
+        if (key === hiKey && cur && !cur.classList.contains("holo-leave")) return
+        clearHiImmediate()
+        const el = makeHiElement(hit, "hover")
+        if (!el) return
+        el.classList.add("holo-enter")
+        hiGroup.appendChild(el)
+        hiKey = key
+    }
+    const drawSelection = (hits: Hit[]) => {
+        const next = new Set(hits.map(hitKey))
+        const entering = new Set<string>()
+        for (const k of next) if (!selKeys.has(k)) entering.add(k)
+        clearSel()
+        for (const h of hits) {
+            const el = makeHiElement(h, "selected")
+            if (!el) continue
+            if (entering.has(hitKey(h))) el.classList.add("holo-enter")
+            selGroup.appendChild(el)
+        }
+        selKeys = next
+    }
+
+    const hideTip = () => {
+        tip.classList.remove("show")
+        if (tipFlipTimer != null) clearTimeout(tipFlipTimer)
+        const delay = prefersReducedMotion() ? 0 : MOTION_MS
+        tipFlipTimer = setTimeout(() => {
+            tipFlipTimer = null
+            if (!tip.classList.contains("show")) tip.classList.remove("flip-x", "flip-y")
+        }, delay)
+    }
     const tipOffset = (e: MouseEvent) => {
         const r = surface.getBoundingClientRect()
         if (r.width > 0 && r.height > 0) return { x: e.clientX - r.left, y: e.clientY - r.top }
@@ -277,7 +338,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         // Full-viewport :view must not suppress element hover — only sparse Tier-0
         // drag targets (threshold / ROI) take the grab early-return.
         if (dragHit && dragHit.layer.kind !== "view") {
-            clearHi(); hideTip()
+            clearHi(true); hideTip()
             surface.classList.add("grab"); surface.classList.remove("hot")
             return
         }
@@ -286,11 +347,11 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         if (hit) {
             drawHi(hit); showTip(hit, p.x, p.y, e); surface.classList.add("hot")
         } else {
-            clearHi(); hideTip(); surface.classList.remove("hot")
+            clearHi(true); hideTip(); surface.classList.remove("hot")
             if (dragHit?.layer.kind === "view") surface.classList.add("grab")
         }
     }
-    const onLeave = () => { clearHi(); hideTip() }
+    const onLeave = () => { clearHi(true); hideTip() }
     const onDown = (e: MouseEvent) => {
         justDragged = false
         const p = imgPx(e)
@@ -444,6 +505,8 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         window.removeEventListener("resize", syncOverlayToBase)
         overlayRO?.disconnect()
         overlayFrames = 24
+        if (hiLeaveTimer != null) clearTimeout(hiLeaveTimer)
+        if (tipFlipTimer != null) clearTimeout(tipFlipTimer)
         shadowHost.remove()
     }
     invalidation?.then(cleanup)
@@ -457,7 +520,7 @@ type HiMode = "hover" | "selected"
 
 function colorWithAlpha(stroke: string, a: number): string {
     const m = /^#([0-9a-f]{6})$/i.exec(stroke.trim())
-    if (!m) return SELECTED_WASH
+    if (!m) return `color-mix(in srgb, ${stroke} ${Math.round(a * 100)}%, transparent)`
     const n = parseInt(m[1], 16)
     return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${a})`
 }

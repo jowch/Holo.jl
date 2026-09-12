@@ -37,7 +37,7 @@
             ],
             "axis": "ax1",
             "style": {
-                "width": 3,
+                "width": 2,
                 "stroke": "#3A6F7C"
             },
             "events": [
@@ -66,7 +66,7 @@
             ],
             "axis": "ax1",
             "style": {
-                "width": 3,
+                "width": 2,
                 "stroke": "#3A6F7C"
             },
             "events": [

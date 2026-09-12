@@ -466,11 +466,12 @@ describe("tooltips (mount/showTip)", () => {
         const sel = shadow.querySelector("g.sel") as SVGGElement
         expect(sel.children.length).toBe(2)                 // BOTH indices, not just the last
         const surface = shadow.querySelector(".surface") as HTMLElement
-        // hover a non-selected element, then empty space (empty space clears g.hi)
+        // hover a non-selected element, then empty space (empty space fades g.hi)
         surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
         surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 10, clientY: 10, bubbles: true }))
         expect(sel.children.length).toBe(2)                 // pre-selection survived the hovers
-        expect((shadow.querySelector("g.hi") as SVGGElement).children.length).toBe(0)
+        const leaving = (shadow.querySelector("g.hi") as SVGGElement).firstElementChild
+        expect(leaving === null || leaving.classList.contains("holo-leave")).toBe(true)
         expect(sel.querySelector("circle")!.getAttribute("fill")).toBe("rgba(58, 111, 124, 0.12)")
     })
 
@@ -682,6 +683,74 @@ describe("overlay visual polish", () => {
     const ink = "#3A6F7C"
     const wash = "rgba(58, 111, 124, 0.12)"
 
+    it("keeps the hover node across mousemove on the same marker", () => {
+        const { host, script } = setup()
+        mount(script, manifest)
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
+        const a = shadow.querySelector("g.hi")!.firstElementChild as SVGElement
+        expect(a.classList.contains("holo-enter")).toBe(true)
+        // still inside r=20 at image (600,400); scale 2 → client (301,201) = image (602,402)
+        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 301, clientY: 201, bubbles: true }))
+        const b = shadow.querySelector("g.hi")!.firstElementChild as SVGElement
+        expect(b).toBe(a)
+    })
+
+    it("does not re-animate a same-key selection when the wash remounts", () => {
+        const { host, script } = setup()
+        mount(script, {
+            width: 1200, height: 800, scaling: 2,
+            transforms: { ax1: { xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
+                viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false } },
+            layers: [
+                { id: "img", kind: "grid", axis: "ax1", events: ["hover"], payloads: [],
+                    geometry: { xedges: [0, 200, 400, 600], yedges: [0, 200, 400, 600], ncols: 3, nrows: 3 } },
+                { id: "roi", kind: "roi", axis: "ax1", events: ["drag"], payloads: [],
+                    selects: "img", geometry: { x: 100, y: 100, w: 300, h: 300, handle: 16 } },
+            ],
+        })
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 125, clientY: 125, bubbles: true }))
+        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 130, clientY: 125, bubbles: true }))
+        const a = shadow.querySelector("g.sel")!.firstElementChild as SVGElement
+        expect(a.classList.contains("holo-enter")).toBe(true)
+        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 135, clientY: 125, bubbles: true }))
+        const b = shadow.querySelector("g.sel")!.firstElementChild as SVGElement
+        expect(b).not.toBe(a)
+        expect(b.classList.contains("holo-enter")).toBe(false)
+        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 135, clientY: 125, bubbles: true }))
+    })
+
+    it("selected wash keeps the layer stroke hue when stroke is not #RRGGBB", () => {
+        const { host, script } = setup()
+        mount(script, {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [{
+                id: "pts", kind: "circles", geometry: [300, 200, 20],
+                payloads: [{ i: 0 }], axis: "ax1", events: ["click", "hover"], selected: [0],
+                style: { stroke: "steelblue", width: 2 },
+            }],
+        })
+        const el = shadowOf(host).querySelector("g.sel")!.firstElementChild as SVGElement
+        expect(el.getAttribute("fill")).toBe("color-mix(in srgb, steelblue 12%, transparent)")
+        expect(el.getAttribute("stroke")).toBe("steelblue")
+    })
+
+    it("fades hover chrome out instead of instant remove", async () => {
+        const { host, script } = setup()
+        mount(script, manifest)
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new MouseEvent("mouseleave", { bubbles: true }))
+        const leaving = shadow.querySelector("g.hi")!.firstElementChild as SVGElement
+        expect(leaving.classList.contains("holo-leave")).toBe(true)
+        await new Promise((r) => setTimeout(r, 120))
+        expect(shadow.querySelector("g.hi")!.children.length).toBe(0)
+    })
+
     it("hover is stroke-only inspector ink (2px, opacity 0.85, fill none)", () => {
         const { host, script } = setup()
         mount(script, manifest)
@@ -838,7 +907,7 @@ describe("overlay visual polish", () => {
         expect(css).toMatch(/opacity/)
     })
 
-    it("clamps the tip and flips the caret near the bottom-right edge", () => {
+    it("clamps the tip and flips the caret near the bottom-right edge", async () => {
         const { host, script } = setup()
         // axis layer: hover anywhere inside the viewport so we can park the cursor at the edge
         mount(script, {
@@ -865,5 +934,12 @@ describe("overlay visual polish", () => {
         expect(top + 80).toBeLessThanOrEqual(400)
         expect(left).toBeGreaterThanOrEqual(0)
         expect(top).toBeGreaterThanOrEqual(0)
+        surface.dispatchEvent(new MouseEvent("mouseleave", { bubbles: true }))
+        expect(tip.classList.contains("show")).toBe(false)
+        expect(tip.classList.contains("flip-x")).toBe(true)
+        expect(tip.classList.contains("flip-y")).toBe(true)
+        await new Promise((r) => setTimeout(r, 120))
+        expect(tip.classList.contains("flip-x")).toBe(false)
+        expect(tip.classList.contains("flip-y")).toBe(false)
     })
 })

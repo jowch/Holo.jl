@@ -389,9 +389,29 @@ try {
       await new Promise((r) => setTimeout(r, 200));
     }
     if (!tipHit(tip)) throw new Error(`${key}: tooltip ${JSON.stringify(tip)}`);
-    if (tip.hi && (tip.hi.fill !== "none" || tip.hi.width !== "2" || tip.hi.opacity !== "0.85")) {
+    if (!tip.hi) throw new Error(`${key}: missing hover stroke`);
+    if (tip.hi.fill !== "none" || tip.hi.width !== "2" || tip.hi.opacity !== "0.85") {
       throw new Error(`${key}: hover recipe ${JSON.stringify(tip.hi)}`);
     }
+    const hiStable = await page.evaluate(([k, ix, iy]) => {
+      const span = document.querySelector(`#coords_${k}`);
+      const hosts = [...document.querySelectorAll(".ip-host")];
+      const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
+      let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
+      const first = sr.querySelector("g.hi")?.firstElementChild;
+      if (!first) return { ok: false, reason: "no hover node" };
+      const b = host.querySelector("img, canvas").getBoundingClientRect();
+      const outW = sr.querySelector("svg").viewBox.baseVal.width;
+      const s = b.width / outW;
+      const o = {
+        bubbles: true, composed: true, cancelable: true,
+        clientX: b.left + ix * s, clientY: b.top + iy * s,
+      };
+      sr.querySelector(".surface").dispatchEvent(new MouseEvent("mousemove", o));
+      const second = sr.querySelector("g.hi")?.firstElementChild;
+      return { ok: first === second, reason: first === second ? "" : "hover remounted" };
+    }, [key, hoverPt.x, hoverPt.y]);
+    if (!hiStable.ok) throw new Error(`${key}: hover node unstable (${hiStable.reason})`);
     if (spec.halo && tip.hi?.r != null) {
       const hp = hitPoint(layer, spec.selectedIndex);
       if (String(Number(tip.hi.r)) !== String(hp.r + 2)) {
@@ -406,7 +426,11 @@ try {
     passed.push(`${key}/hover`);
 
     await leave(key);
-    const afterLeave = await inspect(key);
+    let afterLeave = await inspect(key);
+    for (let a = 0; a < 8 && afterLeave.hi !== 0; a++) {
+      await new Promise((r) => setTimeout(r, 25));
+      afterLeave = await inspect(key);
+    }
     if (afterLeave.hi !== 0) throw new Error(`${key}: g.hi lingered ${afterLeave.hi}`);
     if (spec.selected && afterLeave.sel < 1) throw new Error(`${key}: g.sel dropped on unhover`);
     if (spec.selected) passed.push(`${key}/selected-survives-unhover`);
