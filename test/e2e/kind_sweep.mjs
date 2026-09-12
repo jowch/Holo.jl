@@ -387,8 +387,6 @@ try {
       const hosts = [...document.querySelectorAll(".ip-host")];
       const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
       let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
-      const first = sr.querySelector("g.hi")?.firstElementChild;
-      if (!first) return { ok: false, reason: "no hover node", firstEnter: false };
       const b = host.querySelector("img, canvas").getBoundingClientRect();
       const outW = sr.querySelector("svg").viewBox.baseVal.width;
       const s = b.width / outW;
@@ -396,7 +394,13 @@ try {
         bubbles: true, composed: true, cancelable: true,
         clientX: b.left + ix * s, clientY: b.top + iy * s,
       };
-      sr.querySelector(".surface").dispatchEvent(new MouseEvent("mousemove", o));
+      const surface = sr.querySelector(".surface");
+      surface.dispatchEvent(new MouseEvent("mousemove", o));
+      const first = sr.querySelector("g.hi")?.firstElementChild;
+      if (!first) return { ok: false, reason: "no hover node", firstEnter: false };
+      surface.dispatchEvent(new MouseEvent("mousemove", {
+        ...o, clientX: o.clientX + 1, clientY: o.clientY + 1,
+      }));
       const second = sr.querySelector("g.hi")?.firstElementChild;
       return {
         ok: first === second,
