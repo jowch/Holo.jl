@@ -100,6 +100,12 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     host.appendChild(shadowHost)
     if (manifest.tipStyle) for (const [k, v] of Object.entries(manifest.tipStyle)) shadowHost.style.setProperty(k, v)
 
+    let tipHtml = ""
+    let tipW = 0, tipH = 0, tipSized = false
+    let surfaceW = 0, surfaceH = 0, surfaceSized = false
+    let pendingMove: MouseEvent | null = null
+    let moveRaf = 0
+
     // Pin the overlay to the BASE (img/canvas), not the host. WGLMakie can size the
     // <canvas> differently from `.ip-host` (DPR / setup_scene_init), which left g.sel
     // sitting beside the marker when the SVG was `inset:0` on the host.
@@ -111,6 +117,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         shadowHost.style.top = `${br.top - hr.top}px`
         shadowHost.style.width = `${br.width}px`
         shadowHost.style.height = `${br.height}px`
+        surfaceSized = false
     }
     syncOverlayToBase()
     const overlayRO = typeof ResizeObserver !== "undefined" ? new ResizeObserver(syncOverlayToBase) : null
@@ -294,8 +301,15 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         return { x: e.offsetX || e.clientX, y: e.offsetY || e.clientY }
     }
     const placeTip = (ox: number, oy: number) => {
-        const tw = tip.offsetWidth, th = tip.offsetHeight
-        const hw = surface.clientWidth, hh = surface.clientHeight
+        if (!tipSized) {
+            tipW = tip.offsetWidth; tipH = tip.offsetHeight
+            tipSized = tipW > 0 && tipH > 0
+        }
+        if (!surfaceSized) {
+            surfaceW = surface.clientWidth; surfaceH = surface.clientHeight
+            surfaceSized = surfaceW > 0 && surfaceH > 0
+        }
+        const tw = tipW, th = tipH, hw = surfaceW, hh = surfaceH
         tip.classList.remove("flip-x", "flip-y")
         if (tw <= 0 || th <= 0 || hw <= 0 || hh <= 0) {
             tip.style.left = `${ox + TIP_OFFSET}px`
@@ -325,13 +339,24 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         } else {
             html = renderAutoTable(hit.layer.payloads[hit.index])
         }
-        tip.innerHTML = html
+        if (html !== tipHtml) {
+            tip.innerHTML = html
+            tipHtml = html
+            tipSized = false
+        }
         tip.classList.add("show")
         const p = tipOffset(e)
         placeTip(p.x, p.y)
     }
 
-    const onMove = (e: MouseEvent) => {
+    const setTipText = (s: string) => {
+        if (s === tipHtml) return
+        tip.textContent = s
+        tipHtml = s
+        tipSized = false
+    }
+
+    const applyMove = (e: MouseEvent) => {
         if (drag) return // window-level onDrag owns the pointer mid-drag
         const p = imgPx(e)
         const dragHit = hitTest(manifest, p.x, p.y, "drag")
@@ -351,8 +376,28 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
             if (dragHit?.layer.kind === "view") surface.classList.add("grab")
         }
     }
-    const onLeave = () => { clearHi(true); hideTip() }
+    const onMove = (e: MouseEvent) => {
+        if (pendingMove !== null) { pendingMove = e; return }
+        applyMove(e)
+        if (typeof requestAnimationFrame !== "function") return
+        pendingMove = e
+        moveRaf = requestAnimationFrame(() => {
+            moveRaf = 0
+            const last = pendingMove
+            pendingMove = null
+            if (last && last !== e) applyMove(last)
+        })
+    }
+    const cancelPendingMove = () => {
+        if (moveRaf) {
+            cancelAnimationFrame(moveRaf)
+            moveRaf = 0
+        }
+        pendingMove = null
+    }
+    const onLeave = () => { cancelPendingMove(); clearHi(true); hideTip() }
     const onDown = (e: MouseEvent) => {
+        cancelPendingMove()
         justDragged = false
         const p = imgPx(e)
         // Shift+drag forces view (arbitration vs box-select / ROI / threshold).
@@ -399,9 +444,9 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
             const pos = drag.tg.orientation === "h" ? clampY(drag.t, p.y) : clampX(drag.t, p.x)
             setLine(drag.line, drag.tg, pos)
             const v = invertAxis(drag.t, clampX(drag.t, p.x), clampY(drag.t, p.y))
-            tip.textContent = fmt(drag.tg.orientation === "h" ? v.y : v.x)
+            setTipText(fmt(drag.tg.orientation === "h" ? v.y : v.x))
         } else if (drag.kind === "view") {
-            tip.textContent = viewTip(drag, p)
+            setTipText(viewTip(drag, p))
         } else {
             const box = drag.box, [vx, vy, vw, vh] = box.t.viewport
             if ("move" in drag.mode) {
@@ -416,10 +461,10 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
             if (drag.target) {
                 const sel = computeSelection(box.g, drag.target, manifest.transforms[drag.target.axis])
                 drawSelection(sel.hits)
-                tip.textContent = `${sel.items.length} selected`
+                setTipText(`${sel.items.length} selected`)
             } else {
                 const b = roiBounds(box)
-                tip.textContent = `x:[${fmt(b.xmin)}, ${fmt(b.xmax)}] y:[${fmt(b.ymin)}, ${fmt(b.ymax)}]`
+                setTipText(`x:[${fmt(b.xmin)}, ${fmt(b.xmax)}] y:[${fmt(b.ymin)}, ${fmt(b.ymax)}]`)
             }
         }
         tip.classList.add("show")
@@ -427,6 +472,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         placeTip(tp.x, tp.y)
     }
     const onUp = (e: MouseEvent) => {
+        cancelPendingMove()
         if (!drag) return
         const p = imgPx(e)
         if (drag.kind === "roi" && drag.target) {
@@ -505,6 +551,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         window.removeEventListener("resize", syncOverlayToBase)
         overlayRO?.disconnect()
         overlayFrames = 24
+        cancelPendingMove()
         if (hiLeaveTimer != null) clearTimeout(hiLeaveTimer)
         if (tipFlipTimer != null) clearTimeout(tipFlipTimer)
         shadowHost.remove()
