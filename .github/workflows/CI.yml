@@ -31,6 +31,13 @@ jobs:
       - uses: julia-actions/julia-runtest@v1
         env:
           GROUP: Core
+      - uses: julia-actions/julia-processcoverage@v1
+      - uses: codecov/codecov-action@v5
+        with:
+          files: lcov.info
+          flags: julia-${{ matrix.version }}
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
   no-backend:
     # Holo core with NEITHER backend extension loaded — the "load a renderer" error path.
@@ -48,6 +55,13 @@ jobs:
       - uses: julia-actions/julia-runtest@v1
         env:
           GROUP: NoBackend
+      - uses: julia-actions/julia-processcoverage@v1
+      - uses: codecov/codecov-action@v5
+        with:
+          files: lcov.info
+          flags: no-backend
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
   webgl:
     # The :webgl extension isn't covered by the `julia` job (GROUP=Core loads CairoMakie
@@ -66,7 +80,14 @@ jobs:
       - name: Instantiate + test WGLMakie extension
         run: |
           julia --project=. -e 'using Pkg; Pkg.instantiate()'
-          GROUP=WebGL julia --project=. -e 'using Pkg; Pkg.test()'
+          GROUP=WebGL julia --project=. -e 'using Pkg; Pkg.test(; coverage=true)'
+      - uses: julia-actions/julia-processcoverage@v1
+      - uses: codecov/codecov-action@v5
+        with:
+          files: lcov.info
+          flags: webgl
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
       # Real-browser @bind round-trip: generate the self-contained widget page, then click
       # scatter marker 0 in headless Chromium and assert the overlay emits the right bond

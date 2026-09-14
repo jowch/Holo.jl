@@ -1,6 +1,7 @@
 # Holo.jl
 
 [![CI](https://github.com/jowch/Holo.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/jowch/Holo.jl/actions/workflows/CI.yml)
+[![codecov](https://codecov.io/gh/jowch/Holo.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/jowch/Holo.jl)
 
 **Light, server-free interactivity for Makie plots in Pluto — the same interactions on either
 backend: CairoMakie (static base) by default, or WGLMakie (live base) for animation / large
