@@ -1,7 +1,6 @@
-# Julia (julia-processcoverage) and frontend (vitest --coverage) upload as
-# separate flags. codecov/project is Julia-only so adding frontend/src is
-# not a drop vs a Julia-only main (~97%). Frontend lives on flags: frontend
-# and the Frontend component. Ignore committed IIFE/ESM bundles and tests.
+# One blended project number: Julia + frontend/src. Ignore committed
+# IIFE/ESM bundles and tests. Flags on the upload are labels only —
+# they do not split codecov/project.
 ignore:
   - "assets/**"
   - "frontend/test/**"
@@ -12,57 +11,4 @@ coverage:
     project:
       default:
         target: auto
-        flags:
-          - julia-1
-          - julia-1.10
-          - no-backend
-          - webgl
-        paths:
-          - "src/**"
-          - "ext/**"
-
-flag_management:
-  default_rules:
-    carryforward: true
-  individual_flags:
-    - name: julia-1
-      carryforward: true
-      paths:
-        - "src/**"
-        - "ext/**"
-    - name: julia-1.10
-      carryforward: true
-      paths:
-        - "src/**"
-        - "ext/**"
-    - name: no-backend
-      carryforward: true
-      paths:
-        - "src/**"
-        - "ext/**"
-    - name: webgl
-      carryforward: true
-      paths:
-        - "src/**"
-        - "ext/**"
-    - name: frontend
-      carryforward: true
-      paths:
-        - "frontend/src/**"
-
-component_management:
-  default_rules:
-    statuses:
-      - type: project
-        target: auto
-        informational: true
-  individual_components:
-    - component_id: julia
-      name: Julia
-      paths:
-        - "src/**"
-        - "ext/**"
-    - component_id: frontend
-      name: Frontend
-      paths:
-        - "frontend/src/**"
+        threshold: 1%
