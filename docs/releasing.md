@@ -119,5 +119,7 @@ commit's GitHub page**. TagBot tags. CompatHelper is not part of this path
 ## What this path does not do
 
 - Does not register from a feature branch or from this prep PR.
-- Does not ship a Documenter site (still YAGNI; README is the install surface).
+- User docs are Documenter (`docs/src/`) deployed to GitHub Pages
+  (`https://jowch.github.io/Holo.jl`). Design notes in this folder stay in-repo
+  and are not in the Documenter sidebar. README is the short install surface.
 - Does not un-park animation / live drag preview / `LScene`.
