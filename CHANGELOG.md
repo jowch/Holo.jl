@@ -6,6 +6,35 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Removed
+- Dead `vector`/`mount` scaffolding: `CairoBackend(; vector=false)` and the
+  `AbstractBackend` `mount` interface function (plus `WebGLBackend`'s `mount = :webgl`
+  method) had zero callers — `Holo.render` always rasterizes to PNG, and `Base.show`
+  hardcodes a PNG `<img>`. SVG output remains a roadmap item to build from scratch
+  (`docs/roadmap.md`), not groundwork already in place.
+
+### Changed
+- `hoverstyle(::AbstractInteractable, ::Int)` narrowed to `hoverstyle(::AbstractInteractable)`
+  — the manifest ships one hover style per layer, not per element; the old per-element
+  signature implied styling that was never actually per-element.
+
+### Fixed
+- `SegmentInteractable(...; mode=...)` now validates `mode` at construction
+  (`ArgumentError` for anything but `:polyline`/`:pairs`) instead of silently treating any
+  other symbol as `:pairs`.
+- `RectInteractable(ax; grid=(xedges, yedges, values))` now validates `values` has shape
+  `(length(xedges)-1, length(yedges)-1)` at construction, instead of surfacing a raw
+  `BoundsError` inside `hitlayers`.
+- `tooltip = true` (never meaningful) now fails at interactable construction, with the
+  same error message as before, instead of only failing later at manifest build.
+- `holo(fig, interactables)` finalizes the figure only after the caller has already built
+  `interactables` — unlike `holo(fig)`, which finalizes first. `SegmentInteractable`/
+  `RectInteractable` built from `HLines`/`VLines`/`HSpan`/`VSpan` plot objects could bake
+  stale `ax.finallimits[]` into the span geometry if constructed before the figure was
+  finalized. They now defer that axis-limits read to `hitlayers` time (resolved fresh
+  against the finalized axis), matching `TextInteractable`'s existing
+  construction-vs-hitlayers split for layout-dependent reads.
+
 ## [0.1.0] - 2026-09-12
 
 First General release. Frozen after drag-to-pan / drag-to-rotate
