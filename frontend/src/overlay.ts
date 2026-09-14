@@ -94,8 +94,16 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     svg.appendChild(hiGroup)
     const surface = document.createElement("div")
     surface.className = "surface"
+    // touch-action: block native scroll/pinch on the surface ONLY when this manifest has a drag
+    // interaction (threshold / ROI / view) — a hover/click-only plot (e.g. a plain scatter) must
+    // not hijack page scrolling when a finger lands on it. This has to be decided up front, not
+    // toggled per-pointerdown: UAs resolve touch-action at the touch's first contact, so setting
+    // it later has no effect on the gesture already in flight.
+    if (manifest.layers.some((l) => l.events.includes("drag"))) surface.style.touchAction = "none"
     const tip = document.createElement("div")
     tip.className = "holo-tip"
+    tip.setAttribute("role", "tooltip")
+    tip.setAttribute("aria-hidden", "true")
     shadow.append(style, svg, surface, tip)
     host.appendChild(shadowHost)
     if (manifest.tipStyle) for (const [k, v] of Object.entries(manifest.tipStyle)) shadowHost.style.setProperty(k, v)
@@ -105,6 +113,8 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     let surfaceW = 0, surfaceH = 0, surfaceSized = false
     let pendingMove: MouseEvent | null = null
     let moveRaf = 0
+    let pendingDrag: PointerEvent | null = null
+    let dragRaf = 0
 
     // Pin the overlay to the BASE (img/canvas), not the host. WGLMakie can size the
     // <canvas> differently from `.ip-host` (DPR / setup_scene_init), which left g.sel
@@ -286,8 +296,16 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         selKeys = next
     }
 
+    // role="tooltip" is static markup (set at creation); aria-hidden tracks the same visibility
+    // the "show" class drives, so assistive tech's view matches the sighted one. No keyboard path
+    // in this PR — the tooltip is exposed to AT only via the existing pointer-driven hover/drag.
+    const setTipVisible = (visible: boolean) => {
+        tip.classList.toggle("show", visible)
+        tip.setAttribute("aria-hidden", visible ? "false" : "true")
+    }
+
     const hideTip = () => {
-        tip.classList.remove("show")
+        setTipVisible(false)
         if (tipFlipTimer != null) clearTimeout(tipFlipTimer)
         const delay = prefersReducedMotion() ? 0 : MOTION_MS
         tipFlipTimer = setTimeout(() => {
@@ -344,7 +362,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
             tipHtml = html
             tipSized = false
         }
-        tip.classList.add("show")
+        setTipVisible(true)
         const p = tipOffset(e)
         placeTip(p.x, p.y)
     }
@@ -357,7 +375,9 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     }
 
     const applyMove = (e: MouseEvent) => {
-        if (drag) return // window-level onDrag owns the pointer mid-drag
+        // onPointerMove routes drag-active moves to queueDrag instead — this is only ever
+        // reached with drag === null, but keep the guard as defense-in-depth.
+        if (drag) return
         const p = imgPx(e)
         const dragHit = hitTest(manifest, p.x, p.y, "drag")
         // Full-viewport :view must not suppress element hover — only sparse Tier-0
@@ -396,7 +416,22 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         pendingMove = null
     }
     const onLeave = () => { cancelPendingMove(); clearHi(true); hideTip() }
-    const onDown = (e: MouseEvent) => {
+    // setPointerCapture throws InvalidPointerId if the UA doesn't consider this pointerId active
+    // (observed live in Chromium for a synthetic/non-primary pointerId — real touch/pen input can
+    // hit the same path). An uncaught throw here would abort onDown before `e.preventDefault()`,
+    // so swallow it: the drag still proceeds on `drag`/"grabbing" state alone, just without the
+    // "events keep targeting `surface` even off-element" guarantee capture would otherwise add.
+    const tryCapture = (pointerId: number) => {
+        try {
+            surface.setPointerCapture(pointerId)
+        } catch {
+            /* not capturable — drag proceeds uncaptured */
+        }
+    }
+    const onDown = (e: PointerEvent) => {
+        // A drag is already in progress (e.g. a second concurrent touch) — refuse to let a new
+        // pointer overwrite the first one's `drag` and pointer capture mid-gesture.
+        if (drag) return
         cancelPendingMove()
         justDragged = false
         const p = imgPx(e)
@@ -409,6 +444,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
             if (viewLayer) {
                 startViewDrag(viewLayer, p)
                 surface.classList.add("grabbing")
+                tryCapture(e.pointerId)
                 e.preventDefault()
                 return
             }
@@ -435,31 +471,34 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
             startViewDrag(hit.layer, p)
         } else return
         surface.classList.add("grabbing")
+        tryCapture(e.pointerId)
         e.preventDefault()
     }
-    const onDrag = (e: MouseEvent) => {
-        if (!drag) return
+    // Takes the drag explicitly rather than reading the outer `drag` — onUp/onCancel null that
+    // out before this can run (see the reentrancy note there), so a stale read here would apply
+    // to a gesture that's already been discarded.
+    const applyDrag = (d: Drag, e: PointerEvent) => {
         const p = imgPx(e)
-        if (drag.kind === "threshold") {
-            const pos = drag.tg.orientation === "h" ? clampY(drag.t, p.y) : clampX(drag.t, p.x)
-            setLine(drag.line, drag.tg, pos)
-            const v = invertAxis(drag.t, clampX(drag.t, p.x), clampY(drag.t, p.y))
-            setTipText(fmt(drag.tg.orientation === "h" ? v.y : v.x))
-        } else if (drag.kind === "view") {
-            setTipText(viewTip(drag, p))
+        if (d.kind === "threshold") {
+            const pos = d.tg.orientation === "h" ? clampY(d.t, p.y) : clampX(d.t, p.x)
+            setLine(d.line, d.tg, pos)
+            const v = invertAxis(d.t, clampX(d.t, p.x), clampY(d.t, p.y))
+            setTipText(fmt(d.tg.orientation === "h" ? v.y : v.x))
+        } else if (d.kind === "view") {
+            setTipText(viewTip(d, p))
         } else {
-            const box = drag.box, [vx, vy, vw, vh] = box.t.viewport
-            if ("move" in drag.mode) {
-                box.g.x = Math.max(vx, Math.min(vx + vw - box.g.w, p.x - drag.ax))
-                box.g.y = Math.max(vy, Math.min(vy + vh - box.g.h, p.y - drag.ay))
+            const box = d.box, [vx, vy, vw, vh] = box.t.viewport
+            if ("move" in d.mode) {
+                box.g.x = Math.max(vx, Math.min(vx + vw - box.g.w, p.x - d.ax))
+                box.g.y = Math.max(vy, Math.min(vy + vh - box.g.h, p.y - d.ay))
             } else {
                 const cx = clampX(box.t, p.x), cy = clampY(box.t, p.y)
-                box.g.x = Math.min(drag.ax, cx); box.g.y = Math.min(drag.ay, cy)
-                box.g.w = Math.abs(cx - drag.ax); box.g.h = Math.abs(cy - drag.ay)
+                box.g.x = Math.min(d.ax, cx); box.g.y = Math.min(d.ay, cy)
+                box.g.w = Math.abs(cx - d.ax); box.g.h = Math.abs(cy - d.ay)
             }
             setROI(box)
-            if (drag.target) {
-                const sel = computeSelection(box.g, drag.target, manifest.transforms[drag.target.axis])
+            if (d.target) {
+                const sel = computeSelection(box.g, d.target, manifest.transforms[d.target.axis])
                 drawSelection(sel.hits)
                 setTipText(`${sel.items.length} selected`)
             } else {
@@ -467,46 +506,101 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
                 setTipText(`x:[${fmt(b.xmin)}, ${fmt(b.xmax)}] y:[${fmt(b.ymin)}, ${fmt(b.ymax)}]`)
             }
         }
-        tip.classList.add("show")
+        setTipVisible(true)
         const tp = tipOffset(e)
         placeTip(tp.x, tp.y)
     }
-    const onUp = (e: MouseEvent) => {
+    // rAF-coalesce the drag path the same way onMove coalesces hover: apply the first event of a
+    // burst immediately, then collapse any further events that land before the next frame into one.
+    const queueDrag = (d: Drag, e: PointerEvent) => {
+        if (pendingDrag !== null) { pendingDrag = e; return }
+        applyDrag(d, e)
+        if (typeof requestAnimationFrame !== "function") return
+        pendingDrag = e
+        dragRaf = requestAnimationFrame(() => {
+            dragRaf = 0
+            const last = pendingDrag
+            pendingDrag = null
+            if (last && last !== e) applyDrag(d, last)
+        })
+    }
+    const cancelPendingDrag = () => {
+        if (dragRaf) {
+            cancelAnimationFrame(dragRaf)
+            dragRaf = 0
+        }
+        pendingDrag = null
+    }
+    const onUp = (e: PointerEvent) => {
         cancelPendingMove()
-        if (!drag) return
+        cancelPendingDrag()
+        const d = drag
+        if (!d) return
+        // Claim (null out) `drag` BEFORE releasing capture: releasePointerCapture can synchronously
+        // dispatch lostpointercapture (spec leaves the exact timing to "process pending pointer
+        // capture", which runs between dispatches — implementation-dependent), and onLostCapture
+        // also nulls `drag`. Reading the module-level `drag` after that point would see null (or a
+        // new drag, if one had already started) instead of the gesture this event belongs to — so
+        // everything below operates on the locally-claimed `d`, never the mutable `drag`.
+        drag = null
+        if (surface.hasPointerCapture(e.pointerId)) surface.releasePointerCapture(e.pointerId)
+        // Apply the release event's own position synchronously — a coalesced rAF frame may have
+        // been dropped, and the commit below (roiBounds / d.box.g) reads mutated drag state, not
+        // e, so the final visual (and the value it derives from) must come from this event.
+        applyDrag(d, e)
         const p = imgPx(e)
-        if (drag.kind === "roi" && drag.target) {
-            const sel = computeSelection(drag.box.g, drag.target, manifest.transforms[drag.target.axis])
+        if (d.kind === "roi" && d.target) {
+            const sel = computeSelection(d.box.g, d.target, manifest.transforms[d.target.axis])
             drawSelection(sel.hits)
             ;(host as unknown as { value: unknown }).value = { items: sel.items }
             host.dispatchEvent(new CustomEvent("input"))
-        } else if (drag.kind === "threshold") {
-            const v = invertAxis(drag.t, clampX(drag.t, p.x), clampY(drag.t, p.y))
-            const payload = drag.tg.orientation === "h" ? v.y : v.x
-            ;(host as unknown as { value: unknown }).value = { layer: drag.id, index: 0, payload }
+        } else if (d.kind === "threshold") {
+            const v = invertAxis(d.t, clampX(d.t, p.x), clampY(d.t, p.y))
+            const payload = d.tg.orientation === "h" ? v.y : v.x
+            ;(host as unknown as { value: unknown }).value = { layer: d.id, index: 0, payload }
             host.dispatchEvent(new CustomEvent("input"))
-        } else if (drag.kind === "view") {
-            const dist = Math.hypot(p.x - drag.x0, p.y - drag.y0)
+        } else if (d.kind === "view") {
+            const dist = Math.hypot(p.x - d.x0, p.y - d.y0)
             if (dist >= VIEW_MIN_PX) {
-                const payload = drag.g.mode === "orbit"
-                    ? orbitAngles(drag.g, drag.x0, drag.y0, p.x, p.y)
-                    : panLimits(drag.t, drag.x0, drag.y0, p.x, p.y)
-                ;(host as unknown as { value: unknown }).value = { layer: drag.id, index: 0, payload }
+                const payload = d.g.mode === "orbit"
+                    ? orbitAngles(d.g, d.x0, d.y0, p.x, p.y)
+                    : panLimits(d.t, d.x0, d.y0, p.x, p.y)
+                ;(host as unknown as { value: unknown }).value = { layer: d.id, index: 0, payload }
                 host.dispatchEvent(new CustomEvent("input"))
             }
         } else {
-            ;(host as unknown as { value: unknown }).value = { layer: drag.id, index: 0, payload: roiBounds(drag.box) }
+            ;(host as unknown as { value: unknown }).value = { layer: d.id, index: 0, payload: roiBounds(d.box) }
             host.dispatchEvent(new CustomEvent("input"))
         }
         hideTip(); surface.classList.remove("grabbing")
         // :view micro-drags (below VIEW_MIN_PX) intentionally skip commit — don't swallow
         // the synthesized click that follows, so co-mounted click layers still fire.
-        if (drag.kind === "view") {
-            const dist = Math.hypot(p.x - drag.x0, p.y - drag.y0)
+        if (d.kind === "view") {
+            const dist = Math.hypot(p.x - d.x0, p.y - d.y0)
             justDragged = dist >= VIEW_MIN_PX
         } else {
             justDragged = true
         }
+    }
+    // pointercancel: the interaction was aborted out from under us (browser-initiated gesture
+    // takeover, stylus leaving range, etc.) — unlike pointerup this is not a commit, just a clean
+    // reset so drag can't stay non-null with the cursor stuck in "grabbing".
+    const onCancel = (e: PointerEvent) => {
+        cancelPendingDrag()
+        if (!drag) return
+        drag = null // claim before releasePointerCapture, same reentrancy hazard as onUp
+        if (surface.hasPointerCapture(e.pointerId)) surface.releasePointerCapture(e.pointerId)
+        surface.classList.remove("grabbing")
+        hideTip()
+    }
+    // lostpointercapture fires after any capture release, including the explicit ones in onUp/
+    // onCancel above (where drag is already null by the time this runs — a no-op then). It's the
+    // safety net for capture being taken away some other way while a drag is still in progress.
+    const onLostCapture = () => {
+        cancelPendingDrag()
+        if (!drag) return
+        surface.classList.remove("grabbing")
+        hideTip()
         drag = null
     }
     const onClick = (e: MouseEvent) => {
@@ -518,13 +612,21 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         ;(host as unknown as { value: unknown }).value = { layer: hit.layer.id, index: hit.index, payload: resolvePayload(hit, manifest, p.x, p.y) }
         host.dispatchEvent(new CustomEvent("input"))
     }
+    // Single entry point for pointermove: while a drag owns the pointer, route to the
+    // rAF-coalesced drag path; otherwise it's hover. Pointer capture (set in onDown) keeps these
+    // events targeted at `surface` even once the pointer leaves its bounds or the viewport.
+    const onPointerMove = (e: PointerEvent) => {
+        if (drag) queueDrag(drag, e)
+        else onMove(e)
+    }
 
-    surface.addEventListener("mousemove", onMove)
-    surface.addEventListener("mouseleave", onLeave)
+    surface.addEventListener("pointerdown", onDown)
+    surface.addEventListener("pointermove", onPointerMove)
+    surface.addEventListener("pointerup", onUp)
+    surface.addEventListener("pointercancel", onCancel)
+    surface.addEventListener("pointerleave", onLeave)
+    surface.addEventListener("lostpointercapture", onLostCapture)
     surface.addEventListener("click", onClick)
-    surface.addEventListener("mousedown", onDown)
-    window.addEventListener("mousemove", onDrag)
-    window.addEventListener("mouseup", onUp)
 
     // persistent selected-state from the manifest (re-derived each render) — drawn into the
     // PERSISTENT selection group (g.sel, z-below hover), NOT the transient hover group: it
@@ -542,16 +644,18 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     }
 
     const cleanup = () => {
-        surface.removeEventListener("mousemove", onMove)
-        surface.removeEventListener("mouseleave", onLeave)
+        surface.removeEventListener("pointerdown", onDown)
+        surface.removeEventListener("pointermove", onPointerMove)
+        surface.removeEventListener("pointerup", onUp)
+        surface.removeEventListener("pointercancel", onCancel)
+        surface.removeEventListener("pointerleave", onLeave)
+        surface.removeEventListener("lostpointercapture", onLostCapture)
         surface.removeEventListener("click", onClick)
-        surface.removeEventListener("mousedown", onDown)
-        window.removeEventListener("mousemove", onDrag)
-        window.removeEventListener("mouseup", onUp)
         window.removeEventListener("resize", syncOverlayToBase)
         overlayRO?.disconnect()
         overlayFrames = 24
         cancelPendingMove()
+        cancelPendingDrag()
         if (hiLeaveTimer != null) clearTimeout(hiLeaveTimer)
         if (tipFlipTimer != null) clearTimeout(tipFlipTimer)
         shadowHost.remove()

@@ -121,9 +121,10 @@ try {
     const b = host.querySelector("img, canvas").getBoundingClientRect();
     const outW = sr.querySelector("svg").viewBox.baseVal.width;
     const s = b.width / outW;
-    sr.querySelector(".surface").dispatchEvent(new MouseEvent("mousemove", {
+    sr.querySelector(".surface").dispatchEvent(new PointerEvent("pointermove", {
       bubbles: true, composed: true, cancelable: true,
       clientX: b.left + ix * s, clientY: b.top + iy * s,
+      pointerId: 1, pointerType: "mouse", isPrimary: true,
     }));
     const t = sr.querySelector(".holo-tip");
     const hi = sr.querySelector("g.hi")?.firstElementChild;
@@ -202,12 +203,15 @@ try {
     const b = host.querySelector("img, canvas").getBoundingClientRect();
     const outW = sr.querySelector("svg").viewBox.baseVal.width;
     const s = b.width / outW;
-    const o = { bubbles: true, composed: true, cancelable: true, clientX: b.left + ix * s, clientY: b.top + iy * s };
+    const o = {
+      bubbles: true, composed: true, cancelable: true, clientX: b.left + ix * s, clientY: b.top + iy * s,
+      pointerId: 1, pointerType: "mouse", isPrimary: true,
+    };
     const surface = sr.querySelector(".surface");
-    surface.dispatchEvent(new MouseEvent("mousemove", o));
+    surface.dispatchEvent(new PointerEvent("pointermove", o));
     const first = sr.querySelector("g.hi")?.firstElementChild;
     if (!first) return { ok: false, reason: "no hover node", firstEnter: false };
-    surface.dispatchEvent(new MouseEvent("mousemove", {
+    surface.dispatchEvent(new PointerEvent("pointermove", {
       ...o, clientX: o.clientX + 1, clientY: o.clientY + 1,
     }));
     const second = sr.querySelector("g.hi")?.firstElementChild;
@@ -225,7 +229,7 @@ try {
     const hosts = [...document.querySelectorAll(".ip-host")];
     const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
     let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
-    sr.querySelector(".surface").dispatchEvent(new MouseEvent("mouseleave", { bubbles: true }));
+    sr.querySelector(".surface").dispatchEvent(new PointerEvent("pointerleave", { bubbles: true, pointerId: 1, pointerType: "mouse", isPrimary: true }));
     const hi = sr.querySelector("g.hi")?.firstElementChild;
     return {
       hi: sr.querySelector("g.hi")?.children.length ?? 0,

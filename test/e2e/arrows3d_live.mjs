@@ -123,7 +123,6 @@ try {
     let tipText = "", tipVisible = false;
     for (let a = 0; a < 8; a++) {
       surface.dispatchEvent(new PointerEvent("pointermove", o));
-      surface.dispatchEvent(new MouseEvent("mousemove", o));
       await new Promise((r) => setTimeout(r, 200));
       const tip = sr.querySelector(".holo-tip");
       tipText = tip ? (tip.innerText || tip.textContent || "").replace(/\s+/g, " ").trim() : "";

@@ -69,8 +69,8 @@ try {
     return page.evaluate(([idx, cx2, cy2]) => {
       const host = [...document.querySelectorAll(".ip-host")][idx];
       let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
-      const o = { bubbles: true, composed: true, cancelable: true, clientX: cx2, clientY: cy2 };
-      sr.querySelector(".surface").dispatchEvent(new MouseEvent("mousemove", o));
+      const o = { bubbles: true, composed: true, cancelable: true, clientX: cx2, clientY: cy2, pointerId: 1, pointerType: "mouse", isPrimary: true };
+      sr.querySelector(".surface").dispatchEvent(new PointerEvent("pointermove", o));
       const tip = sr.querySelector(".holo-tip");
       return tip ? { display: tip.style.display, text: tip.innerText } : null;
     }, [i, cx, cy]);
@@ -88,9 +88,9 @@ try {
     await page.evaluate(([idx, cx2, cy2]) => {
       const host = [...document.querySelectorAll(".ip-host")][idx];
       let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
-      const o = { bubbles: true, composed: true, cancelable: true, clientX: cx2, clientY: cy2 };
+      const o = { bubbles: true, composed: true, cancelable: true, clientX: cx2, clientY: cy2, pointerId: 1, pointerType: "mouse", isPrimary: true };
       const surface = sr.querySelector(".surface");
-      surface.dispatchEvent(new MouseEvent("mousemove", o));
+      surface.dispatchEvent(new PointerEvent("pointermove", o));
       surface.dispatchEvent(new MouseEvent("click", o));
     }, [i, cx, cy]);
   };
@@ -100,14 +100,17 @@ try {
       const host = [...document.querySelectorAll(".ip-host")][idx];
       let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
       const surface = sr.querySelector(".surface");
-      const down = { bubbles: true, composed: true, cancelable: true, clientX: ax, clientY: ay };
-      surface.dispatchEvent(new MouseEvent("mousedown", down));
-      // drag listeners live on window (overlay.ts) — move in a few steps, then release
+      // dispatchEvent bypasses hit-testing/capture redirection — it always fires on the element
+      // you call it on — so drive move/up on `surface` directly (overlay.ts drives its drag path
+      // off pointer capture on the surface now, not window listeners).
+      const pid = { pointerId: 1, pointerType: "mouse", isPrimary: true };
+      const down = { bubbles: true, composed: true, cancelable: true, clientX: ax, clientY: ay, ...pid };
+      surface.dispatchEvent(new PointerEvent("pointerdown", down));
       for (let t = 0.25; t <= 1.0; t += 0.25) {
-        const o = { bubbles: true, cancelable: true, clientX: ax + (bx - ax) * t, clientY: ay + (by - ay) * t };
-        window.dispatchEvent(new MouseEvent("mousemove", o));
+        const o = { bubbles: true, cancelable: true, clientX: ax + (bx - ax) * t, clientY: ay + (by - ay) * t, ...pid };
+        surface.dispatchEvent(new PointerEvent("pointermove", o));
       }
-      window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, clientX: bx, clientY: by }));
+      surface.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true, clientX: bx, clientY: by, ...pid }));
     }, [i, a.cx, a.cy, b.cx, b.cy]);
   };
   const text = (sel) => page.evaluate((q) => document.querySelector(q)?.innerText ?? "", sel);

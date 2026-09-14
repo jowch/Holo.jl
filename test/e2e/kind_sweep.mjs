@@ -203,7 +203,6 @@ try {
     const o = { bubbles: true, composed: true, cancelable: true, clientX: cx, clientY: cy, pointerId: 1, pointerType: "mouse", isPrimary: true };
     const surface = sr.querySelector(".surface");
     surface.dispatchEvent(new PointerEvent(typ === "click" ? "pointermove" : typ, o));
-    surface.dispatchEvent(new MouseEvent(typ === "pointermove" ? "mousemove" : typ, o));
     if (typ === "click") {
       surface.dispatchEvent(new PointerEvent("pointerdown", o));
       surface.dispatchEvent(new PointerEvent("pointerup", o));
@@ -257,15 +256,19 @@ try {
       const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
       let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
       const surface = sr.querySelector(".surface");
-      const down = { bubbles: true, composed: true, cancelable: true, clientX: ax, clientY: ay, shiftKey: shift };
-      surface.dispatchEvent(new MouseEvent("mousedown", down));
+      // dispatchEvent bypasses hit-testing/capture redirection entirely — it always fires on the
+      // element you call it on — so drive move/up on `surface` directly (matching what real pointer
+      // capture, set by onDown for an actual user gesture, would route there anyway).
+      const pid = { pointerId: 1, pointerType: "mouse", isPrimary: true };
+      const down = { bubbles: true, composed: true, cancelable: true, clientX: ax, clientY: ay, shiftKey: shift, ...pid };
+      surface.dispatchEvent(new PointerEvent("pointerdown", down));
       for (let t = 0.25; t <= 1.0; t += 0.25) {
-        window.dispatchEvent(new MouseEvent("mousemove", {
-          bubbles: true, cancelable: true, shiftKey: shift,
+        surface.dispatchEvent(new PointerEvent("pointermove", {
+          bubbles: true, cancelable: true, shiftKey: shift, ...pid,
           clientX: ax + (bx - ax) * t, clientY: ay + (by - ay) * t,
         }));
       }
-      window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, shiftKey: shift, clientX: bx, clientY: by }));
+      surface.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true, shiftKey: shift, clientX: bx, clientY: by, ...pid }));
     }, [key, a.cx, a.cy, b.cx, b.cy, shift]);
   };
 
@@ -395,12 +398,13 @@ try {
       const o = {
         bubbles: true, composed: true, cancelable: true,
         clientX: b.left + ix * s, clientY: b.top + iy * s,
+        pointerId: 1, pointerType: "mouse", isPrimary: true,
       };
       const surface = sr.querySelector(".surface");
-      surface.dispatchEvent(new MouseEvent("mousemove", o));
+      surface.dispatchEvent(new PointerEvent("pointermove", o));
       const first = sr.querySelector("g.hi")?.firstElementChild;
       if (!first) return { ok: false, reason: "no hover node", firstEnter: false };
-      surface.dispatchEvent(new MouseEvent("mousemove", {
+      surface.dispatchEvent(new PointerEvent("pointermove", {
         ...o, clientX: o.clientX + 1, clientY: o.clientY + 1,
       }));
       const second = sr.querySelector("g.hi")?.firstElementChild;
@@ -430,7 +434,7 @@ try {
       const hosts = [...document.querySelectorAll(".ip-host")];
       const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
       let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
-      sr.querySelector(".surface").dispatchEvent(new MouseEvent("mouseleave", { bubbles: true }));
+      sr.querySelector(".surface").dispatchEvent(new PointerEvent("pointerleave", { bubbles: true, pointerId: 1, pointerType: "mouse", isPrimary: true }));
       const hi = sr.querySelector("g.hi")?.firstElementChild;
       return {
         hi: sr.querySelector("g.hi")?.children.length ?? 0,

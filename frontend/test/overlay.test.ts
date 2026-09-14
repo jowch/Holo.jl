@@ -23,6 +23,22 @@ const manifest: Manifest = {
 
 const shadowOf = (host: HTMLElement) => (host.lastElementChild as HTMLElement).shadowRoot!
 
+// onDrag/onMove are rAF-coalesced: a second pointermove dispatched before the browser has painted
+// a frame only updates the pending event, it doesn't apply synchronously. Tests that need to see
+// an intermediate drag/hover frame must await one of these between dispatches.
+const flushFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()))
+
+// Factory so each test gets a fresh geometry object — the alias fix (box.g = rg) mutates
+// layer.geometry in-place, which would pollute a shared const across tests. Module scope so
+// both the "mount" and pointer-capture describe blocks can use it.
+const roiManifest = (): Manifest => ({
+    width: 1200, height: 800, scaling: 2,
+    transforms: { ax1: { xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
+        viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false } },
+    layers: [{ id: "roi", kind: "roi", axis: "ax1", events: ["drag"], payloads: [],
+        geometry: { x: 200, y: 200, w: 400, h: 400, handle: 16 } }],
+})
+
 describe("mount", () => {
     it("builds a shadow overlay and round-trips a click to host.value", () => {
         const { host, script } = setup()
@@ -100,10 +116,10 @@ describe("mount", () => {
             committed = (host as unknown as { value: { layer: string; index: number; payload: number } }).value
         })
         // display scale = 1200/600 = 2 → client (300,200) == image (600,400) == on the line
-        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 300, clientY: 200, bubbles: true }))
-        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 300, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 300, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 300, bubbles: true }))
         expect(line.getAttribute("y1")).toBe("600")              // line followed the drag (image y = 2*300)
-        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 300, clientY: 300, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 300, clientY: 300, bubbles: true }))
         expect(committed).toMatchObject({ layer: "thr", index: 0 })
         // image (600,600): fy = 1 - 600/800 = 0.25; ylims [0,100] → 25
         expect(committed!.payload).toBeCloseTo(25)
@@ -127,9 +143,9 @@ describe("mount", () => {
         const shadow = shadowOf(host)
         const surface = shadow.querySelector(".surface") as HTMLElement
         // drag the threshold: mousedown on line (clientY=200 → image y=400 = threshold pos), release at clientY=300
-        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 300, clientY: 200, bubbles: true }))
-        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 300, bubbles: true }))
-        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 300, clientY: 300, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 300, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 300, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 300, clientY: 300, bubbles: true }))
         const afterDrag = (host as unknown as { value: { layer: string; index: number; payload: number } }).value
         expect(afterDrag).toMatchObject({ layer: "thr", index: 0 })
         // synthesized click at the release point — browser fires this after mouseup; circle is at (600,600) and would be hit
@@ -137,16 +153,6 @@ describe("mount", () => {
         const afterClick = (host as unknown as { value: { layer: string; index: number; payload: number } }).value
         // guard must have blocked the click — threshold commit must survive
         expect(afterClick.layer).toBe("thr")
-    })
-
-    // Factory so each test gets a fresh geometry object — the alias fix (box.g = rg) mutates
-    // layer.geometry in-place, which would pollute a shared const across tests.
-    const roiManifest = (): Manifest => ({
-        width: 1200, height: 800, scaling: 2,
-        transforms: { ax1: { xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
-            viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false } },
-        layers: [{ id: "roi", kind: "roi", axis: "ax1", events: ["drag"], payloads: [],
-            geometry: { x: 200, y: 200, w: 400, h: 400, handle: 16 } }],
     })
 
     it("draws an ROI box + 4 handles and commits inverted bounds after a move", () => {
@@ -163,10 +169,10 @@ describe("mount", () => {
             committed = (host as unknown as { value: { layer: string; index: number; payload: { xmin: number; xmax: number; ymin: number; ymax: number } } }).value
         })
         // display scale 1200/600 = 2 → client (200,200) == image (400,400) == interior center
-        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 200, clientY: 200, bubbles: true }))
-        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true })) // image x 400→600
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 200, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true })) // image x 400→600
         expect(box.getAttribute("x")).toBe("400")    // origin moved +200 image px (clamped within viewport)
-        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 300, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 300, clientY: 200, bubbles: true }))
         expect(committed).toMatchObject({ layer: "roi", index: 0 })
         // box x now [400,800] image → data [400/1200*10, 800/1200*10]
         expect(committed!.payload.xmin).toBeCloseTo(10 * 400 / 1200)
@@ -184,13 +190,13 @@ describe("mount", () => {
             committed = (host as unknown as { value: { layer: string; index: number; payload: { xmin: number; xmax: number; ymin: number; ymax: number } } }).value
         })
         // BR corner is image (600,600) == client (300,300); drag to image (800,800) == client (400,400)
-        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 300, clientY: 300, bubbles: true }))
-        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 400, clientY: 400, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 300, clientY: 300, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 400, clientY: 400, bubbles: true }))
         expect(box.getAttribute("x")).toBe("200")        // TL anchor unchanged
         expect(box.getAttribute("y")).toBe("200")
         expect(box.getAttribute("width")).toBe("600")    // 800 - 200
         expect(box.getAttribute("height")).toBe("600")
-        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 400, clientY: 400, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 400, clientY: 400, bubbles: true }))
         // TL anchor (200,200), BR dragged to (800,800); viewport 1200x800
         expect(committed!.payload.xmin).toBeCloseTo(10 * 200 / 1200)
         expect(committed!.payload.xmax).toBeCloseTo(10 * 800 / 1200)
@@ -198,25 +204,28 @@ describe("mount", () => {
         expect(committed!.payload.ymax).toBeCloseTo(75)   // image y 200 → data 100*(1-200/800)=75
     })
 
-    it("resize flips past the anchor and clamps to the viewport", () => {
+    it("resize flips past the anchor and clamps to the viewport", async () => {
         const { host, script } = setup()
         mount(script, roiManifest())
         const surface = shadowOf(host).querySelector(".surface") as HTMLElement
         const box = shadowOf(host).querySelectorAll("rect")[0] as SVGRectElement
         // grab BR corner image (600,600)==client (300,300); anchor = TL (200,200)
-        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 300, clientY: 300, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 300, clientY: 300, bubbles: true }))
         // drag PAST the TL anchor to image (100,100)==client (50,50): box flips, stays non-degenerate
-        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 50, clientY: 50, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 50, clientY: 50, bubbles: true }))
         expect(box.getAttribute("x")).toBe("100")        // min(200, 100)
         expect(box.getAttribute("y")).toBe("100")
         expect(box.getAttribute("width")).toBe("100")    // |100 - 200|
         expect(box.getAttribute("height")).toBe("100")
         // drag beyond the viewport image (1400,1000)==client (700,500): clamps to (1200,800)
-        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 700, clientY: 500, bubbles: true }))
+        // rAF-coalesced: the first move above already consumed this frame's immediate apply, so
+        // this second move only lands once the trailing frame runs.
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 700, clientY: 500, bubbles: true }))
+        await flushFrame()
         expect(box.getAttribute("x")).toBe("200")        // min(200, 1200)
         expect(box.getAttribute("width")).toBe("1000")   // |1200 - 200|
         expect(box.getAttribute("height")).toBe("600")   // |800 - 200|
-        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 700, clientY: 500, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 700, clientY: 500, bubbles: true }))
     })
 
     it("re-grab works at the moved box position (hit-test tracks live geometry)", () => {
@@ -231,18 +240,18 @@ describe("mount", () => {
         // roiManifest: box at image [200,600]×[200,600], scaling=2 so client×2=image
         // First drag: grab interior at client(200,200)=image(400,400); move to client(300,200)=image(600,400)
         // ax = 400-200 = 200; new box.g.x = 600-200 = 400 → box now spans image x [400,800]
-        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 200, clientY: 200, bubbles: true }))
-        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 200, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
         expect(box.getAttribute("x")).toBe("400")
-        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 300, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 300, clientY: 200, bubbles: true }))
         // Second grab: client(350,200)=image(700,400) is INSIDE the moved box [400,800]×[200,600]
         // but OUTSIDE the original [200,600]×[200,600] — so hit only lands if live geometry is used
-        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 350, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 350, clientY: 200, bubbles: true }))
         // Move to client(400,200)=image(800,400); ax=700-400=300; new box.g.x=max(0,min(800,800-300))=500
-        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 400, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 400, clientY: 200, bubbles: true }))
         // Second drag registered → box moved again (x went from 400 to 500)
         expect(box.getAttribute("x")).toBe("500")
-        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 400, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 400, clientY: 200, bubbles: true }))
     })
 
     // Factory so each test gets a fresh geometry object — drag mutates geometry in-place.
@@ -269,8 +278,8 @@ describe("mount", () => {
             committed = (host as unknown as { value: { items: { layer: string; index: number }[] } }).value
         })
         // grab the box interior (image 400,400 = client 200,200), release without moving → emit current enclosure
-        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 200, clientY: 200, bubbles: true }))
-        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 200, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 200, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 200, clientY: 200, bubbles: true }))
         expect(committed!.items.map((e) => e.index)).toEqual([0, 1])
         expect(committed!.items.every((e) => e.layer === "pts")).toBe(true)
         // two persistent selection highlights drawn
@@ -288,9 +297,9 @@ describe("mount", () => {
             committed = (host as unknown as { value: { items: unknown[] } }).value
         })
         // move the box up so it encloses no point: grab interior, drag origin up-left out of the cluster
-        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 200, clientY: 200, bubbles: true }))
-        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 350, clientY: 50, bubbles: true }))
-        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 350, clientY: 50, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 200, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 350, clientY: 50, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 350, clientY: 50, bubbles: true }))
         expect(box).toBeTruthy()
         expect(committed!.items).toEqual([])
     })
@@ -304,9 +313,9 @@ describe("mount", () => {
         host.addEventListener("input", () => { committed = (host as unknown as { value: typeof committed }).value })
         // grab the BR corner (image 600,600 = client 300,300; anchor = TL 200,200) and drag it out to
         // image (950,750) = client (475,375), enclosing all three points ([200,950]×[200,750])
-        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 300, clientY: 300, bubbles: true }))
-        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 475, clientY: 375, bubbles: true }))
-        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 475, clientY: 375, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 300, clientY: 300, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 475, clientY: 375, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 475, clientY: 375, bubbles: true }))
         expect(committed!.items.map((e) => e.index)).toEqual([0, 1, 2])
         expect(shadow.querySelector("g.sel")!.children.length).toBe(3)
     })
@@ -319,9 +328,9 @@ describe("mount", () => {
         let committed: { items: { index: number }[] } | null = null
         host.addEventListener("input", () => { committed = (host as unknown as { value: typeof committed }).value })
         // move the box origin to image (50,50) ([50,450]²) so only the first point (300,300) is inside
-        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 200, clientY: 200, bubbles: true }))
-        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 125, clientY: 125, bubbles: true }))
-        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 125, clientY: 125, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 200, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 125, clientY: 125, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 125, clientY: 125, bubbles: true }))
         expect(committed!.items.map((e) => e.index)).toEqual([0])
         expect(shadow.querySelector("g.sel")!.children.length).toBe(1)
     })
@@ -348,8 +357,8 @@ describe("mount", () => {
             committed = (host as unknown as { value: typeof committed }).value
         })
         // box is image [100,400]×[100,400]; grab interior (image 250,250 = client 125,125), release
-        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 125, clientY: 125, bubbles: true }))
-        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 125, clientY: 125, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 125, clientY: 125, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 125, clientY: 125, bubbles: true }))
         expect(committed!.items.length).toBe(1)
         const r = committed!.items[0].payload
         expect([r.i0, r.i1, r.j0, r.j1]).toEqual([0, 1, 0, 1])    // cells covered by [100,400]
@@ -357,6 +366,150 @@ describe("mount", () => {
         expect(r.xmax).toBeCloseTo(10 * 400 / 1200)
         expect(r.ymin).toBeCloseTo(50)                            // image y 400 → 100*(1-400/800)
         expect(r.ymax).toBeCloseTo(87.5)                          // image y 100 → 100*(1-100/800)
+    })
+})
+
+// Pointer events: capture-driven drag lifecycle (issue: overlay pointer events / capture / rAF-coalesced drag).
+describe("pointer capture, cancel, and coalesced drag release", () => {
+    const thresholdManifest = (): Manifest => ({
+        width: 1200, height: 800, scaling: 2,
+        transforms: { ax1: { xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
+            viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false } },
+        layers: [{ id: "thr", kind: "threshold", axis: "ax1", events: ["drag"], payloads: [],
+            geometry: { orientation: "h", pos: 400, span: [0, 1200] } }],
+    })
+
+    it("pointerdown on a draggable target sets pointer capture; release drops it", () => {
+        const { host, script } = setup()
+        mount(script, thresholdManifest())
+        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(surface.hasPointerCapture(0)).toBe(true)
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 300, clientY: 300, bubbles: true }))
+        expect(surface.hasPointerCapture(0)).toBe(false)
+    })
+
+    it("a throwing setPointerCapture (real Chromium: InvalidPointerId for a non-active pointerId) does not abort onDown", () => {
+        // Live-verify finding: Chromium's setPointerCapture throws InvalidPointerId for a
+        // pointerId the UA doesn't consider active (happy-dom's is a bare Set.add and never
+        // throws, so this has to be forced here). A DOM listener's thrown exception is swallowed
+        // by dispatchEvent itself (spec behavior, reproduced by happy-dom above) — so `threw`
+        // can't distinguish an aborted onDown from a completed one. `e.preventDefault()` runs
+        // AFTER setPointerCapture in onDown, so `defaultPrevented` is the signal: false means
+        // onDown returned early at the throw, before reaching preventDefault.
+        const { host, script } = setup()
+        mount(script, thresholdManifest())
+        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        surface.setPointerCapture = () => {
+            throw new DOMException("No active pointer with the given id is found.", "InvalidPointerId")
+        }
+        const down = new PointerEvent("pointerdown", { clientX: 300, clientY: 200, bubbles: true, cancelable: true })
+        surface.dispatchEvent(down)
+        expect(down.defaultPrevented).toBe(true)
+        expect(surface.classList.contains("grabbing")).toBe(true)
+        // the drag still commits normally on release, despite never having real capture
+        let committed: { layer: string } | null = null
+        host.addEventListener("input", () => {
+            committed = (host as unknown as { value: typeof committed }).value
+        })
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 300, clientY: 300, bubbles: true }))
+        expect(committed).toMatchObject({ layer: "thr" })
+    })
+
+    it("pointercancel mid-drag ends the drag cleanly: no commit, capture released, cursor unstuck", () => {
+        const { host, script } = setup()
+        mount(script, thresholdManifest())
+        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        let fired = false
+        host.addEventListener("input", () => { fired = true })
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(surface.classList.contains("grabbing")).toBe(true)
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 300, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true }))
+        expect(fired).toBe(false)                                  // cancel discards, it does not commit
+        expect(surface.classList.contains("grabbing")).toBe(false) // cursor is not left stuck
+        expect(surface.hasPointerCapture(0)).toBe(false)
+        // a stray pointerup arriving after cancel must not resurrect the drag or commit late
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 300, clientY: 300, bubbles: true }))
+        expect(fired).toBe(false)
+    })
+
+    it("lostpointercapture mid-drag resets state as a safety net (capture taken away some other way)", () => {
+        const { host, script } = setup()
+        mount(script, thresholdManifest())
+        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(surface.classList.contains("grabbing")).toBe(true)
+        surface.dispatchEvent(new PointerEvent("lostpointercapture", { bubbles: true }))
+        expect(surface.classList.contains("grabbing")).toBe(false)
+        // the drag is gone — a plain pointerup now must not commit
+        let fired = false
+        host.addEventListener("input", () => { fired = true })
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(fired).toBe(false)
+    })
+
+    it("applies the last move on pointerup even when its rAF frame never ran (not a dropped frame)", () => {
+        const { host, script } = setup()
+        mount(script, roiManifest())
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const box = shadow.querySelectorAll("rect")[0] as SVGRectElement
+        let committed: { payload: { xmin: number; xmax: number } } | null = null
+        host.addEventListener("input", () => {
+            committed = (host as unknown as { value: typeof committed }).value
+        })
+        // grab the box interior: client(200,200) = image(400,400); box at [200,600]² → ax=ay=200
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 200, clientY: 200, bubbles: true }))
+        // move 1 applies synchronously (queueDrag's immediate apply) and schedules a trailing frame
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 220, clientY: 200, bubbles: true }))
+        expect(box.getAttribute("x")).toBe("240") // image x 440 - ax 200
+        // move 2 arrives before that frame runs — coalesced, NOT applied yet
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(box.getAttribute("x")).toBe("240") // still move 1's position — move 2 is pending
+        // release at move 2's position with no requestAnimationFrame flush in between
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(box.getAttribute("x")).toBe("400") // image x 600 - ax 200: release point, not the dropped frame
+        expect(committed).not.toBeNull()
+        expect(committed!.payload.xmax).toBeCloseTo(10 * 800 / 1200) // box right edge at image x 800
+    })
+
+    it("touch tap (no hover, pointerType touch) still round-trips a click via the normal click event", () => {
+        const { host, script } = setup()
+        mount(script, manifest) // click/hover circles layer, no drag
+        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        let fired = false
+        host.addEventListener("input", () => { fired = true })
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 300, clientY: 200, bubbles: true, pointerType: "touch" }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 300, clientY: 200, bubbles: true, pointerType: "touch" }))
+        surface.dispatchEvent(new MouseEvent("click", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(fired).toBe(true)
+    })
+
+    it("sets touch-action:none only on surfaces with a drag-capable layer", () => {
+        const hover = setup()
+        mount(hover.script, manifest) // click/hover circles layer, no drag layer
+        const hoverSurface = shadowOf(hover.host).querySelector(".surface") as HTMLElement
+        expect(hoverSurface.style.touchAction).not.toBe("none") // page scroll must still work here
+
+        const drag = setup()
+        mount(drag.script, thresholdManifest())
+        const dragSurface = shadowOf(drag.host).querySelector(".surface") as HTMLElement
+        expect(dragSurface.style.touchAction).toBe("none")
+    })
+
+    it("tooltip carries role=tooltip and aria-hidden tracks its visibility", () => {
+        const { host, script } = setup()
+        mount(script, manifest)
+        const shadow = shadowOf(host)
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        expect(tip.getAttribute("role")).toBe("tooltip")
+        expect(tip.getAttribute("aria-hidden")).toBe("true")
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(tip.getAttribute("aria-hidden")).toBe("false")
+        surface.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }))
+        expect(tip.getAttribute("aria-hidden")).toBe("true")
     })
 })
 
@@ -371,7 +524,7 @@ describe("tooltips (mount/showTip)", () => {
     })
     const hoverMarker = (shadow: ShadowRoot) =>
         (shadow.querySelector(".surface") as HTMLElement)
-            .dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
+            .dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
 
     it("applies tipStyle custom properties to the shadow host", () => {
         const { host, script } = setup()
@@ -423,7 +576,7 @@ describe("tooltips (mount/showTip)", () => {
         const tip = shadow.querySelector(".holo-tip") as HTMLElement
         // client (110,150) → image px (220,300); inside bbox; fy=0.5 → value=5.0; fmt(5)="5.000"
         ;(shadow.querySelector(".surface") as HTMLElement)
-            .dispatchEvent(new MouseEvent("mousemove", { clientX: 110, clientY: 150, bubbles: true }))
+            .dispatchEvent(new PointerEvent("pointermove", { clientX: 110, clientY: 150, bubbles: true }))
         expect(tip.classList.contains("show")).toBe(true)
         expect(tip.innerHTML).toBe("5.000")
         expect(tip.innerHTML).not.toContain("undefined")
@@ -442,7 +595,7 @@ describe("tooltips (mount/showTip)", () => {
         const shadow = shadowOf(host)
         const tip = shadow.querySelector(".holo-tip") as HTMLElement
         ;(shadow.querySelector(".surface") as HTMLElement)
-            .dispatchEvent(new MouseEvent("mousemove", { clientX: 200, clientY: 200, bubbles: true }))
+            .dispatchEvent(new PointerEvent("pointermove", { clientX: 200, clientY: 200, bubbles: true }))
         expect(tip.classList.contains("show")).toBe(true)
         expect(tip.innerHTML).toContain("x=")
         expect(tip.innerHTML).toContain("y=")
@@ -467,8 +620,8 @@ describe("tooltips (mount/showTip)", () => {
         expect(sel.children.length).toBe(2)                 // BOTH indices, not just the last
         const surface = shadow.querySelector(".surface") as HTMLElement
         // hover a non-selected element, then empty space (empty space fades g.hi)
-        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
-        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 10, clientY: 10, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 10, clientY: 10, bubbles: true }))
         await new Promise<void>((r) => requestAnimationFrame(() => r()))
         expect(sel.children.length).toBe(2)                 // pre-selection survived the hovers
         const leaving = (shadow.querySelector("g.hi") as SVGGElement).firstElementChild
@@ -555,8 +708,8 @@ describe("tooltips (mount/showTip)", () => {
         expect(sel.children.length).toBe(1)  // pre-highlight alone
         const surface = shadow.querySelector(".surface") as HTMLElement
         // commit current ROI enclosure (points 0 and 1) — replaces pre-selection of index 2
-        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 200, clientY: 200, bubbles: true }))
-        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 200, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 200, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 200, clientY: 200, bubbles: true }))
         expect(sel.children.length).toBe(2)
     })
 
@@ -576,9 +729,9 @@ describe("tooltips (mount/showTip)", () => {
             committed = (host as unknown as { value: typeof committed }).value
         })
         // display scale 2: client Δx=100 → image Δx=200 → 200/1200 of lims = 10/6 ≈ 1.667
-        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 100, clientY: 200, bubbles: true }))
-        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 200, clientY: 200, bubbles: true }))
-        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 200, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 100, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 200, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 200, clientY: 200, bubbles: true }))
         expect(committed).toMatchObject({ layer: "view" })
         expect(committed!.payload.xmin).toBeCloseTo(-10 * 200 / 1200)
         expect(committed!.payload.xmax).toBeCloseTo(10 - 10 * 200 / 1200)
@@ -597,8 +750,8 @@ describe("tooltips (mount/showTip)", () => {
         const surface = shadowOf(host).querySelector(".surface") as HTMLElement
         let fired = false
         host.addEventListener("input", () => { fired = true })
-        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 100, clientY: 100, bubbles: true }))
-        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 101, clientY: 100, bubbles: true })) // 2 image-px
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 100, clientY: 100, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 101, clientY: 100, bubbles: true })) // 2 image-px
         expect(fired).toBe(false)
     })
 
@@ -621,11 +774,11 @@ describe("tooltips (mount/showTip)", () => {
         const surface = shadow.querySelector(".surface") as HTMLElement
         const tip = shadow.querySelector(".holo-tip") as HTMLElement
         // hover over the point (client 300,200 → image 600,400)
-        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
         expect(tip.classList.contains("show")).toBe(true)
         expect(surface.classList.contains("hot")).toBe(true)
         // empty area: grab cursor from view, no hover tip
-        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 50, clientY: 50, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 50, clientY: 50, bubbles: true }))
         await new Promise<void>((r) => requestAnimationFrame(() => r()))
         expect(tip.classList.contains("show")).toBe(false)
         expect(surface.classList.contains("grab")).toBe(true)
@@ -634,8 +787,8 @@ describe("tooltips (mount/showTip)", () => {
         host.addEventListener("input", () => {
             clicked = (host as unknown as { value: typeof clicked }).value
         })
-        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 300, clientY: 200, bubbles: true }))
-        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 301, clientY: 200, bubbles: true })) // 2 image-px
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 300, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 301, clientY: 200, bubbles: true })) // 2 image-px
         surface.dispatchEvent(new MouseEvent("click", { clientX: 300, clientY: 200, bubbles: true }))
         expect(clicked).toMatchObject({ layer: "pts", index: 0 })
     })
@@ -657,10 +810,10 @@ describe("tooltips (mount/showTip)", () => {
         const shadow = shadowOf(host)
         const surface = shadow.querySelector(".surface") as HTMLElement
         const tip = shadow.querySelector(".holo-tip") as HTMLElement
-        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 50, clientY: 50, bubbles: true }))
-        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 200, clientY: 120, bubbles: true }))
-        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
-        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 300, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 50, clientY: 50, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 200, clientY: 120, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 300, clientY: 200, bubbles: true }))
         expect(tip.classList.contains("show")).toBe(false)
         await new Promise<void>((r) => requestAnimationFrame(() => r()))
         expect(tip.classList.contains("show")).toBe(false)
@@ -691,14 +844,14 @@ describe("tooltips (mount/showTip)", () => {
             committed = (host as unknown as { value: typeof committed }).value
         })
         // without Shift: ROI wins over view (layer order)
-        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 200, clientY: 200, bubbles: true }))
-        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 250, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 200, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 250, clientY: 200, bubbles: true }))
         expect(committed!.layer).toBe("roi")
         // with Shift: view orbit wins even over ROI interior
         committed = null
-        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 200, clientY: 200, bubbles: true, shiftKey: true }))
-        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 500, clientY: 200, bubbles: true, shiftKey: true }))
-        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 500, clientY: 200, bubbles: true, shiftKey: true }))
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 200, clientY: 200, bubbles: true, shiftKey: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 500, clientY: 200, bubbles: true, shiftKey: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 500, clientY: 200, bubbles: true, shiftKey: true }))
         expect(committed!.layer).toBe("view")
         // image Δx = 600; sens = π/1200 → Δaz = −π/2
         expect(committed!.payload.azimuth).toBeCloseTo(0.4 - Math.PI / 2)
@@ -713,24 +866,23 @@ describe("tooltips (mount/showTip)", () => {
 describe("overlay visual polish", () => {
     const ink = "#3A6F7C"
     const wash = "rgba(58, 111, 124, 0.12)"
-    const flushFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()))
 
     it("keeps the hover node across mousemove on the same marker", async () => {
         const { host, script } = setup()
         mount(script, manifest)
         const shadow = shadowOf(host)
         const surface = shadow.querySelector(".surface") as HTMLElement
-        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
         const a = shadow.querySelector("g.hi")!.firstElementChild as SVGElement
         expect(a.classList.contains("holo-enter")).toBe(true)
         // still inside r=20 at image (600,400); scale 2 → client (301,201) = image (602,402)
-        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 301, clientY: 201, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 301, clientY: 201, bubbles: true }))
         await flushFrame()
         const b = shadow.querySelector("g.hi")!.firstElementChild as SVGElement
         expect(b).toBe(a)
     })
 
-    it("does not re-animate a same-key selection when the wash remounts", () => {
+    it("does not re-animate a same-key selection when the wash remounts", async () => {
         const { host, script } = setup()
         mount(script, {
             width: 1200, height: 800, scaling: 2,
@@ -745,15 +897,17 @@ describe("overlay visual polish", () => {
         })
         const shadow = shadowOf(host)
         const surface = shadow.querySelector(".surface") as HTMLElement
-        surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 125, clientY: 125, bubbles: true }))
-        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 130, clientY: 125, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 125, clientY: 125, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 130, clientY: 125, bubbles: true }))
         const a = shadow.querySelector("g.sel")!.firstElementChild as SVGElement
         expect(a.classList.contains("holo-enter")).toBe(true)
-        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 135, clientY: 125, bubbles: true }))
+        // rAF-coalesced: this second move lands on the trailing frame from the first, not synchronously.
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 135, clientY: 125, bubbles: true }))
+        await flushFrame()
         const b = shadow.querySelector("g.sel")!.firstElementChild as SVGElement
         expect(b).not.toBe(a)
         expect(b.classList.contains("holo-enter")).toBe(false)
-        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 135, clientY: 125, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 135, clientY: 125, bubbles: true }))
     })
 
     it("selected wash keeps the layer stroke hue when stroke is not #RRGGBB", () => {
@@ -776,8 +930,8 @@ describe("overlay visual polish", () => {
         mount(script, manifest)
         const shadow = shadowOf(host)
         const surface = shadow.querySelector(".surface") as HTMLElement
-        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
-        surface.dispatchEvent(new MouseEvent("mouseleave", { bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }))
         const leaving = shadow.querySelector("g.hi")!.firstElementChild as SVGElement
         expect(leaving.classList.contains("holo-leave")).toBe(true)
         await new Promise((r) => setTimeout(r, 120))
@@ -789,7 +943,7 @@ describe("overlay visual polish", () => {
         mount(script, manifest)
         const shadow = shadowOf(host)
         const surface = shadow.querySelector(".surface") as HTMLElement
-        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
         const el = shadow.querySelector("g.hi")!.firstElementChild as SVGElement
         expect(el.tagName.toLowerCase()).toBe("circle")
         expect(el.getAttribute("fill")).toBe("none")
@@ -823,7 +977,7 @@ describe("overlay visual polish", () => {
         const { host, script } = setup()
         mount(script, manifest)
         const surface = shadowOf(host).querySelector(".surface") as HTMLElement
-        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
         const el = shadowOf(host).querySelector("g.hi")!.firstElementChild as SVGElement
         expect(el.getAttribute("r")).toBe("22") // geometry r=20
         expect(el.getAttribute("cx")).toBe("600")
@@ -926,9 +1080,9 @@ describe("overlay visual polish", () => {
         const tip = shadow.querySelector(".holo-tip") as HTMLElement
         const surface = shadow.querySelector(".surface") as HTMLElement
         expect(tip.classList.contains("show")).toBe(false)
-        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
         expect(tip.classList.contains("show")).toBe(true)
-        surface.dispatchEvent(new MouseEvent("mouseleave", { bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }))
         expect(tip.classList.contains("show")).toBe(false)
     })
 
@@ -957,7 +1111,7 @@ describe("overlay visual polish", () => {
         const shadow = shadowOf(host)
         const tip = shadow.querySelector(".holo-tip") as HTMLElement
         const surface = shadow.querySelector(".surface") as HTMLElement
-        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
         expect(tip.classList.contains("show")).toBe(true)
         const html = tip.innerHTML
         let writes = 0
@@ -968,7 +1122,7 @@ describe("overlay visual polish", () => {
             set(v: string) { writes++; desc.set!.call(this, v) },
         })
         const left0 = tip.style.left, top0 = tip.style.top
-        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 301, clientY: 201, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 301, clientY: 201, bubbles: true }))
         await flushFrame()
         expect(writes).toBe(0)
         expect(tip.innerHTML).toBe(html)
@@ -985,11 +1139,11 @@ describe("overlay visual polish", () => {
         let sizeReads = 0
         Object.defineProperty(tip, "offsetWidth", { configurable: true, get() { sizeReads++; return 120 } })
         Object.defineProperty(tip, "offsetHeight", { configurable: true, get() { sizeReads++; return 40 } })
-        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
         expect(sizeReads).toBeGreaterThan(0)
         const afterFirst = sizeReads
         const left0 = tip.style.left, top0 = tip.style.top
-        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 301, clientY: 201, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 301, clientY: 201, bubbles: true }))
         await flushFrame()
         expect(sizeReads).toBe(afterFirst)
         expect(tip.style.left).not.toBe(left0)
@@ -1007,14 +1161,14 @@ describe("overlay visual polish", () => {
         const shadow = shadowOf(host)
         const tip = shadow.querySelector(".holo-tip") as HTMLElement
         const surface = shadow.querySelector(".surface") as HTMLElement
-        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 580, clientY: 380, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 580, clientY: 380, bubbles: true }))
         expect(tip.classList.contains("show")).toBe(true)
         expect(tip.classList.contains("flip-x")).toBe(false)
         Object.defineProperty(tip, "offsetWidth", { configurable: true, value: 220 })
         Object.defineProperty(tip, "offsetHeight", { configurable: true, value: 80 })
         Object.defineProperty(surface, "clientWidth", { configurable: true, value: 600 })
         Object.defineProperty(surface, "clientHeight", { configurable: true, value: 400 })
-        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 581, clientY: 381, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 581, clientY: 381, bubbles: true }))
         await flushFrame()
         expect(tip.classList.contains("flip-x")).toBe(true)
         expect(tip.classList.contains("flip-y")).toBe(true)
@@ -1039,7 +1193,7 @@ describe("overlay visual polish", () => {
             set(v: string) { writes++; desc.set!.call(this, v) },
         })
         for (let i = 0; i < 8; i++) {
-            surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 200 + i, clientY: 200, bubbles: true }))
+            surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 200 + i, clientY: 200, bubbles: true }))
         }
         expect(writes).toBeLessThan(8)
         await new Promise<void>((r) => requestAnimationFrame(() => r()))
@@ -1064,7 +1218,7 @@ describe("overlay visual polish", () => {
         Object.defineProperty(surface, "clientWidth", { configurable: true, value: 600 })
         Object.defineProperty(surface, "clientHeight", { configurable: true, value: 400 })
         // client (580, 380) is inside the axis viewport and near the 600×400 surface corner
-        surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 580, clientY: 380, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 580, clientY: 380, bubbles: true }))
         expect(tip.classList.contains("show")).toBe(true)
         expect(tip.classList.contains("flip-x")).toBe(true)
         expect(tip.classList.contains("flip-y")).toBe(true)
@@ -1074,7 +1228,7 @@ describe("overlay visual polish", () => {
         expect(top + 80).toBeLessThanOrEqual(400)
         expect(left).toBeGreaterThanOrEqual(0)
         expect(top).toBeGreaterThanOrEqual(0)
-        surface.dispatchEvent(new MouseEvent("mouseleave", { bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }))
         expect(tip.classList.contains("show")).toBe(false)
         expect(tip.classList.contains("flip-x")).toBe(true)
         expect(tip.classList.contains("flip-y")).toBe(true)
