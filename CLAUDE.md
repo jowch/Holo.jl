@@ -8,13 +8,15 @@ plots in Pluto. Browser layer is TypeScript in `frontend/`, bundled by esbuild t
 - Julia tests: `julia --project=. test/runtests.jl`
 - Frontend gate: `cd frontend && npm run lint && npm run typecheck && npm test && npm run build` (build → `../assets/overlay.js`)
 - Format (Runic, CI-enforced): `julia -e 'using Runic; exit(Runic.main(["--inplace","src","test","bench","gallery","examples"]))'` — pass every dir with `.jl`, since CI formats the whole repo (PR #11 slipped because `gallery/` was omitted here). **CI's `runic-action` has no `paths:` filter → it checks the WHOLE repo** (incl. `bench/`, `gallery/`, `examples/`), and tracks the latest Runic (1.7+); a locally-old Runic can pass a file CI rejects. Format every `.jl` you add, with current Runic.
-- Registry name-clash check: packed General (typical depot / CI) is a 129-byte
-  `~/.julia/registries/General.toml` pointer + `General.tar.gz`. Package rows are
-  inline tables (`uuid = { name = "Holo", path = "H/Holo" }`). `grep '^name = "X"$'`
-  only hits `name = "General"` and **false-passes** if the index is missing or packed.
-  Use `tar -xOf ~/.julia/registries/General.tar.gz Registry.toml | rg '{ name = "Holo"'`
-  (or the unpacked `General/Registry.toml` if present). The gate is
-  `test/registry_readiness.jl`.
+- Registry name-clash check (manual, not `Pkg.test`): packed General (typical
+  depot / CI) is a 129-byte `~/.julia/registries/General.toml` pointer +
+  `General.tar.gz`. Package rows are inline tables (`uuid = { name = "Holo",
+  path = "H/Holo" }`). `grep '^name = "X"$'` only hits `name = "General"` and
+  **false-passes** if the index is missing or packed. Use
+  `tar -xOf ~/.julia/registries/General.tar.gz Registry.toml | rg '{ name = "Holo"'`
+  (or the unpacked `General/Registry.toml` if present). Do not assert
+  unregistered in CI — that fails once General indexes the package and needs
+  network.
 - **Always verify CI is green before merging.** A merged PR can leave `main` red (PR #11 merged with Runic failing). After a PR's checks finish, `gh run list` / `gh pr checks <n>` must show all green — don't merge on a stale or pending run.
 
 ## Gotchas (verified this session)
