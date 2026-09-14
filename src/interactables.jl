@@ -313,10 +313,10 @@ function TextInteractable(ax, p::Makie.Text; id = :text, payloads = nothing, too
 end
 tooltip_spec(i::TextInteractable) = i.tooltip
 function hitlayers(i::TextInteractable, ctx)
-    boxes = Makie.string_boundingboxes(i.p)   # Vector{Rect3d}, scene-local pixel (y-up), one per string
+    boxes = _string_bboxes(i.p)   # Vector{Rect3d}, scene-local pixel (y-up), one per string
     length(boxes) == length(i.payloads) ||
         error("TextInteractable: $(length(boxes)) boxes for $(length(i.payloads)) payloads (Makie internals changed?)")
-    o = i.ax.scene.viewport[].origin           # scene-local → figure pixel offset
+    o = _scene_viewport(i.ax).origin           # scene-local → figure pixel offset
     g = Real[]
     # divergence from design spec §1 ("skip empty strings"): NOT skipped — a zero-area box keeps box-count == payload-count for the guards above (deliberate).
     for b in boxes

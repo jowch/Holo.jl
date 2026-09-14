@@ -16,6 +16,7 @@ function __init__()
     return nothing
 end
 
+include("makie_compat.jl")
 include("backend.jl")
 include("markup.jl")
 include("interactables.jl")

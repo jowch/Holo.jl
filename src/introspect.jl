@@ -8,7 +8,7 @@
 
 const _GB = Makie.GeometryBasics
 
-_conv(p) = p.converted[]
+_conv(p) = _converted(p)
 
 # ---- Scatter -> PointInteractable ----
 # markersize is a diameter in :pixel space (Makie's default markerspace) → radius = ms/2 in
@@ -125,8 +125,8 @@ end
 # The child Poly carries the final laid-out rectangles (dodge/stack/automatic-width applied),
 # so we read those instead of replaying Makie's bar solver. (roadmap: dodge/stack are the gotcha.)
 function _bar_rects(p)
-    for c in p.plots
-        cv = c.converted[]
+    for c in _child_plots(p)
+        cv = _converted(c)
         if cv isa Tuple && !isempty(cv) && cv[1] isa AbstractVector && eltype(cv[1]) <: _GB.HyperRectangle
             return [
                 (r.origin[1] + r.widths[1] / 2, r.origin[2] + r.widths[2] / 2, r.widths[1], r.widths[2])
@@ -195,7 +195,7 @@ _poly_exterior_rings(polys) = [poly.exterior for poly in polys]
 # midpoint, correct for uniform, non-uniform, and single-band levels alike. Constant/zero-range data
 # collapses the edges, correctly yielding a zero-width band (low == high), no crash.
 function _contourf_payloads(p, poly)
-    edges = sort(Float64.(p.computed_levels[]))
+    edges = sort(Float64.(_computed_levels(p)))
     length(edges) >= 2 || error("Contourf introspection: <2 computed level edges (Makie internals changed?)")
     mids = [(edges[k] + edges[k + 1]) / 2 for k in 1:(length(edges) - 1)]
     colors = Float64.(poly.color[])
@@ -264,7 +264,7 @@ function _boxplot_stats_node(p)
             length(cv[1]) == length(cv[2]) == length(cv[3]) == length(cv[4])
         return p
     end
-    for c in p.plots
+    for c in _child_plots(p)
         r = try
             _boxplot_stats_node(c)
         catch e
@@ -300,7 +300,7 @@ end
 # laid-out geometry off the plot (or its children). No new types, no new manifest path.
 
 _childof(p, T) = (
-    for c in p.plots
+    for c in _child_plots(p)
         c isa T && return c
     end; error("$(typeof(p).name.name): no $T child plot found (Makie internals changed?)")
 )
@@ -309,7 +309,7 @@ _childof(p, T) = (
 # plot we need below a wrapper child (e.g. Density wraps a Band; Voronoiplot nests its Poly).
 _descendant_or_nothing(p, T) = p isa T ? p :
     (
-        for c in p.plots
+        for c in _child_plots(p)
             r = _descendant_or_nothing(c, T)
             r !== nothing && return r
     end; nothing
@@ -324,7 +324,7 @@ end
 # The parent `converted` is the raw input points; the rendered staircase (the actual click target)
 # lives in the child Lines as the pre-expanded step polyline — read that, don't replay the stepper.
 SegmentInteractable(ax, p::Makie.Stairs; id = :stairs, payloads = nothing, tol = 6) =
-    SegmentInteractable(ax, _childof(p, Makie.Lines).converted[][1]; mode = :polyline, id, payloads, tol)
+    SegmentInteractable(ax, _converted(_childof(p, Makie.Lines))[1]; mode = :polyline, id, payloads, tol)
 
 # ---- Errorbars / Rangebars -> Segment(:pairs) ----
 # One disjoint pair per element; caps/whiskers are decorative. Errorbars `converted` is Vec4
@@ -333,7 +333,7 @@ SegmentInteractable(ax, p::Makie.Stairs; id = :stairs, payloads = nothing, tol =
 function _errorbar_pairs(p)
     horiz = p.direction[] === :x
     vs = Point2f[]
-    for v in p.converted[][1]
+    for v in _converted(p)[1]
         x, y, lo, hi = v[1], v[2], v[3], v[4]
         horiz ? (push!(vs, Point2f(x - lo, y)); push!(vs, Point2f(x + hi, y))) :
             (push!(vs, Point2f(x, y - lo)); push!(vs, Point2f(x, y + hi)))
@@ -343,7 +343,7 @@ end
 function _rangebar_pairs(p)
     horiz = p.direction[] === :x
     vs = Point2f[]
-    for v in p.converted[][1]
+    for v in _converted(p)[1]
         val, lo, hi = v[1], v[2], v[3]
         horiz ? (push!(vs, Point2f(lo, val)); push!(vs, Point2f(hi, val))) :
             (push!(vs, Point2f(val, lo)); push!(vs, Point2f(val, hi)))
@@ -359,10 +359,10 @@ SegmentInteractable(ax, p::Makie.Rangebars; id = :rangebars, payloads = nothing,
 # Each line spans the full data range from `finallimits` (read post-update_state_before_display!).
 # ponytail: fractional xmin/xmax (HLines) / ymin/ymax (VLines) span attrs ignored — full span only.
 function _span_pairs(ax, p, ishoriz)
-    fl = ax.finallimits[]
+    fl = _finallimits(ax)
     lo = fl.origin[ishoriz ? 1 : 2]; hi = lo + fl.widths[ishoriz ? 1 : 2]
     vs = Point2f[]
-    for c in p.converted[][1]
+    for c in _converted(p)[1]
         ishoriz ? (push!(vs, Point2f(lo, c)); push!(vs, Point2f(hi, c))) :
             (push!(vs, Point2f(c, lo)); push!(vs, Point2f(c, hi)))
     end
@@ -396,7 +396,7 @@ function _spy_rects(p)
             "(per-marker sizes unsupported)."
     )
     w, h = ms isa AbstractVector ? (Float64(ms[1]), Float64(ms[2])) : (Float64(ms), Float64(ms))
-    return [(Float64(c[1]), Float64(c[2]), w, h) for c in sc.converted[][1]]
+    return [(Float64(c[1]), Float64(c[2]), w, h) for c in _converted(sc)[1]]
 end
 RectInteractable(ax, p::Makie.Spy; id = :spy, payloads = nothing) =
     RectInteractable(ax; rects = _spy_rects(p), id, payloads)
@@ -418,7 +418,7 @@ function _hist_payloads(rects, direction)
     ]
 end
 function _waterfall_payloads(p, rects)
-    deltas = p.converted[][1]                      # Point2 per bar: (x, signed delta)
+    deltas = _converted(p)[1]                      # Point2 per bar: (x, signed delta)
     return Any[
         let (cx, cy, w, h) = rects[k]
             (; low = Float64(cy - h / 2), high = Float64(cy + h / 2), value = Float64(deltas[k][2]))
@@ -442,7 +442,7 @@ end
 # ---- HSpan / VSpan -> RectInteractable(:list) ----
 # Payload: (low, high) from converted[] — the dimension the user explicitly specified.
 function _span_payloads(p)
-    cv = p.converted[]                                   # HSpan (ymin,ymax) / VSpan (xmin,xmax)
+    cv = _converted(p)                                   # HSpan (ymin,ymax) / VSpan (xmin,xmax)
     lo, hi = cv[1], cv[2]
     return Any[(; low = Float64(lo[k]), high = Float64(hi[k])) for k in eachindex(lo)]
 end
@@ -454,9 +454,9 @@ end
 # `full`: the axis direction the span fills completely (:x for HSpan, :y for VSpan).
 # converted[] = (lo_vec, hi_vec) where lo/hi are the band's own-dimension bounds.
 function _span_rects(ax, p, full::Symbol)
-    cv = p.converted[]
+    cv = _converted(p)
     lo_vec, hi_vec = cv[1], cv[2]
-    fl = ax.finallimits[]
+    fl = _finallimits(ax)
     fa_lo = fl.origin[full === :x ? 1 : 2]
     fa_hi = fa_lo + fl.widths[full === :x ? 1 : 2]
     fa_ctr = (fa_lo + fa_hi) / 2
@@ -483,7 +483,7 @@ end
 # Box rects are a direct child (depth 1); _bar_rects(p) finds them without _childof.
 # Semantic payload (midpoint, low, high) comes from p.converted[] = (x, midpoint, low, high).
 function _crossbar_payloads(p)
-    _, midpts, lows, highs = p.converted[]
+    _, midpts, lows, highs = _converted(p)
     return Any[(; midpoint = Float64(midpts[i]), low = Float64(lows[i]), high = Float64(highs[i])) for i in eachindex(midpts)]
 end
 function RectInteractable(ax, p::Makie.CrossBar; id = :crossbar, payloads = nothing)
@@ -607,7 +607,7 @@ function auto_interactables(fig)
     seen = Dict{Symbol, Int}()
     for ax in fig.content
         ax isa Union{Makie.Axis, Makie.Axis3, Makie.PolarAxis} || continue
-        for p in ax.scene.plots
+        for p in _child_plots(ax.scene)
             base = _plotbase(p)
             if base === nothing
                 @warn "holo: skipping unsupported plot type $(typeof(p).name.name) (no introspection recipe)" maxlog = 16

@@ -266,7 +266,7 @@ function holo(
     bg0 = fig.scene.backgroundcolor[]
     try
         fig.scene.backgroundcolor[] = RGBAf(Makie.red(bg0), Makie.green(bg0), Makie.blue(bg0), 1)
-        Makie.update_state_before_display!(fig)        # finalize once; render + context share it
+        _finalize!(fig)        # finalize once; render + context share it
         ppu = _ppu(backend, fig)
         ctx = context(backend, fig, ppu)
         tip_style = tip_style_dict(;
@@ -293,7 +293,7 @@ function holo(fig; kwargs...)
     # Finalize layout BEFORE auto-extraction: introspection that reads post-layout axis state
     # (e.g. `_span_rects`/hlines/vlines read `ax.finallimits[]`) would otherwise see stale limits,
     # since `holo(fig, ints)` only finalizes after `auto_interactables` has already built them.
-    Makie.update_state_before_display!(fig)
+    _finalize!(fig)
     ints = auto_interactables(fig)
     isempty(ints) && @warn "holo(fig): no introspectable plots found — overlaying nothing (static image only)"
     return holo(fig, ints; kwargs...)
