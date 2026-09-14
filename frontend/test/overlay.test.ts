@@ -498,6 +498,63 @@ describe("pointer capture, cancel, and coalesced drag release", () => {
         expect(dragSurface.style.touchAction).toBe("none")
     })
 
+    it("a second pointer's move/up cannot hijack a drag it didn't start", () => {
+        const { host, script } = setup()
+        mount(script, thresholdManifest())
+        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        let committed: { payload: number } | null = null
+        host.addEventListener("input", () => {
+            committed = (host as unknown as { value: typeof committed }).value
+        })
+        // pointer 0 starts the drag
+        surface.dispatchEvent(new PointerEvent("pointerdown", { pointerId: 0, clientX: 300, clientY: 200, bubbles: true }))
+        // pointer 1 (a second touch) arrives mid-drag: onDown's `if (drag) return` ignores its
+        // down, but its move/up must not steer or end pointer 0's drag either
+        surface.dispatchEvent(new PointerEvent("pointermove", { pointerId: 1, clientX: 900, clientY: 700, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1, clientX: 900, clientY: 700, bubbles: true }))
+        expect(committed).toBeNull()                               // pointer 1's up did not commit
+        expect(surface.classList.contains("grabbing")).toBe(true)  // pointer 0's drag is still live
+        expect(surface.hasPointerCapture(0)).toBe(true)
+        // pointer 0 moves and releases — its own drag commits normally
+        surface.dispatchEvent(new PointerEvent("pointermove", { pointerId: 0, clientX: 300, clientY: 300, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { pointerId: 0, clientX: 300, clientY: 300, bubbles: true }))
+        expect(committed).not.toBeNull()
+        expect(surface.classList.contains("grabbing")).toBe(false)
+    })
+
+    it("a second pointer's cancel cannot end a drag it didn't start", () => {
+        const { host, script } = setup()
+        mount(script, thresholdManifest())
+        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        surface.dispatchEvent(new PointerEvent("pointerdown", { pointerId: 0, clientX: 300, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 1, bubbles: true }))
+        expect(surface.classList.contains("grabbing")).toBe(true) // pointer 0's drag survives pointer 1's cancel
+        surface.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 0, bubbles: true }))
+        expect(surface.classList.contains("grabbing")).toBe(false)
+    })
+
+    it("pointerleave resets a drag left uncaptured (tryCapture's fallback path)", () => {
+        const { host, script } = setup()
+        mount(script, thresholdManifest())
+        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        // Force the same uncaptured fallback as the InvalidPointerId test above: onDown proceeds
+        // on drag/"grabbing" state alone, with no real capture granted.
+        surface.setPointerCapture = () => {
+            throw new DOMException("No active pointer with the given id is found.", "InvalidPointerId")
+        }
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(surface.classList.contains("grabbing")).toBe(true)
+        expect(surface.hasPointerCapture(0)).toBe(false) // no real capture — the fallback path
+        // Without real capture, a pointer leaving the surface mid-drag fires pointerleave (capture
+        // would otherwise suppress it) — the drag must not strand "grabbing" here.
+        surface.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }))
+        expect(surface.classList.contains("grabbing")).toBe(false)
+        let fired = false
+        host.addEventListener("input", () => { fired = true })
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 300, clientY: 300, bubbles: true }))
+        expect(fired).toBe(false) // the drag is gone — a later pointerup must not commit
+    })
+
     it("tooltip carries role=tooltip and aria-hidden tracks its visibility", () => {
         const { host, script } = setup()
         mount(script, manifest)

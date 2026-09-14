@@ -214,20 +214,25 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         roiBoxes.set(layer.id, box)
     }
 
+    // Every variant carries the pointerId that started it — onPointerMove/onUp/onCancel gate on
+    // this so a second concurrent pointer (e.g. two-finger touch, now let through by
+    // touch-action:none) can move/release/cancel without hijacking an in-flight drag it didn't
+    // start. onDown's `if (drag) return` only stops a second pointerDOWN; without this field the
+    // second pointer's move/up/cancel still routed into the first pointer's drag.
     type Drag =
-        | { kind: "threshold"; id: string; line: SVGLineElement; tg: ThresholdGeometry; t: AxisTransform }
-        | { kind: "roi"; id: string; box: ROIBox; mode: { corner: number } | { move: true }; ax: number; ay: number; target?: HitLayer }
-        | { kind: "view"; id: string; g: ViewGeometry; t: AxisTransform; x0: number; y0: number }
+        | { kind: "threshold"; id: string; line: SVGLineElement; tg: ThresholdGeometry; t: AxisTransform; pointerId: number }
+        | { kind: "roi"; id: string; box: ROIBox; mode: { corner: number } | { move: true }; ax: number; ay: number; target?: HitLayer; pointerId: number }
+        | { kind: "view"; id: string; g: ViewGeometry; t: AxisTransform; x0: number; y0: number; pointerId: number }
     let drag: Drag | null = null
     let justDragged = false
     const VIEW_MIN_PX = 3 // image-px; ignore accidental micro-drags
     const clampX = (t: AxisTransform, x: number) => Math.max(t.viewport[0], Math.min(t.viewport[0] + t.viewport[2], x))
     const clampY = (t: AxisTransform, y: number) => Math.max(t.viewport[1], Math.min(t.viewport[1] + t.viewport[3], y))
 
-    const startViewDrag = (layer: HitLayer, p: { x: number; y: number }) => {
+    const startViewDrag = (layer: HitLayer, p: { x: number; y: number }, pointerId: number) => {
         drag = {
             kind: "view", id: layer.id, g: layer.geometry as ViewGeometry,
-            t: manifest.transforms[layer.axis], x0: p.x, y0: p.y,
+            t: manifest.transforms[layer.axis], x0: p.x, y0: p.y, pointerId,
         }
     }
     const viewTip = (d: Extract<Drag, { kind: "view" }>, p: { x: number; y: number }) => {
@@ -415,7 +420,19 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         }
         pendingMove = null
     }
-    const onLeave = () => { cancelPendingMove(); clearHi(true); hideTip() }
+    const onLeave = () => {
+        cancelPendingMove(); clearHi(true); hideTip()
+        // Fallback for tryCapture's uncaptured path: without real capture, leaving the surface
+        // fires pointerleave (capture would otherwise suppress it until release), and the
+        // pointermove/pointerup that follow off-element never reach these listeners — so drag
+        // would stay non-null with the cursor stuck "grabbing", reopening the pre-PR bug. Under
+        // real capture this check is false (hasPointerCapture is still true) and it's a no-op.
+        if (drag && !surface.hasPointerCapture(drag.pointerId)) {
+            cancelPendingDrag()
+            drag = null
+            surface.classList.remove("grabbing")
+        }
+    }
     // setPointerCapture throws InvalidPointerId if the UA doesn't consider this pointerId active
     // (observed live in Chromium for a synthetic/non-primary pointerId — real touch/pen input can
     // hit the same path). An uncaught throw here would abort onDown before `e.preventDefault()`,
@@ -442,7 +459,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
                 return hitTest({ ...manifest, layers: [l] }, p.x, p.y, "drag") !== null
             })
             if (viewLayer) {
-                startViewDrag(viewLayer, p)
+                startViewDrag(viewLayer, p, e.pointerId)
                 surface.classList.add("grabbing")
                 tryCapture(e.pointerId)
                 e.preventDefault()
@@ -454,21 +471,21 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         if (hit.layer.kind === "threshold") {
             const line = thresholdLines.get(hit.layer.id)
             if (!line) return
-            drag = { kind: "threshold", id: hit.layer.id, line, tg: hit.layer.geometry as ThresholdGeometry, t: manifest.transforms[hit.layer.axis] }
+            drag = { kind: "threshold", id: hit.layer.id, line, tg: hit.layer.geometry as ThresholdGeometry, t: manifest.transforms[hit.layer.axis], pointerId: e.pointerId }
         } else if (hit.layer.kind === "roi" && hit.roiPart) {
             const box = roiBoxes.get(hit.layer.id)
             if (!box) return
             const target = box.target   // resolved once when roiBoxes was built
             if (hit.roiPart.move) {
-                drag = { kind: "roi", id: hit.layer.id, box, mode: { move: true }, ax: p.x - box.g.x, ay: p.y - box.g.y, target }
+                drag = { kind: "roi", id: hit.layer.id, box, mode: { move: true }, ax: p.x - box.g.x, ay: p.y - box.g.y, target, pointerId: e.pointerId }
             } else {
                 const k = hit.roiPart.corner as number
                 const c = [[box.g.x, box.g.y], [box.g.x + box.g.w, box.g.y], [box.g.x + box.g.w, box.g.y + box.g.h], [box.g.x, box.g.y + box.g.h]]
                 const opp = c[(k + 2) % 4]
-                drag = { kind: "roi", id: hit.layer.id, box, mode: { corner: k }, ax: opp[0], ay: opp[1], target }
+                drag = { kind: "roi", id: hit.layer.id, box, mode: { corner: k }, ax: opp[0], ay: opp[1], target, pointerId: e.pointerId }
             }
         } else if (hit.layer.kind === "view") {
-            startViewDrag(hit.layer, p)
+            startViewDrag(hit.layer, p, e.pointerId)
         } else return
         surface.classList.add("grabbing")
         tryCapture(e.pointerId)
@@ -533,9 +550,12 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     }
     const onUp = (e: PointerEvent) => {
         cancelPendingMove()
-        cancelPendingDrag()
         const d = drag
-        if (!d) return
+        // Ignore a pointer that isn't the one that owns this drag (e.g. a second touch lifting
+        // first) — without this, any pointer's up committed and ended whichever drag happened
+        // to be in flight, at that pointer's own coordinates.
+        if (!d || e.pointerId !== d.pointerId) return
+        cancelPendingDrag()
         // Claim (null out) `drag` BEFORE releasing capture: releasePointerCapture can synchronously
         // dispatch lostpointercapture (spec leaves the exact timing to "process pending pointer
         // capture", which runs between dispatches — implementation-dependent), and onLostCapture
@@ -586,8 +606,10 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     // takeover, stylus leaving range, etc.) — unlike pointerup this is not a commit, just a clean
     // reset so drag can't stay non-null with the cursor stuck in "grabbing".
     const onCancel = (e: PointerEvent) => {
+        // Same pointerId gate as onUp — a non-owning pointer's cancel must not touch a drag it
+        // didn't start.
+        if (!drag || e.pointerId !== drag.pointerId) return
         cancelPendingDrag()
-        if (!drag) return
         drag = null // claim before releasePointerCapture, same reentrancy hazard as onUp
         if (surface.hasPointerCapture(e.pointerId)) surface.releasePointerCapture(e.pointerId)
         surface.classList.remove("grabbing")
@@ -616,8 +638,13 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     // rAF-coalesced drag path; otherwise it's hover. Pointer capture (set in onDown) keeps these
     // events targeted at `surface` even once the pointer leaves its bounds or the viewport.
     const onPointerMove = (e: PointerEvent) => {
-        if (drag) queueDrag(drag, e)
-        else onMove(e)
+        if (drag) {
+            // A second pointer's move (e.g. two-finger touch, now let through by touch-action:none)
+            // must not steer a drag it didn't start — ignore it outright rather than falling through
+            // to hover, which would fight the "grabbing" cursor and hi/tip state mid-drag.
+            if (e.pointerId !== drag.pointerId) return
+            queueDrag(drag, e)
+        } else onMove(e)
     }
 
     surface.addEventListener("pointerdown", onDown)
