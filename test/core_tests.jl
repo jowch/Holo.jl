@@ -758,8 +758,8 @@ end
         @test haskey(m["transforms"], "ax1")
 
         # inspector ink (first polish PR): hoverstyle default + shipped layer.style
-        @test Holo.hoverstyle(PointInteractable(bax, pts; id = :scatter), 1).stroke == "#3A6F7C"
-        @test Holo.hoverstyle(PointInteractable(bax, pts; id = :scatter), 1).width == 2
+        @test Holo.hoverstyle(PointInteractable(bax, pts; id = :scatter)).stroke == "#3A6F7C"
+        @test Holo.hoverstyle(PointInteractable(bax, pts; id = :scatter)).width == 2
         @test m["layers"][1]["style"]["stroke"] == "#3A6F7C"
 
         # selection round-trip: pre-highlight indices ride the manifest keyed by layer id

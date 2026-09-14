@@ -51,7 +51,7 @@ function _payload_keys(payloads)
 end
 
 function _layer_dict(i, L::HitLayer)
-    hs = hoverstyle(i, 1)
+    hs = hoverstyle(i)
     d = Dict{String, Any}(
         "id" => string(L.id), "kind" => string(L.kind), "axis" => string(L.axis),
         "geometry" => L.geometry, "payloads" => L.payloads,
