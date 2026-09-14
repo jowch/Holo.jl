@@ -44,7 +44,6 @@ abstract type AbstractBackend end
 
 render(::AbstractBackend, fig)::RenderResult         # finalize layout + produce artifact
 context(::AbstractBackend, fig)::InteractionContext  # projection + per-axis transforms
-mount(::AbstractBackend)::Symbol                     # :img (raster) | :svg (vector)
 
 struct RenderResult
     mime    :: String                                 # "image/png" | "image/svg+xml"
@@ -57,8 +56,10 @@ end
 
 **`CairoBackend` was the only v1 implementation.** (Update: a second, co-equal implementation,
 `WebGLBackend` — the `:webgl` backend, in `ext/HoloWGLMakieExt.jl` — was added later; see the
-note at the end of this section.) `CairoBackend` is PNG (`mount = :img`) by default, SVG
-(`mount = :svg`) optionally for sparse plots. `render` = `colorbuffer` → PNG → bytes. `context` calls
+note at the end of this section.) `CairoBackend` renders PNG only — no vector/SVG output path
+exists (a `CairoBackend(vector=true)` groundwork field was removed pre-registration as dead code;
+see `roadmap.md`'s SVG output path item for what an actual implementation would need). `render` =
+`colorbuffer` → PNG → bytes. `context` calls
 `Makie.update_state_before_display!(fig)` (mandatory, validated) then builds the projection closure
 and reads each axis's transform.
 
@@ -72,7 +73,7 @@ The seam was originally scoped static-only: v1's research (Q0) found a browser-s
 WGLMakie rendering model server-centric and reload-fragile, at odds with the static/durable
 output this project set out to provide, and framed it as a different product rather than a
 deferred target. **Update:** the seam turned out to admit a live implementation cleanly after
-all — `WebGLBackend` implements the same `AbstractBackend` contract (`render`/`context`/`mount`)
+all — `WebGLBackend` implements the same `AbstractBackend` contract (`render`/`context`)
 against a browser-GPU `<canvas>` instead of a PNG, shipped as the `HoloWGLMakieExt` weak-dep
 extension. The two backends are now co-equal peers (`_resolve_backend` in `src/render.jl`
 picks the loaded one, honors `backend=`, and defaults to Cairo if both are present); see
@@ -151,7 +152,8 @@ events(::AbstractInteractable)::Tuple = (:click, :hover)   # which events the ov
 # constructor (nothing → auto-table, Markup → template, false → suppress).
 # The per-element `tooltip(interactable, idx, payload)` dispatch is retired (M2.3).
 # See docs/tooltips.md.
-hoverstyle(::AbstractInteractable, idx::Int)::NamedTuple = (; stroke="#3A6F7C", width=2)
+# hoverstyle is per-LAYER too — the manifest ships one `style` per layer, not per element.
+hoverstyle(::AbstractInteractable)::NamedTuple = (; stroke="#3A6F7C", width=2)
 ```
 
 **`validate` is per-capability, not a global scale gate** (fixes a latent silent-coordinate bug).

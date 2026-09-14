@@ -26,7 +26,8 @@ events(::AbstractInteractable) = (:click, :hover)
 # Per-LAYER tooltip spec (applies to every element of the interactable's layers):
 #   nothing → auto name/value table (default) · Markup → template · false → suppress.
 tooltip_spec(::AbstractInteractable) = nothing
-hoverstyle(::AbstractInteractable, ::Int) = (; stroke = "#3A6F7C", width = 2)
+# One hover style per LAYER (the manifest ships one `style` dict per layer, not per element).
+hoverstyle(::AbstractInteractable) = (; stroke = "#3A6F7C", width = 2)
 
 abstract type AbstractSelector <: AbstractInteractable end
 
@@ -72,6 +73,17 @@ function _check_payloads(payloads, n, what)
     return collect(Any, payloads)
 end
 
+# tooltip = true is never meaningful (Markup/false/nothing only) — fail at CONSTRUCTION so the
+# error points at the call the caller wrote, not at manifest build time deep inside holo().
+# Called from every interactable constructor that accepts `tooltip`.
+_check_tooltip(tooltip) =
+    tooltip === true && throw(
+    ArgumentError(
+        "tooltip = true is not meaningful — omit `tooltip` for the auto name/value table " *
+            "(the default), pass holo\"…\" for a template, or `false` to suppress.",
+    ),
+)
+
 # ============================ PointInteractable ============================
 struct PointInteractable <: AbstractInteractable
     ax; points::Vector{Point3f}; id::Symbol; payloads::Vector{Any}; radius::Float64
@@ -94,6 +106,7 @@ function PointInteractable(
         ],
         radius = 9, radius3d = nothing, tooltip = nothing
     )
+    _check_tooltip(tooltip)
     pts = [_pt3(p) for p in points]
     length(payloads) == length(pts) || throw(ArgumentError("payloads must match points"))
     r3 = radius3d === nothing ? nothing : Vector{Makie.Vec3f}(radius3d)
@@ -130,20 +143,37 @@ end
 # ============================ SegmentInteractable ==========================
 struct SegmentInteractable <: AbstractInteractable
     ax; vertices::Vector{Point3f}; mode::Symbol; id::Symbol; payloads::Vector{Any}; tol::Float64; tooltip::Union{Nothing, Markup, Bool}
+    # When set, hitlayers calls `resolve(ax)` for the vertices instead of the stored `vertices` —
+    # for geometry that depends on axis layout state not yet final at construction time (HLines/
+    # VLines span `ax.finallimits[]`, which is only correct AFTER `update_state_before_display!`
+    # runs; a hand-built interactable can be constructed before that, e.g. `holo(fig, ints)` where
+    # `ints` was built before `holo` finalizes). `vertices` is still populated eagerly (current
+    # best-effort) so direct field access keeps working; only hitlayers prefers `resolve`. Same
+    # construction-vs-hitlayers split TextInteractable uses for string_boundingboxes/viewport.
+    resolve::Union{Nothing, Function}
 end
 function SegmentInteractable(
         ax, vertices; mode = :polyline, id = :segments,
         payloads = nothing, tol = 6, tooltip = nothing
     )
+    _check_tooltip(tooltip)
+    mode in (:polyline, :pairs) ||
+        throw(ArgumentError("SegmentInteractable: mode must be :polyline or :pairs, got :$mode"))
     vs = [_pt3(v) for v in vertices]
     nseg = mode === :polyline ? max(0, length(vs) - 1) : length(vs) ÷ 2
     pl = payloads === nothing ? Any[(; segment_index = k - 1) for k in 1:nseg] : _check_payloads(payloads, nseg, "SegmentInteractable")
-    return SegmentInteractable(ax, vs, mode, id, pl, Float64(tol), tooltip)
+    return SegmentInteractable(ax, vs, mode, id, pl, Float64(tol), tooltip, nothing)
+end
+# Internal-only: construct with a lazy `resolve(ax) -> vertices`, used by introspection
+# constructors whose geometry depends on axis state that isn't final yet at construction time.
+function _segment_with_resolve(ax, vertices, mode, id, payloads, tol, resolve)
+    return SegmentInteractable(ax, [_pt3(v) for v in vertices], mode, id, payloads, Float64(tol), nothing, resolve)
 end
 tooltip_spec(i::SegmentInteractable) = i.tooltip
 function hitlayers(i::SegmentInteractable, ctx)
+    vs = i.resolve === nothing ? i.vertices : [_pt3(v) for v in i.resolve(i.ax)]
     g = Real[]
-    for v in i.vertices
+    for v in vs
         q = _proj(ctx, i.ax, v); append!(g, (_q(q[1]), _q(q[2])))
     end
     kind = i.mode === :polyline ? :polyline : :segments
@@ -158,26 +188,49 @@ struct RectInteractable <: AbstractInteractable
     # inward rounding (ceil for near edge, floor for far edge) so that integer quantization
     # never expands the rect beyond the viewport bounds. See architecture.md §3 + phase2a fix.
     clamp_to_viewport::Bool
+    # :list only. When set, hitlayers calls `resolve(ax)` for the rects instead of the stored
+    # `data` — HSpan/VSpan fill one dimension with `ax.finallimits[]`, which is only correct
+    # AFTER `update_state_before_display!` runs. Same defer-to-hitlayers split as
+    # `SegmentInteractable.resolve` (see its comment); `data` stays populated (current
+    # best-effort) for direct field access.
+    resolve::Union{Nothing, Function}
 end
 function RectInteractable(
         ax; rects = nothing, grid = nothing, id = :rects, payloads = nothing,
         tooltip = nothing, clamp_to_viewport = false
     )
+    _check_tooltip(tooltip)
     return if grid !== nothing
         xe, ye, vals = grid
-        RectInteractable(ax, :grid, (collect(Float64, xe), collect(Float64, ye), vals), id, Any[], tooltip, false)
+        xe = collect(Float64, xe); ye = collect(Float64, ye)
+        expected = (length(xe) - 1, length(ye) - 1)
+        vals isa AbstractMatrix && size(vals) == expected || throw(
+            ArgumentError(
+                "RectInteractable: grid `values` must be a Matrix with shape (length(xedges)-1, length(yedges)-1) " *
+                    "= $(expected), got $(vals isa AbstractMatrix ? size(vals) : typeof(vals))",
+            ),
+        )
+        RectInteractable(ax, :grid, (xe, ye, vals), id, Any[], tooltip, false, nothing)
     else
         rs = [(Float64(r[1]), Float64(r[2]), Float64(r[3]), Float64(r[4])) for r in rects]
         pl = payloads === nothing ? Any[(; index = k - 1) for k in 1:length(rs)] : _check_payloads(payloads, length(rs), "RectInteractable")
-        RectInteractable(ax, :list, rs, id, pl, tooltip, clamp_to_viewport)
+        RectInteractable(ax, :list, rs, id, pl, tooltip, clamp_to_viewport, nothing)
     end
+end
+# Internal-only: construct a :list RectInteractable with a lazy `resolve(ax) -> rects`, used by
+# introspection constructors (HSpan/VSpan) whose geometry depends on axis state that isn't final
+# yet at construction time.
+function _rect_with_resolve(ax, rects, id, payloads, clamp_to_viewport, resolve)
+    rs = [(Float64(r[1]), Float64(r[2]), Float64(r[3]), Float64(r[4])) for r in rects]
+    return RectInteractable(ax, :list, rs, id, payloads, nothing, clamp_to_viewport, resolve)
 end
 tooltip_spec(i::RectInteractable) = i.tooltip
 function hitlayers(i::RectInteractable, ctx)
     if i.layout === :list
+        rects = i.resolve === nothing ? i.data : i.resolve(i.ax)
         g = Real[]
         vp = i.clamp_to_viewport ? ctx.transforms[axis_id(ctx, i.ax)].viewport : nothing
-        for (xc, yc, w, h) in i.data
+        for (xc, yc, w, h) in rects
             a = _proj(ctx, i.ax, (xc - w / 2, yc - h / 2)); b = _proj(ctx, i.ax, (xc + w / 2, yc + h / 2))
             cx = (a[1] + b[1]) / 2; cy = (a[2] + b[2]) / 2
             ww = abs(b[1] - a[1]); hh = abs(b[2] - a[2])
@@ -243,6 +296,7 @@ struct TextInteractable <: AbstractInteractable
     ax; p; id::Symbol; payloads::Vector{Any}; tooltip::Union{Nothing, Markup, Bool}   # p::Makie.Text
 end
 function TextInteractable(ax, p::Makie.Text; id = :text, payloads = nothing, tooltip = nothing)
+    _check_tooltip(tooltip)
     strs = p.text[]
     anchors = p.positions[]
     length(anchors) == length(strs) ||
@@ -283,6 +337,7 @@ struct PolygonInteractable <: AbstractInteractable
     ax; rings::Vector; id::Symbol; payloads::Vector{Any}; tooltip::Union{Nothing, Markup, Bool}
 end
 function PolygonInteractable(ax, rings; id = :polygons, payloads = nothing, tooltip = nothing)
+    _check_tooltip(tooltip)
     rs = [[_pt3(p) for p in ring] for ring in rings]
     pl = payloads === nothing ? Any[(; index = k - 1) for k in 1:length(rs)] : _check_payloads(payloads, length(rs), "PolygonInteractable")
     return PolygonInteractable(ax, rs, id, pl, tooltip)
@@ -480,6 +535,7 @@ function RegionInteractable(
         ax; regions, payloads, id = :region,
         tooltip = nothing, events = (:click, :hover)
     )
+    _check_tooltip(tooltip)
     length(regions) == length(payloads) || throw(ArgumentError("regions/payloads length mismatch"))
     return RegionInteractable(ax, collect(regions), collect(Any, payloads), id, tooltip, events)
 end

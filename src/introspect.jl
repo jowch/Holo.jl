@@ -368,10 +368,18 @@ function _span_pairs(ax, p, ishoriz)
     end
     return vs
 end
-SegmentInteractable(ax, p::Makie.HLines; id = :hlines, payloads = nothing, tol = 6) =
-    SegmentInteractable(ax, _span_pairs(ax, p, true); mode = :pairs, id, payloads, tol)
-SegmentInteractable(ax, p::Makie.VLines; id = :vlines, payloads = nothing, tol = 6) =
-    SegmentInteractable(ax, _span_pairs(ax, p, false); mode = :pairs, id, payloads, tol)
+function SegmentInteractable(ax, p::Makie.HLines; id = :hlines, payloads = nothing, tol = 6)
+    vs = _span_pairs(ax, p, true)
+    nseg = length(vs) ÷ 2
+    pl = payloads === nothing ? Any[(; segment_index = k - 1) for k in 1:nseg] : _check_payloads(payloads, nseg, "SegmentInteractable")
+    return _segment_with_resolve(ax, vs, :pairs, id, pl, tol, _ax -> _span_pairs(_ax, p, true))
+end
+function SegmentInteractable(ax, p::Makie.VLines; id = :vlines, payloads = nothing, tol = 6)
+    vs = _span_pairs(ax, p, false)
+    nseg = length(vs) ÷ 2
+    pl = payloads === nothing ? Any[(; segment_index = k - 1) for k in 1:nseg] : _check_payloads(payloads, nseg, "SegmentInteractable")
+    return _segment_with_resolve(ax, vs, :pairs, id, pl, tol, _ax -> _span_pairs(_ax, p, false))
+end
 
 # ---- Spy -> Rect(:list) ----
 # Spy renders nonzeros as a child Scatter with markerspace=:data, so markersize IS the cell size
@@ -461,12 +469,14 @@ function _span_rects(ax, p, full::Symbol)
     ]
 end
 function RectInteractable(ax, p::Makie.HSpan; id = :hspan, payloads = nothing)
-    pl = payloads === nothing ? _span_payloads(p) : payloads
-    return RectInteractable(ax; rects = _span_rects(ax, p, :x), id, payloads = pl, clamp_to_viewport = true)
+    rs = _span_rects(ax, p, :x)
+    pl = payloads === nothing ? _span_payloads(p) : _check_payloads(payloads, length(rs), "RectInteractable")
+    return _rect_with_resolve(ax, rs, id, pl, true, _ax -> _span_rects(_ax, p, :x))
 end
 function RectInteractable(ax, p::Makie.VSpan; id = :vspan, payloads = nothing)
-    pl = payloads === nothing ? _span_payloads(p) : payloads
-    return RectInteractable(ax; rects = _span_rects(ax, p, :y), id, payloads = pl, clamp_to_viewport = true)
+    rs = _span_rects(ax, p, :y)
+    pl = payloads === nothing ? _span_payloads(p) : _check_payloads(payloads, length(rs), "RectInteractable")
+    return _rect_with_resolve(ax, rs, id, pl, true, _ax -> _span_rects(_ax, p, :y))
 end
 
 # ---- CrossBar -> RectInteractable(:list) ----

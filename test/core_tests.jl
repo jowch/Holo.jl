@@ -758,8 +758,8 @@ end
         @test haskey(m["transforms"], "ax1")
 
         # inspector ink (first polish PR): hoverstyle default + shipped layer.style
-        @test Holo.hoverstyle(PointInteractable(bax, pts; id = :scatter), 1).stroke == "#3A6F7C"
-        @test Holo.hoverstyle(PointInteractable(bax, pts; id = :scatter), 1).width == 2
+        @test Holo.hoverstyle(PointInteractable(bax, pts; id = :scatter)).stroke == "#3A6F7C"
+        @test Holo.hoverstyle(PointInteractable(bax, pts; id = :scatter)).width == 2
         @test m["layers"][1]["style"]["stroke"] == "#3A6F7C"
 
         # selection round-trip: pre-highlight indices ride the manifest keyed by layer id
@@ -1142,6 +1142,75 @@ end
             @test drawn_near(img, (g[1] + g[3]) / 2, (g[2] + g[4]) / 2)
         end
 
+        @testset "hlines/vlines: interactable built before finalize resolves against finalized limits" begin
+            # Regression: holo(fig, interactables) only finalizes AFTER the caller already built
+            # `interactables` (unlike holo(fig), which finalizes first). A SegmentInteractable built
+            # from an HLines/VLines plot object before any finalize call must still span the
+            # FINALIZED viewport at hitlayers time, not whatever finallimits happened to hold at
+            # construction.
+            f = Figure(size = (500, 350)); a = Axis(f[1, 1]); scatter!(a, [0.0, 5.0], [0.0, 5.0])
+            ph = hlines!(a, [1.0, 3.0])
+            seg = SegmentInteractable(a, ph)   # constructed BEFORE any finalize call
+            xlims!(a, -20, 20)                 # widen limits after construction
+            w = holo(f, [seg])                 # finalizes internally, after seg was already built
+            ref = holo(f)                      # holo(fig): finalizes first, then auto-extracts (ground truth)
+            seg_layer = only(filter(l -> l["id"] == "hlines", w.manifest["layers"]))
+            ref_layer = only(filter(l -> l["id"] == "hlines", ref.manifest["layers"]))
+            @test seg_layer["geometry"] == ref_layer["geometry"]
+            fl = a.finallimits[]
+            @test fl.origin[1] ≈ -20 atol = 0.5
+            @test fl.origin[1] + fl.widths[1] ≈ 20 atol = 0.5
+
+            # VLines mirror: spans the full Y-range (ishoriz=false in `_span_pairs`), so widen ylims.
+            fv = Figure(size = (500, 350)); av = Axis(fv[1, 1]); scatter!(av, [0.0, 5.0], [0.0, 5.0])
+            pv = vlines!(av, [1.0, 3.0])
+            segv = SegmentInteractable(av, pv)   # constructed BEFORE any finalize call
+            ylims!(av, -20, 20)                  # widen limits after construction
+            wv = holo(fv, [segv])
+            refv = holo(fv)
+            segv_layer = only(filter(l -> l["id"] == "vlines", wv.manifest["layers"]))
+            refv_layer = only(filter(l -> l["id"] == "vlines", refv.manifest["layers"]))
+            @test segv_layer["geometry"] == refv_layer["geometry"]
+            flv = av.finallimits[]
+            @test flv.origin[2] ≈ -20 atol = 0.5
+            @test flv.origin[2] + flv.widths[2] ≈ 20 atol = 0.5
+        end
+
+        @testset "hspan/vspan: interactable built before finalize resolves against finalized limits" begin
+            # Same finalize-order regression as hlines/vlines, but for RectInteractable's `resolve`
+            # path (`_rect_with_resolve`, wired at the HSpan/VSpan constructors in introspect.jl).
+            # Every existing HSpan/VSpan test goes through holo(fig), which finalizes first, so
+            # none of them would catch hitlayers falling back to stale `data`.
+
+            # HSpan fills the full X-range (`_span_rects(ax, p, :x)`), so widen xlims.
+            f = Figure(size = (500, 350)); a = Axis(f[1, 1]); scatter!(a, [0.0, 5.0], [0.0, 5.0])
+            ph = hspan!(a, [1.0], [3.0])
+            rect = RectInteractable(a, ph)       # constructed BEFORE any finalize call
+            xlims!(a, -20, 20)                   # widen limits after construction
+            w = holo(f, [rect])
+            ref = holo(f)
+            rect_layer = only(filter(l -> l["id"] == "hspan", w.manifest["layers"]))
+            ref_layer = only(filter(l -> l["id"] == "hspan", ref.manifest["layers"]))
+            @test rect_layer["geometry"] == ref_layer["geometry"]
+            fl = a.finallimits[]
+            @test fl.origin[1] ≈ -20 atol = 0.5
+            @test fl.origin[1] + fl.widths[1] ≈ 20 atol = 0.5
+
+            # VSpan fills the full Y-range (`_span_rects(ax, p, :y)`), so widen ylims.
+            fv = Figure(size = (500, 350)); av = Axis(fv[1, 1]); scatter!(av, [0.0, 5.0], [0.0, 5.0])
+            pv = vspan!(av, [1.0], [3.0])
+            rectv = RectInteractable(av, pv)     # constructed BEFORE any finalize call
+            ylims!(av, -20, 20)                  # widen limits after construction
+            wv = holo(fv, [rectv])
+            refv = holo(fv)
+            rectv_layer = only(filter(l -> l["id"] == "vspan", wv.manifest["layers"]))
+            refv_layer = only(filter(l -> l["id"] == "vspan", refv.manifest["layers"]))
+            @test rectv_layer["geometry"] == refv_layer["geometry"]
+            flv = av.finallimits[]
+            @test flv.origin[2] ≈ -20 atol = 0.5
+            @test flv.origin[2] + flv.widths[2] ≈ 20 atol = 0.5
+        end
+
         @testset "empty data -> empty layer (no pairs)" begin
             # Build the empty Errorbars from a typed Vec4f[] (the post-conversion type Makie
             # expects). Empty *untyped* vectors (Float64[], Float64[], Float64[]) fail Makie's
@@ -1473,6 +1542,26 @@ end
         @test ri2.payloads[2] == (; low = 3.0, high = 4.0)
     end
 
+    @testset "HSpan/VSpan: wrong-length user payloads rejected" begin
+        # Pins existing behavior (not new in this PR): user-supplied `payloads` for HSpan/VSpan
+        # go through `_check_payloads` and must match the band count, same as every other
+        # interactable. Regression coverage for the `_rect_with_resolve` refactor, which now calls
+        # `_check_payloads` directly instead of delegating to the public keyword `RectInteractable`
+        # constructor (which checked it transitively before).
+        using Holo: RectInteractable
+        fig = Figure(); ax = Axis(fig[1, 1]); lines!(ax, 0 .. 10, sin)
+        hspan!(ax, [1.0, 3.0], [2.0, 4.0])
+        Makie.update_state_before_display!(fig)
+        hp = ax.scene.plots[end]
+        @test_throws ArgumentError RectInteractable(ax, hp; id = :hspan, payloads = [(; a = 1)])
+
+        fig2 = Figure(); ax2 = Axis(fig2[1, 1]); lines!(ax2, 0 .. 10, cos)
+        vspan!(ax2, [1.0, 3.0], [2.0, 4.0])
+        Makie.update_state_before_display!(fig2)
+        vp = ax2.scene.plots[end]
+        @test_throws ArgumentError RectInteractable(ax2, vp; id = :vspan, payloads = [(; a = 1)])
+    end
+
     @testset "HSpan/VSpan hit-rect bounded to axis limits (anti-bleed)" begin
         # Regression: span hit-rects must clamp the full-axis dimension to ax.finallimits[],
         # not rely on the child Poly's HyperRectangle (which can exceed axis limits in some
@@ -1562,6 +1651,39 @@ end
         @test_throws ArgumentError PolygonInteractable(ax, [ring]; payloads = [(; a = 1), (; a = 2)])      # too long
         @test_throws ArgumentError PolygonInteractable(ax, [ring, ring]; payloads = [(; a = 1)])          # too short: 2 rings, 1 payload
         @test PolygonInteractable(ax, [ring]; payloads = [(; a = 1)]) isa PolygonInteractable             # exact
+    end
+
+    @testset "construction-time validation: mode / grid shape / tooltip=true" begin
+        using Holo: SegmentInteractable, RectInteractable, PointInteractable
+        fig = Figure(); ax = Axis(fig[1, 1])
+        pts = [Point2f(0, 0), Point2f(1, 1)]
+        @test_throws ArgumentError SegmentInteractable(ax, pts; mode = :segments)
+        @test SegmentInteractable(ax, pts; mode = :pairs) isa SegmentInteractable
+        @test SegmentInteractable(ax, pts; mode = :polyline) isa SegmentInteractable
+
+        # grid `values` must be (length(xedges)-1, length(yedges)-1)
+        xe = 0.0:1.0:3.0; ye = 0.0:1.0:2.0   # 3x2 cells expected
+        good = zeros(3, 2)
+        @test RectInteractable(ax; grid = (xe, ye, good)) isa RectInteractable
+        bad = zeros(2, 3)   # transposed — wrong shape
+        @test_throws ArgumentError RectInteractable(ax; grid = (xe, ye, bad))
+        # non-Matrix `values` (e.g. a vector, or nothing) must raise the same friendly
+        # ArgumentError, not a bare MethodError from `size(nothing)` deep inside the check.
+        @test_throws ArgumentError RectInteractable(ax; grid = (xe, ye, nothing))
+        @test_throws ArgumentError RectInteractable(ax; grid = (xe, ye, [1.0, 2.0, 3.0]))
+
+        # tooltip = true fails at construction, not at manifest build — every constructor that
+        # accepts `tooltip` shares the `_check_tooltip` helper; pin the contract on all of them.
+        @test_throws ArgumentError PointInteractable(ax, [(0.0, 0.0)]; tooltip = true)
+        @test_throws ArgumentError SegmentInteractable(ax, pts; tooltip = true)
+        @test_throws ArgumentError RectInteractable(ax; rects = [(0.0, 0.0, 1.0, 1.0)], tooltip = true)
+        tp = text!(ax, [0.0], [0.0]; text = ["a"])
+        @test_throws ArgumentError TextInteractable(ax, tp; tooltip = true)
+        ring = [Point2f(0, 0), Point2f(1, 0), Point2f(1, 1)]
+        @test_throws ArgumentError PolygonInteractable(ax, [ring]; tooltip = true)
+        @test_throws ArgumentError RegionInteractable(
+            ax; regions = [(:circle, (1.0, 1.0), 0.5)], payloads = [(; n = "a")], tooltip = true
+        )
     end
 
     @testset "clamp path is non-finite-safe" begin

@@ -125,7 +125,6 @@ end
 @testset "backend wiring" begin
     b = _WGLExt.WebGLBackend()
     @test b isa Holo.AbstractBackend
-    @test Holo.mount(b) === :webgl
     @test isfile(_WGLExt.SHIM_JS)
     @test isfile(_WGLExt.wglmakie_bundle_path())   # the version-matched renderer is on disk
 end
