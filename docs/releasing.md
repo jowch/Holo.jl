@@ -1,14 +1,20 @@
 # Releasing Holo to General
 
+Process: **merge → Jonathan Registrators → TagBot tags after General**.
+Tags are created **after** General accepts, via TagBot (already in this repo).
+Do not create a git tag or GitHub Release before that.
+
 Prep for **v0.1.0**. Jonathan comments `@JuliaRegistrator register` **after**
 this prep merges — never on the prep PR, and never before `main` CI is green.
 
 Julia ships the registered git *tree*, not GitHub release assets. CI is the sole
 author of `assets/overlay.js` (and `assets/holo-webgl.js`) on `main`. Register
-and tag a **CI-green `main` commit**, never a branch head that CI has not rebuilt.
+a **CI-green `main` commit**, never a branch head that CI has not rebuilt.
+TagBot tags that commit after the General PR merges.
 
-Do **not** run Registrator, create a git tag, or open a GitHub Release from the
-prep PR. Those are Jonathan's post-merge steps.
+Do **not** run Registrator from the prep PR. Creating a git tag or GitHub
+Release is **not** a post-merge human step — TagBot does that after General
+accepts.
 
 ## What this repo already has
 
@@ -86,17 +92,18 @@ All of these, then Jonathan registers:
    packages wait **3 days**; expect a human for the 4-letter name even if the
    other AutoMerge checks pass.
 6. When that General PR merges, TagBot creates the `v0.1.0` git tag and GitHub
-   Release. Do **not** tag or open the Release first. If TagBot cannot push
-   because the registered SHA modified a workflow file, it opens a
-   **manual-release** issue — follow that, then (only then) tag / `gh release
-   create` on the *registered* SHA.
+   Release. Do **not** tag — or open a GitHub Release — after this repo's merge
+   or while the General PR is open. If TagBot cannot push because the registered
+   SHA modified a workflow file, it opens a **manual-release** issue — follow
+   that, then (only then) tag / `gh release create` on the *registered* SHA.
 
 ## First tag (this prep adds `TagBot.yml`)
 
 Official TagBot: `GITHUB_TOKEN` cannot create a tag or GitHub Release for a
 commit that changes `.github/workflows/*.yml`. This prep *is* that change. The
 merge commit (or a squash of it) is therefore a bad first-tag SHA unless
-`DOCUMENTER_KEY` is set.
+`DOCUMENTER_KEY` is set. That is a TagBot constraint on the SHA Jonathan
+**registers** — it is not a reason to tag before General accepts.
 
 | Registered SHA | `GITHUB_TOKEN` can tag? | What to do |
 |---|---|---|
@@ -113,11 +120,12 @@ auto-opened issue.
 
 Bump `Project.toml` `version`, add a dated CHANGELOG section, merge to `main`,
 wait for the bundle commit-back, then `@JuliaRegistrator register` on **that
-commit's GitHub page**. TagBot tags. CompatHelper is not part of this path
-(YAGNI until a dep churn actually hurts).
+commit's GitHub page**. TagBot tags after General accepts. CompatHelper is not
+part of this path (YAGNI until a dep churn actually hurts).
 
 ## What this path does not do
 
 - Does not register from a feature branch or from this prep PR.
+- Does not create a git tag or GitHub Release before General accepts.
 - Does not ship a Documenter site (still YAGNI; README is the install surface).
 - Does not un-park animation / live drag preview / `LScene`.
