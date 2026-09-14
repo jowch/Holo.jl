@@ -31,10 +31,9 @@ end
 # fig is already finalized (update_state_before_display!) by holo.
 function Holo.render(::CairoBackend, fig, ppu)
     # backend=CairoMakie pinned explicitly: current_backend() is a bare global Ref that
-    # ANY loaded backend's __init__ can flip (confirmed: CairoMakie.jl:39-40 and
-    # WGLMakie.jl:70-74 both call activate!() unconditionally on load). Holo enforces
+    # ANY loaded backend's __init__ can flip unconditionally on load. Holo enforces
     # "exactly one backend loaded" at the holo() call site, but this stays pinned as
-    # defense in depth — see the spec's hardening note.
+    # defense in depth against that global state changing between the check and the call.
     img = Makie.colorbuffer(fig; px_per_unit = ppu, backend = CairoMakie)
     io = IOBuffer(); save(Stream{format"PNG"}(io), img)
     return RenderResult("image/png", take!(io), size(img, 2), size(img, 1), Float64(ppu))
@@ -54,8 +53,8 @@ function Holo.context(b::CairoBackend, fig, ppu)
 
     # Fail loud, never silently wrong: an axis-like block Holo doesn't build transforms for
     # (LScene today) would be silently dropped here, then interactables would project against
-    # the wrong axis. Reject it up front. Axis3 since WS-3D; PolarAxis discrete overlays ship
-    # here (roadmap.md M3); LScene remains deferred.
+    # the wrong axis. Reject it up front. Axis3 and PolarAxis discrete overlays are supported;
+    # LScene remains deferred (see docs/roadmap.md).
     unsupported = unique(
         typeof.(
             c for c in fig.content if c isa Makie.AbstractAxis &&

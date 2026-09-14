@@ -74,8 +74,8 @@ end
 
 # Kinds the overlay can draw as a persistent pre-highlight (`hitLayerByIndex` / `makeHiElement`).
 # Closed kinds get the selected wash; open kinds (segments/polyline) get the ring fallback.
-# Unsupported kinds (grid/axis/…) with `selected=` used to silently draw nothing — fail loud
-# instead, same doctrine as wrong-length `payloads=` (`_check_payloads`).
+# `selected=` on any other kind (grid/axis/…) fails loud, same doctrine as wrong-length
+# `payloads=` (`_check_payloads`).
 const _SELECTED_KINDS = (:circles, :rects, :polygons, :segments, :polyline)
 
 # Element count for a HitLayer geometry, matching the JS layout in types.ts / hitLayerByIndex.
@@ -209,12 +209,11 @@ struct HoloWidget
 end
 
 # Backend choice is tied to which package extension is active — never guessed from
-# figure content. See .superpowers/specs/2026-06-30-holo-backend-selection-design.md:
-# Makie's `current_backend()` is a bare global `Ref` that any loaded backend's `__init__`
-# flips unconditionally, so we do not sniff Makie state. `explicit` is the caller's
-# `backend=` override. A session with both extensions loaded (e.g. a fat sysimage) is
-# no longer fatal: honor `backend=` or default to Cairo. Still throw when *no* renderer
-# is loaded — that is a missing `using` line, not an ambiguous one.
+# figure content. Makie's `current_backend()` is a bare global `Ref` that any loaded
+# backend's `__init__` flips unconditionally, so we do not sniff Makie state. `explicit`
+# is the caller's `backend=` override. A session with both extensions loaded (e.g. a fat
+# sysimage) is not fatal: honor `backend=` or default to Cairo. Still throw when *no*
+# renderer is loaded — that is a missing `using` line, not an ambiguous one.
 function _resolve_backend(explicit; max_width)
     cairo_ext = Base.get_extension(@__MODULE__, :HoloCairoMakieExt)
     wgl_ext = Base.get_extension(@__MODULE__, :HoloWGLMakieExt)
@@ -302,8 +301,8 @@ end
 function Base.show(io::IO, m::MIME"text/html", w::HoloWidget)
     # Inject the bundle UNCONDITIONALLY (it self-installs window.Holo and is
     # idempotent). We do NOT wrap it in `if (!window.Holo) {…}`: running the
-    # esbuild IIFE inside an `if`-block makes it install `{}` instead of `{mount}` (a
-    # block-scope/strict heisenbug; verified). Re-parsing ~6KB per cell is negligible.
+    # esbuild IIFE inside an `if`-block makes it install `{}` instead of `{mount}`
+    # (a JS block-scope/strict-mode quirk). Re-parsing ~6KB per cell is negligible.
     boot = HypertextLiteral.JavaScript(_OVERLAY_JS[])
     html = @htl(
         """
@@ -325,7 +324,7 @@ end
 APD.Bonds.initial_value(::HoloWidget) = nothing
 function APD.Bonds.transform_value(::HoloWidget, js)
     js === nothing && return nothing
-    if haskey(js, "items")   # a selector's declared multi output (Design D) — always a vector
+    if haskey(js, "items")   # a selector's declared multi output — always a vector
         return InteractionEvent[
             InteractionEvent(Symbol(it["layer"]), Int(it["index"]), get(it, "payload", nothing))
                 for it in js["items"]

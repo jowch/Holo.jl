@@ -6,8 +6,8 @@ module HoloWGLMakieExt
 # live canvas makes animation, large data, and frequent re-renders cheap where the static
 # PNG re-rasterizes. Ships NO Bonito runtime and NO server: the scene is serialized to a
 # plain payload (published_to_js) and drawn by a vendored WGLMakie bundle + a ~30-line
-# shim (assets/holo-webgl.js). Validated by spikes 06/08: full 2D+3D fidelity, 1-2px
-# overlay alignment, client-side animation hook.
+# shim (assets/holo-webgl.js), giving full 2D+3D fidelity with the overlay aligned to
+# within 1-2px of the live canvas.
 
 using Holo: Holo, AbstractBackend, InteractionContext, build_manifest, InteractionEvent, auto_interactables
 using WGLMakie
@@ -28,8 +28,8 @@ export WebGLBackend
 """
     WebGLBackend(; px_per_unit=2.0, max_width=700)
 
-Browser-GPU Holo backend. `px_per_unit` is the explicit device scale (the spike confirmed
-surface DPI is a controllable knob); `max_width` mirrors CairoBackend (Pluto's column).
+Browser-GPU Holo backend. `px_per_unit` is the explicit device scale (surface DPI is a
+controllable knob); `max_width` mirrors CairoBackend (Pluto's column).
 """
 struct WebGLBackend <: AbstractBackend
     px_per_unit::Float64
@@ -182,7 +182,7 @@ end
 
 Serialize a finalized figure to the browser payload. A `NoConnection` session + screen is
 attached first so `serialize_scene`'s atlas tracker is populated — required for markers
-and text glyphs (spike finding: bare `serialize_scene` emits an empty atlas).
+and text glyphs (an unattached scene serializes with an empty atlas).
 """
 function scene_payload(fig)
     scene = fig.scene
@@ -207,10 +207,10 @@ function Holo.render(b::WebGLBackend, fig, ppu)
 end
 
 # context: the same shared projection closure as CairoBackend (transform_func applied,
-# then Makie.project + viewport + scaling + y-flip — Holo._project_closure). The spike
-# measured this lands within 1-2px of where WGLMakie draws the data, so the STATIC-camera
-# overlay rides the existing manifest unchanged; Axis3 rides the same closure (3D enters
-# only at the projection step — src/backend.jl).
+# then Makie.project + viewport + scaling + y-flip — Holo._project_closure), which lands
+# within 1-2px of where WGLMakie draws the data, so the static-camera overlay rides the
+# existing manifest unchanged; Axis3 rides the same closure (3D enters only at the
+# projection step — src/backend.jl).
 function Holo.context(b::WebGLBackend, fig, ppu)
     w, h = size(fig.scene)
     scaling = Float64(ppu)
@@ -227,10 +227,10 @@ function Holo.context(b::WebGLBackend, fig, ppu)
         ids[ax] = id
         # Populate the per-axis transform exactly as CairoBackend does. Without this, every
         # axis-keyed interactable (Threshold/ROI/Region/box-select) KeyErrors at manifest build
-        # (interactables.jl indexes ctx.transforms[axis_id]). We call the shared constructors
-        # directly (both backends share them, per src/backend.jl) rather than duplicating the
-        # loop — CairoBackend now lives in a sibling extension we can't (and don't need to)
-        # reach from here. PolarAxis rides `_polar_transform` (ispolar; continuous θ/r deferred).
+        # (interactables.jl indexes ctx.transforms[axis_id]). Calls the shared constructors
+        # directly (src/backend.jl) rather than sharing a loop with CairoBackend, which lives in
+        # a sibling extension not reachable from here. PolarAxis rides `_polar_transform`
+        # (ispolar; continuous θ/r deferred).
         transforms[id] = if ax isa Makie.Axis3
             Holo._axis3_transform(id, ax, scaling, out_h)
         elseif ax isa Makie.PolarAxis
@@ -239,11 +239,9 @@ function Holo.context(b::WebGLBackend, fig, ppu)
             Holo._axis_transform(id, ax, scaling, out_h)
         end
     end
-    # Colorbar transforms, exactly as CairoBackend builds them. This loop was missing
-    # (the one-sided context() divergence the parity goldens now pin): a ColorbarInteractable
-    # then fell through axis_id's old :ax1 fallback and silently rendered a whole-plot 2-D
-    # {x,y} readout instead of the 1-D colorbar value. Caught by the cross-backend parity
-    # invariant (colorbar figure + valueaxis oracle) in test/no_backend_tests.jl.
+    # Colorbar transforms, exactly as CairoBackend builds them — required so a
+    # ColorbarInteractable resolves its own 1-D value transform instead of falling back to
+    # the wrong axis. Covered by the cross-backend parity invariant in test/no_backend_tests.jl.
     cbs = [c for c in fig.content if c isa Makie.Colorbar]
     for (k, cb) in enumerate(cbs)
         id = Symbol("cb", k)
@@ -278,7 +276,7 @@ function _widget_html(w::WebGLWidget; scene_expr, manifest_expr, bundle_js, shim
     overlay = JavaScript(Holo._OVERLAY_JS[])   # reuse Holo's committed overlay bundle verbatim
     # Holo's overlay is base-agnostic (`querySelector("img, canvas")`; image-px scale from
     # `manifest.width`, not the element's intrinsic size — design.md §6), so it binds directly to
-    # our <canvas>. No transparent SVG sizer shim anymore (M3.1).
+    # our <canvas> with no sizer shim needed.
     return @htl(
         """
         <div class="ip-host" style="position:relative; display:inline-block; width:100%; max-width:$(w.display_css)px;">
@@ -325,9 +323,9 @@ _shim_text() = (isempty(_SHIM_TEXT[]) && (_SHIM_TEXT[] = read(SHIM_JS, String));
 function Base.show(io::IO, m::MIME"text/html", w::WebGLWidget)
     # Everything ships over Pluto's published_to_js data channel — scene + manifest + the
     # bundle/shim text — so there is no server and no file:// path (works remote + export).
-    # The bundle is shared once per notebook (M2), wire half: published_to_js ids are content-
-    # addressed (notebook_id/objectid) and objectid(::String) is content-based, so this one cached
-    # string always gets the same stable id. That id crosses the wire exactly once: across cells,
+    # The bundle is shared once per notebook: published_to_js ids are content-addressed
+    # (notebook_id/objectid) and objectid(::String) is content-based, so this one cached string
+    # always gets the same stable id. That id crosses the wire exactly once: across cells,
     # Pluto's notebook merge keeps a single copy on load; across re-runs of a cell, Pluto nulls
     # already-known ids before sending (known_published_objects from the prior run + format_output),
     # so a re-run re-ships only its new scene, never the stable-id bundle (re-publish != re-send).

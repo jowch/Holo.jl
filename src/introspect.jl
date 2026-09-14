@@ -1,10 +1,10 @@
-# M2.1 — plot-introspection constructors. Pull geometry straight from a live Makie plot's
+# Plot-introspection constructors. Pull geometry straight from a live Makie plot's
 # post-conversion `converted[]` (data space, dodge/stack/width already applied) and delegate
-# to the explicit constructor. No new types, no new manifest path — pure sugar over M1.
+# to the explicit constructor. No new types, no new manifest path — pure sugar.
 #
 # The Axis is passed explicitly: a plot holds no back-reference to its Axis, and `axis_id`
 # keys the transform by the Axis object (multi-axis figures need the right one). `holo(fig)`
-# (M2.2) supplies it from the scene walk; here the user already has `ax` from `plot!(ax, …)`.
+# supplies it from the scene walk; here the user already has `ax` from `plot!(ax, …)`.
 
 const _GB = Makie.GeometryBasics
 
@@ -34,11 +34,11 @@ end
 # ---- MeshScatter -> PointInteractable (data-sized markers) ----
 # markersize is DATA-space by construction (no markerspace attribute), so the pixel radius is
 # camera/depth-dependent — normalize it to per-element Vec3f half-extents and let hitlayers
-# project them (PointInteractable.radius3d). Spike-verified (2026-07-02): markersize acts as the
-# sphere radius. The projected ±axis-offset max underestimates the true silhouette when data
-# axes project onto nearly the same screen direction (worst case ~√2; a few % on typical
-# cameras, where frontend HIT_TOL absorbs it). Non-sphere `marker=` meshes ride the same
-# half-extent approximation; pass `radius=`/`radius3d=` explicitly if it's too coarse.
+# project them (PointInteractable.radius3d); markersize acts as the sphere radius. The
+# projected ±axis-offset max underestimates the true silhouette when data axes project onto
+# nearly the same screen direction (worst case ~√2; a few % on typical cameras, where frontend
+# HIT_TOL absorbs it). Non-sphere `marker=` meshes ride the same half-extent approximation;
+# pass `radius=`/`radius3d=` explicitly if it's too coarse.
 function _meshscatter_extents(ms, n)
     ms isa Makie.VecTypes{3} && return fill(Makie.Vec3f(ms...), n)
     ms isa Real && return fill(Makie.Vec3f(ms, ms, ms), n)
@@ -66,23 +66,20 @@ SegmentInteractable(ax, p::Makie.LineSegments; id = :segments, payloads = nothin
     SegmentInteractable(ax, _conv(p)[1]; mode = :pairs, id, payloads, tol)
 
 # ---- Wireframe -> SegmentInteractable(:pairs) ----
-# The rendered edges live in the child LineSegments' converted (DATA space — spike-verified
-# extrema match the input, and every segment midpoint lands on rendered wire pixels), including
-# the mesh-triangulation diagonals a grid-edge reconstruction would miss. Same read-the-child
+# The rendered edges live in the child LineSegments' converted (DATA space), including the
+# mesh-triangulation diagonals a grid-edge reconstruction would miss. Same read-the-child
 # pattern as Stairs.
 SegmentInteractable(ax, p::Makie.Wireframe; id = :wireframe, payloads = nothing, tol = 6) =
     SegmentInteractable(ax, _conv(_childof(p, Makie.LineSegments))[1]; mode = :pairs, id, payloads, tol)
 
 # ---- Arrows3D -> SegmentInteractable(:pairs) ----
-# Premise (corrected 2026-07-02): raw `pos → pos+dir` is WRONG — arrows3d autoscales
-# (`arrowscale` from data bbox when `markerscale = automatic`) and renders via three
-# MeshScatter children (tail/shaft/tip) whose positions/rotations/markersizes live in a
-# normalized, anisotropically-scaled (float32convert) space. Child quaternion × markersize.z
-# recovers shaft+tip extents in that space, but Holo's project closure expects DATA coords
-# (it applies float32convert itself). The recipe therefore reads the processed
-# `startpoints`/`endpoints` — post-align/lengthscale/normalize ends that the children span
-# (spike-verified 2026-09-11: midpoints land on drawn pixels under anisotropic limits and
-# `lengthscale ≠ 1`; raw pos+dir misses). Payloads carry the input anchor + direction.
+# Raw `pos → pos+dir` is WRONG: arrows3d autoscales (`arrowscale` from data bbox when
+# `markerscale = automatic`) and renders via three MeshScatter children (tail/shaft/tip) whose
+# positions/rotations/markersizes live in a normalized, anisotropically-scaled (float32convert)
+# space. Child quaternion × markersize.z recovers shaft+tip extents in that space, but Holo's
+# project closure expects DATA coords (it applies float32convert itself). The recipe therefore
+# reads the processed `startpoints`/`endpoints` — post-align/lengthscale/normalize ends that the
+# children span. Payloads carry the input anchor + direction.
 function SegmentInteractable(ax, p::Makie.Arrows3D; id = :arrows3d, payloads = nothing, tol = 6)
     starts, ends_ = p.startpoints[], p.endpoints[]
     length(starts) == length(ends_) || error(
@@ -123,7 +120,7 @@ end
 
 # ---- BarPlot -> RectInteractable(:list) ----
 # The child Poly carries the final laid-out rectangles (dodge/stack/automatic-width applied),
-# so we read those instead of replaying Makie's bar solver. (roadmap: dodge/stack are the gotcha.)
+# so we read those instead of replaying Makie's bar solver.
 function _bar_rects(p)
     for c in _child_plots(p)
         cv = _converted(c)
@@ -186,7 +183,7 @@ end
 # Makie lays out one GB.Polygon per filled level-piece on a child Poly (marching-squares already
 # run). Take each polygon's EXTERIOR ring only (holes excluded; `poly.exterior` is a Vector{Point}).
 # Annular bands therefore over-cover their hole at the boundary — a documented v1 limitation.
-# ponytail: exterior-only; add compound-polygon (ring-group) support if a real contour use needs it.
+# Exterior-only; add compound-polygon (ring-group) support if a real contour use needs it.
 _poly_exterior_rings(polys) = [poly.exterior for poly in polys]
 
 # Payload (; low, high): each contourf polygon fills the band between two consecutive level edges.
@@ -240,7 +237,7 @@ end
 # ---- Voronoiplot -> PolygonInteractable ----
 # Makie tessellates and lays out one GB.Polygon per cell on a nested child Poly. Cells come back in
 # tessellation order, NOT input-site order, so there's no cheap cell→generator mapping → default
-# (; index) payload. ponytail: index-only; upgrade to (; x, y) via point-in-cell matching if needed.
+# (; index) payload. Upgrade to (; x, y) via point-in-cell matching if a real use needs it.
 function PolygonInteractable(ax, p::Makie.Voronoiplot; id = :voronoiplot, payloads = nothing)
     poly = _descendant(p, Makie.Poly)
     rings = _poly_exterior_rings(_conv(poly)[1])
@@ -252,7 +249,7 @@ end
 # Stats come from Makie's COMPUTED-STATS node — the node whose converted is a 4-tuple
 # (centers, medians, q1s, q3s); these equal Statistics.quantile(group, [.5,.25,.75]) exactly, i.e.
 # the numbers Makie drew the box and median line from. Read them; don't recompute or read the
-# median LineSegments. Whiskers/caps/outliers are decorative (not hit-tested) in this arc.
+# median LineSegments. Whiskers/caps/outliers are decorative (not hit-tested).
 function _boxplot_stats_node(p)
     cv = try
         _conv(p)
@@ -295,7 +292,7 @@ function _boxplot_interactable(ax, p; id = :boxplot, payloads = nothing)
     end
 end
 
-# ====================== M3 cheap wins (same primitives) ======================
+# ====================== More recipes (same primitives) ======================
 # Each delegates to an existing explicit constructor; the only work is reading the right
 # laid-out geometry off the plot (or its children). No new types, no new manifest path.
 
@@ -357,7 +354,7 @@ SegmentInteractable(ax, p::Makie.Rangebars; id = :rangebars, payloads = nothing,
 
 # ---- HLines / VLines -> Segment(:pairs) spanning the axis ----
 # Each line spans the full data range from `finallimits` (read post-update_state_before_display!).
-# ponytail: fractional xmin/xmax (HLines) / ymin/ymax (VLines) span attrs ignored — full span only.
+# Fractional xmin/xmax (HLines) / ymin/ymax (VLines) span attrs are ignored — full span only.
 function _span_pairs(ax, p, ishoriz)
     fl = _finallimits(ax)
     lo = fl.origin[ishoriz ? 1 : 2]; hi = lo + fl.widths[ishoriz ? 1 : 2]
@@ -385,7 +382,7 @@ end
 # Spy renders nonzeros as a child Scatter with markerspace=:data, so markersize IS the cell size
 # in data units. One unit rect per nonzero, centered on the laid-out marker. (Delegating to
 # PointInteractable would fail: :data markerspace can't derive a pixel radius.)
-# ponytail: default {index} payloads; survey's {i,j,value} deferred (needs nonzero↔marker ordering).
+# Default {index} payloads; {i,j,value} needs nonzero↔marker ordering, deferred.
 function _spy_rects(p)
     sc = _childof(p, Makie.Scatter)
     ms = sc.markersize[]
@@ -492,7 +489,7 @@ function RectInteractable(ax, p::Makie.CrossBar; id = :crossbar, payloads = noth
     return RectInteractable(ax; rects = rs, id, payloads = pl)
 end
 
-# ---- Composites: one plot -> two layers (survey: ScatterLines is the model) ----
+# ---- Composites: one plot -> two layers (ScatterLines is the model) ----
 # Each half delegates to the existing child-plot constructor; the point layer keeps the base id,
 # the line/segment layer gets a suffix so the two ids stay distinct in the manifest.
 _stem_parts(ax, p, base) = AbstractInteractable[
@@ -504,9 +501,9 @@ _scatterlines_parts(ax, p, base) = AbstractInteractable[
     SegmentInteractable(ax, _childof(p, Makie.Lines); id = Symbol(base, :_line)),
 ]
 
-# ====================== M2.2 holo(fig) auto-extraction ======================
+# ====================== holo(fig) auto-extraction ======================
 # Walk each Axis's top-level plots and emit the Vector{AbstractInteractable} a user could
-# hand-write, via the M2.1 constructors. Unsupported plot type → skip + warn. Pure sugar.
+# hand-write, via the constructors above. Unsupported plot type → skip + warn. Pure sugar.
 
 # Text → TextInteractable, but only for DATA-anchored text: its anchor projects to a meaningful
 # (x, y). Pixel/relative-space text (rare manual overlays, most decorations) is skipped, loudly but
@@ -587,20 +584,21 @@ end
     auto_interactables(fig) -> Vector{AbstractInteractable}
 
 Introspect a Makie `Figure`: for every supported plot in every `Axis`, `Axis3`, or `PolarAxis`,
-build the interactable its M2.1 constructor would (on `Axis3`: `Scatter`/`Lines`/`LineSegments`
+build the interactable its explicit constructor would (on `Axis3`: `Scatter`/`Lines`/`LineSegments`
 ride the widened constructors, `MeshScatter` gets depth-correct per-element hit radii from its
 data-space `markersize`, `Wireframe` reads its child's rendered edge segments, and `Arrows3D`
 emits start→end segments from its processed `startpoints`/`endpoints`; other 3D plot kinds are
-skipped with a warning pending their own extraction recipes, see docs/roadmap.md M3.
+skipped with a warning pending their own extraction recipes, see docs/roadmap.md.
 On `PolarAxis`: `Scatter`/`Lines`/`LineSegments`/`ScatterLines` project through the shared
 `transform_func` closure — continuous θ/r readout and separable-grid recipes are deferred).
 Layer ids are the plot kind (`:scatter`, `:lines`, …), suffixed `_2`, `_3`, … when a kind
 repeats. Returns the same concrete vector you could pass to [`holo`](@ref) yourself — edit or
 extend it freely.
 
-Note: each interactable inherits M1's default per-element payloads (e.g. a `Scatter` materializes
-one `(; index, x, y)` per point), so the zero-config path on a very large plot allocates one
-payload per element. For huge data, construct the interactable with a lean `payloads=` yourself.
+Note: each interactable inherits its constructor's default per-element payloads (e.g. a
+`Scatter` materializes one `(; index, x, y)` per point), so the zero-config path on a very
+large plot allocates one payload per element. For huge data, construct the interactable with
+a lean `payloads=` yourself.
 """
 function auto_interactables(fig)
     ints = AbstractInteractable[]
@@ -617,7 +615,7 @@ function auto_interactables(fig)
             # recipe extracts pixel-separable geometry (grid edges projected per-axis,
             # axis-aligned rects, 2D anchors) that a perspective projection silently
             # misaligns — the silent-wrong class, so skip LOUDLY rather than construct.
-            # (roadmap M3 per-type extraction graduates kinds out of this gate.)
+            # (Per-type 3D extraction narrows this gate over time; see docs/roadmap.md.)
             if ax isa Makie.Axis3 && !(
                     p isa Union{
                         Makie.Scatter, Makie.Lines, Makie.LineSegments,

@@ -48,14 +48,13 @@ _proj(ctx, ax, p) = data_to_image_px(ctx, ax, p)
 
 # One storage path for 2D and 3D geometry: points widen to Point3f with z=0 for 2-coord
 # input, so a 2D interactable's projected output is unchanged (the shared closure feeds
-# x/y/z straight through; z=0 ≡ the 2D path, spike-verified byte-identical). Float32
-# storage caps coordinates at floatmax(Float32) — same as the previous Point2f storage.
+# x/y/z straight through). Float32 storage caps coordinates at floatmax(Float32).
 _pt3(p) = Point3f(p[1], p[2], length(p) >= 3 ? p[3] : 0)
 
 # Quantize a finite geometry coordinate to integer image-px. MsgPack encodes a small Int in 1–3 bytes
 # vs a Float32's flat 5, so per-element geometry stores Int — −58% on that term, no manifest-shape change
 # (the frontend reads numbers either way), and ≤0.5px is inside the ~1px hit-test tolerance. AxisTransform
-# lims/viewport stay Float64 (M4 drag inverts pixel→data through them). See architecture.md §9.
+# lims/viewport stay Float64 (drag inverts pixel→data through them). See architecture.md §9.
 #
 # Non-finite coords pass through as Float32 (NOT rounded — `round(Int, NaN/Inf)` throws): element layers
 # are un-gated on scale (above), so a log out-of-domain point projects to NaN/±Inf, and `:polyline`
@@ -186,7 +185,7 @@ struct RectInteractable <: AbstractInteractable
     ax; layout::Symbol; data::Any; id::Symbol; payloads::Vector{Any}; tooltip::Union{Nothing, Markup, Bool}
     # When true (spans only): clamp the projected pixel rect to the owning axis viewport using
     # inward rounding (ceil for near edge, floor for far edge) so that integer quantization
-    # never expands the rect beyond the viewport bounds. See architecture.md §3 + phase2a fix.
+    # never expands the rect beyond the viewport bounds. See architecture.md §3.
     clamp_to_viewport::Bool
     # :list only. When set, hitlayers calls `resolve(ax)` for the rects instead of the stored
     # `data` — HSpan/VSpan fill one dimension with `ax.finallimits[]`, which is only correct
@@ -318,7 +317,7 @@ function hitlayers(i::TextInteractable, ctx)
         error("TextInteractable: $(length(boxes)) boxes for $(length(i.payloads)) payloads (Makie internals changed?)")
     o = _scene_viewport(i.ax).origin           # scene-local → figure pixel offset
     g = Real[]
-    # divergence from design spec §1 ("skip empty strings"): NOT skipped — a zero-area box keeps box-count == payload-count for the guards above (deliberate).
+    # Empty strings are NOT skipped: a zero-area box keeps box-count == payload-count for the length guards above (deliberate).
     for b in boxes
         bx, by = Float64(b.origin[1]), Float64(b.origin[2])
         bw, bh = Float64(b.widths[1]), Float64(b.widths[2])

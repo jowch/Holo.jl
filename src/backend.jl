@@ -32,7 +32,7 @@ struct AxisTransform
     viewport::NTuple{4, Float64}      # (x,y,w,h) image px, top-left origin
     xreversed::Bool
     yreversed::Bool
-    xcats::Union{Nothing, Vector{String}}   # categorical tick map (v1; nothing if not categorical)
+    xcats::Union{Nothing, Vector{String}}   # categorical tick map, nothing if not categorical
     ycats::Union{Nothing, Vector{String}}
     valueaxis::Union{Nothing, Symbol}       # nothing = 2-D {x,y} readout; :x/:y = 1-D colorbar value readout
     is3d::Bool                              # Axis3: pixel→data inversion is undefined (a pixel is a ray) — lims degenerate, JS never inverts
@@ -58,12 +58,10 @@ end
 
 "the one coordinate primitive interactables call — never re-derive projection"
 data_to_image_px(ctx::InteractionContext, ax, p) = ctx.project(ax, p)
-# Fail loud, never silently wrong: the old `:ax1` fallback silently absorbed any
-# fig.content block a backend forgot to register (a Colorbar, tomorrow a Legend) and
-# rebound it to the main axis — turning a missing transform into a plausible-but-WRONG
-# widget (whole-plot 2-D readout instead of the colorbar value; validate passed). An
-# unregistered block is a backend context() bug or an interactable keyed to an axis
-# that isn't part of the rendered figure — both must surface at build time.
+# Fail loud, never silently wrong: an unregistered fig.content block (a Colorbar,
+# tomorrow a Legend) is a backend context() bug or an interactable keyed to an axis
+# that isn't part of the rendered figure — both must surface at build time, not fall
+# back to some other axis's transform.
 axis_id(ctx::InteractionContext, ax) =
     get(ctx.ids, ax) do
     throw(
@@ -82,29 +80,21 @@ function context end
 function _ppu end         # (backend, fig) -> px_per_unit / device scale
 function make_widget end  # (backend, <backend's RenderResult-like>, manifest, display_css) -> the @bind widget
 
-# ---- shared projection + axis-transform helpers: both CairoBackend and WebGLBackend
-# build the same projection closure and AxisTransform shape off a 2D Makie.Axis.
-# WebGLBackend's context() calls these directly (see ext/HoloWGLMakieExt.jl) rather
-# than duplicating them. ----
+# ---- shared projection + axis-transform helpers (used by both backends' context()) ----
 
 # The shared data→image-px projection closure — both backends' context() build it with
-# this (ONE fix site, not two). The 2-arg `Makie.project(scene, p)` expects TRANSFORMED
-# (post-transform_func) coordinates — it does NOT apply the scene's transform_func
-# (verified empirically on Makie 0.24.12: raw feed lands 0/5 on a log-axis scatter's
-# rendered markers; transformed feed 5/5 at 0.0px) — so apply the axis transform first,
-# in input (Float64) precision: `project` f32-converts afterward, and a Float32-first
-# cast would lose precision on large-magnitude coords and overflow to Inf above
-# floatmax(Float32) (e.g. x=1e39 on a log axis is fine in Float64: log10 → 39).
-# Out-of-domain input (e.g. log10 of a negative) throws DomainError inside
-# apply_transform: NaN-guard it so the point degrades to a non-finite projection.
-# (log10(0.0) is -Inf WITHOUT throwing — that degrades through the same non-finite
-# path, no guard needed.) Element layers are un-gated on scale; `_q` passes non-finite
-# through — see interactables.jl and the log-scale testset in core_tests.jl.
-# 3D enters ONLY here (WS-3D): points widen to Point3 (z=0 for 2-coord input, so the 2D
-# path is unchanged — spike-verified byte-identical incl. on log axes), Makie's 2-tuple
-# transform_func applies to x/y and preserves z, Axis3's transform_func is `identity`,
-# and `Makie.project` handles the 3D camera. The output stays a 2D image-px point:
-# hit-testing is 2D pixel geometry on both backends regardless of scene dimensionality.
+# this (ONE fix site, not two). `Makie.project(scene, p)` expects TRANSFORMED
+# (post-transform_func) coordinates, so apply the axis transform first, in Float64: a
+# Float32-first cast would lose precision on large-magnitude coords and overflow above
+# floatmax(Float32) (e.g. log10(1e39) is fine in Float64 but not after an early f32 cast).
+# Out-of-domain input (e.g. log10 of a negative) throws DomainError inside apply_transform;
+# NaN-guard it so the point degrades to a non-finite projection (log10(0.0) is already
+# -Inf without throwing, so it needs no guard). Element layers are un-gated on scale;
+# `_q` (interactables.jl) passes non-finite coordinates through.
+# 3D enters only here: points widen to Point3 (z=0 for 2-coord input leaves the 2D path
+# unchanged), Makie's 2-tuple transform_func applies to x/y and preserves z, Axis3's
+# transform_func is `identity`, and `Makie.project` handles the 3D camera — the output
+# stays a 2D image-px point regardless of scene dimensionality.
 function _project_closure(scaling, out_h)
     return function (ax, p)
         tp = try
