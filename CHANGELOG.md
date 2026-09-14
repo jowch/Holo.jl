@@ -36,6 +36,20 @@ All notable changes to this project are documented here. The format is based on
   against the finalized axis), matching `TextInteractable`'s existing
   construction-vs-hitlayers split for layout-dependent reads.
 
+### Internal
+- Every non-public Makie/WGLMakie/Bonito internal Holo relies on (`converted`, child
+  `plots`, `finallimits`, scene `viewport`, Contourf's `computed_levels`, a Colorbar's
+  `computedbbox`, `string_boundingboxes`, `transform_func`/`apply_transform`/`project`,
+  `update_state_before_display!`, and the WGL-only screen/serialization internals) now
+  goes through one small fail-loud accessor in `src/makie_compat.jl` (WGL-only internals
+  route through an equivalent block in `ext/HoloWGLMakieExt.jl`). A future Makie/WGLMakie
+  bump that moves one of these surfaces now fails with one clear message at the accessor,
+  not scattered wrong-pixel/`MethodError` symptoms across the codebase. Added a canary
+  testset (`test/makie_compat_tests.jl`, first in the Core group) asserting each
+  accessor's actual return shape, and a daily `CompatHelper.yml` workflow so
+  Makie/CairoMakie/WGLMakie compat bumps arrive as PRs that run it. Pure internal
+  refactor — no manifest/payload/behavior change (parity goldens pass unchanged).
+
 ## [0.1.0] - 2026-09-12
 
 First General release. Frozen after drag-to-pan / drag-to-rotate
