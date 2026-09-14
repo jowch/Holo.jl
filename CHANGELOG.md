@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- Vitest coverage for `frontend/src` uploads to Codecov (`flags: frontend`).
+  Committed `assets/` bundles are ignored.
+
 ### Removed
 - Dead `vector`/`mount` scaffolding: `CairoBackend(; vector=false)` and the
   `AbstractBackend` `mount` interface function (plus `WebGLBackend`'s `mount = :webgl`

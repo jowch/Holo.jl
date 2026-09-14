@@ -182,7 +182,14 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm test
+      - run: npm run test:coverage
+      - uses: codecov/codecov-action@v5
+        with:
+          files: frontend/coverage/lcov.info
+          flags: frontend
+          disable_search: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
       - run: npm run build
 
       # PRs (incl. forks, which can't push): fail if either committed bundle is stale.

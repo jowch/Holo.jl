@@ -1,0 +1,24 @@
+# Julia (julia-processcoverage) and frontend (vitest --coverage) upload as
+# separate flags. Ignore committed IIFE/ESM bundles and tests so they never
+# enter the project number.
+ignore:
+  - "assets/**"
+  - "frontend/test/**"
+  - "test/**"
+
+component_management:
+  default_rules:
+    statuses:
+      - type: project
+        target: auto
+        informational: true
+  individual_components:
+    - component_id: julia
+      name: Julia
+      paths:
+        - "src/**"
+        - "ext/**"
+    - component_id: frontend
+      name: Frontend
+      paths:
+        - "frontend/src/**"
