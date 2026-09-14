@@ -1142,6 +1142,26 @@ end
             @test drawn_near(img, (g[1] + g[3]) / 2, (g[2] + g[4]) / 2)
         end
 
+        @testset "hlines/vlines: interactable built before finalize resolves against finalized limits" begin
+            # Regression: holo(fig, interactables) only finalizes AFTER the caller already built
+            # `interactables` (unlike holo(fig), which finalizes first). A SegmentInteractable built
+            # from an HLines/VLines plot object before any finalize call must still span the
+            # FINALIZED viewport at hitlayers time, not whatever finallimits happened to hold at
+            # construction.
+            f = Figure(size = (500, 350)); a = Axis(f[1, 1]); scatter!(a, [0.0, 5.0], [0.0, 5.0])
+            ph = hlines!(a, [1.0, 3.0])
+            seg = SegmentInteractable(a, ph)   # constructed BEFORE any finalize call
+            xlims!(a, -20, 20)                 # widen limits after construction
+            w = holo(f, [seg])                 # finalizes internally, after seg was already built
+            ref = holo(f)                      # holo(fig): finalizes first, then auto-extracts (ground truth)
+            seg_layer = only(filter(l -> l["id"] == "hlines", w.manifest["layers"]))
+            ref_layer = only(filter(l -> l["id"] == "hlines", ref.manifest["layers"]))
+            @test seg_layer["geometry"] == ref_layer["geometry"]
+            fl = a.finallimits[]
+            @test fl.origin[1] ≈ -20 atol = 0.5
+            @test fl.origin[1] + fl.widths[1] ≈ 20 atol = 0.5
+        end
+
         @testset "empty data -> empty layer (no pairs)" begin
             # Build the empty Errorbars from a typed Vec4f[] (the post-conversion type Makie
             # expects). Empty *untyped* vectors (Float64[], Float64[], Float64[]) fail Makie's
@@ -1562,6 +1582,25 @@ end
         @test_throws ArgumentError PolygonInteractable(ax, [ring]; payloads = [(; a = 1), (; a = 2)])      # too long
         @test_throws ArgumentError PolygonInteractable(ax, [ring, ring]; payloads = [(; a = 1)])          # too short: 2 rings, 1 payload
         @test PolygonInteractable(ax, [ring]; payloads = [(; a = 1)]) isa PolygonInteractable             # exact
+    end
+
+    @testset "construction-time validation: mode / grid shape / tooltip=true" begin
+        using Holo: SegmentInteractable, RectInteractable, PointInteractable
+        fig = Figure(); ax = Axis(fig[1, 1])
+        pts = [Point2f(0, 0), Point2f(1, 1)]
+        @test_throws ArgumentError SegmentInteractable(ax, pts; mode = :segments)
+        @test SegmentInteractable(ax, pts; mode = :pairs) isa SegmentInteractable
+        @test SegmentInteractable(ax, pts; mode = :polyline) isa SegmentInteractable
+
+        # grid `values` must be (length(xedges)-1, length(yedges)-1)
+        xe = 0.0:1.0:3.0; ye = 0.0:1.0:2.0   # 3x2 cells expected
+        good = zeros(3, 2)
+        @test RectInteractable(ax; grid = (xe, ye, good)) isa RectInteractable
+        bad = zeros(2, 3)   # transposed — wrong shape
+        @test_throws ArgumentError RectInteractable(ax; grid = (xe, ye, bad))
+
+        # tooltip = true fails at construction, not at manifest build
+        @test_throws ArgumentError PointInteractable(ax, [(0.0, 0.0)]; tooltip = true)
     end
 
     @testset "clamp path is non-finite-safe" begin
