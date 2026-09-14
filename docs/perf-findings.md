@@ -318,9 +318,9 @@ confirms render time, not the browser, is the latency bottleneck.
 > manifest) and is **unchanged** by the `:webgl` backend below — the two ship genuinely different
 > wire formats, so `:webgl` gets its own self-contained envelope here rather than folding into the
 > tables above. This section was merged in from the formerly-separate `HoloWGL` package's own
-> `docs/perf-findings.md` when that package folded into `Holo` (Phase 2 of the backend-selection
-> plan, see `.superpowers/specs/2026-06-30-holo-backend-selection-design.md`); it remains the single
-> source of every `:webgl` size number, same as the rest of this file is for `:cairo`.
+> `docs/perf-findings.md` when that package folded into `Holo` as a package extension rather than
+> staying a separate registered package; it remains the single source of every `:webgl` size
+> number, same as the rest of this file is for `:cairo`.
 >
 > **Reproduce** (re-runnable, prints the live numbers — they can't silently rot):
 > `julia --project=. bench/webgl_payload_size.jl`. Last measured **2026-06-30** at commit

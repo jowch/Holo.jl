@@ -362,7 +362,8 @@ TypeScript overlay (committed as `assets/overlay.js`) mounts a shadow-root layer
 image, hit-tests pointer events against the manifest, draws highlights/tooltips locally,
 and dispatches only deliberate clicks back through `@bind`. Because the image and manifest
 are embedded, the **inspection layer keeps working in an exported, offline static HTML**
-(only click → recompute needs a live kernel). See [`docs/`](docs) for the full design.
+(only click → recompute needs a live kernel). See [`docs/`](docs/README.md) for the full
+design — the docs index there says which doc is for users and which is for maintainers.
 
 ## Development
 

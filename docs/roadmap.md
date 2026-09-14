@@ -149,11 +149,11 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
       **after this merges** (not on the PR), then TagBot's `v0.1.0` tag. Name
       is 4 letters → AutoMerge needs a human (guideline is ≥5). See
       `docs/releasing.md`.
-- [x] **Distribution decision**: folded into `ext/HoloWGLMakieExt.jl` — see
-      `.superpowers/specs/2026-06-30-holo-backend-selection-design.md`. (This also obsoletes the
-      former `HoloWGL`'s own "General-registry readiness" item — there's no longer a second package
-      needing its own `[compat]` bound or registration path; the item above is Holo's one registration
-      story for both backends.)
+- [x] **Distribution decision**: folded into `ext/HoloWGLMakieExt.jl` as a package extension of
+      `Holo`, rather than shipping `HoloWGL` as a separate registered package. (This also obsoletes
+      the former `HoloWGL`'s own "General-registry readiness" item — there's no longer a second
+      package needing its own `[compat]` bound or registration path; the item above is Holo's one
+      registration story for both backends.)
 
 ---
 

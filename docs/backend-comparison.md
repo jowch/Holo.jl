@@ -158,11 +158,10 @@ the user's GPU anyway). Three facts, GL-independent:
   the moving plot. Both facts are latent until the camera is turned on.
 - **Turning the *client* camera on would be large and backend-asymmetric — which is why that path
   is retired.** Its staged design (S1 2D magnifier → S2 3D-rotate via client re-projection → S3 JS
-  data-space zoom → S4 GPU-pick occlusion; parked in
-  `.superpowers/holowgl-live-camera-overlay-design.md`, a local process doc) lands **only in
-  `:webgl`** and exists to chase a camera Julia can't see. The in-scope replacement — server-side
-  `@bind` re-render (†) — needs none of it: the overlay is re-projected by Julia each step, so the
-  drift problem the client path had to solve never arises.
+  data-space zoom → S4 GPU-pick occlusion) lands **only in `:webgl`** and exists to chase a camera
+  Julia can't see. The in-scope replacement — server-side `@bind` re-render (†) — needs none of
+  it: the overlay is re-projected by Julia each step, so the drift problem the client path had to
+  solve never arises.
 
 **Decision — superseded (2026-07-02): in scope, as parity.** The 2026-07-01 "investigated →
 deferred" call answered the wrong question — it scoped view manipulation as a *client-side camera*
