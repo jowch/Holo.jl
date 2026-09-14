@@ -8,7 +8,8 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 - Vitest coverage for `frontend/src` uploads to Codecov (`flags: frontend`).
-  Committed `assets/` bundles are ignored.
+  Committed `assets/` bundles are ignored. `codecov/project` stays on the
+  Julia flags (carryforward) so the JS tree is not a drop vs `main`.
 
 ### Removed
 - Dead `vector`/`mount` scaffolding: `CairoBackend(; vector=false)` and the
