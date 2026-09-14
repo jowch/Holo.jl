@@ -24,7 +24,8 @@ All notable changes to this project are documented here. The format is based on
   other symbol as `:pairs`.
 - `RectInteractable(ax; grid=(xedges, yedges, values))` now validates `values` has shape
   `(length(xedges)-1, length(yedges)-1)` at construction, instead of surfacing a raw
-  `BoundsError` inside `hitlayers`.
+  `BoundsError` inside `hitlayers`. A non-`Matrix` `values` (e.g. `nothing` or a vector)
+  now raises the same `ArgumentError` instead of a bare `MethodError` from `size`.
 - `tooltip = true` (never meaningful) now fails at interactable construction, with the
   same error message as before, instead of only failing later at manifest build.
 - `holo(fig, interactables)` finalizes the figure only after the caller has already built

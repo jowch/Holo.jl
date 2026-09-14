@@ -204,10 +204,10 @@ function RectInteractable(
         xe, ye, vals = grid
         xe = collect(Float64, xe); ye = collect(Float64, ye)
         expected = (length(xe) - 1, length(ye) - 1)
-        size(vals) == expected || throw(
+        vals isa AbstractMatrix && size(vals) == expected || throw(
             ArgumentError(
-                "RectInteractable: grid `values` must have shape (length(xedges)-1, length(yedges)-1) " *
-                    "= $(expected), got $(size(vals))",
+                "RectInteractable: grid `values` must be a Matrix with shape (length(xedges)-1, length(yedges)-1) " *
+                    "= $(expected), got $(vals isa AbstractMatrix ? size(vals) : typeof(vals))",
             ),
         )
         RectInteractable(ax, :grid, (xe, ye, vals), id, Any[], tooltip, false, nothing)
