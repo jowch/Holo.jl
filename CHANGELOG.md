@@ -46,8 +46,10 @@ All notable changes to this project are documented here. The format is based on
   bump that moves one of these surfaces now fails with one clear message at the accessor,
   not scattered wrong-pixel/`MethodError` symptoms across the codebase. Added a canary
   testset (`test/makie_compat_tests.jl`, first in the Core group) asserting each
-  accessor's actual return shape, and a daily `CompatHelper.yml` workflow so
-  Makie/CairoMakie/WGLMakie compat bumps arrive as PRs that run it. Pure internal
+  accessor's actual return shape, including that a moved/renamed internal produces the
+  compat error rather than a raw exception. A CompatHelper workflow (so Makie/CairoMakie/
+  WGLMakie compat bumps arrive as PRs that run this canary automatically) is planned as a
+  follow-up — not part of this change. Pure internal
   refactor — no manifest/payload/behavior change (parity goldens pass unchanged).
 
 ## [0.1.0] - 2026-09-12

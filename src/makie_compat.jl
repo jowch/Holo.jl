@@ -1,9 +1,28 @@
 # Every non-public Makie internal Holo relies on is called through exactly one of the
 # accessors below — a Makie bump that moves one of these surfaces as ONE clear error here,
 # not a scattered wrong-pixel or MethodError somewhere downstream. See test/makie_compat_tests.jl
-# (the canary) and CLAUDE.md's Makie-robustness note.
+# (the canary).
 
-const _MAKIE_SHAPE_ERRORS = Union{MethodError, UndefVarError, ErrorException}
+# Struct-field reads (`p.converted`, `ax.finallimits`, `scene.viewport`, ...) throw
+# `ErrorException("type X has no field y")` on Julia 1.10/1.11 but `FieldError` on >= 1.12
+# (FieldError doesn't exist before 1.12, hence the version guard). Plot *attributes*
+# (`.converted`, `.computed_levels`) resolve through `Base.getproperty(::Plot)` into a `Dict`
+# lookup, which throws `KeyError` when the attribute is gone, regardless of Julia version.
+const _MAKIE_SHAPE_ERRORS = @static if isdefined(Base, :FieldError)
+    Union{MethodError, UndefVarError, ErrorException, KeyError, FieldError}
+else
+    Union{MethodError, UndefVarError, ErrorException, KeyError}
+end
+
+# A narrower union for accessors that run arbitrary downstream code (user observable
+# callbacks, other plots' recipes) rather than just reading a field/attribute off the object
+# passed in. `ErrorException` is excluded here: rewrapping it would re-headline a `error(...)`
+# raised by that downstream code as "Makie internal changed shape", hiding the real cause.
+const _MAKIE_DOWNSTREAM_ERRORS = @static if isdefined(Base, :FieldError)
+    Union{MethodError, UndefVarError, KeyError, FieldError}
+else
+    Union{MethodError, UndefVarError, KeyError}
+end
 
 _makie_compat_error(name, expected) = error(
     "Holo: Makie internal `$(name)` changed shape under Makie v$(pkgversion(Makie)) — " *
@@ -43,7 +62,9 @@ function _finallimits(ax)
         e isa _MAKIE_SHAPE_ERRORS || rethrow()
         return _makie_compat_error("finallimits", "an Axis to expose `.finallimits[]`")
     end
-    fl isa Makie.Rect2 || return _makie_compat_error("finallimits", "`.finallimits[]` to be a `Rect2`")
+    # Axis3.finallimits is a Rect3d, not a Rect2 — accept any-dimension Rect; every caller
+    # only ever indexes origin/widths[1:2] (2D geometry), so a Rect3 is equally usable.
+    fl isa Makie.Rect || return _makie_compat_error("finallimits", "`.finallimits[]` to be a `Rect`")
     return fl
 end
 
@@ -139,11 +160,14 @@ end
 
 # `Makie.update_state_before_display!(fig)` is the finalize step Makie itself runs at
 # display/save time — semi-public, no better alternative for finalizing layout before hitlayers.
+# Runs user observable callbacks (e.g. `on(ax.finallimits) do ... end`), so it uses the
+# DOWNSTREAM union: an `ErrorException` raised by a user callback must propagate as-is, not
+# get re-headlined as a Makie compat break.
 function _finalize!(fig)
     try
         Makie.update_state_before_display!(fig)
     catch e
-        e isa _MAKIE_SHAPE_ERRORS || rethrow()
+        e isa _MAKIE_DOWNSTREAM_ERRORS || rethrow()
         return _makie_compat_error("update_state_before_display!", "`Makie.update_state_before_display!(fig)` to finalize layout")
     end
     return nothing

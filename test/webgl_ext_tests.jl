@@ -180,6 +180,14 @@ end
     @test occursin("find_plots", bundle)
 end
 
+@testset "WGL accessors rewrap a moved internal" begin
+    # Negative path for the WGL-only compat block, mirroring test/makie_compat_tests.jl's
+    # "accessors rewrap a moved internal" — a shape break must produce the Holo message,
+    # not a raw MethodError/FieldError.
+    @test_throws r"^Holo: WGLMakie/Bonito internal `serialize_scene`" _WGLExt._serialize_scene(nothing)
+    @test_throws r"^Holo: WGLMakie/Bonito internal `headless screen construction`" _WGLExt._headless_screen(identity, nothing)
+end
+
 @testset "@bind round-trip contract (click payload -> InteractionEvent)" begin
     import JSON3
     import AbstractPlutoDingetjes as APD

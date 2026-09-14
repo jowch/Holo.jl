@@ -35,6 +35,9 @@
         cf_children = Holo._child_plots(cf)
         @test cf_children isa AbstractVector
         @test !isempty(cf_children)
+
+        # a leaf plot (Scatter draws no children of its own) has an empty, not missing, list
+        @test isempty(Holo._child_plots(sc))
     end
 
     @testset "_finallimits" begin
@@ -90,5 +93,35 @@
 
     @testset "_finalize! is idempotent" begin
         @test Holo._finalize!(fig) === nothing
+        @test fig.scene.viewport[] isa Makie.Rect2   # actually re-ran layout, not a no-op
+    end
+
+    # Negative path: a moved/renamed internal must produce the Holo compat message, not a
+    # raw MethodError/FieldError/KeyError — this is the behavior the accessors exist to add,
+    # and the gap that let a too-narrow _MAKIE_SHAPE_ERRORS ship once already (a Julia 1.12
+    # FieldError and a plot-attribute KeyError both escaped unwrapped before that fix).
+    @testset "accessors rewrap a moved internal" begin
+        @test_throws r"^Holo: Makie internal `converted`" Holo._converted(nothing)
+        @test_throws r"^Holo: Makie internal `plots`" Holo._child_plots(nothing)
+        @test_throws r"^Holo: Makie internal `finallimits`" Holo._finallimits(nothing)
+        @test_throws r"^Holo: Makie internal `viewport`" Holo._scene_viewport(nothing)
+        @test_throws r"^Holo: Makie internal `computed_levels`" Holo._computed_levels(sc)   # KeyError path (missing attribute)
+        @test_throws r"^Holo: Makie internal `computedbbox`" Holo._colorbar_bbox(nothing)
+        @test_throws r"^Holo: Makie internal `string_boundingboxes`" Holo._string_bboxes(nothing)
+        @test_throws r"^Holo: Makie internal `transform_func`" Holo._transform_func(nothing)
+        @test_throws r"^Holo: Makie internal `project`" Holo._project_px(nothing, Makie.Point3(0.0, 0.0, 0.0))
+        @test_throws DomainError Holo._apply_transform(log10, Makie.Point3(-1.0, 1.0, 0.0))   # pass-through preserved
+    end
+
+    # _finalize! must NOT rewrap an error raised by the user's own observable callback as a
+    # Makie compat break — regression test for the _MAKIE_DOWNSTREAM_ERRORS split.
+    @testset "_finalize! lets a user callback error through unrewrapped" begin
+        fig2 = Figure(; size = (200, 150))
+        ax2 = Axis(fig2[1, 1])
+        scatter!(ax2, [1.0], [1.0])
+        on(ax2.finallimits) do _
+            error("USER CALLBACK BOOM")
+        end
+        @test_throws "USER CALLBACK BOOM" Holo._finalize!(fig2)
     end
 end

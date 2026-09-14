@@ -45,7 +45,22 @@ Holo._ppu(b::WebGLBackend, _fig) = b.px_per_unit
 # src/makie_compat.jl (which these deliberately do NOT live in — they're WGL-only and this
 # extension is the only place `WGLMakie`/`Bonito` are in scope). See test/webgl_ext_tests.jl's
 # "version-coupling guard".
-const _WGL_SHAPE_ERRORS = Union{MethodError, UndefVarError, ErrorException}
+# Same version split as src/makie_compat.jl's _MAKIE_SHAPE_ERRORS: struct-field reads throw
+# `FieldError` on Julia >= 1.12 (doesn't exist before), `ErrorException` on 1.10/1.11.
+const _WGL_SHAPE_ERRORS = @static if isdefined(Base, :FieldError)
+    Union{MethodError, UndefVarError, ErrorException, KeyError, FieldError}
+else
+    Union{MethodError, UndefVarError, ErrorException, KeyError}
+end
+
+# Narrower union for `_serialize_scene`, which walks every plot's own recipe code — an
+# `ErrorException` raised there is the plot's, not a Makie internal shape change.
+const _WGL_DOWNSTREAM_ERRORS = @static if isdefined(Base, :FieldError)
+    Union{MethodError, UndefVarError, KeyError, FieldError}
+else
+    Union{MethodError, UndefVarError, KeyError}
+end
+
 _wgl_compat_error(name, expected) = error(
     "Holo: WGLMakie/Bonito internal `$(name)` changed shape under WGLMakie v$(pkgversion(WGLMakie)) — " *
         "expected $(expected); please open an issue"
@@ -102,7 +117,7 @@ function _serialize_scene(scene)
     try
         return WGLMakie.serialize_scene(scene)
     catch e
-        e isa _WGL_SHAPE_ERRORS || rethrow()
+        e isa _WGL_DOWNSTREAM_ERRORS || rethrow()
         return _wgl_compat_error("serialize_scene", "`WGLMakie.serialize_scene(scene)` to return a plain scene tree")
     end
 end
