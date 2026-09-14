@@ -126,7 +126,7 @@ end
     b = _WGLExt.WebGLBackend()
     @test b isa Holo.AbstractBackend
     @test isfile(_WGLExt.SHIM_JS)
-    @test isfile(_WGLExt.wglmakie_bundle_path())   # the version-matched renderer is on disk
+    @test isfile(_WGLExt._wgl_bundle_path())   # the version-matched renderer is on disk
 end
 
 @testset "version-coupling guard (WGLMakie/Bonito internals)" begin
@@ -136,7 +136,8 @@ end
     # bump can move any of these and break the widget IN THE BROWSER with no Julia error —
     # the other testsets would still pass. Each check below names one coupling point so a
     # bump fails loudly *here*, cueing "re-verify the wire format" instead of a confusing
-    # downstream symptom.
+    # downstream symptom. Exercises the WGL-only compat block (`_wgl_bundle_path`,
+    # `_headless_screen`, `_serialize_scene` in ext/HoloWGLMakieExt.jl), not just `isdefined`.
 
     @test isdefined(_WGLExt.Bonito, :NoConnection)   # session-free serialize (no live Pluto)
     @test isdefined(WGLMakie, :ScreenConfig)
@@ -149,6 +150,21 @@ end
 
     fig = Figure(; size = (300, 200)); ax = Axis(fig[1, 1]); scatter!(ax, 1:6, (1:6) ./ 6)
     Makie.update_state_before_display!(fig)
+
+    # _headless_screen(f, scene): f sees a live, session-attached screen; detached after.
+    n0 = length(fig.scene.current_screens)
+    sess_seen = _WGLExt._headless_screen(fig.scene) do screen
+        screen isa WGLMakie.Screen && screen.session !== nothing
+    end
+    @test sess_seen === true
+    @test length(fig.scene.current_screens) == n0
+
+    # _serialize_scene(scene) directly (not just via scene_payload's _plain wrapper).
+    raw = _WGLExt._headless_screen(fig.scene) do screen
+        _WGLExt._serialize_scene(fig.scene)
+    end
+    @test haskey(raw, :plots) || haskey(raw, "plots") || haskey(raw, :children) || haskey(raw, "children")
+
     payload = _WGLExt.scene_payload(fig)
     @test haskey(payload, "plots") || haskey(payload, "children")   # scene nesting
 
@@ -159,7 +175,7 @@ end
     walk(payload)
     @test !isempty(uuids)
 
-    bundle = read(_WGLExt.wglmakie_bundle_path(), String)
+    bundle = read(_WGLExt._wgl_bundle_path(), String)
     @test occursin("setup_scene_init", bundle)
     @test occursin("find_plots", bundle)
 end
