@@ -37,7 +37,6 @@ struct WebGLBackend <: AbstractBackend
 end
 WebGLBackend(; px_per_unit = 2.0, max_width = 700) = WebGLBackend(px_per_unit, max_width)
 
-Holo.mount(::WebGLBackend) = :webgl
 Holo._ppu(b::WebGLBackend, _fig) = b.px_per_unit
 
 # ---------------------------------------------------------------------------

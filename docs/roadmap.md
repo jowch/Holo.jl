@@ -48,7 +48,7 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 - [x] **Computational-geometry extraction**: Contourf/Violin/Voronoiplot + BoxPlot box-body shipped; Tricontourf deferred; BoxPlot box-body-only (whiskers/outliers decorative). *Done (`src/introspect.jl`): Contourf → `:polygons` per contour level with `(; low, high)` from Makie's computed level range; Violin → `:polygons` with `(; x)` from the data position; Voronoiplot → `:polygons` with `(; index)`; BoxPlot box-body → `:rects` (un-notched) / `:polygons` (notched) with `(; q1, median, q3)` from Makie's computed-stats node. Principle: hit geometry from rendered shapes; payload values from Makie's computed values.*
 - [x] **Bars/areas** *(Hist/Waterfall/CrossBar/HSpan/VSpan done; Colorbar done M3; Legend remaining)*: Hist, Waterfall, CrossBar, HSpan, VSpan now auto-extracted by `holo(fig)` as `:rects` (same primitive as BarPlot, no new JS path). Shared bar payload schema — semantic, no redundant `index` (element index lives in `InteractionEvent.index`): BarPlot/Waterfall `(; low, high, value)`, Hist `(; value, low, high)`, CrossBar `(; midpoint, low, high)`, HSpan/VSpan `(; low, high)`. Span hit-rects clamped to the owning axis's pixel viewport (prevents cross-axis bleed in multi-axis figures). Uniform fail-loud payload-length validation (`_check_payloads`) added to `SegmentInteractable`/`RectInteractable`/`PolygonInteractable` — a wrong-length `payloads=` now throws `ArgumentError` at construction. *Colorbar: done (M3) — `ColorbarInteractable` auto-extracted from `fig.content`; figure-block walk now exists and Legend slots in the same place. Remaining: Legend (deferred — a linking capability, its own arc).*
 - [x] **Text bboxes** (Text/Annotation): `TextInteractable` — `text!`/`annotation!` labels auto-extracted as `:rects` click-to-pick buttons, payload `(; text, index, x, y)`. *Done: the original "needs font-metric measurement → new `bbox` primitive" premise was obsolete — `Makie.string_boundingboxes` already returns per-string boxes, so no new geometry kind or dependency was needed. `TextLabel` (a `Block`, not a plot — needs the figure-block walk `ColorbarInteractable` uses, not the scene-plot walk) is the remaining deferred piece.*
-- [ ] **SVG output path**: `CairoBackend(vector=true)` is groundwork; actually emit SVG base + overlay for sparse, low-primitive plots (cleaner coords, no raster).
+- [ ] **SVG output path**: no groundwork exists today (the `CairoBackend(vector=true)`/`mount` scaffolding was dead code — zero callers — and was removed pre-registration); would need to be built from scratch: emit SVG base + overlay for sparse, low-primitive plots (cleaner coords, no raster).
 - [x] **Axis3 overlays (parity) — core** *(delivered 2026-07-02, WS-3D core widening)*:
       Point/Segment/Polygon storage + the shared projection closure widened to 3D (`Point3f`,
       z=0 for 2-coord input — every pre-existing golden value-identical modulo the new `is3d`
@@ -282,8 +282,8 @@ These three are independent and can run concurrently.
   + regenerated manifest), not a CSS resize. Self-contained; slot anytime in this phase.
 
 ### Phase 4 — Output & scale (gated by Phase 0)
-- **SVG output path** — base SVG output is already the `mount=:svg` seam; the new part is the
-  overlay over a vector base. Least-validated item: gate behind a viability spike (primitive-count
+- **SVG output path** — no `mount`/`vector` seam exists (removed as dead code pre-registration);
+  base SVG output and the overlay over a vector base both need building from scratch. Least-validated item: gate behind a viability spike (primitive-count
   threshold; SVG uses `pt_per_unit/0.75`, not `px_per_unit`). Sparse-plot mode only — dense plots
   stay PNG. Pairs naturally with Phase 0.
 - **Spatial acceleration** (quadtree/grid) — demand-gated; may never be built. Grids are already

@@ -7,8 +7,7 @@
 """
     RenderResult
 
-The displayable artifact + the numbers JS needs to map it. `payload` is bytes (raster)
-or a string (svg); `mount` reports which.
+The displayable artifact + the numbers JS needs to map it.
 """
 struct RenderResult
     mime::String
@@ -80,7 +79,6 @@ end
 # ---- interface (every backend extension implements methods for these) ----
 function render end
 function context end
-function mount end        # :img (raster) | :svg (vector) | :webgl (live canvas)
 function _ppu end         # (backend, fig) -> px_per_unit / device scale
 function make_widget end  # (backend, <backend's RenderResult-like>, manifest, display_css) -> the @bind widget
 

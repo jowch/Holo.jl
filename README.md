@@ -136,8 +136,8 @@ finalize step Makie performs at display time).
 
 - **`backend`** — left as `nothing` (the default), `holo` picks the one backend implied by
   whichever of `CairoMakie` / `WGLMakie` is loaded (`CairoBackend` / `WebGLBackend`); pass one
-  explicitly to be unambiguous or to override `max_width`. `CairoBackend(; max_width = 700, vector
-  = false)` is the default 2D path; `WebGLBackend(; px_per_unit = 2.0, max_width = 700)` is the
+  explicitly to be unambiguous or to override `max_width`. `CairoBackend(; max_width = 700)`
+  is the default 2D path; `WebGLBackend(; px_per_unit = 2.0, max_width = 700)` is the
   browser-GPU path (see [3D, animation, and large data](#3d-animation-and-large-data-wglmakie)).
   `max_width` is the display width to target (Pluto's column); render resolution is *derived*
   from it (~2× the display width for `CairoBackend` — retina-crisp, not wasteful — never a fixed
