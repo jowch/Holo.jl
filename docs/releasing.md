@@ -32,7 +32,7 @@ prep PR. Those are Jonathan's post-merge steps.
 All of these, then Jonathan registers:
 
 1. This prep PR is merged (TagBot + freeze + docs).
-2. CI on `main` is green for that tree (frontend jobs may commit
+2. CI on `main` is green for that tree (the frontend job may commit
    `assets/overlay.js` / `assets/holo-webgl.js` back).
 3. The SHA he registers is that CI-green commit **and** does not modify
    `.github/workflows/*.yml`, unless `DOCUMENTER_KEY` is set (see

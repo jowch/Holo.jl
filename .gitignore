@@ -6,12 +6,11 @@
 *.jl.mem
 /docs/build/
 
-# Node / TypeScript (frontend, frontend-webgl). The built bundles assets/overlay.js and
+# Node / TypeScript (`frontend/`). The built bundles assets/overlay.js and
 # assets/holo-webgl.js ARE committed.
 frontend/node_modules/
 frontend/dist/
-frontend-webgl/node_modules/
-frontend-webgl/dist/
+frontend/coverage/
 test/e2e/node_modules/
 test/e2e/package-lock.json
 *.tsbuildinfo

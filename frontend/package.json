@@ -1,11 +1,13 @@
 {
-  "name": "interactiveplots-frontend",
+  "name": "holo-frontend",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Browser overlay for Holo.jl. Source of truth for the committed assets/overlay.js bundle.",
+  "description": "Browser overlay and :webgl shim for Holo.jl. Source of truth for the committed assets/overlay.js (IIFE) and assets/holo-webgl.js (ESM) bundles.",
   "scripts": {
     "build": "node build.mjs",
+    "build:overlay": "node build.mjs overlay",
+    "build:shim": "node build.mjs shim",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src test",
     "test": "vitest run"

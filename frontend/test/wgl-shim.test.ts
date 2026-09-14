@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { rewrap, obs, makeBonitoShim } from "../src/holo-webgl"
+import { rewrap, obs, makeBonitoShim } from "../src/wgl-shim"
 
 // rewrap is the JS half of the 4-rule scene contract — it must decode exactly what `_plain`
 // in ext/HoloWGLMakieExt.jl emits. These lock that cross-language contract (previously

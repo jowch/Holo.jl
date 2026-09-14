@@ -3,7 +3,7 @@
 // through a tiny shim. Validated by the spikes (full 2D+3D fidelity, animation hook).
 //
 // Usage (from the Holo widget HTML, mount===:webgl):
-//   import { mountWebGL } from "./holo-webgl.js";
+//   import { mountWebGL } from "./holo-webgl.js";  // committed ESM at assets/holo-webgl.js
 //   mountWebGL({ canvas, wglBundleUrl, scene: published, width, height, pxPerUnit });
 //
 // `scene` is the published_to_js payload from HoloWGLMakieExt.scene_payload (the 4-rule
