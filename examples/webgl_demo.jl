@@ -52,7 +52,7 @@ fig2d = let
     ax = Axis(f[1, 1]; title = "click a point")
     scatter!(ax, 1:8, (1:8) .^ 1.6; markersize = 16)
     f
-end
+end;
 
 # ╔═╡ d0000000-0000-0000-0000-000000000012
 @bind ev2d holo(fig2d)
@@ -80,7 +80,7 @@ fig3d = let
     lines!(ax, cos.(ts), sin.(ts), ts ./ 6; linewidth = 3)
     scatter!(ax, cos.(ts[1:20:end]), sin.(ts[1:20:end]), ts[1:20:end] ./ 6; markersize = 14, color = :tomato)
     f
-end
+end;
 
 # ╔═╡ d0000000-0000-0000-0000-000000000022
 @bind ev3d holo(fig3d)
