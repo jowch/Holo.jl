@@ -179,7 +179,8 @@ HTML(
 # ╔═╡ c1000000-0000-0000-0000-000000000040
 HTML(
     "<span id=\"kind_meta\" style=\"display:none\">$(JSON3.write(kind_sweep_meta()))</span>" *
-        "<span id=\"kind_backend\">cairo</span>",
+        "<span id=\"kind_backend\">cairo</span>" *
+        "<span id=\"kind_env\" style=\"display:none\">$(!isempty(dev))</span>",
 )
 
 # ╔═╡ Cell order:

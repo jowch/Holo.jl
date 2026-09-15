@@ -4,18 +4,23 @@
 // remount fade / no pulse, steel-teal (not #ff3b30), and Pluto/OS
 // prefers-color-scheme (official Pluto has no notebook toggle).
 //
-//   node polish_verify.mjs <base-url> <notebook-abs-path> <cairo|webgl>
+//   node polish_verify.mjs <base-url> <notebook-abs-path> <cairo|webgl> [artifact-dir]
 import { chromium } from "playwright";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   assertNoAlertRed, assertWash, assertRing, assertHoverRecipe,
   assertRemountStable, assertLeaveFade, assertTooltipColorScheme,
 } from "./visual_assert.mjs";
 
-const [base, notebook, backend] = process.argv.slice(2);
+const [base, notebook, backend, artifactDirArg] = process.argv.slice(2);
 if (!base || !notebook || !backend) {
-  console.error("usage: node polish_verify.mjs <base-url> <notebook> <cairo|webgl>");
+  console.error("usage: node polish_verify.mjs <base-url> <notebook> <cairo|webgl> [artifact-dir]");
   process.exit(2);
 }
+const artifactDir = artifactDirArg || process.env.E2E_ARTIFACT_DIR || null;
+if (artifactDir) mkdirSync(artifactDir, { recursive: true });
+const consoleLog = [];
 
 const SHIM_LEAK = /\b(?:Bonito|comm)\.\w+ is not a function/;
 const ALLOWED = [/Bonito\.decode_binary is not a function/, /Bonito\.fetch_binary is not a function/];
@@ -27,21 +32,23 @@ const browser = await chromium.launch({
 const passed = [];
 const unexpected = [];
 let failed = null;
+let context, page;
 try {
-  const context = await browser.newContext({
+  context = await browser.newContext({
     locale: "en-US", timezoneId: "UTC",
     viewport: { width: 1000, height: 900 },
     deviceScaleFactor: 2,
     colorScheme: "light",
     reducedMotion: "no-preference",
   });
-  const page = await context.newPage();
+  page = await context.newPage();
   page.on("pageerror", (e) => {
     const shim = SHIM_LEAK.test(e.message);
     const benign = shim && ALLOWED.some((re) => re.test(e.message));
     if (!benign) unexpected.push(e.message);
     console.error(benign ? "PAGEERROR (known-benign):" : "PAGEERROR:", e.message);
   });
+  page.on("console", (m) => consoleLog.push(`[${m.type()}] ${m.text()}`));
 
   await page.goto(`${base}/open?path=${encodeURIComponent(notebook)}`, { waitUntil: "domcontentloaded", timeout: 60000 });
   const deadline = Date.now() + 900000;
@@ -263,6 +270,24 @@ try {
   console.log(`POLISH VERIFY OK — ${backend}: ${passed.join(", ")}`);
 } catch (e) {
   failed = e;
+  // Mirrors the captureFailure shape #67 added to bind_click.mjs: screenshot + DOM dump +
+  // console log, so a CI failure ships enough evidence to diagnose without re-running locally.
+  if (artifactDir && page) {
+    try {
+      await page.screenshot({ path: join(artifactDir, `polish_verify-${backend}-failure.png`), fullPage: true });
+      const dump = await page.evaluate(() => ({
+        title: document.title,
+        url: location.href,
+        cells: [...document.querySelectorAll("pluto-cell")].map((c) => ({ id: c.id, classes: c.className })),
+        hosts: document.querySelectorAll(".ip-host").length,
+      }));
+      writeFileSync(join(artifactDir, `polish_verify-${backend}-dom.json`), JSON.stringify(dump, null, 2));
+      writeFileSync(join(artifactDir, `polish_verify-${backend}-console.log`), consoleLog.join("\n"));
+      console.error(`artifact: wrote polish_verify-${backend}-{failure.png,dom.json,console.log} to ${artifactDir}`);
+    } catch (e2) {
+      console.error("artifact capture failed:", e2.message);
+    }
+  }
 } finally {
   await browser.close();
 }

@@ -66,6 +66,9 @@ text and the bond payload → it gets a live check on every backend × the kinds
 - Mechanics below. Kind-sweep notebooks: `test/e2e/kind_sweep_cairo.jl` / `kind_sweep_webgl.jl`
   (both drivers). Demo envs (`examples/demo.jl`, `examples/webgl_demo.jl`) and
   `test/e2e/webgl_sweep.mjs` remain useful extras, not a substitute.
+- CI's `kind-sweep` job runs both drivers on both backends advisorily
+  (`continue-on-error: true`) — agents still run the sweep locally before calling a
+  user-facing change done, until the job is promoted to a required check.
 
 ## Pluto integration testing (slow — minutes)
 - A fresh per-notebook env re-resolves + precompiles the Makie stack (~6 min first open).
