@@ -1,52 +1,66 @@
-# API
+# API Reference
 
-```jldoctest
-julia> using Holo
+Full docstrings for every exported name, grouped by area. Usage guidance and worked
+examples live on the other pages; this page is the reference.
 
-julia> typeof(InteractionEvent(:scatter, 0, "a"))
+## Entry point
+
+```@docs
+holo
+auto_interactables
 InteractionEvent
 ```
 
-## `holo`
+## Interactables
 
-```julia
-holo(fig, interactables; backend = nothing, max_width = 700, selected = nothing) -> HoloWidget
-holo(fig, interactable;  …)   # single-interactable convenience
-holo(fig; …)                  # zero-config: auto-extract interactables from the plots
+```@docs
+PointInteractable
+SegmentInteractable
+RectInteractable
+PolygonInteractable
+AxisInteractable
+ColorbarInteractable
+TextInteractable
+ThresholdInteractable
+ROIInteractable
+ViewInteractable
+RegionInteractable
+FunctionInteractable
 ```
 
-Renders `fig` and overlays hit-testing for the declared interactables. Use as a Pluto
-`@bind` source; the bond value is `nothing` until a click, then an [`InteractionEvent`](@ref).
-`holo` does not corrupt your figure (it saves/restores the background and runs the same
-finalize step Makie performs at display time).
+## Tooltips
 
-- **`backend`** — left as `nothing` (the default), `holo` picks the one backend implied by
-  whichever of `CairoMakie` / `WGLMakie` is loaded (`CairoBackend` / `WebGLBackend`); pass one
-  explicitly to be unambiguous or to override `max_width`. `CairoBackend(; max_width = 700, vector
-  = false)` is the default 2D path; `WebGLBackend(; px_per_unit = 2.0, max_width = 700)` is the
-  browser-GPU path (see [Backends](@ref)).
-  `max_width` is the display width to target (Pluto's column); render resolution is *derived*
-  from it (~2× the display width for `CairoBackend` — retina-crisp, not wasteful — never a fixed
-  DPI). Loading neither backend raises an `ArgumentError`. If both are loaded, `backend=`
-  wins and implicit `holo` defaults to Cairo.
-- **`selected`** — a `layer_id => indices` map that pre-highlights elements on mount. See
-  [Selection](@ref).
-
-## `InteractionEvent`
-
-The bond value after a click:
-
-```julia
-struct InteractionEvent
-    layer::Symbol   # the interactable's `id`
-    index::Int      # 0-based element index within the layer
-    payload::Any    # the data you attached — see note
-end
+```@docs
+Markup
+@holo_str
 ```
 
-> **Payloads round-trip as a `Dict`** (via JSON), not the original `NamedTuple`. A payload
-> `(; label = "a")` comes back as `Dict("label" => "a")`, so index it as
-> `ev.payload["label"]`. `AxisInteractable` yields `Dict("x" => …, "y" => …)`.
+See [Tooltips](@ref) for usage and [`architecture.md` §10](https://github.com/jowch/Holo.jl/blob/main/docs/dev/architecture.md)
+for the wire format.
 
-Constructors and plot-object overloads are tabulated under [Interactables](@ref).
-Custom geometry: [Custom interactions](@ref).
+## Custom-interaction interface
+
+The pieces [Custom interactions](@ref) build on:
+
+```@docs
+AbstractInteractable
+AbstractSelector
+HitLayer
+InteractionContext
+AxisTransform
+data_to_image_px
+hitlayers
+```
+
+## Backends
+
+```@docs
+AbstractBackend
+```
+
+`CairoBackend` and `WebGLBackend` are the two concrete backends, but they're defined inside
+Holo's package extensions (`ext/HoloCairoMakieExt.jl`, `ext/HoloWGLMakieExt.jl`) rather than
+in `Holo` itself — they only exist once `CairoMakie`/`WGLMakie` is loaded, so Documenter
+can't resolve `@docs` for them without loading both weak dependencies into the docs build
+just to document two structs. They're documented in prose instead: see [Backends](@ref) for
+what each does, and `holo`'s docstring above for the `backend=` keyword both accept.

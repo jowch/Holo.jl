@@ -1,12 +1,63 @@
 # Selection
 
-Pass `selected` to pre-highlight, and feed a bond value back to make a selection persist.
-The catch: feeding one widget's bond into *its own* `selected` is a Pluto reactive cycle
-("Cyclic references") and won't run. Break it across two cells — the click source and the
-highlighted display — with the accumulator in between:
+## Reacting to a click
+
+Every `holo(...)` bond value is `nothing` until a click, then an [`InteractionEvent`](@ref)
+with `layer` (the clicked interactable's `id`), `index` (0-based, within that layer), and
+`payload`. A cell that reads the bond re-runs on every click:
 
 ```julia
-# once: a persistent accumulator (the Ref survives later cells' re-runs)
+@bind ev holo(fig, PointInteractable(ax, pts; id = :scatter))
+```
+
+```julia
+ev === nothing ? "nothing selected" : "clicked #$(ev.index) in :$(ev.layer)"
+```
+
+## Linked selection across plots
+
+Because `layer`/`index`/`payload` are plain data, one click can drive any number of
+downstream cells — filter a table, highlight a second plot, recompute a fit. Give the
+`payloads` on two interactables the same shape and key on it to link them without any Holo
+API:
+
+```julia
+rows = ev === nothing ? data : filter(r -> r.id == ev.payload["id"], data)
+```
+
+## `selected=` — pre-highlighting on mount
+
+Pass `selected` to any `holo(...)` call to highlight elements the moment the widget mounts,
+before any click:
+
+```julia
+holo(fig, PointInteractable(ax, pts; id = :scatter); selected = Dict(:scatter => [0, 2]))
+```
+
+`selected` is a `layer_id => indices` map. Indices are 0-based and match
+`InteractionEvent.index`. Supported kinds: `circles` / `rects` / `polygons` (selected wash)
+and `segments` / `polyline` (selected ring). Unsupported kinds (`grid`, `axis`, …) or
+out-of-range indices throw `ArgumentError` at build time — fail loud, like a wrong-length
+`payloads=`. Keys are layer ids: for the single-layer kinds that's the interactable's `id`,
+but [`RegionInteractable`](@ref) splits into suffixed layers (`:id_c` circles / `:id_r` rects
+/ `:id_p` polygons) — key on those.
+
+## Persisting a selection across re-renders
+
+The natural next step — feed a widget's own bond value back into its own `selected` — is a
+Pluto reactive cycle. Pluto detects it and reports **"Cyclic references"** instead of
+running the cell:
+
+```julia
+# DOESN'T WORK — ev and holo(...; selected=...) are in the same cell, feeding each other
+@bind ev holo(fig, PointInteractable(ax, pts; id = :scatter); selected = Dict(:scatter => something(ev)))
+```
+
+Break the cycle across cells, with a persistent accumulator in between. A `Ref` initialized
+in its own cell survives later cells' re-runs without re-initializing:
+
+```julia
+# once: a persistent accumulator
 picks = Ref(Int[])
 ```
 
@@ -16,7 +67,7 @@ picks = Ref(Int[])
 ```
 
 ```julia
-# accumulate clicked indices (acyclic: reads `ev` + the once-init Ref)
+# accumulate clicked indices (acyclic: reads `ev` + the once-init Ref, doesn't read its own output)
 selected = begin
     ev === nothing || push!(picks[], ev.index)
     Dict(:scatter => unique!(sort(picks[])))
@@ -24,19 +75,31 @@ end
 ```
 
 ```julia
-# the display: pre-highlights `selected` on mount (its own bond is unused)
+# the display: pre-highlights `selected` on mount; this widget's own bond goes unused
 @bind _ holo(fig2, PointInteractable(ax2, pts; id = :scatter); selected = selected)
 ```
 
 The overlay re-derives highlights from `selected` on every render, so the highlighted
 elements survive a re-render without flicker. This is exactly the pattern in
-[`examples/demo.jl`](https://github.com/jowch/Holo.jl/blob/main/examples/demo.jl) (cells under "Selection round-trip"), which CI runs
-headlessly on every change.
+[`examples/demo.jl`](https://github.com/jowch/Holo.jl/blob/main/examples/demo.jl) (cells
+under "Selection round-trip"), which CI runs headlessly on every change.
 
-`selected` is a `layer_id => indices` map (e.g. `Dict(:scatter => [0, 2])`). Indices are
-0-based and match `InteractionEvent.index`. Supported kinds: `circles` / `rects` /
-`polygons` (selected wash) and `segments` / `polyline` (selected ring). Unsupported kinds
-(`grid`, `axis`, …) or out-of-range indices throw `ArgumentError` at build time (fail loud,
-like wrong-length `payloads=`). Keys are layer ids: for the single-layer kinds that's the
-interactable's `id`, but `RegionInteractable` splits into suffixed layers (`:id_c` circles /
-`:id_r` rects / `:id_p` polygons) — key on those.
+## Multi-element selectors
+
+[`ROIInteractable`](@ref) is an [`AbstractSelector`](@ref): pair it with a
+`selects = :scatter` keyword pointing at another layer, and its drag box selects every
+element of `:scatter` it currently encloses, rather than the single `{layer, index}` an
+ordinary click reports. The bond value becomes a `Vector{InteractionEvent}` — one entry per
+enclosed point — instead of a single `InteractionEvent`:
+
+```julia
+scatter!(ax, xs, ys)
+roi = ROIInteractable(ax; bounds = (0.0, 10.0, 0.0, 10.0), selects = :scatter)
+@bind picked holo(fig, [PointInteractable(ax, pts; id = :scatter), roi])
+# picked isa Vector{InteractionEvent} once you release a drag over some points
+```
+
+See [`gallery/gallery.jl`](@ref Examples)'s "Box-select scatter" recipe for the full worked
+example. If you're building a custom interaction that should report more than one element
+per event the same way, see [`AbstractSelector`](@ref) on the [API Reference](@ref) page for
+the extension point.

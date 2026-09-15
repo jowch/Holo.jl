@@ -7,6 +7,10 @@ on:
     tags: '*'
   pull_request:
 
+concurrency:
+  group: documentation-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     # These permissions are needed to:

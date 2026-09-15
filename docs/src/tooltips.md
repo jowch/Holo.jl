@@ -1,76 +1,110 @@
 # Tooltips
 
-Hover shows a tooltip (purely client-side, no Julia round-trip). The tooltip card follows
-`prefers-color-scheme` — the same OS/browser signal official Pluto uses (there is no
-notebook theme toggle). Pin `tooltip_*` to lock colors.
-
-The `tooltip` keyword is accepted by every interactable constructor. Its type governs
-the browser's rendering path:
+Hovering an element shows a tooltip — purely client-side, no Julia round-trip. The `tooltip`
+keyword is accepted by every interactable constructor; its type governs what the browser
+renders:
 
 | Value | Type | Browser behaviour |
 |---|---|---|
 | *(omitted / `nothing`)* | `Nothing` | Auto name/value table built from the payload |
 | `holo"..."` | `Markup` | Template interpolated against the hovered element's payload |
-| `false` | `Bool` | Tooltip suppressed entirely |
+| `false` | `Bool` | Tooltip suppressed entirely (the hover highlight still applies) |
 
-When `tooltip` is not set, the browser generates a name/value table from the element's
-payload dict. All field names and values are HTML-escaped.
+## The default: an auto-table
+
+When `tooltip` isn't set, the browser renders a name/value table straight from the element's
+payload — every field name and value, HTML-escaped:
 
 ```julia
-PointInteractable(ax, pts; payloads = [...], tooltip = false)  # hover highlight, no card
+PointInteractable(ax, pts; payloads = [(; city = "Lyon", pop = 513_000)])
+# hovering shows a two-row table: city → Lyon, pop → 513000
+```
+
+```julia
+PointInteractable(ax, pts; payloads = [...], tooltip = false)   # no card at all
 ```
 
 ## `holo"..."` templates
 
-`holo"..."` is a string macro that produces a `Markup` value. `$(field)` is a placeholder
-for a browser-side payload lookup at hover time — it does **not** read a Julia variable.
+`holo"..."` is a string macro (exported; the underlying function is `@holo_str`) that
+produces a `Markup` value:
 
 ```julia
 tooltip = holo"<b>$(name)</b> — $(population:,) people"
 ```
 
+`$(field)` is a placeholder resolved in the browser from the hovered element's payload entry
+at hover time — it does **not** read a Julia variable, and there is no Julia-object
+interpolation in templates.
+
 | Syntax | Meaning |
 |---|---|
-| `$(field)` | Value of payload field `field`; HTML-escaped at hover time |
-| `$(field:spec)` | Same, formatted by [d3-format](https://d3js.org/d3-format) `spec` before escaping |
+| `$(field)` | Value of payload field `field`; HTML-escaped |
+| `$(field:spec)` | Same, formatted by a [d3-format](https://d3js.org/d3-format) `spec` before escaping |
 | `` \$ `` | Literal dollar sign |
 
 A fixed label with no placeholders is a template with no `$()` at all:
-`holo"<em>static label</em>"`.
+`holo"<em>static label</em>"`. The literal (non-`$()`) portions of the template are raw
+HTML — you're responsible for escaping `<` and `&` in literal text, same as `@htl`;
+`$(field)` interpolation and the auto-table are always HTML-escaped for you.
 
-Literal portions of `holo"..."` are treated as raw HTML (same contract as `@htl`).
-Interpolated `$(field)` values and the auto-table are HTML-escaped.
-
-Because `holo"..."` requires a string literal, a runtime-computed string must travel as
-a field inside the payload:
+Because `holo"..."` requires a string literal, a runtime-computed string has to travel as a
+field inside the payload instead:
 
 ```julia
 payloads = [(; city, pop, label = "$(city): $(pop) residents") for (city, pop) in data]
 tooltip  = holo"$(label)"   # label is pre-rendered per element in the payload
 ```
 
-A field present in the template but absent from the payload is a build-time `ArgumentError`.
+### Field check
+
+Two checks catch typos at different times. A malformed template (`$(pop+1)`, an unclosed
+`$(`, an unknown d3-format type character) is a `TemplateValidationError` the instant the
+cell containing `holo"..."` parses — before `holo()` ever runs. A syntactically valid field
+that isn't actually a key in your payload is caught later, when `holo()` builds the
+manifest: an `ArgumentError` with a "did you mean?" suggestion for a close misspelling. This
+second check only runs for `NamedTuple` payloads (the built-in default); for `Dict` or mixed
+payloads a missing field silently renders empty at hover instead.
 
 ## Styling
 
-Official Pluto has **no notebook light/dark toggle** — Settings → Dark mode is help
-text. Pluto's theme CSS uses the same `prefers-color-scheme` query, so the card already
-matches stock Pluto. Pin `tooltip_bg` / `tooltip_color` to lock the card.
+### Dark mode is automatic
 
-Figure-level style overrides are keyword arguments to `holo()`:
+The built-in card follows the OS/browser `prefers-color-scheme` signal — the same one stock
+Pluto uses for its own theme (official Pluto has no in-app light/dark toggle; Settings →
+Dark mode is help text, not a real switch). No author action needed; the card already
+matches whatever mode the reader's Pluto is in.
+
+### Figure-level overrides
+
+Pin any of these to lock the card's look (this also opts that property out of dark-mode
+inversion — the author's deliberate choice):
 
 ```julia
 holo(fig, interactables...;
-    tooltip_bg        = nothing,   # background  — CSS string or Makie color
+    tooltip_bg        = nothing,   # background  — CSS string or Makie color (:dodgerblue, RGBf(...))
     tooltip_color     = nothing,   # text color  — CSS string or Makie color
     tooltip_accent    = nothing,   # accent (emphasis / links)
     tooltip_font      = nothing,   # font-family — String
     tooltip_font_size = nothing,   # Real → appended with "px"
     tooltip_radius    = nothing,   # Real → appended with "px"
-    tooltip_caret     = true,      # Bool — draw the caret (default: true)
+    tooltip_caret     = true,      # Bool — draw the caret pointing at the hovered element
 )
 ```
 
-`nothing` means "use the built-in default." An explicitly set kwarg pins that variable,
-overriding dark mode. CSS custom properties (`--holo-tip-*`) also inherit across shadow
-DOM boundaries if you set them from a Pluto `<style>` cell.
+`nothing` (the default for every kwarg except `tooltip_caret`) means "use the built-in
+default"; only the kwargs you actually set change anything.
+
+### CSS escape hatch
+
+The underlying `--holo-tip-*` custom properties inherit across the shadow DOM boundary, so a
+Pluto `<style>` cell can override them without any Julia API:
+
+```html
+<style>
+  :root { --holo-tip-bg: #1a1a2e; --holo-tip-color: #e0e0e0; }
+</style>
+```
+
+See [`architecture.md` §10](https://github.com/jowch/Holo.jl/blob/main/docs/dev/architecture.md)
+for the full `--holo-tip-*` reference and the wire format behind all of this.

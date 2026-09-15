@@ -1,4 +1,4 @@
-# Contributing
+# Development
 
 The `:cairo` overlay is TypeScript, bundled to a committed `assets/overlay.js`:
 
@@ -32,18 +32,30 @@ JULIA_NOSYSIMAGE=1 GROUP=NoBackend julia --project=. -e 'using Pkg; Pkg.test()' 
 JULIA_NOSYSIMAGE=1 GROUP=WebGL julia --project=. -e 'using Pkg; Pkg.test()'     # WGL then both
 ```
 
-Julia code is formatted with [Runic](https://github.com/fredrikekre/Runic.jl) (CI enforces it):
+Julia code is formatted with [Runic](https://github.com/fredrikekre/Runic.jl) (CI enforces
+it, and checks the *whole* repo, not just `src`/`test`):
 
 ```bash
 julia -e 'using Runic; exit(Runic.main(["--inplace", "src", "test", "bench", "gallery", "examples", "docs"]))'
 ```
 
-User documentation is Documenter, from `docs/src/`. Design notes stay as markdown in `docs/`
-and are not in the Documenter sidebar.
+This site is Documenter, built from `docs/src/`. Maintainer/design notes live in `docs/dev/`
+and are not part of the Documenter sidebar.
 
 ```bash
 julia --project=docs -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
 julia --project=docs docs/make.jl
 ```
 
-Local `make.jl` builds HTML under `docs/build/` and skips `deploydocs` (that runs on CI).
+Local `make.jl` builds HTML under `docs/build/` and skips `deploydocs` (that runs on CI,
+which also owns the deploy to GitHub Pages on `main` and tags).
+
+## Live verification
+
+Unit and frontend tests check the manifest and the JS in isolation; they don't prove the
+rendered widget behaves for a reader. Any change that can alter what a user interacts with
+or sees — including a Julia-only change to the manifest shape, hit-test geometry, or hover
+text — needs to be checked live in a real Pluto + browser, on every supported backend, for
+every interactable kind it touches. This isn't optional polish; it's the actual gate before
+a user-facing change is done. The full playbook is
+[`docs/dev/live-interaction-checklist.md`](https://github.com/jowch/Holo.jl/blob/main/docs/dev/live-interaction-checklist.md).

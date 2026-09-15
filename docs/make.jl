@@ -13,19 +13,24 @@ makedocs(;
     ),
     pages = [
         "Home" => "index.md",
+        "Getting started" => "getting-started.md",
         "Interactables" => "interactables.md",
-        "Custom interactions" => "custom.md",
         "Selection" => "selection.md",
         "Tooltips" => "tooltips.md",
+        "Custom interactions" => "custom.md",
         "Backends" => "backends.md",
-        "API" => "api.md",
+        "Troubleshooting" => "troubleshooting.md",
+        "Examples" => "examples.md",
+        "API Reference" => "api.md",
+        "Development" => "contributing.md",
     ],
-    doctest = true,
-    checkdocs = :none,
+    doctest = false,
+    checkdocs = :exports,
+    warnonly = false,
 )
 
 deploydocs(;
-    repo = "github.com/jowch/Holo.jl.git",
+    repo = "github.com/jowch/Holo.jl",
     devbranch = "main",
-    push_preview = true,
+    push_preview = false,
 )
