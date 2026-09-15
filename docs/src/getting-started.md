@@ -10,9 +10,10 @@ Nothing Holo-specific yet:
 ```julia
 using CairoMakie
 
+pts = [(1.0, 1.0), (2.0, 4.0), (3.0, 9.0)]
 fig = Figure()
 ax = Axis(fig[1, 1])
-scatter!(ax, [1.0, 2.0, 3.0], [1.0, 4.0, 9.0])
+scatter!(ax, first.(pts), last.(pts))
 fig
 ```
 
@@ -35,12 +36,11 @@ skipped with a `@warn`, not an error.
 ## 3. Explicit interactables — when you want control
 
 Zero-config is sugar over an explicit vector of interactables. Building it yourself gets you
-custom `payloads`, a chosen `id`, and non-default styling:
+custom `payloads`, a chosen `id`, and non-default styling — on the *same* `fig`/`ax` from
+step 1, without plotting `pts` a second time:
 
 ```julia
-pts = [(1.0, 1.0), (2.0, 4.0), (3.0, 9.0)]
 labels = ["a", "b", "c"]
-scatter!(ax, first.(pts), last.(pts))
 
 @bind ev holo(fig, [PointInteractable(ax, pts; id = :points, payloads = labels)])
 ```

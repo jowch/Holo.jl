@@ -550,7 +550,7 @@ version = "100.14004.0+0"
 
 [[deps.Holo]]
 deps = ["AbstractPlutoDingetjes", "Base64", "FileIO", "HypertextLiteral", "Makie"]
-path = "/mnt/eggtart/home/jonathanchen/projects/Holo.jl/.claude/worktrees/agent-ab4ef8acb1e4b0054"
+path = ".."
 uuid = "82b01fb5-7eeb-4559-83ea-8d75f85d4328"
 version = "0.1.0"
 
