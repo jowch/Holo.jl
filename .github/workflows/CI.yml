@@ -89,7 +89,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
 
-      # Real-browser @bind round-trip: generate the self-contained widget page, then click
+      # Real-browser `@bind` round-trip: generate the self-contained widget page, then click
       # scatter marker 0 in headless Chromium and assert the overlay emits the right bond
       # value. Covers the browser half the Julia unit tests can't reach.
       - name: Generate :webgl E2E page
@@ -102,17 +102,17 @@ jobs:
         run: |
           npm install
           npx playwright install --with-deps chromium
-      - name: Run real-browser @bind E2E
+      - name: Run real-browser bind E2E
         working-directory: test/e2e
         run: node click.mjs "$RUNNER_TEMP/e2e"
       - name: Verify browser-emitted value through transform_value
         run: julia --project=. test/e2e/verify_capture.jl "$RUNNER_TEMP/e2e"
 
   webgl-bind-e2e:
-    # THROUGH-Pluto @bind E2E: a live headless Pluto kernel + real Chromium. Isolated as its
+    # THROUGH-Pluto `@bind` E2E: a live headless Pluto kernel + real Chromium. Isolated as its
     # own job (heaviest, and the one most exposed to Pluto-version churn) so it reads cleanly
     # and is trivial to drop if it ever proves flaky.
-    name: WGLMakie @bind E2E (Pluto)
+    name: WGLMakie bind E2E (Pluto)
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -131,7 +131,7 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Pre-warm env (precompile into the cached depot)
         run: julia --project=. -e 'using Pkg; Pkg.instantiate()'
-      - name: Through-Pluto @bind round-trip
+      - name: Through-Pluto bind round-trip
         working-directory: test/e2e
         run: |
           julia serve.jl 1234 > pluto.log 2>&1 &
