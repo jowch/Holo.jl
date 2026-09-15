@@ -1,6 +1,6 @@
 # Getting started
 
-This walks through the same three steps as the [Home](@ref) quick start, slower, and covers
+This walks through the same three steps as the [Home](index.md) quick start, slower, and covers
 the two ways to tell Holo what's clickable.
 
 ## 1. A figure, like any other

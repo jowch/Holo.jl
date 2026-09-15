@@ -89,7 +89,9 @@ under "Selection round-trip"), which CI runs headlessly on every change.
 [`ROIInteractable`](@ref) is an [`AbstractSelector`](@ref): pair it with a
 `selects = :scatter` keyword pointing at another layer, and its drag box selects every
 element of `:scatter` it currently encloses, rather than the single `{layer, index}` an
-ordinary click reports. The bond value becomes a `Vector{InteractionEvent}` — one entry per
+ordinary click reports. `selects` only works when the target layer is a `circles` or `grid`
+kind (i.e. built from [`PointInteractable`](@ref) or the grid form of
+[`RectInteractable`](@ref)) — pointing it at any other kind fails loud. The bond value becomes a `Vector{InteractionEvent}` — one entry per
 enclosed point — instead of a single `InteractionEvent`:
 
 ```julia

@@ -11,7 +11,7 @@ auto_interactables
 InteractionEvent
 ```
 
-## Interactables
+## Interactable constructors
 
 ```@docs
 PointInteractable
@@ -28,7 +28,7 @@ RegionInteractable
 FunctionInteractable
 ```
 
-## Tooltips
+## Tooltip macro & type
 
 ```@docs
 Markup
@@ -52,7 +52,7 @@ data_to_image_px
 hitlayers
 ```
 
-## Backends
+## Backend abstraction
 
 ```@docs
 AbstractBackend

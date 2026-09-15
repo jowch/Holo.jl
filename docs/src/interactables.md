@@ -48,21 +48,22 @@ demonstrates both.
 
 Every interactable takes an `Axis` (or, for [`ColorbarInteractable`](@ref), a
 `Makie.Colorbar`) and geometry in **data space**. All accept `id` — the `Symbol` the event
-reports as `layer` — and `payloads`, one entry per element (auto-generated with a 0-based
-`index` if omitted).
+reports as `layer` — `payloads` — one entry per element, auto-generated with a 0-based
+`index` if omitted — and `tooltip` (`nothing` / `holo"..."` / `false`, see [Tooltips](@ref)).
+The table below lists the keywords *beyond* those three.
 
-| Constructor | Geometry | Default payload |
-|---|---|---|
-| `PointInteractable(ax, points; id = :points, payloads, radius = 9)` | `points :: Vector{(x, y)}`; `radius` is the px click target | `(; index, x, y)` |
-| `SegmentInteractable(ax, vertices; mode = :polyline, id = :segments, payloads, tol = 6)` | `:polyline` = connected path (hit = nearest segment); `:pairs` = disjoint segment pairs; `tol` px slack | `(; segment_index)` |
-| `RectInteractable(ax; rects, id = :rects, payloads)` | `rects = [(xc, yc, w, h), …]` — explicit boxes (e.g. bars) | `(; index)` |
-| `RectInteractable(ax; grid, id, payloads)` | `grid = (xedges, yedges, values)` — a heatmap shipped as edges, not N rects | cell `(i, j, value)`, resolved client-side |
-| `PolygonInteractable(ax, rings; id = :polygons, payloads)` | `rings :: Vector{Vector{(x, y)}}` — one or more filled rings | `(; index)` |
-| `AxisInteractable(ax; id = :axis)` | the whole axis: a click anywhere returns the data coordinate | `Dict("x" => …, "y" => …)` |
-| `ColorbarInteractable(cb; id = :colorbar)` | takes a `Makie.Colorbar` block, not an `Axis`; hit region bounded to the colorbar's pixel bbox | `(; value)`, resolved client-side |
-| `ThresholdInteractable(ax; orientation = :horizontal, value, id = :threshold)` | a draggable line (`:horizontal` = constant-y, dragged vertically; `:vertical` = constant-x); live readout while dragging, commit on mouse-up | scalar data coord, on release |
-| `ROIInteractable(ax; bounds = (xmin, xmax, ymin, ymax), id = :roi)` | a draggable + resizable box; move (interior) / resize (corner); commit on mouse-up | `Dict("xmin"=>…, "xmax"=>…, "ymin"=>…, "ymax"=>…)`, on release |
-| `ViewInteractable(ax; id = :view)` | drag-to-pan (2D) or drag-to-rotate (Axis3); commit on mouse-up; Shift+drag forces view over ROI/threshold | 2D: `Dict("xmin"=>…, "xmax"=>…, "ymin"=>…, "ymax"=>…)`; 3D: `Dict("azimuth"=>…, "elevation"=>…)` |
+| Constructor | Geometry | Extra keywords | Default payload |
+|---|---|---|---|
+| `PointInteractable(ax, points; radius = 9, radius3d = nothing, id = :points)` | `points :: Vector{(x, y)}` (or `(x,y,z)` for a 3D axis) | `radius` — px click target; `radius3d` — per-point data-space half-extents on a 3D axis (overrides `radius`) | `(; index, x, y[, z])` |
+| `SegmentInteractable(ax, vertices; mode = :polyline, tol = 6, id = :segments)` | connected/disjoint vertices | `mode` — `:polyline` (connected path, nearest-segment hit) or `:pairs` (disjoint pairs); `tol` — px slack | `(; segment_index)` |
+| `RectInteractable(ax; rects, clamp_to_viewport = false, id = :rects)` | `rects = [(xc, yc, w, h), …]` — explicit boxes (e.g. bars) | `clamp_to_viewport` — clamp a rect that spans past the axis edge instead of letting it overflow | `(; index)` |
+| `RectInteractable(ax; grid, id = :rects)` | `grid = (xedges, yedges, values)` — a heatmap shipped as edges, not N rects | — | cell `(i, j, value)`, resolved client-side |
+| `PolygonInteractable(ax, rings; id = :polygons)` | `rings :: Vector{Vector{(x, y)}}` — one or more filled rings | — | `(; index)` |
+| `AxisInteractable(ax; id = :axis)` | the whole axis: a click anywhere returns the data coordinate | — | `Dict("x" => …, "y" => …)` |
+| `ColorbarInteractable(cb; id = :colorbar)` | takes a `Makie.Colorbar` block, not an `Axis`; hit region bounded to the colorbar's pixel bbox | — | `(; value)`, resolved client-side |
+| `ThresholdInteractable(ax; orientation = :horizontal, value, id = :threshold)` | a draggable line (`:horizontal` = constant-y, dragged vertically; `:vertical` = constant-x); live readout while dragging, commit on mouse-up | `orientation`, `value` (initial position) | scalar data coord, on release |
+| `ROIInteractable(ax; bounds = (xmin, xmax, ymin, ymax), selects = nothing, id = :roi)` | a draggable + resizable box; move (interior) / resize (corner); commit on mouse-up | `selects` — another layer's `id`; if set, the box reports every element of that layer it encloses instead of committing its own bounds (`circles`/`grid` layers only — see [Multi-element selectors](@ref)) | `Dict("xmin"=>…, "xmax"=>…, "ymin"=>…, "ymax"=>…)`, on release (or `Vector{InteractionEvent}` with `selects`) |
+| `ViewInteractable(ax; id = :view)` | drag-to-pan (2D) or drag-to-rotate (Axis3); commit on mouse-up; Shift+drag forces view over ROI/threshold | — | 2D: `Dict("xmin"=>…, "xmax"=>…, "ymin"=>…, "ymax"=>…)`; 3D: `Dict("azimuth"=>…, "elevation"=>…)` |
 
 [`AxisInteractable`](@ref), [`ColorbarInteractable`](@ref), [`ThresholdInteractable`](@ref),
 and [`ROIInteractable`](@ref) invert pixels→data client-side, so they support `identity` /
