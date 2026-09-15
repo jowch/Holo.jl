@@ -1,8 +1,12 @@
 # Tooltips
 
 Hovering an element shows a tooltip — purely client-side, no Julia round-trip. The `tooltip`
-keyword is accepted by every interactable constructor; its type governs what the browser
-renders:
+keyword is accepted by the element-kind constructors — [`PointInteractable`](@ref),
+[`SegmentInteractable`](@ref), [`RectInteractable`](@ref), [`PolygonInteractable`](@ref),
+[`TextInteractable`](@ref), [`RegionInteractable`](@ref) — but not by the whole-axis or drag
+kinds (`AxisInteractable`, `ColorbarInteractable`, `ThresholdInteractable`, `ROIInteractable`,
+`ViewInteractable`) or by `FunctionInteractable`; see [Interactables](@ref) for the full
+breakdown. Its type governs what the browser renders:
 
 | Value | Type | Browser behaviour |
 |---|---|---|

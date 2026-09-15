@@ -40,17 +40,20 @@ demonstrates both.
 
 ## Constructors
 
-Every interactable takes an `Axis` (or, for [`ColorbarInteractable`](@ref), a
-`Makie.Colorbar`) and geometry in **data space**; all accept `id` — the `Symbol` the event
-reports as `layer`. The element kinds — [`PointInteractable`](@ref),
-[`SegmentInteractable`](@ref), [`RectInteractable`](@ref), [`PolygonInteractable`](@ref) —
-also accept `payloads` (one entry per element, auto-generated with a 0-based `index` if
+Every constructor in the table below takes an `Axis` (or, for [`ColorbarInteractable`](@ref),
+a `Makie.Colorbar`) and geometry in **data space**, and all of them accept `id` — the
+`Symbol` the event reports as `layer`. The element kinds — [`PointInteractable`](@ref),
+[`SegmentInteractable`](@ref), [`RectInteractable`](@ref), [`PolygonInteractable`](@ref), and
+(documented on their own pages) [`TextInteractable`](@ref) and [`RegionInteractable`](@ref)
+— also accept `payloads` (one entry per element, auto-generated with a 0-based `index` if
 omitted) and `tooltip` (`nothing` / `holo"..."` / `false`, see [Tooltips](@ref)). The
 whole-axis and drag kinds — [`AxisInteractable`](@ref), [`ColorbarInteractable`](@ref),
 [`ThresholdInteractable`](@ref), [`ROIInteractable`](@ref), [`ViewInteractable`](@ref) —
 report one client-computed value per event rather than a discrete element, so they take only
 `id` plus their own keywords below; passing `payloads=`/`tooltip=` to one of these is a
-`MethodError`. The table below lists the keywords *beyond* `id`/`payloads`/`tooltip`.
+`MethodError`. [`FunctionInteractable`](@ref) is the outlier: it takes neither an `Axis` nor
+`id` as constructor arguments at all — see [Custom interactions](@ref). The table below lists
+the keywords *beyond* `id`/`payloads`/`tooltip` for the constructors it covers.
 
 | Constructor | Geometry | Extra keywords | Default payload |
 |---|---|---|---|
@@ -99,7 +102,10 @@ tooltip contract, plot-specific default payload and `id`:
 
 `id` on all of these, and `payloads` on most, take the same keywords as the explicit
 constructors; defaults are the plot's own name in lowercase (`:scatter`, `:lines`, `:hist`,
-`:crossbar`, …). The `Heatmap`/`Image` method is the one exception — it takes no `payloads`
+`:crossbar`, …) — **except** `Heatmap`/`Image` (`:cells`), `BarPlot` (`:bars`), and
+`LineSegments` (`:segments`). `holo(fig)`/`auto_interactables` use these same ids, so a
+`selected=`/`ev.layer` check against `:heatmap` or `:barplot` will never match — use `:cells`
+and `:bars`. The `Heatmap`/`Image` method is also the one exception that takes no `payloads`
 keyword at all, since grid cells resolve `{i, j, value}` client-side, same as the explicit
 `grid = (...)` form. Any plot type not listed here — or here and in the
 [Constructors](@ref) table above — needs a custom interaction; see
@@ -123,7 +129,8 @@ end
 @bind ev holo(fig)   # both plots interactive; ev.layer tells you which was clicked
 ```
 
-Layer ids are the plot kind (`:scatter`, `:hist`, `:band`, …, from the table above) plus
+Layer ids are the plot kind (`:scatter`, `:hist`, `:band`, …, from the table above — note the
+`heatmap!` above gets `:cells`, not `:heatmap`; see the exceptions listed there) plus
 `:colorbar` for any `Colorbar` block, suffixed `_2`, `_3`, … when a kind repeats within one
 figure. Unsupported plot types are skipped with a `@warn`, not an error.
 
