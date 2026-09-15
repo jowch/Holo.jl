@@ -6,7 +6,7 @@ plots in Pluto. Browser layer is TypeScript in `frontend/`, bundled by esbuild t
 
 ## Commands
 - Julia tests: `julia --project=. test/runtests.jl`
-- Frontend gate: `cd frontend && npm run lint && npm run typecheck && npm test && npm run build` (build → `../assets/overlay.js`)
+- Frontend gate: `cd frontend && npm run lint && npm run typecheck && npm test && npm run build` (build → `../assets/overlay.js` IIFE + `../assets/holo-webgl.js` ESM)
 - Format (Runic, CI-enforced): `julia -e 'using Runic; exit(Runic.main(["--inplace","src","test","bench","gallery","examples"]))'` — pass every dir with `.jl`, since CI formats the whole repo (PR #11 slipped because `gallery/` was omitted here). **CI's `runic-action` has no `paths:` filter → it checks the WHOLE repo** (incl. `bench/`, `gallery/`, `examples/`), and tracks the latest Runic (1.7+); a locally-old Runic can pass a file CI rejects. Format every `.jl` you add, with current Runic.
 - Registry name-clash check (manual, not `Pkg.test`): packed General (typical
   depot / CI) is a 129-byte `~/.julia/registries/General.toml` pointer +
@@ -30,7 +30,7 @@ plots in Pluto. Browser layer is TypeScript in `frontend/`, bundled by esbuild t
 ## Conventions
 - Coords: image px, top-left origin = `Makie.project(ax.scene, pt)` + axis `viewport.origin`, ×`px_per_unit`, y-flipped. Tests assert projected coords land on rendered markers.
 - DPI is derived, not fixed: `px_per_unit = 2·min(scene_width, max_width=700)` (Pluto's column).
-- CI is the **sole author** of `assets/overlay.js` (rebuilds + commits on `main`); committing your local bundle is optional, but a stale committed bundle fails PR CI.
+- CI is the **sole author** of `assets/overlay.js` and `assets/holo-webgl.js` (rebuilds + commits on `main`); committing your local bundle is optional, but a stale committed bundle fails PR CI.
 
 ## Live verification (standing practice — not optional)
 Unit/frontend tests assert the manifest and the JS in isolation; they don't prove the rendered

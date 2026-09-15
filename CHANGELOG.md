@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- Vitest coverage for `frontend/src` uploads to Codecov (`flags: frontend`).
+  Committed `assets/` bundles are ignored. One blended `codecov/project`
+  number (Julia + `frontend/src`); `target: auto`, `threshold: 1%`.
+
 ### Removed
 - Dead `vector`/`mount` scaffolding: `CairoBackend(; vector=false)` and the
   `AbstractBackend` `mount` interface function (plus `WebGLBackend`'s `mount = :webgl`
@@ -17,6 +22,10 @@ All notable changes to this project are documented here. The format is based on
 - `hoverstyle(::AbstractInteractable, ::Int)` narrowed to `hoverstyle(::AbstractInteractable)`
   — the manifest ships one hover style per layer, not per element; the old per-element
   signature implied styling that was never actually per-element.
+- Browser TypeScript lives in one `frontend/` package with two modules: the
+  shared overlay IIFE (`assets/overlay.js`) and the `:webgl` ESM shim
+  (`assets/holo-webgl.js`, source `frontend/src/wgl-shim.ts`). The old
+  `frontend-webgl/` package and its CI job are gone.
 
 ### Fixed
 - `SegmentInteractable(...; mode=...)` now validates `mode` at construction

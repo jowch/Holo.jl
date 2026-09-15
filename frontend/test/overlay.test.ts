@@ -1294,3 +1294,129 @@ describe("overlay visual polish", () => {
         expect(tip.classList.contains("flip-y")).toBe(false)
     })
 })
+
+describe("coverage gaps: grid-value tooltip, drag-target hover cursor, rects/polygons selected=, unsupported selects target", () => {
+    it("grid hover tooltip shows '(i,j) = value' when values[] is present (not the no-value branch)", () => {
+        const m: Manifest = {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [{ id: "hm", kind: "grid", axis: "ax1", events: ["hover"], payloads: [],
+                geometry: { xedges: [0, 10, 20], yedges: [0, 10, 20], ncols: 2, nrows: 2, values: [11, 12, 21, 22] } }],
+        }
+        const { host, script } = setup()
+        mount(script, m)
+        const shadow = shadowOf(host)
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        // scale = 1200/600 = 2 → client (7.5, 2.5) = image (15, 5), cell i=1,j=0 → values[0*2+1]=12
+        ;(shadow.querySelector(".surface") as HTMLElement)
+            .dispatchEvent(new PointerEvent("pointermove", { clientX: 7.5, clientY: 2.5, bubbles: true }))
+        expect(tip.classList.contains("show")).toBe(true)
+        expect(tip.innerHTML).toBe("(1,0) = 12")
+    })
+
+    it("grid hover tooltip shows '(i,j)' with no value when values[] was dropped", () => {
+        const m: Manifest = {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [{ id: "hm", kind: "grid", axis: "ax1", events: ["hover"], payloads: [],
+                geometry: { xedges: [0, 10, 20], yedges: [0, 10, 20], ncols: 2, nrows: 2 } }], // no values
+        }
+        const { host, script } = setup()
+        mount(script, m)
+        const shadow = shadowOf(host)
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        ;(shadow.querySelector(".surface") as HTMLElement)
+            .dispatchEvent(new PointerEvent("pointermove", { clientX: 7.5, clientY: 2.5, bubbles: true }))
+        expect(tip.classList.contains("show")).toBe(true)
+        expect(tip.innerHTML).toBe("(1,0)")
+    })
+
+    it("hovering a drag-only target (no button pressed) shows the grab cursor and suppresses hover/tooltip", () => {
+        const m: Manifest = {
+            width: 1200, height: 800, scaling: 2,
+            transforms: { ax1: { xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
+                viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false } },
+            layers: [{ id: "thr", kind: "threshold", axis: "ax1", events: ["drag"], payloads: [],
+                geometry: { orientation: "h", pos: 400, span: [0, 1200] } }],
+        }
+        const { host, script } = setup()
+        mount(script, m)
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        // client (300,200) = image (600,400), exactly on the threshold line — a drag hit with no pointerdown
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(surface.classList.contains("grab")).toBe(true)
+        expect(surface.classList.contains("hot")).toBe(false)
+        expect(tip.classList.contains("show")).toBe(false)
+    })
+
+    it("selected= on a rects layer pre-highlights the right rect (hitLayerByIndex rects branch)", () => {
+        const { host, script } = setup()
+        mount(script, {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [{ id: "bars", kind: "rects", geometry: [100, 100, 40, 20, 300, 100, 40, 20],
+                payloads: [{ i: 0 }, { i: 1 }], axis: "ax1", events: ["click", "hover"], selected: [1] }],
+        })
+        const el = shadowOf(host).querySelector("g.sel")!.firstElementChild as SVGElement
+        expect(el.tagName.toLowerCase()).toBe("rect")
+        expect(el.getAttribute("x")).toBe("280") // cx(300) - w/2(20)
+        expect(el.getAttribute("y")).toBe("90")  // cy(100) - h/2(10)
+        expect(el.getAttribute("width")).toBe("40")
+        expect(el.getAttribute("height")).toBe("20")
+    })
+
+    it("selected= on a polygons layer draws a polygon wash (hitLayerByIndex + makeHiElement poly branch)", () => {
+        const { host, script } = setup()
+        mount(script, {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [{ id: "polys", kind: "polygons", geometry: [[0, 0, 10, 0, 10, 10, 0, 10]],
+                payloads: [{ i: 0 }], axis: "ax1", events: ["click", "hover"], selected: [0] }],
+        })
+        const el = shadowOf(host).querySelector("g.sel")!.firstElementChild as SVGElement
+        expect(el.tagName.toLowerCase()).toBe("polygon")
+        expect(el.getAttribute("points")).toBe("0,0 10,0 10,10 0,10")
+        expect(el.getAttribute("fill")).not.toBe("none") // closed kind → wash, not a ring
+    })
+
+    it("plain axis hover on a categorical x-axis formats the label via String(), not toPrecision", () => {
+        const m: Manifest = {
+            width: 1200, height: 800, scaling: 2,
+            transforms: { ax1: { xlims: [1, 3], ylims: [0, 5], xscale: "identity", yscale: "identity",
+                viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false, xcats: ["a", "b", "c"] } },
+            layers: [{ id: "axis", kind: "axis", geometry: null, payloads: [], axis: "ax1", events: ["hover"] }],
+        }
+        const { host, script } = setup()
+        mount(script, m)
+        const shadow = shadowOf(host)
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        // client (0,200) → image (0,400): leftmost x fraction → category "a"
+        ;(shadow.querySelector(".surface") as HTMLElement)
+            .dispatchEvent(new PointerEvent("pointermove", { clientX: 0, clientY: 200, bubbles: true }))
+        expect(tip.classList.contains("show")).toBe(true)
+        expect(tip.innerHTML).toContain("x=a")
+    })
+
+    it("a selects-ROI targeting an unsupported kind emits an empty selection (computeSelection fallback)", () => {
+        const m: Manifest = {
+            width: 1200, height: 800, scaling: 2,
+            transforms: { ax1: { xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
+                viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false } },
+            layers: [
+                { id: "segs", kind: "segments", geometry: [100, 100, 500, 500], payloads: [{ i: 0 }], axis: "ax1", events: ["hover"] },
+                { id: "roi", kind: "roi", axis: "ax1", events: ["drag"], payloads: [],
+                    selects: "segs", geometry: { x: 0, y: 0, w: 800, h: 800, handle: 16 } },
+            ],
+        }
+        const { host, script } = setup()
+        mount(script, m)
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        let committed: { items: unknown[] } | null = null
+        host.addEventListener("input", () => {
+            committed = (host as unknown as { value: typeof committed }).value
+        })
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 50, clientY: 50, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 50, clientY: 50, bubbles: true }))
+        expect(committed!.items).toEqual([])
+        expect(shadow.querySelector("g.sel")!.children.length).toBe(0)
+    })
+})

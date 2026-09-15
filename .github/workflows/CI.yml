@@ -5,7 +5,8 @@ on:
     branches: [main]
   pull_request:
 
-# needed for the bundle commit-back on main (CI is the sole author of assets/overlay.js)
+# needed for the bundle commit-back on main (CI is the sole author of
+# assets/overlay.js and assets/holo-webgl.js)
 permissions:
   contents: write
 
@@ -181,74 +182,38 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
-
-      # PRs (incl. forks, which can't push): fail if the committed bundle is stale.
-      - name: Verify committed bundle is up to date
-        if: github.event_name == 'pull_request'
-        working-directory: .
-        run: |
-          if ! git diff --quiet assets/overlay.js; then
-            echo "::error::assets/overlay.js is out of date — run 'cd frontend && npm run build' and commit."
-            git --no-pager diff --stat assets/overlay.js
-            exit 1
-          fi
-
-      # Push to main: CI owns the bundle — commit any rebuild so main is never stale.
-      - name: Commit rebuilt bundle
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        working-directory: .
-        run: |
-          if ! git diff --quiet assets/overlay.js; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add assets/overlay.js
-            git commit -m "ci: rebuild assets/overlay.js [skip ci]"
-            git pull --rebase origin main   # serialize with the webgl-frontend commit-back (different file, no conflict)
-            git push
-          fi
-
-  webgl-frontend:
-    # Same gate as `frontend` but for the :webgl shim, which lives in frontend-webgl/.
-    # lint + typecheck + vitest (locks the rewrap<->_plain contract) + build; CI is the sole
-    # author of assets/holo-webgl.js, same model as overlay.js.
-    name: WGLMakie frontend (TS) + shim bundle
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend-webgl
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - run: npm run test:coverage
+      - uses: codecov/codecov-action@v5
         with:
-          node-version: '20'
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
+          files: frontend/coverage/lcov.info
+          flags: frontend
+          disable_search: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
       - run: npm run build
 
-      - name: Verify committed shim bundle is up to date
+      # PRs (incl. forks, which can't push): fail if either committed bundle is stale.
+      - name: Verify committed bundles are up to date
         if: github.event_name == 'pull_request'
         working-directory: .
         run: |
-          if ! git diff --quiet assets/holo-webgl.js; then
-            echo "::error::assets/holo-webgl.js is out of date — run 'cd frontend-webgl && npm run build' and commit."
-            git --no-pager diff --stat assets/holo-webgl.js
+          if ! git diff --quiet -- assets/overlay.js assets/holo-webgl.js; then
+            echo "::error::frontend assets are out of date — run 'cd frontend && npm run build' and commit."
+            git --no-pager diff --stat -- assets/overlay.js assets/holo-webgl.js
             exit 1
           fi
 
-      - name: Commit rebuilt shim bundle
+      # Push to main: CI owns both bundles — commit whichever rebuilt so main is never stale.
+      - name: Commit rebuilt bundles
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         working-directory: .
         run: |
-          if ! git diff --quiet assets/holo-webgl.js; then
+          if ! git diff --quiet -- assets/overlay.js assets/holo-webgl.js; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add assets/holo-webgl.js
-            git commit -m "ci: rebuild assets/holo-webgl.js [skip ci]"
-            git pull --rebase origin main   # serialize with the frontend commit-back (different file, no conflict)
+            git add assets/overlay.js assets/holo-webgl.js
+            git commit -m "ci: rebuild frontend assets [skip ci]"
+            git pull --rebase origin main   # serialize with a second push landing on main mid-run
             git push
           fi
 

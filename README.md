@@ -367,23 +367,16 @@ design — the docs index there says which doc is for users and which is for mai
 
 ## Development
 
-The `:cairo` overlay is TypeScript, bundled to a committed `assets/overlay.js`:
+The overlay (shared by both backends) and the `:webgl` scene-bootstrap shim are
+TypeScript in one `frontend/` package, two modules, two bundles:
 
 ```bash
 cd frontend
 npm ci
 npm run lint && npm run typecheck && npm test   # gate
-npm run build                                    # → ../assets/overlay.js
-```
-
-The `:webgl` shim is a second, separate TypeScript project, bundled to a committed
-`assets/holo-webgl.js`:
-
-```bash
-cd frontend-webgl
-npm ci
-npm run lint && npm run typecheck && npm test   # gate
-npm run build                                    # → ../assets/holo-webgl.js
+npm run build                                    # IIFE overlay + ESM shim
+# npm run build:overlay  → ../assets/overlay.js
+# npm run build:shim     → ../assets/holo-webgl.js
 ```
 
 CI is the source of truth for both bundles (it rebuilds and commits on `main`), so committing

@@ -142,7 +142,7 @@ which is exactly what makes them **co-equal**, not light-vs-heavy.
 the user's GPU anyway). Three facts, GL-independent:
 
 - **Camera interaction is gated off today — verified.** The shim hardcodes `can_send_to_julia:()=>true`
-  (`HoloWGL/frontend/src/holo-webgl.ts`); WGLMakie's
+  (`frontend/src/wgl-shim.ts`); WGLMakie's
   `use_orbit_cam = ()=>!(Bonito.can_send_to_julia && Bonito.can_send_to_julia())` (pinned bundle)
   therefore **disables 3D OrbitControls**, and 2D `Axis` zoom/pan is Julia-side and dead under the
   server-free (`NoConnection`) model. So a `:webgl` plot renders live but **does not pan, zoom, or

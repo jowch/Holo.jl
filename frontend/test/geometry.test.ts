@@ -31,10 +31,26 @@ describe("invertAxis", () => {
         const t: AxisTransform = { ...linear, xlims: [1, 1000], xscale: "log10" }
         expect(invertAxis(t, 100, 0).x).toBeCloseTo(31.6227, 2) // 10^1.5
     })
+    it("log (non-10) scale is treated the same as log10", () => {
+        const t: AxisTransform = { ...linear, xlims: [1, 1000], xscale: "log" }
+        expect(invertAxis(t, 100, 0).x).toBeCloseTo(31.6227, 2)
+    })
     it("categorical x returns a label", () => {
         const t: AxisTransform = { ...linear, xlims: [1, 3], xcats: ["a", "b", "c"] }
         expect(invertAxis(t, 0, 200).x).toBe("a")
         expect(invertAxis(t, 200, 200).x).toBe("c")
+    })
+    it("reversed x flips the fraction before mapping to data", () => {
+        const t: AxisTransform = { ...linear, xreversed: true }
+        // left edge (px=0) would normally map to xmin=0; reversed maps it to xmax=10
+        expect(invertAxis(t, 0, 200).x).toBeCloseTo(10)
+        expect(invertAxis(t, 200, 200).x).toBeCloseTo(0)
+    })
+    it("reversed y flips the fraction before mapping to data", () => {
+        const t: AxisTransform = { ...linear, yreversed: true }
+        // top edge (py=0) normally maps to ymax=100 (fy=1); reversed maps it to ymin=0
+        expect(invertAxis(t, 100, 0).y).toBeCloseTo(0)
+        expect(invertAxis(t, 100, 400).y).toBeCloseTo(100)
     })
 })
 
@@ -46,11 +62,90 @@ describe("hitLayer + hitTest", () => {
         expect(hitLayer(circles, 305, 300)?.index).toBe(1) // within radius+tol
         expect(hitLayer(circles, 500, 500)).toBeNull()
     })
+    it("circle tolerance boundary: exactly r+HIT_TOL hits, one px beyond misses", () => {
+        // HIT_TOL = 4px slack; r=10 → hit radius 14
+        const one: HitLayer = { ...circles, geometry: [0, 0, 10] }
+        expect(hitLayer(one, 14, 0)).not.toBeNull()
+        expect(hitLayer(one, 15, 0)).toBeNull()
+    })
+    it("zero-radius circle still hits at its own tolerance ring, misses beyond it", () => {
+        const zero: HitLayer = { ...circles, geometry: [50, 50, 0] }
+        expect(hitLayer(zero, 50, 50)).not.toBeNull()   // dead center
+        expect(hitLayer(zero, 54, 50)).not.toBeNull()   // within HIT_TOL
+        expect(hitLayer(zero, 55, 50)).toBeNull()       // just beyond
+    })
+    it("non-finite circle coordinates never match (no crash)", () => {
+        const nan: HitLayer = { ...circles, geometry: [NaN, NaN, 10] }
+        expect(hitLayer(nan, 0, 0)).toBeNull()
+    })
+    it("rects hit-test: inside the half-extents hits, outside misses", () => {
+        const rects: HitLayer = { id: "bars", kind: "rects", geometry: [100, 100, 40, 20], payloads: [{ i: 0 }], axis: "ax1", events: ["click"] }
+        expect(hitLayer(rects, 100, 100)).toMatchObject({ index: 0 })
+        expect(hitLayer(rects, 119, 109)).toMatchObject({ index: 0 }) // just inside half-extents (20,10)
+        expect(hitLayer(rects, 121, 100)).toBeNull()                  // just outside half-width
+        expect(hitLayer(rects, 500, 500)).toBeNull()
+    })
+    it("polyline: nearest segment wins, NaN vertices create a gap that's skipped, tolerance applies", () => {
+        // three sub-lines: [0,0]-[10,0], a NaN gap, [20,0]-[30,0], another gap, [40,0]-[50,10]
+        const pl: HitLayer = {
+            id: "line", kind: "polyline", axis: "ax1", events: ["hover"], payloads: [],
+            geometry: [0, 0, 10, 0, NaN, NaN, 20, 0, 30, 0, NaN, NaN, 40, 0, 50, 10],
+        }
+        // near the first sub-segment
+        expect(hitLayer(pl, 5, 1)).toMatchObject({ index: 0 })
+        // near the second sub-segment (index 3, after the NaN-bounded segments are skipped)
+        expect(hitLayer(pl, 25, 1)).toMatchObject({ index: 3 })
+        // far from every real segment → miss (the NaN-adjacent virtual segments must not match)
+        expect(hitLayer(pl, 15, 20)).toBeNull()
+        // beyond SEG_TOL (8px) from the nearest real segment
+        expect(hitLayer(pl, 5, 20)).toBeNull()
+    })
+    it("segments: nearest of several disjoint segments wins; non-finite endpoints just don't match", () => {
+        const segs: HitLayer = {
+            id: "segs", kind: "segments", axis: "ax1", events: ["hover"], payloads: [],
+            geometry: [0, 0, 10, 0, 100, 100, 110, 100],
+        }
+        expect(hitLayer(segs, 5, 1)).toMatchObject({ index: 0 })
+        expect(hitLayer(segs, 105, 101)).toMatchObject({ index: 1 })
+        expect(hitLayer(segs, 50, 50)).toBeNull() // equidistant-ish but beyond tolerance either way
+        const nanSegs: HitLayer = { ...segs, geometry: [NaN, NaN, NaN, NaN, 5, 0, 15, 0] }
+        expect(hitLayer(nanSegs, 10, 2)).toMatchObject({ index: 1 }) // NaN segment never wins, no crash
+    })
+    it("polygons: even-odd hit-tests each ring independently, first containing ring wins", () => {
+        const square = [0, 0, 10, 0, 10, 10, 0, 10]
+        const triangle = [20, 0, 30, 0, 25, 10]
+        const polys: HitLayer = { id: "polys", kind: "polygons", axis: "ax1", events: ["click"], payloads: [{ i: 0 }, { i: 1 }],
+            geometry: [square, triangle] }
+        expect(hitLayer(polys, 5, 5)).toMatchObject({ index: 0 })
+        expect(hitLayer(polys, 25, 3)).toMatchObject({ index: 1 })
+        expect(hitLayer(polys, 100, 100)).toBeNull()
+    })
+    it("polygons: an even-odd ring with a bridged hole excludes the hole's interior", () => {
+        // Outer 0..10 square, bridged out-and-back to an inner 3..7 hole: the bridge edge is
+        // traversed twice (there and back), so its ray-crossings cancel and even-odd only "sees"
+        // the outer boundary XOR the hole boundary — the hole's interior reads as outside.
+        const ring = [0, 0, 10, 0, 10, 10, 0, 10, 0, 0, 3, 3, 7, 3, 7, 7, 3, 7, 3, 3, 0, 0]
+        expect(pointInPolygon(5, 5, ring)).toBe(false)   // inside the hole → excluded
+        expect(pointInPolygon(1, 1, ring)).toBe(true)    // in the annulus between hole and outer edge
+        expect(pointInPolygon(20, 20, ring)).toBe(false) // outside entirely
+    })
+    it("empty layer geometry never hits", () => {
+        const emptyCircles: HitLayer = { id: "pts", kind: "circles", geometry: [], payloads: [], axis: "ax1", events: ["hover"] }
+        expect(hitLayer(emptyCircles, 0, 0)).toBeNull()
+        const emptyPolys: HitLayer = { id: "polys", kind: "polygons", geometry: [], payloads: [], axis: "ax1", events: ["hover"] }
+        expect(hitLayer(emptyPolys, 0, 0)).toBeNull()
+    })
     it("grid inverts pixel to (i,j) + value", () => {
         const grid: HitLayer = { id: "hm", kind: "grid", axis: "ax1", events: ["hover"], payloads: [],
             geometry: { xedges: [0, 10, 20], yedges: [0, 10, 20], ncols: 2, nrows: 2, values: [11, 12, 21, 22] } }
         const h = hitLayer(grid, 15, 5)
         expect(h?.grid).toEqual([1, 0, 12]) // i=1, j=0, values[0*2+1]
+    })
+    it("grid misses outside every bin on either axis", () => {
+        const grid: HitLayer = { id: "hm", kind: "grid", axis: "ax1", events: ["hover"], payloads: [],
+            geometry: { xedges: [0, 10, 20], yedges: [0, 10, 20], ncols: 2, nrows: 2, values: [11, 12, 21, 22] } }
+        expect(hitLayer(grid, 99, 5)).toBeNull()  // x outside every bin
+        expect(hitLayer(grid, 5, 99)).toBeNull()  // y outside every bin
     })
     it("grid still hits (i,j) when values[] was dropped", () => {
         const grid: HitLayer = { id: "hm", kind: "grid", axis: "ax1", events: ["hover"], payloads: [],
@@ -77,6 +172,13 @@ describe("hitLayer + hitTest", () => {
         const pl = resolvePayload(hit, m, 15, 5)
         expect(pl).toEqual({ i: 1, j: 0 }) // {i,j} only — no `value` key, not value:undefined
         expect("value" in (pl as object)).toBe(false)
+    })
+    it("resolvePayload includes value when values[] is present", () => {
+        const grid: HitLayer = { id: "hm", kind: "grid", axis: "ax1", events: ["click"], payloads: [],
+            geometry: { xedges: [0, 10, 20], yedges: [0, 10, 20], ncols: 2, nrows: 2, values: [11, 12, 21, 22] } }
+        const m: Manifest = { width: 20, height: 20, scaling: 1, transforms: {}, layers: [grid] }
+        const hit = hitTest(m, 15, 5, "click")!
+        expect(resolvePayload(hit, m, 15, 5)).toEqual({ i: 1, j: 0, value: 12 })
     })
 })
 
@@ -125,6 +227,14 @@ describe("view pan / orbit math", () => {
         expect(lim.xmin).toBeCloseTo(0.1, 6)
         expect(lim.xmax).toBeCloseTo(10, 6)
     })
+    it("panLimits on a reversed axis flips the drag direction back", () => {
+        const revT: AxisTransform = { ...t, xreversed: true, yreversed: true }
+        const rev = panLimits(revT, 100, 100, 200, 300)
+        expect(rev.xmin).toBeCloseTo(1)
+        expect(rev.xmax).toBeCloseTo(11)
+        expect(rev.ymin).toBeCloseTo(-40)
+        expect(rev.ymax).toBeCloseTo(60)
+    })
     it("orbitAngles maps dx/dy to azimuth/elevation and clamps elevation", () => {
         const g = { x: 0, y: 0, w: 1000, h: 500, mode: "orbit" as const, azimuth: 1.0, elevation: 0.5 }
         const o = orbitAngles(g, 0, 0, 1000, 0) // full-width drag right → −π azimuth
@@ -133,6 +243,12 @@ describe("view pan / orbit math", () => {
         const clamped = orbitAngles(g, 0, 0, 0, 1e6)
         expect(clamped.elevation).toBeLessThan(Math.PI / 2)
         expect(clamped.elevation).toBeGreaterThan(-Math.PI / 2)
+    })
+    it("orbitAngles defaults azimuth/elevation to 0 when the geometry omits them", () => {
+        const g = { x: 0, y: 0, w: 1000, h: 500, mode: "orbit" as const }
+        const o = orbitAngles(g, 0, 0, 1000, 0)
+        expect(o.azimuth).toBeCloseTo(0 - Math.PI)
+        expect(o.elevation).toBeCloseTo(0)
     })
     it("view hit-test is the viewport bbox", () => {
         const layer: HitLayer = {
