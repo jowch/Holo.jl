@@ -463,8 +463,10 @@ describe("keyboard navigation", () => {
 
     it("the tooltip is placed at a segment's midpoint and a polygon's centroid, not offset elsewhere", () => {
         // display scale = manifest.width(1200) / base rect width(600) = 2, so image px -> CSS
-        // px is /2; happy-dom has no layout engine (tip/surface report zero size), so placeTip
-        // takes its degenerate branch: CSS anchor + the fixed 10px TIP_OFFSET, exactly.
+        // px is /2; happy-dom has no layout engine (tip/surface report zero size), so
+        // placeAnchored takes its degenerate branch: left = anchor.x, top = anchor.top - 10
+        // (geometry.ts's ANCHOR_GAP), exactly — segments/polygons have no separate top edge, so
+        // anchor.top === anchor.y (the midpoint/centroid itself).
         const mixedManifest: Manifest = {
             width: 1200, height: 800, scaling: 2, transforms: {},
             layers: [
@@ -476,10 +478,10 @@ describe("keyboard navigation", () => {
         surface.focus()
         const tip = shadow.querySelector(".holo-tip") as HTMLElement
         down(surface, "ArrowRight") // seg[0]: midpoint of (0,0)-(100,100) = image (50,50) -> CSS (25,25)
-        expect(tip.style.left).toBe("35px")
-        expect(tip.style.top).toBe("35px")
+        expect(tip.style.left).toBe("25px")
+        expect(tip.style.top).toBe("15px") // 25 - ANCHOR_GAP(10)
         down(surface, "ArrowRight") // pg[0]: centroid of the 10x10 square = image (5,5) -> CSS (2.5,2.5)
-        expect(tip.style.left).toBe("12.5px")
-        expect(tip.style.top).toBe("12.5px")
+        expect(tip.style.left).toBe("2.5px")
+        expect(tip.style.top).toBe("0px") // max(0, 2.5 - 10)
     })
 })

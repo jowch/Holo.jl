@@ -8,7 +8,8 @@ import { drawHi, clearHi } from "./highlight"
 import { showTipAt, hideTip } from "./hover"
 import { commitClick } from "./bond"
 import { plainTextForHit } from "./template"
-import { cssPx } from "./state"
+import { cssAnchor } from "./state"
+import { anchorFor } from "./geometry"
 import type { OverlayCtx, OverlayState } from "./state"
 import type { FocusRef, Hit, HitLayer, Manifest } from "./types"
 
@@ -56,29 +57,6 @@ function hitFor(ref: FocusRef): Hit {
     return { layer: ref.layer_, ...hitLayerByIndex(ref.layer_, ref.index_) }
 }
 
-// Anchor point (image px) for the tooltip/announcement, per kind — mirrors
-// test/e2e/kind_sweep.mjs's hitPoint(), which computes the same points for the live-verify
-// click targets. Circle anchors below the marker (like a mouse hovering its lower edge would);
-// rect/seg/poly anchor at their visual center. The two {x:0,y:0} fallbacks below are
-// unreachable on a real focus-list Hit — every caller goes through hitFor/hitLayerByIndex,
-// which only ever produces one of the four handled tags for FOCUSABLE_KINDS — and are left
-// uncovered deliberately rather than tested via a fabricated, impossible geom tag.
-function anchorImgPx(hit: Hit): { x: number; y: number } {
-    const g = hit.geom_ as [string, ...number[]] | [string, number[]] | undefined
-    if (!g) return { x: 0, y: 0 }
-    if (g[0] === "circle") return { x: g[1] as number, y: (g[2] as number) + (g[3] as number) }
-    if (g[0] === "rect") return { x: g[1] as number, y: g[2] as number }
-    if (g[0] === "seg") return { x: ((g[1] as number) + (g[3] as number)) / 2, y: ((g[2] as number) + (g[4] as number)) / 2 }
-    if (g[0] === "poly") {
-        const ring = g[1] as number[]
-        let sx = 0, sy = 0
-        const n = ring.length / 2
-        for (let k = 0; k < ring.length; k += 2) { sx += ring[k]; sy += ring[k + 1] }
-        return { x: sx / n, y: sy / n }
-    }
-    return { x: 0, y: 0 }
-}
-
 // Position is relative to the element's own layer ("element 3 of 10" for a 10-point Scatter
 // layer), not the flat cross-layer focus-list index — the number a user labels a Scatter
 // `label` against is its own element count, not how many other layers happen to precede it.
@@ -121,9 +99,11 @@ export function focusTo(ctx: OverlayCtx, state: OverlayState, i: number | null):
     state.focusHit_ = hit
     ctx.surface_.classList.add("kbd-ring")
     drawHi(state, ctx.hiGroup_, hit)
-    const { x, y } = anchorImgPx(hit)
-    const css = cssPx(ctx.base_, ctx.manifest_, x, y)
-    const html = showTipAt(ctx, state, hit, x, y, css.x, css.y)
+    // anchorFor(hit, null): no pointer to derive a "closest point on segment"/"cursor inside
+    // polygon" placement from, so this falls back to the midpoint/centroid rule (geometry.ts).
+    const anchor = anchorFor(hit, null)
+    const css = cssAnchor(ctx.base_, ctx.manifest_, anchor)
+    const html = showTipAt(ctx, state, hit, anchor.x, anchor.y, css)
     state.focusTipHtml_ = html
     state.focusTipCss_ = html === null ? null : css
     scheduleAnnounce(ctx, state, announceText(ref, plainTextForHit(hit)))
@@ -201,7 +181,7 @@ export function handleKeydown(ctx: OverlayCtx, state: OverlayState, e: KeyboardE
             if (!ref.layer_.events.includes("click")) return // hover-only layer: nothing to dispatch
             e.preventDefault(); e.stopPropagation()
             const hit = hitFor(ref)
-            const { x, y } = anchorImgPx(hit)
+            const { x, y } = anchorFor(hit, null)
             commitClick(ctx, state, hit, x, y)
             return
         }

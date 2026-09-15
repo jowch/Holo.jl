@@ -1,16 +1,24 @@
 // All coordinates here are image pixels.
-import type { AxisTransform, GridGeometry, Hit, HitLayer, Manifest, ThresholdGeometry, ROIGeometry, ViewGeometry } from "./types"
+import type { AxisTransform, GridGeometry, Hit, HitLayer, Kind, Manifest, ThresholdGeometry, ROIGeometry, ViewGeometry } from "./types"
 
 const HIT_TOL = 4 // px slack for circles/rects
 const SEG_TOL = 8 // px slack for segments/polylines
 
-export function distToSegment(px: number, py: number, x0: number, y0: number, x1: number, y1: number): number {
+// closest point on the clamped segment (x0,y0)-(x1,y1) to (px,py) — the projection distToSegment
+// already computes, factored out so anchorFor can reuse the point (not just its distance) for the
+// "tooltip slides along the line" placement rule.
+export function closestPointOnSegment(px: number, py: number, x0: number, y0: number, x1: number, y1: number): { x: number; y: number } {
     const dx = x1 - x0
     const dy = y1 - y0
     const len2 = dx * dx + dy * dy
     let t = len2 ? ((px - x0) * dx + (py - y0) * dy) / len2 : 0
     t = Math.max(0, Math.min(1, t))
-    return Math.hypot(px - (x0 + t * dx), py - (y0 + t * dy))
+    return { x: x0 + t * dx, y: y0 + t * dy }
+}
+
+export function distToSegment(px: number, py: number, x0: number, y0: number, x1: number, y1: number): number {
+    const p = closestPointOnSegment(px, py, x0, y0, x1, y1)
+    return Math.hypot(px - p.x, py - p.y)
 }
 
 // even-odd point-in-polygon; ring is a flat [x,y,…]
@@ -158,9 +166,20 @@ export function hitLayer(layer: HitLayer, px: number, py: number): Omit<Hit, "la
         }
         case "roi": {
             const rg = g as ROIGeometry
+            // Hit area is generous (>= 2x the drawn glyph, floor 6px) so a thin ROI is still
+            // grabbable; corners are checked before edges before the body so a small ROI's
+            // overlapping corner/edge hit boxes resolve to the (two-axis) corner, not an edge.
+            const halfHit = Math.max(2 * rg.handle, 6)
             const corners: [number, number][] = [[rg.x, rg.y], [rg.x + rg.w, rg.y], [rg.x + rg.w, rg.y + rg.h], [rg.x, rg.y + rg.h]]
             for (let k = 0; k < 4; k++) {
-                if (Math.abs(px - corners[k][0]) <= rg.handle && Math.abs(py - corners[k][1]) <= rg.handle) return { index: 0, roiPart_: { corner: k } }
+                if (Math.abs(px - corners[k][0]) <= halfHit && Math.abs(py - corners[k][1]) <= halfHit) return { index: 0, roiPart_: { corner: k } }
+            }
+            const midX = rg.x + rg.w / 2, midY = rg.y + rg.h / 2
+            const edges: ["n" | "s" | "w" | "e", number, number][] = [
+                ["n", midX, rg.y], ["s", midX, rg.y + rg.h], ["w", rg.x, midY], ["e", rg.x + rg.w, midY],
+            ]
+            for (const [edge, ex, ey] of edges) {
+                if (Math.abs(px - ex) <= halfHit && Math.abs(py - ey) <= halfHit) return { index: 0, roiPart_: { edge } }
             }
             if (px >= rg.x && px <= rg.x + rg.w && py >= rg.y && py <= rg.y + rg.h) return { index: 0, roiPart_: { move: true } }
             return null
@@ -236,4 +255,87 @@ export function resolvePayload(hit: Hit, manifest: Manifest, px: number, py: num
     }
     if (hit.grid_) return hit.grid_[2] === undefined ? { i: hit.grid_[0], j: hit.grid_[1] } : { i: hit.grid_[0], j: hit.grid_[1], value: hit.grid_[2] }
     return hit.layer.payloads[hit.index]
+}
+
+// --- tooltip placement: mark-anchored for element kinds, cursor-following for the rest ---
+
+// :axis/:threshold/:roi/:view have no discrete "mark" to anchor on — a continuous axis readout,
+// an invisible drag handle, or a box being dragged all only make sense relative to the cursor.
+// Checked by layer.kind, not hit.geom's tag, because :threshold's geom is ["seg", …] — byte-
+// identical to :segments — so a geom-first dispatch would wrongly anchor a threshold hover.
+export const CURSOR_FOLLOWING_KINDS: ReadonlySet<Kind> = new Set(["axis", "threshold", "roi", "view"])
+
+export interface Anchor {
+    x: number // horizontal center the tooltip box is placed over
+    y: number // the anchor point itself (used to derive a symmetric "bottom" for the flip-below case)
+    top: number // the mark's top edge — the box's bottom sits ANCHOR_GAP above this
+}
+
+// Anchor point + top edge (image px) for a hit's tooltip, per the locked placement rules.
+// `cursor` is the pointer's image-px position for the hover path, or null for keyboard focus
+// (no pointer to project a "nearest point on segment" or "cursor inside polygon" from).
+export function anchorFor(hit: Hit, cursor: { x: number; y: number } | null): Anchor {
+    if (CURSOR_FOLLOWING_KINDS.has(hit.layer.kind)) {
+        const p = cursor ?? { x: 0, y: 0 }
+        return { x: p.x, y: p.y, top: p.y }
+    }
+    const g = hit.geom_ as [string, ...number[]] | [string, number[]] | undefined
+    if (!g) return cursor ? { x: cursor.x, y: cursor.y, top: cursor.y } : { x: 0, y: 0, top: 0 }
+    if (g[0] === "circle") {
+        const cx = g[1] as number, cy = g[2] as number, r = g[3] as number
+        return { x: cx, y: cy, top: cy - r }
+    }
+    if (g[0] === "rect") {
+        // Also covers :grid (hitLayer already reports its cell as ["rect", cx, cy, w, h]):
+        // cell centre, top edge = cell top — same rule as a bar's top-centre anchor.
+        const cx = g[1] as number, cy = g[2] as number, h = g[4] as number
+        const top = cy - h / 2
+        return { x: cx, y: top, top }
+    }
+    if (g[0] === "seg") {
+        const x0 = g[1] as number, y0 = g[2] as number, x1 = g[3] as number, y1 = g[4] as number
+        const p = cursor ? closestPointOnSegment(cursor.x, cursor.y, x0, y0, x1, y1) : { x: (x0 + x1) / 2, y: (y0 + y1) / 2 }
+        return { x: p.x, y: p.y, top: p.y }
+    }
+    if (g[0] === "poly") {
+        const ring = g[1] as number[]
+        const n = ring.length / 2
+        let sx = 0, sy = 0
+        for (let k = 0; k < ring.length; k += 2) { sx += ring[k]; sy += ring[k + 1] }
+        const cx = sx / n, cy = sy / n
+        if (pointInPolygon(cx, cy, ring)) return { x: cx, y: cy, top: cy }
+        if (cursor) return { x: cursor.x, y: cursor.y, top: cursor.y }
+        return { x: cx, y: cy, top: cy } // keyboard focus with an off-centroid centroid: no cursor to fall back to
+    }
+    return cursor ? { x: cursor.x, y: cursor.y, top: cursor.y } : { x: 0, y: 0, top: 0 }
+}
+
+export interface AnchoredPlacement {
+    left: number
+    top: number
+    caretX: number // px from the box's left edge — kept over the anchor even when the box is shifted
+    below: boolean // true when clipping at the surface's top edge flipped the box below the mark
+}
+
+const ANCHOR_GAP = 10 // px between the mark and the box
+const EDGE_GAP = 8 // px margin kept between the box and the surface edge
+
+// Pure placement math (css px in, css px out) shared by the pointer and keyboard-focus tooltip
+// paths, so "pointer and keyboard look identical" holds structurally, not by convention.
+export function computeAnchoredPlacement(a: Anchor, tipW: number, tipH: number, surfW: number, surfH: number): AnchoredPlacement {
+    // The mark's bottom edge, mirrored around the anchor point from its top edge — exact for a
+    // circle (top=cy-r, bottom=cy+r); degenerates to the anchor itself for a rect/seg/poly/grid
+    // anchor, which is already its own top edge (half-extent 0), so "below" starts right at it.
+    const bottom = a.y + (a.y - a.top)
+    let top = a.top - ANCHOR_GAP - tipH
+    let below = false
+    if (top < EDGE_GAP) {
+        top = bottom + ANCHOR_GAP
+        below = true
+    }
+    const left = a.x - tipW / 2
+    const clampedLeft = Math.max(EDGE_GAP, Math.min(left, surfW - tipW - EDGE_GAP))
+    const clampedTop = Math.max(EDGE_GAP, Math.min(top, surfH - tipH - EDGE_GAP))
+    const caretX = Math.max(6, Math.min(tipW - 6, a.x - clampedLeft))
+    return { left: clampedLeft, top: clampedTop, caretX, below }
 }
