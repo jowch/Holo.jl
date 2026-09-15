@@ -93,7 +93,7 @@ export function hitLayer(layer: HitLayer, px: number, py: number): Omit<Hit, "la
             const a = g as number[]
             for (let k = 0; k < a.length / 3; k++) {
                 const cx = a[3 * k], cy = a[3 * k + 1], r = a[3 * k + 2]
-                if ((px - cx) ** 2 + (py - cy) ** 2 <= (r + HIT_TOL) ** 2) return { index: k, geom: ["circle", cx, cy, r] }
+                if ((px - cx) ** 2 + (py - cy) ** 2 <= (r + HIT_TOL) ** 2) return { index: k, geom_: ["circle", cx, cy, r] }
             }
             return null
         }
@@ -101,7 +101,7 @@ export function hitLayer(layer: HitLayer, px: number, py: number): Omit<Hit, "la
             const a = g as number[]
             for (let k = 0; k < a.length / 4; k++) {
                 const cx = a[4 * k], cy = a[4 * k + 1], w = a[4 * k + 2], h = a[4 * k + 3]
-                if (Math.abs(px - cx) <= w / 2 && Math.abs(py - cy) <= h / 2) return { index: k, geom: ["rect", cx, cy, w, h] }
+                if (Math.abs(px - cx) <= w / 2 && Math.abs(py - cy) <= h / 2) return { index: k, geom_: ["rect", cx, cy, w, h] }
             }
             return null
         }
@@ -115,7 +115,7 @@ export function hitLayer(layer: HitLayer, px: number, py: number): Omit<Hit, "la
                 const d = distToSegment(px, py, x0, y0, x1, y1)
                 if (d < bd) { bd = d; best = k }
             }
-            if (bd <= tol) return { index: best, geom: ["seg", a[2 * best], a[2 * best + 1], a[2 * best + 2], a[2 * best + 3]] }
+            if (bd <= tol) return { index: best, geom_: ["seg", a[2 * best], a[2 * best + 1], a[2 * best + 2], a[2 * best + 3]] }
             return null
         }
         case "segments": {
@@ -126,12 +126,12 @@ export function hitLayer(layer: HitLayer, px: number, py: number): Omit<Hit, "la
                 const d = distToSegment(px, py, a[4 * k], a[4 * k + 1], a[4 * k + 2], a[4 * k + 3])
                 if (d < bd) { bd = d; best = k }
             }
-            if (bd <= tol) return { index: best, geom: ["seg", a[4 * best], a[4 * best + 1], a[4 * best + 2], a[4 * best + 3]] }
+            if (bd <= tol) return { index: best, geom_: ["seg", a[4 * best], a[4 * best + 1], a[4 * best + 2], a[4 * best + 3]] }
             return null
         }
         case "polygons": {
             const rings = g as number[][]
-            for (let k = 0; k < rings.length; k++) if (pointInPolygon(px, py, rings[k])) return { index: k, geom: ["poly", rings[k]] }
+            for (let k = 0; k < rings.length; k++) if (pointInPolygon(px, py, rings[k])) return { index: k, geom_: ["poly", rings[k]] }
             return null
         }
         case "grid": {
@@ -141,8 +141,8 @@ export function hitLayer(layer: HitLayer, px: number, py: number): Omit<Hit, "la
             const idx = j * gg.ncols + i
             return {
                 index: idx,
-                grid: [i, j, gg.values?.[idx]],
-                geom: ["rect", (gg.xedges[i] + gg.xedges[i + 1]) / 2, (gg.yedges[j] + gg.yedges[j + 1]) / 2,
+                grid_: [i, j, gg.values?.[idx]],
+                geom_: ["rect", (gg.xedges[i] + gg.xedges[i + 1]) / 2, (gg.yedges[j] + gg.yedges[j + 1]) / 2,
                     Math.abs(gg.xedges[i + 1] - gg.xedges[i]), Math.abs(gg.yedges[j + 1] - gg.yedges[j])],
             }
         }
@@ -153,16 +153,16 @@ export function hitLayer(layer: HitLayer, px: number, py: number): Omit<Hit, "la
             const y0 = tg.orientation === "h" ? tg.pos : lo
             const x1 = tg.orientation === "h" ? hi : tg.pos
             const y1 = tg.orientation === "h" ? tg.pos : hi
-            if (distToSegment(px, py, x0, y0, x1, y1) <= SEG_TOL) return { index: 0, geom: ["seg", x0, y0, x1, y1] }
+            if (distToSegment(px, py, x0, y0, x1, y1) <= SEG_TOL) return { index: 0, geom_: ["seg", x0, y0, x1, y1] }
             return null
         }
         case "roi": {
             const rg = g as ROIGeometry
             const corners: [number, number][] = [[rg.x, rg.y], [rg.x + rg.w, rg.y], [rg.x + rg.w, rg.y + rg.h], [rg.x, rg.y + rg.h]]
             for (let k = 0; k < 4; k++) {
-                if (Math.abs(px - corners[k][0]) <= rg.handle && Math.abs(py - corners[k][1]) <= rg.handle) return { index: 0, roiPart: { corner: k } }
+                if (Math.abs(px - corners[k][0]) <= rg.handle && Math.abs(py - corners[k][1]) <= rg.handle) return { index: 0, roiPart_: { corner: k } }
             }
-            if (px >= rg.x && px <= rg.x + rg.w && py >= rg.y && py <= rg.y + rg.h) return { index: 0, roiPart: { move: true } }
+            if (px >= rg.x && px <= rg.x + rg.w && py >= rg.y && py <= rg.y + rg.h) return { index: 0, roiPart_: { move: true } }
             return null
         }
         case "axis": {
@@ -170,7 +170,7 @@ export function hitLayer(layer: HitLayer, px: number, py: number): Omit<Hit, "la
                 const [x, y, w, h] = g as number[]
                 if (px < x || px > x + w || py < y || py > y + h) return null // bounded (colorbar)
             }
-            return { index: -1, axis: layer.axis } // catch-all when no bbox (AxisInteractable)
+            return { index: -1, axis_: layer.axis } // catch-all when no bbox (AxisInteractable)
         }
         case "view": {
             const vg = g as ViewGeometry
@@ -229,11 +229,11 @@ export function hitTest(manifest: Manifest, px: number, py: number, event: strin
 
 // the @bind payload for a hit (single-select)
 export function resolvePayload(hit: Hit, manifest: Manifest, px: number, py: number): unknown {
-    if (hit.axis) {
-        const t = manifest.transforms[hit.axis]
+    if (hit.axis_) {
+        const t = manifest.transforms[hit.axis_]
         const inv = invertAxis(t, px, py)
         return t.valueaxis ? { value: inv[t.valueaxis] } : inv
     }
-    if (hit.grid) return hit.grid[2] === undefined ? { i: hit.grid[0], j: hit.grid[1] } : { i: hit.grid[0], j: hit.grid[1], value: hit.grid[2] }
+    if (hit.grid_) return hit.grid_[2] === undefined ? { i: hit.grid_[0], j: hit.grid_[1] } : { i: hit.grid_[0], j: hit.grid_[1], value: hit.grid_[2] }
     return hit.layer.payloads[hit.index]
 }

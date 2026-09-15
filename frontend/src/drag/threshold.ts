@@ -29,18 +29,18 @@ export function buildThresholdLines(manifest: Manifest, svg: SVGSVGElement): Map
 }
 
 export function begin(id: string, line: SVGLineElement, tg: ThresholdGeometry, t: AxisTransform, pointerId: number): Drag {
-    return { kind: "threshold", id, line, tg, t, pointerId }
+    return { kind: "threshold", id_: id, line_: line, tg_: tg, t_: t, pointerId_: pointerId }
 }
 
 export function move(d: Extract<Drag, { kind: "threshold" }>, p: { x: number; y: number }): string {
-    const pos = d.tg.orientation === "h" ? clampY(d.t, p.y) : clampX(d.t, p.x)
-    setLine(d.line, d.tg, pos)
-    const v = invertAxis(d.t, clampX(d.t, p.x), clampY(d.t, p.y))
-    return fmt(d.tg.orientation === "h" ? v.y : v.x)
+    const pos = d.tg_.orientation === "h" ? clampY(d.t_, p.y) : clampX(d.t_, p.x)
+    setLine(d.line_, d.tg_, pos)
+    const v = invertAxis(d.t_, clampX(d.t_, p.x), clampY(d.t_, p.y))
+    return fmt(d.tg_.orientation === "h" ? v.y : v.x)
 }
 
 export function end(d: Extract<Drag, { kind: "threshold" }>, p: { x: number; y: number }): { layer: string; index: number; payload: unknown } {
-    const v = invertAxis(d.t, clampX(d.t, p.x), clampY(d.t, p.y))
-    const payload = d.tg.orientation === "h" ? v.y : v.x
-    return { layer: d.id, index: 0, payload }
+    const v = invertAxis(d.t_, clampX(d.t_, p.x), clampY(d.t_, p.y))
+    const payload = d.tg_.orientation === "h" ? v.y : v.x
+    return { layer: d.id_, index: 0, payload }
 }

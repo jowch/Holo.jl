@@ -60,6 +60,17 @@ that **future features inflate** (tooltips, animation frames, multi-select).
 the committed bundle **10 828 → 17 515 bytes raw minified** (+6 687 B raw; ~2–2.5 KB gzipped delta).
 This is a one-time delivery cost per page-load, independent of manifest or PNG size.
 
+PR #72 split `overlay.ts` into modules threaded through a shared `OverlayState`/`OverlayCtx`
+object — object properties survive esbuild's identifier minification, so that refactor grew
+`assets/overlay.js` **27 364 → 29 736 bytes** (+2 372 B), then to **35 133 bytes** after #75's
+keyboard/a11y work. Enabling esbuild's `mangleProps: /_$/` (every frontend-internal
+`OverlayState`/`OverlayCtx`/`ROIBox`/`Drag`/`FocusRef`/`Hit` field renamed to a trailing-`_`
+convention — see `frontend-delivery.md`'s Bundle row) recovered most of that: **35 133 → 33 048
+bytes** (−2 085 B, ~5.9%). `assets/holo-webgl.js` is unaffected (**1 173 bytes**, unchanged) —
+`wgl-shim.ts` has no `OverlayState`-shaped internal properties to mangle, and its two wire-tag
+properties (`__obs__`/`__t__`) are read via bracket notation specifically so `mangleProps` can
+never touch them. Both bundles remain byte-identical across repeated `npm run build` runs.
+
 ## Measured envelope
 
 base64 PNG decoded size (KB) and manifest MsgPack size (KB), default 700px column (px_per_unit 2):

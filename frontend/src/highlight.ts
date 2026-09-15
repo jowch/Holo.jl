@@ -36,9 +36,9 @@ export function makeRing(shape: SVGElement, stroke: string): SVGGElement {
 }
 
 export function makeHiElement(hit: Hit, mode: HiMode = "hover"): SVGElement | null {
-    if (!hit.geom) return null
+    if (!hit.geom_) return null
     const st = hit.layer.style ?? DEFAULT_STYLE
-    const g = hit.geom as [string, ...number[]] | [string, number[]]
+    const g = hit.geom_ as [string, ...number[]] | [string, number[]]
     let el: SVGElement | null = null
     if (g[0] === "circle") {
         el = document.createElementNS(SVG_NS, "circle")
@@ -76,13 +76,13 @@ export function makeHiElement(hit: Hit, mode: HiMode = "hover"): SVGElement | nu
     return el
 }
 
-// --- highlight/selection DOM-lifecycle: keyed by OverlayState.hiKey / selKeys ---
+// --- highlight/selection DOM-lifecycle: keyed by OverlayState.hiKey_ / selKeys_ ---
 
 // Fade-out is hover-only (leave / miss). selects-ROI remounts g.sel every drag
 // frame — a leave class there would wash the box-select on every pointer tick.
 export function clearHiImmediate(state: OverlayState, hiGroup: SVGGElement): void {
-    if (state.hiLeaveTimer != null) { clearTimeout(state.hiLeaveTimer); state.hiLeaveTimer = null }
-    state.hiKey = null
+    if (state.hiLeaveTimer_ != null) { clearTimeout(state.hiLeaveTimer_); state.hiLeaveTimer_ = null }
+    state.hiKey_ = null
     while (hiGroup.firstChild) hiGroup.removeChild(hiGroup.firstChild)
 }
 
@@ -91,14 +91,14 @@ export function clearHi(state: OverlayState, hiGroup: SVGGElement, fade = false)
         clearHiImmediate(state, hiGroup)
         return
     }
-    state.hiKey = null
+    state.hiKey_ = null
     for (const el of [...hiGroup.children]) {
         el.classList.remove("holo-enter")
         el.classList.add("holo-leave")
     }
-    if (state.hiLeaveTimer != null) clearTimeout(state.hiLeaveTimer)
-    state.hiLeaveTimer = setTimeout(() => {
-        state.hiLeaveTimer = null
+    if (state.hiLeaveTimer_ != null) clearTimeout(state.hiLeaveTimer_)
+    state.hiLeaveTimer_ = setTimeout(() => {
+        state.hiLeaveTimer_ = null
         while (hiGroup.firstChild) hiGroup.removeChild(hiGroup.firstChild)
     }, MOTION_MS)
 }
@@ -110,19 +110,19 @@ export function clearSel(selGroup: SVGGElement): void {
 export function drawHi(state: OverlayState, hiGroup: SVGGElement, hit: Hit): void {
     const key = hitKey(hit)
     const cur = hiGroup.firstElementChild
-    if (key === state.hiKey && cur && !cur.classList.contains("holo-leave")) return
+    if (key === state.hiKey_ && cur && !cur.classList.contains("holo-leave")) return
     clearHiImmediate(state, hiGroup)
     const el = makeHiElement(hit, "hover")
     if (!el) return
     el.classList.add("holo-enter")
     hiGroup.appendChild(el)
-    state.hiKey = key
+    state.hiKey_ = key
 }
 
 export function drawSelection(state: OverlayState, selGroup: SVGGElement, hits: Hit[]): void {
     const next = new Set(hits.map(hitKey))
     const entering = new Set<string>()
-    for (const k of next) if (!state.selKeys.has(k)) entering.add(k)
+    for (const k of next) if (!state.selKeys_.has(k)) entering.add(k)
     clearSel(selGroup)
     for (const h of hits) {
         const el = makeHiElement(h, "selected")
@@ -130,5 +130,5 @@ export function drawSelection(state: OverlayState, selGroup: SVGGElement, hits: 
         if (entering.has(hitKey(h))) el.classList.add("holo-enter")
         selGroup.appendChild(el)
     }
-    state.selKeys = next
+    state.selKeys_ = next
 }

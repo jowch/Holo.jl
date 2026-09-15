@@ -29,7 +29,7 @@ export function computeSelection(
             const cx = a[3 * k], cy = a[3 * k + 1]
             if (cx >= xlo && cx <= xhi && cy >= ylo && cy <= yhi) {
                 items.push({ layer: target.id, index: k, payload: target.payloads[k] })
-                hits.push({ layer: target, index: k, geom: ["circle", cx, cy, a[3 * k + 2]] })
+                hits.push({ layer: target, index: k, geom_: ["circle", cx, cy, a[3 * k + 2]] })
             }
         }
         return { items, hits }
@@ -50,7 +50,7 @@ export function computeSelection(
         }
         const rx0 = gg.xedges[i0], rx1 = gg.xedges[i1 + 1], ry0 = gg.yedges[j0], ry1 = gg.yedges[j1 + 1]
         const hits: Hit[] = [{ layer: target, index: 0,
-            geom: ["rect", (rx0 + rx1) / 2, (ry0 + ry1) / 2, Math.abs(rx1 - rx0), Math.abs(ry1 - ry0)] }]
+            geom_: ["rect", (rx0 + rx1) / 2, (ry0 + ry1) / 2, Math.abs(rx1 - rx0), Math.abs(ry1 - ry0)] }]
         return { items: [{ layer: target.id, index: 0, payload }], hits }
     }
     return { items: [], hits: [] } // unsupported target kind
@@ -93,20 +93,20 @@ export function hitLayerByIndex(layer: HitLayer, index: number): Omit<Hit, "laye
     const g = layer.geometry
     if (layer.kind === "circles" && Array.isArray(g)) {
         const a = g as number[]
-        return { index, geom: ["circle", a[3 * index], a[3 * index + 1], a[3 * index + 2]] }
+        return { index, geom_: ["circle", a[3 * index], a[3 * index + 1], a[3 * index + 2]] }
     }
     if (layer.kind === "rects" && Array.isArray(g)) {
         const a = g as number[]
-        return { index, geom: ["rect", a[4 * index], a[4 * index + 1], a[4 * index + 2], a[4 * index + 3]] }
+        return { index, geom_: ["rect", a[4 * index], a[4 * index + 1], a[4 * index + 2], a[4 * index + 3]] }
     }
     if (layer.kind === "segments" && Array.isArray(g)) {
         const a = g as number[]
-        return { index, geom: ["seg", a[4 * index], a[4 * index + 1], a[4 * index + 2], a[4 * index + 3]] }
+        return { index, geom_: ["seg", a[4 * index], a[4 * index + 1], a[4 * index + 2], a[4 * index + 3]] }
     }
     if (layer.kind === "polyline" && Array.isArray(g)) {
         const a = g as number[]
-        return { index, geom: ["seg", a[2 * index], a[2 * index + 1], a[2 * index + 2], a[2 * index + 3]] }
+        return { index, geom_: ["seg", a[2 * index], a[2 * index + 1], a[2 * index + 2], a[2 * index + 3]] }
     }
     // polygons (only remaining closed SELECTED_KINDS entry)
-    return { index, geom: ["poly", (g as number[][])[index]] }
+    return { index, geom_: ["poly", (g as number[][])[index]] }
 }

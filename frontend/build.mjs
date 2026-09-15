@@ -7,6 +7,11 @@ import { build } from "esbuild"
 
 const target = process.argv[2]
 
+// Trailing-underscore convention (frontend-delivery.md's Bundle row): any property named
+// foo_ is frontend-internal and safe to shorten. A quoted property (obj["foo_"]) is never
+// mangled by esbuild, so nothing crossing the Julia/Pluto/DOM boundary may end in "_".
+const mangleProps = /_$/
+
 async function buildOverlay() {
     await build({
         entryPoints: ["src/index.ts"],
@@ -15,6 +20,7 @@ async function buildOverlay() {
         target: "es2020",
         outfile: "../assets/overlay.js",
         minify: true,
+        mangleProps,
         legalComments: "none",
         banner: { js: "/* Holo.jl overlay — generated from frontend/src by esbuild. Do not edit. */" },
     })
@@ -29,6 +35,7 @@ async function buildShim() {
         target: "es2020",
         outfile: "../assets/holo-webgl.js",
         minify: true,
+        mangleProps,
         legalComments: "none",
         banner: { js: "/* Holo :webgl shim — generated from frontend/src by esbuild. Do not edit. */" },
     })

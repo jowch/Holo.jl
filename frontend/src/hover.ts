@@ -14,49 +14,49 @@ const TIP_OFFSET = 10
 // aria-live is) — that's what keyboard.ts's separate live region is for; showTip/showTipAt just
 // give sighted keyboard users the same visual tooltip a mouse hover would.
 export function setTipVisible(ctx: OverlayCtx, visible: boolean): void {
-    ctx.tip.classList.toggle("show", visible)
-    ctx.tip.setAttribute("aria-hidden", visible ? "false" : "true")
+    ctx.tip_.classList.toggle("show", visible)
+    ctx.tip_.setAttribute("aria-hidden", visible ? "false" : "true")
 }
 
 export function hideTip(ctx: OverlayCtx, state: OverlayState): void {
     setTipVisible(ctx, false)
-    if (state.tipFlipTimer != null) clearTimeout(state.tipFlipTimer)
+    if (state.tipFlipTimer_ != null) clearTimeout(state.tipFlipTimer_)
     const delay = prefersReducedMotion() ? 0 : MOTION_MS
-    state.tipFlipTimer = setTimeout(() => {
-        state.tipFlipTimer = null
-        if (!ctx.tip.classList.contains("show")) ctx.tip.classList.remove("flip-x", "flip-y")
+    state.tipFlipTimer_ = setTimeout(() => {
+        state.tipFlipTimer_ = null
+        if (!ctx.tip_.classList.contains("show")) ctx.tip_.classList.remove("flip-x", "flip-y")
     }, delay)
 }
 
 export function tipOffset(ctx: OverlayCtx, e: MouseEvent): { x: number; y: number } {
-    const r = ctx.surface.getBoundingClientRect()
+    const r = ctx.surface_.getBoundingClientRect()
     if (r.width > 0 && r.height > 0) return { x: e.clientX - r.left, y: e.clientY - r.top }
     return { x: e.offsetX || e.clientX, y: e.offsetY || e.clientY }
 }
 
 export function placeTip(ctx: OverlayCtx, state: OverlayState, ox: number, oy: number): void {
-    if (!state.tipSized) {
-        state.tipW = ctx.tip.offsetWidth; state.tipH = ctx.tip.offsetHeight
-        state.tipSized = state.tipW > 0 && state.tipH > 0
+    if (!state.tipSized_) {
+        state.tipW_ = ctx.tip_.offsetWidth; state.tipH_ = ctx.tip_.offsetHeight
+        state.tipSized_ = state.tipW_ > 0 && state.tipH_ > 0
     }
-    if (!state.surfaceSized) {
-        state.surfaceW = ctx.surface.clientWidth; state.surfaceH = ctx.surface.clientHeight
-        state.surfaceSized = state.surfaceW > 0 && state.surfaceH > 0
+    if (!state.surfaceSized_) {
+        state.surfaceW_ = ctx.surface_.clientWidth; state.surfaceH_ = ctx.surface_.clientHeight
+        state.surfaceSized_ = state.surfaceW_ > 0 && state.surfaceH_ > 0
     }
-    const tw = state.tipW, th = state.tipH, hw = state.surfaceW, hh = state.surfaceH
-    ctx.tip.classList.remove("flip-x", "flip-y")
+    const tw = state.tipW_, th = state.tipH_, hw = state.surfaceW_, hh = state.surfaceH_
+    ctx.tip_.classList.remove("flip-x", "flip-y")
     if (tw <= 0 || th <= 0 || hw <= 0 || hh <= 0) {
-        ctx.tip.style.left = `${ox + TIP_OFFSET}px`
-        ctx.tip.style.top = `${oy + TIP_OFFSET}px`
+        ctx.tip_.style.left = `${ox + TIP_OFFSET}px`
+        ctx.tip_.style.top = `${oy + TIP_OFFSET}px`
         return
     }
     let left = ox + TIP_OFFSET, top = oy + TIP_OFFSET
     const flipX = left + tw > hw - TIP_GAP
     const flipY = top + th > hh - TIP_GAP
-    if (flipX) { left = ox - tw - TIP_OFFSET; ctx.tip.classList.add("flip-x") }
-    if (flipY) { top = oy - th - TIP_OFFSET; ctx.tip.classList.add("flip-y") }
-    ctx.tip.style.left = `${Math.max(TIP_GAP, Math.min(left, hw - tw - TIP_GAP))}px`
-    ctx.tip.style.top = `${Math.max(TIP_GAP, Math.min(top, hh - th - TIP_GAP))}px`
+    if (flipX) { left = ox - tw - TIP_OFFSET; ctx.tip_.classList.add("flip-x") }
+    if (flipY) { top = oy - th - TIP_OFFSET; ctx.tip_.classList.add("flip-y") }
+    ctx.tip_.style.left = `${Math.max(TIP_GAP, Math.min(left, hw - tw - TIP_GAP))}px`
+    ctx.tip_.style.top = `${Math.max(TIP_GAP, Math.min(top, hh - th - TIP_GAP))}px`
 }
 
 // The html-selection branching shared by pointer hover (showTip, below) and keyboard focus
@@ -66,21 +66,21 @@ export function tipHtmlForHit(ctx: OverlayCtx, hit: Hit, x: number, y: number): 
     const layer = hit.layer
     if (layer.tooltip === false) return null
     if (layer.template) {
-        return renderTemplate(layer.template, resolvePayload(hit, ctx.manifest, x, y))
-    } else if (hit.grid) {
-        return hit.grid[2] === undefined ? `(${hit.grid[0]},${hit.grid[1]})` : `(${hit.grid[0]},${hit.grid[1]}) = ${esc(hit.grid[2])}`
-    } else if (hit.axis) {
-        const v = resolvePayload(hit, ctx.manifest, x, y) as { x?: unknown; y?: unknown; value?: unknown }
+        return renderTemplate(layer.template, resolvePayload(hit, ctx.manifest_, x, y))
+    } else if (hit.grid_) {
+        return hit.grid_[2] === undefined ? `(${hit.grid_[0]},${hit.grid_[1]})` : `(${hit.grid_[0]},${hit.grid_[1]}) = ${esc(hit.grid_[2])}`
+    } else if (hit.axis_) {
+        const v = resolvePayload(hit, ctx.manifest_, x, y) as { x?: unknown; y?: unknown; value?: unknown }
         return "value" in v ? esc(fmt(v.value)) : `x=${esc(fmt(v.x))}, y=${esc(fmt(v.y))}`
     }
     return renderAutoTable(hit.layer.payloads[hit.index])
 }
 
 export function applyTipHtml(ctx: OverlayCtx, state: OverlayState, html: string): void {
-    if (html !== state.tipHtml) {
-        ctx.tip.innerHTML = html
-        state.tipHtml = html
-        state.tipSized = false
+    if (html !== state.tipHtml_) {
+        ctx.tip_.innerHTML = html
+        state.tipHtml_ = html
+        state.tipSized_ = false
     }
     setTipVisible(ctx, true)
 }
@@ -108,11 +108,11 @@ export function showTipAt(ctx: OverlayCtx, state: OverlayState, hit: Hit, x: num
 // over empty canvas, or off the surface, doesn't erase a focus ring that's still logically set.
 // Returns false (nothing to restore) so the caller falls back to its usual clearHi/hideTip.
 export function restoreFocus(ctx: OverlayCtx, state: OverlayState): boolean {
-    if (!state.focusHit) return false
-    drawHi(state, ctx.hiGroup, state.focusHit)
-    if (state.focusTipHtml !== null && state.focusTipCss) {
-        applyTipHtml(ctx, state, state.focusTipHtml)
-        placeTip(ctx, state, state.focusTipCss.x, state.focusTipCss.y)
+    if (!state.focusHit_) return false
+    drawHi(state, ctx.hiGroup_, state.focusHit_)
+    if (state.focusTipHtml_ !== null && state.focusTipCss_) {
+        applyTipHtml(ctx, state, state.focusTipHtml_)
+        placeTip(ctx, state, state.focusTipCss_.x, state.focusTipCss_.y)
     } else {
         hideTip(ctx, state)
     }
@@ -120,59 +120,59 @@ export function restoreFocus(ctx: OverlayCtx, state: OverlayState): boolean {
 }
 
 export function setTipText(ctx: OverlayCtx, state: OverlayState, s: string): void {
-    if (s === state.tipHtml) return
-    ctx.tip.textContent = s
-    state.tipHtml = s
-    state.tipSized = false
+    if (s === state.tipHtml_) return
+    ctx.tip_.textContent = s
+    state.tipHtml_ = s
+    state.tipSized_ = false
 }
 
 export function applyMove(ctx: OverlayCtx, state: OverlayState, e: MouseEvent): void {
     // onPointerMove routes drag-active moves to queueDrag instead — this is only ever
     // reached with drag === null, but keep the guard as defense-in-depth.
-    if (state.drag) return
-    const p = imgPx(ctx.base, ctx.manifest, e)
-    const dragHit = hitTest(ctx.manifest, p.x, p.y, "drag")
+    if (state.drag_) return
+    const p = imgPx(ctx.base_, ctx.manifest_, e)
+    const dragHit = hitTest(ctx.manifest_, p.x, p.y, "drag")
     // A full-viewport :view hit must not suppress element hover.
     if (dragHit && dragHit.layer.kind !== "view") {
-        if (!restoreFocus(ctx, state)) { clearHi(state, ctx.hiGroup, true); hideTip(ctx, state) }
-        ctx.surface.classList.add("grab"); ctx.surface.classList.remove("hot")
+        if (!restoreFocus(ctx, state)) { clearHi(state, ctx.hiGroup_, true); hideTip(ctx, state) }
+        ctx.surface_.classList.add("grab"); ctx.surface_.classList.remove("hot")
         return
     }
-    ctx.surface.classList.remove("grab")
-    const hit = hitTest(ctx.manifest, p.x, p.y, "hover")
+    ctx.surface_.classList.remove("grab")
+    const hit = hitTest(ctx.manifest_, p.x, p.y, "hover")
     if (hit) {
-        drawHi(state, ctx.hiGroup, hit); showTip(ctx, state, hit, p.x, p.y, e); ctx.surface.classList.add("hot")
+        drawHi(state, ctx.hiGroup_, hit); showTip(ctx, state, hit, p.x, p.y, e); ctx.surface_.classList.add("hot")
     } else {
-        if (!restoreFocus(ctx, state)) { clearHi(state, ctx.hiGroup, true); hideTip(ctx, state) }
-        ctx.surface.classList.remove("hot")
-        if (dragHit?.layer.kind === "view") ctx.surface.classList.add("grab")
+        if (!restoreFocus(ctx, state)) { clearHi(state, ctx.hiGroup_, true); hideTip(ctx, state) }
+        ctx.surface_.classList.remove("hot")
+        if (dragHit?.layer.kind === "view") ctx.surface_.classList.add("grab")
     }
 }
 
 export function onMove(ctx: OverlayCtx, state: OverlayState, e: MouseEvent): void {
-    if (state.pendingMove !== null) { state.pendingMove = e; return }
+    if (state.pendingMove_ !== null) { state.pendingMove_ = e; return }
     applyMove(ctx, state, e)
     if (typeof requestAnimationFrame !== "function") return
-    state.pendingMove = e
-    state.moveRaf = requestAnimationFrame(() => {
-        state.moveRaf = 0
-        const last = state.pendingMove
-        state.pendingMove = null
+    state.pendingMove_ = e
+    state.moveRaf_ = requestAnimationFrame(() => {
+        state.moveRaf_ = 0
+        const last = state.pendingMove_
+        state.pendingMove_ = null
         if (last && last !== e) applyMove(ctx, state, last)
     })
 }
 
 export function onLeave(ctx: OverlayCtx, state: OverlayState): void {
     cancelPendingMove(state)
-    if (!restoreFocus(ctx, state)) { clearHi(state, ctx.hiGroup, true); hideTip(ctx, state) }
+    if (!restoreFocus(ctx, state)) { clearHi(state, ctx.hiGroup_, true); hideTip(ctx, state) }
     // Fallback for tryCapture's uncaptured path: without real capture, leaving the surface
     // fires pointerleave (capture would otherwise suppress it until release), and the
     // pointermove/pointerup that follow off-element never reach these listeners — so drag
     // would stay non-null with the cursor stuck "grabbing", reopening the pre-PR bug. Under
     // real capture this check is false (hasPointerCapture is still true) and it's a no-op.
-    if (state.drag && !ctx.surface.hasPointerCapture(state.drag.pointerId)) {
+    if (state.drag_ && !ctx.surface_.hasPointerCapture(state.drag_.pointerId_)) {
         cancelPendingDrag(state)
-        state.drag = null
-        ctx.surface.classList.remove("grabbing")
+        state.drag_ = null
+        ctx.surface_.classList.remove("grabbing")
     }
 }
