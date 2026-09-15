@@ -6,7 +6,7 @@ import type { Drag, OverlayCtx, OverlayState } from "./state"
 import * as thresholdDrag from "./drag/threshold"
 import * as roiDrag from "./drag/roi"
 import * as viewDrag from "./drag/view"
-import type { ThresholdGeometry, ViewGeometry } from "./types"
+import type { Hit, ThresholdGeometry, ViewGeometry } from "./types"
 
 // setPointerCapture throws InvalidPointerId if the UA doesn't consider this pointerId active
 // (observed live in Chromium for a synthetic/non-primary pointerId — real touch/pen input can
@@ -171,14 +171,21 @@ export function onLostCapture(ctx: OverlayCtx, state: OverlayState): void {
     state.drag = null
 }
 
+// The click→bond commit, factored out of onClick so keyboard.ts's Enter/Space can dispatch the
+// identical bond value for a keyboard-focused hit — same highlight draw, same payload
+// resolution, same "input" event.
+export function commitClick(ctx: OverlayCtx, state: OverlayState, hit: Hit, px: number, py: number): void {
+    drawHi(state, ctx.hiGroup, hit)
+    ;(ctx.host as unknown as { value: unknown }).value = { layer: hit.layer.id, index: hit.index, payload: resolvePayload(hit, ctx.manifest, px, py) }
+    ctx.host.dispatchEvent(new CustomEvent("input"))
+}
+
 export function onClick(ctx: OverlayCtx, state: OverlayState, e: MouseEvent): void {
     if (state.justDragged) { state.justDragged = false; return }
     const p = imgPx(ctx.base, ctx.manifest, e)
     const hit = hitTest(ctx.manifest, p.x, p.y, "click")
     if (!hit) return // miss = no-op, no round-trip
-    drawHi(state, ctx.hiGroup, hit)
-    ;(ctx.host as unknown as { value: unknown }).value = { layer: hit.layer.id, index: hit.index, payload: resolvePayload(hit, ctx.manifest, p.x, p.y) }
-    ctx.host.dispatchEvent(new CustomEvent("input"))
+    commitClick(ctx, state, hit, p.x, p.y)
 }
 
 // Single entry point for pointermove: while a drag owns the pointer, route to the

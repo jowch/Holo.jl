@@ -2,6 +2,7 @@ import { SVG_NS, drawSelection } from "./highlight"
 import { hitLayerByIndex } from "./selection"
 import { onLeave } from "./hover"
 import { onDown, onUp, onCancel, onLostCapture, onClick, onPointerMove } from "./bond"
+import { buildFocusable, handleKeydown } from "./keyboard"
 import * as thresholdDrag from "./drag/threshold"
 import * as roiDrag from "./drag/roi"
 import { createOverlayState, cancelPendingMove, cancelPendingDrag, MOTION_MS } from "./state"
@@ -14,7 +15,13 @@ const STYLE = `
 .surface.hot { cursor: pointer; }
 .surface.grab { cursor: grab; }
 .surface.grabbing { cursor: grabbing; }
+/* Default :focus-visible outline stays until a focus ring is actually drawn (kbd-ring, set by
+   keyboard.ts's focusTo) — so tabbing in still shows *something* before the first arrow press,
+   but the browser outline doesn't double up with our own ring once one exists. */
+.surface.kbd-ring:focus-visible { outline: none; }
 svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+       clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .holo-enter { animation: holo-in ${MOTION_MS}ms ease-out; }
 .holo-leave { animation: holo-out ${MOTION_MS}ms ease-in forwards; }
 @keyframes holo-in { from { opacity: 0 } to { opacity: 1 } }
@@ -96,13 +103,44 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     tip.className = "holo-tip"
     tip.setAttribute("role", "tooltip")
     tip.setAttribute("aria-hidden", "true")
-    shadow.append(style, svg, surface, tip)
+
+    // Keyboard nav needs the surface to be a real focus stop; role="application" (over the
+    // safer "group") because NVDA/JAWS's default browse mode intercepts arrow keys before a
+    // "group" ever sees them — "application" tells the AT this widget owns its own key
+    // handling. aria-label is generic (there's no per-plot title in the manifest to draw one
+    // from); aria-describedby points at a static, non-live usage hint (below) — the two must
+    // share this shadow root, since ARIA idrefs don't cross shadow boundaries.
+    surface.setAttribute("tabindex", "0")
+    surface.setAttribute("role", "application")
+    surface.setAttribute("aria-label", "Interactive plot")
+    surface.setAttribute("aria-describedby", "holo-kbd-hint")
+
+    const kbdHint = document.createElement("div")
+    kbdHint.id = "holo-kbd-hint"
+    kbdHint.className = "sr-only"
+    kbdHint.textContent = "Use arrow keys to move between elements, Page Up or Page Down to jump between layers, " +
+        "Enter to select, Escape to leave."
+
+    // aria-live="polite", not the tooltip: aria-hidden toggling on the tooltip isn't an
+    // announcement path for assistive tech, only a visibility one. Created empty and populated
+    // later (keyboard.ts's focusTo, debounced) — a region created and filled in the same tick
+    // often doesn't announce.
+    const liveRegion = document.createElement("div")
+    liveRegion.className = "sr-only"
+    liveRegion.setAttribute("aria-live", "polite")
+    liveRegion.setAttribute("aria-atomic", "true")
+
+    shadow.append(style, svg, surface, tip, kbdHint, liveRegion)
     host.appendChild(shadowHost)
     if (manifest.tipStyle) for (const [k, v] of Object.entries(manifest.tipStyle)) shadowHost.style.setProperty(k, v)
 
     const thresholdLines = thresholdDrag.buildThresholdLines(manifest, svg)
     const roiBoxes = roiDrag.buildROIBoxes(manifest, svg)
-    const ctx: OverlayCtx = { manifest, host, base, surface, tip, hiGroup, selGroup, thresholdLines, roiBoxes }
+    const focusable = buildFocusable(manifest)
+    const ctx: OverlayCtx = {
+        manifest, host, base, surface, tip, hiGroup, selGroup, thresholdLines, roiBoxes,
+        shadowRoot: shadow, focusable, liveRegion,
+    }
     const state = createOverlayState()
 
     // Pinned to the base (img/canvas), not the host: WGLMakie can size the <canvas>
@@ -136,6 +174,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     const leave = () => onLeave(ctx, state)
     const lostCapture = () => onLostCapture(ctx, state)
     const click = (e: MouseEvent) => onClick(ctx, state, e)
+    const keydown = (e: KeyboardEvent) => handleKeydown(ctx, state, e)
 
     surface.addEventListener("pointerdown", down)
     surface.addEventListener("pointermove", move)
@@ -144,6 +183,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     surface.addEventListener("pointerleave", leave)
     surface.addEventListener("lostpointercapture", lostCapture)
     surface.addEventListener("click", click)
+    surface.addEventListener("keydown", keydown)
 
     // Drawn into g.sel, not g.hi: it must survive hovers (onMove clears g.hi on every miss)
     // and support multiple selected indices (drawHi keeps only the last).
@@ -165,6 +205,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         surface.removeEventListener("pointerleave", leave)
         surface.removeEventListener("lostpointercapture", lostCapture)
         surface.removeEventListener("click", click)
+        surface.removeEventListener("keydown", keydown)
         window.removeEventListener("resize", syncOverlayToBase)
         overlayRO?.disconnect()
         overlayFrames = 24
@@ -172,6 +213,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         cancelPendingDrag(state)
         if (state.hiLeaveTimer != null) clearTimeout(state.hiLeaveTimer)
         if (state.tipFlipTimer != null) clearTimeout(state.tipFlipTimer)
+        if (state.announceTimer != null) clearTimeout(state.announceTimer)
         shadowHost.remove()
     }
     invalidation?.then(cleanup)

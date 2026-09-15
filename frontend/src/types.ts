@@ -78,6 +78,7 @@ export interface HitLayer {
     tooltip?: false              // explicit suppress; absent + no template → auto name/value table
     selected?: number[] // element indices to draw pre-highlighted on mount
     selects?: string   // id of the target layer this ROI selects; absent → bounds-ROI (no multi-select)
+    label?: string     // screen-reader announcement prefix, e.g. "Scatter, point 3 of 10: …"; absent → no prefix
     // Bond value shape: selects-ROI mouse-up ships { items: [...] }; single-click / bounds-ROI
     // ships { layer, index, payload } directly.
 }
@@ -98,4 +99,12 @@ export interface Hit {
     grid?: [number, number, number?] // [i, j, value]; value absent when values[] was dropped
     axis?: string // transform id, for continuous inversion
     roiPart?: { corner?: number; move?: boolean } // which sub-part of an :roi a drag grabbed
+}
+
+// One entry in keyboard.ts's flat, manifest-order nav list — element-indexed kinds only
+// (circles/rects/polygons/segments/polyline; grid/axis/threshold/roi/view excluded, see
+// keyboard.ts's FOCUSABLE_KINDS for why).
+export interface FocusRef {
+    layer: HitLayer
+    index: number
 }
