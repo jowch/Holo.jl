@@ -52,6 +52,8 @@ end
 
 "the one coordinate primitive interactables call — never re-derive projection"
 data_to_image_px(ctx::InteractionContext, ax, p) = ctx.project(ax, p)
+# No fallback to a default axis: a silent fallback here once made a missing Colorbar
+# transform render a plausible-but-wrong 2-D readout instead of failing to build.
 axis_id(ctx::InteractionContext, ax) =
     get(ctx.ids, ax) do
     throw(

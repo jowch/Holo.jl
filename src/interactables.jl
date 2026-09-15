@@ -67,7 +67,8 @@ _check_tooltip(tooltip) =
 struct PointInteractable <: AbstractInteractable
     ax; points::Vector{Point3f}; id::Symbol; payloads::Vector{Any}; radius::Float64
     # Data-space half-extents (meshscatter markers are data-sized); overrides `radius` via an
-    # axis-aligned pixel-radius approximation that can underestimate the true silhouette.
+    # axis-aligned pixel-radius approximation that can underestimate the true silhouette
+    # (worst case ~29%, at adversarial azimuth/elevation).
     radius3d::Union{Nothing, Vector{Makie.Vec3f}}
     tooltip::Union{Nothing, Markup, Bool}
 end

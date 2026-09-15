@@ -26,8 +26,8 @@ end
 
 # markersize is DATA-space (no markerspace attribute), so pixel radius is camera/depth-dependent;
 # normalize to per-element Vec3f half-extents (radius3d) and let hitlayers project them. The
-# axis-aligned half-extent approximation can underestimate the true silhouette; pass
-# radius=/radius3d= explicitly if it's too coarse.
+# axis-aligned half-extent approximation can underestimate the true silhouette (worst case ~29%,
+# at adversarial azimuth/elevation); pass radius=/radius3d= explicitly if it's too coarse.
 function _meshscatter_extents(ms, n)
     ms isa Makie.VecTypes{3} && return fill(Makie.Vec3f(ms...), n)
     ms isa Real && return fill(Makie.Vec3f(ms, ms, ms), n)
