@@ -5,41 +5,27 @@ using CairoMakie
 import Makie
 using Test
 
-# CairoBackend now lives in the extension (weak CairoMakie dep) — reach it via
-# Base.get_extension rather than a bare name, same pattern the extension itself uses.
-const _CairoExt = Base.get_extension(Holo, :HoloCairoMakieExt)
-
-# finalize + context the way holo does internally
-function ctx_for(fig; max_width = 700)
-    bk = _CairoExt.CairoBackend(; max_width)
-    Makie.update_state_before_display!(fig)
-    ppu = IP._ppu(bk, fig)
-    return bk, ppu, IP.context(bk, fig, ppu)
-end
-
-function drawn_near(img, cx, cy; tol = 8)
-    ih, iw = size(img)
-    notwhite(c) = !(Float64(Makie.red(c)) > 0.95 && Float64(Makie.green(c)) > 0.95 && Float64(Makie.blue(c)) > 0.95)
-    x, y = round(Int, cx), round(Int, cy)
-    for dy in -tol:tol, dx in -tol:tol
-        xx, yy = x + dx, y + dy
-        (1 <= xx <= iw && 1 <= yy <= ih) || continue
-        notwhite(img[yy, xx]) && return true
-    end
-    return false
-end
+# `ctx_for`, `drawn_near`, `default_fixture`, `DEFAULT_PTS` — shared across every testset
+# below (and, after the next commit, across test/core/*.jl too).
+include(joinpath(@__DIR__, "testutils.jl"))
 
 # Canary FIRST: a Makie internal that changed shape should fail loudly here, not as a
 # scattered downstream MethodError/wrong-pixel bug in one of the testsets below.
 include("makie_compat_tests.jl")
 
 @testset "Holo" begin
-    pts = [(1.0, 1.0), (2.0, 4.0), (3.0, 9.0)]
-    fig = Figure(size = (600, 400)); ax = Axis(fig[1, 1])
-    scatter!(ax, first.(pts), last.(pts); color = :red, markersize = 16)
-    bk, ppu, ctx = ctx_for(fig)
+    # `pts` is a plain constant (never mutated in a way that broke a downstream reader —
+    # audited every bare use) so it stays shared. `fig`/`ax`/`bk`/`ppu`/`ctx` are gone:
+    # those were rebuilt (`fig = Figure(...)`, `_, _, ctx = ctx_for(f)`, …) by testsets
+    # throughout this file, and Julia's top-level soft scope makes that rebind the
+    # *global* binding — so a later testset reading bare `ax`/`ctx` without rebuilding
+    # got whatever the previous testset last left behind, not necessarily this one.
+    # Every testset that needs one now calls `default_fixture()` (see testutils.jl) for
+    # its own copy.
+    pts = DEFAULT_PTS
 
     @testset "DPI from layout fact" begin
+        (; ppu, ctx) = default_fixture()
         @test ppu == 2.0                              # 600 ≤ 700 column → render at 2×
         @test ctx.scaling == 2.0
         # a figure wider than the column renders at ~2× the column, not 2× itself
@@ -49,6 +35,7 @@ include("makie_compat_tests.jl")
     end
 
     @testset "context / transforms" begin
+        (; ctx) = default_fixture()
         t = ctx.transforms[:ax1]
         @test t.xscale == :identity && t.yscale == :identity
         @test t.viewport[3] > 0 && t.viewport[4] > 0
@@ -63,6 +50,7 @@ include("makie_compat_tests.jl")
     end
 
     @testset "PointInteractable lands on markers" begin
+        (; fig, ax, pts, ppu, ctx) = default_fixture()
         pin = PointInteractable(ax, pts; id = :scatter)
         @test validate(pin, ctx) === nothing
         L = only(hitlayers(pin, ctx))
@@ -189,6 +177,7 @@ include("makie_compat_tests.jl")
     @testset "geometry quantized to integer pixels" begin
         # finite per-element geometry ships as Int (1–3 B/coord in MsgPack vs Float32's 5) — docs/dev/architecture.md §9.
         # Containers are Real[] (so non-finite coords can pass through), so assert the *values*, not eltype.
+        (; ax, pts, ctx) = default_fixture()
         allint(g) = all(x -> !isfinite(x) || x isa Integer, g)   # finite coords are Int
         L = only(hitlayers(PointInteractable(ax, pts), ctx))
         @test allint(L.geometry)
@@ -207,6 +196,7 @@ include("makie_compat_tests.jl")
     @testset "non-finite projection degrades, never crashes" begin
         # element layers are un-gated on scale (docs/dev/architecture.md §3); a log out-of-domain point projects to
         # NaN/±Inf. `_q` must pass it through (round(Int, NaN) throws) so holo degrades, not crashes.
+        (; ax, ctx) = default_fixture()
         finite_int(g) = all(x -> !isfinite(x) || x isa Integer, g)
         flog = Figure(); axlog = Axis(flog[1, 1]; xscale = log10)
         scatter!(axlog, [1.0, 10.0], [1.0, 10.0])
@@ -220,6 +210,7 @@ include("makie_compat_tests.jl")
     end
 
     @testset "validate is per-capability" begin
+        pts = DEFAULT_PTS
         fl = Figure(); axl = Axis(fl[1, 1]; xscale = sqrt)   # sqrt: not JS-invertible
         scatter!(axl, [1.0, 2.0, 3.0], [1.0, 2.0, 3.0])
         _, _, ctxl = ctx_for(fl)
@@ -619,6 +610,7 @@ include("makie_compat_tests.jl")
     end
 
     @testset "Polygon geometry projects per ring" begin
+        (; ax, ctx) = default_fixture()
         rings = [[(1.0, 1.0), (2.0, 4.0), (3.0, 1.0)], [(1.5, 2.0), (2.5, 2.0), (2.0, 3.0)]]
         L = only(hitlayers(PolygonInteractable(ax, rings; id = :poly), ctx))
         @test L.kind === :polygons && L.id === :poly
@@ -675,6 +667,13 @@ include("makie_compat_tests.jl")
     end
 
     @testset "Segment + Axis + custom" begin
+        # Bare `ax`/`ctx` here read whatever the previous testset last assigned them to
+        # (soft-scope clobbering — see the file-level note above `default_fixture`); by
+        # execution order that was actually the TextInteractable testset's leftover
+        # text-only figure, unrelated to this testset's Segment/Region/Function coverage.
+        # Assertions below are kind/type-only, so the swap to `default_fixture()` is
+        # behavior-preserving and fixes the staleness.
+        (; ax, ctx, pts) = default_fixture()
         @test only(hitlayers(SegmentInteractable(ax, pts; mode = :polyline), ctx)).kind === :polyline
         @test only(hitlayers(AxisInteractable(ax), ctx)).geometry === nothing
         ri = RegionInteractable(
@@ -688,6 +687,9 @@ include("makie_compat_tests.jl")
     end
 
     @testset "ThresholdInteractable (M4 drag)" begin
+        # Same clobbering as "Segment + Axis + custom" above — every assertion here is
+        # self-referential (computed via the same ax/ctx it tests), so the swap is safe.
+        (; ax, ctx) = default_fixture()
         th = ThresholdInteractable(ax; orientation = :horizontal, value = 4.0)
         @test events(th) == (:drag,)
         @test validate(th, ctx) === nothing
@@ -717,6 +719,8 @@ include("makie_compat_tests.jl")
     end
 
     @testset "ViewInteractable (drag-to-pan / orbit)" begin
+        # See the ThresholdInteractable note above — same clobbering, same fix.
+        (; ax, ctx) = default_fixture()
         v = ViewInteractable(ax)
         @test events(v) == (:drag,)
         @test validate(v, ctx) === nothing
@@ -766,6 +770,8 @@ include("makie_compat_tests.jl")
     end
 
     @testset "ROIInteractable (M4 drag cut 2)" begin
+        # See the ThresholdInteractable note above — same clobbering, same fix.
+        (; ax, ctx) = default_fixture()
         r = ROIInteractable(ax; bounds = (1.0, 3.0, 2.0, 8.0))
         @test events(r) == (:drag,)
         @test validate(r, ctx) === nothing
@@ -1487,6 +1493,10 @@ include("makie_compat_tests.jl")
     end
 
     @testset "tooltip_spec on interactables" begin
+        # Bare `ax` here is another clobbering leftover (the Voronoiplot testset's axis by
+        # execution order) — tooltip_spec never touches geometry/ctx so it never affected
+        # the outcome, but `default_fixture()` fixes the staleness anyway.
+        (; ax) = default_fixture()
         pts = [(1.0, 1.0), (2.0, 2.0)]
         @test Holo.tooltip_spec(PointInteractable(ax, pts)) === nothing
         pi = PointInteractable(ax, pts; tooltip = holo"$(x)")
