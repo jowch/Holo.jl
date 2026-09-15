@@ -13,16 +13,15 @@
 > (manifest-shape change: new per-transform `is3d` key + z in 3-coord point payloads — envelope
 > unchanged: scatter-1k manifest 38.0 KB, heatmap-200² 196.8 KB, 30-frame scrub 5.6 MB; the
 > `is3d` key costs ~10 B/transform and z one float per 3-coord point, both noise at this scale)
-> and re-run for the `SegmentInteractable` `tol` wiring (`fix/tol-and-rect-validation` branch):
-> manifest-shape change — a new per-`:segments`/`:polyline`-layer `"tol"` field (one small int,
-> present only on that layer, not per element) — envelope re-run and unchanged: `bench/payload_
-> envelope.jl` doesn't exercise `SegmentInteractable` (only `PointInteractable`/`:circles`), so
-> the printed numbers are byte-identical to the previous run above; `bench/stress.jl` likewise
-> doesn't cover segments. Measured delta by direct manifest inspection instead: one MsgPack int
-> header+value (1–3 B) added to the *layer* dict once per `:segments`/`:polyline` layer — e.g.
-> the parity corpus's `logscale`/`axis3`/`polaraxis`/`colorbar` line layers each gained exactly
-> one `"tol": 12` entry (see `test/fixtures/parity/*.{cairo,webgl}.json` diffs). Independent of
-> element/vertex count, so it doesn't scale with plot size — negligible at any N;
+> and re-run for the `SegmentInteractable` `tol` wiring (PR #66): manifest-shape change — a new
+> per-`:segments`/`:polyline`-layer `"tol"` field (one small int, present only on that layer,
+> not per element). Envelope unchanged: `bench/payload_envelope.jl`/`bench/stress.jl` don't
+> exercise `SegmentInteractable` (only `PointInteractable`/`:circles`), so re-running reproduces
+> the previous numbers byte-for-byte. Measured the delta by direct manifest inspection instead:
+> one MsgPack int header+value (1–3 B), added once per `:segments`/`:polyline` layer, not per
+> element/vertex — e.g. the parity corpus's `logscale`/`axis3`/`polaraxis`/`colorbar` line
+> layers each gained exactly one `"tol": 12` entry (`test/fixtures/parity/*.{cairo,webgl}.json`
+> diffs). Doesn't scale with plot size — negligible at any N;
 > baseline established after int-pixel geometry quantization, CairoMakie 0.15, Julia 1.12):
 > - **base64-PNG / manifest / render numbers** — `julia --project=. bench/payload_envelope.jl`
 >   (normal envelope) and `julia --project=. bench/stress.jl` (the 10× extremes). Both `seed!(0)`,

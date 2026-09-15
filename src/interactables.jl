@@ -252,9 +252,10 @@ Lines / polylines (nearest-segment hit) or disjoint segment pairs. Produces one 
 - `payloads` — one entry per segment (count per `mode` above); `ArgumentError` if the length
   doesn't match. Default: `(; segment_index)`, 0-based.
 - `tol` — hit-test slack around a segment, in logical px (scaled to the rendered image's DPI
-  like [`PointInteractable`](@ref)'s `radius`). Shipped in the manifest as a per-layer `"tol"`
-  field; the overlay's client-side default (`SEG_TOL` in `frontend/src/geometry.ts`, 8 image
-  px) applies only when this field is absent.
+  like [`PointInteractable`](@ref)'s `radius`). Must be finite and positive (`ArgumentError`
+  otherwise). Shipped in the manifest as a per-layer `"tol"` field; the overlay's client-side
+  default (`SEG_TOL` in `frontend/src/geometry.ts`, 8 image px) applies only when this field
+  is absent.
 - `tooltip` — `nothing` for the auto name/value table (default), `holo"..."` for a template, or
   `false` to suppress. `tooltip = true` is rejected (`ArgumentError`).
 
@@ -295,6 +296,8 @@ function SegmentInteractable(
     _check_tooltip(tooltip)
     mode in (:polyline, :pairs) ||
         throw(ArgumentError("SegmentInteractable: mode must be :polyline or :pairs, got :$mode"))
+    isfinite(tol) && tol > 0 ||
+        throw(ArgumentError("SegmentInteractable: tol must be finite and positive, got $tol"))
     vs = [_pt3(v) for v in vertices]
     nseg = mode === :polyline ? max(0, length(vs) - 1) : length(vs) ÷ 2
     pl = payloads === nothing ? Any[(; segment_index = k - 1) for k in 1:nseg] : _check_payloads(payloads, nseg, "SegmentInteractable")

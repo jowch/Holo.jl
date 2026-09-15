@@ -23,19 +23,6 @@ All notable changes to this project are documented here. The format is based on
   `perf-findings.md`, `roadmap.md`, `backend-comparison.md`, `live-interaction-checklist.md`,
   `frontend-delivery.md`, `releasing.md`); `docs/README.md` is now a short index pointing at
   the site and at `docs/dev/`.
-
-### Removed
-- `docs/design.md`, `docs/research-findings.md`, `docs/survey-makie-surfaces.md` — superseded
-  by `docs/dev/architecture.md`/`docs/dev/roadmap.md` (kept in git history). `docs/tooltips.md`
-  — its internals moved into `docs/dev/architecture.md` §10, its user-facing half into the
-  site's Tooltips page.
-- Dead `vector`/`mount` scaffolding: `CairoBackend(; vector=false)` and the
-  `AbstractBackend` `mount` interface function (plus `WebGLBackend`'s `mount = :webgl`
-  method) had zero callers — `Holo.render` always rasterizes to PNG, and `Base.show`
-  hardcodes a PNG `<img>`. SVG output remains a roadmap item to build from scratch
-  (`docs/dev/roadmap.md`), not groundwork already in place.
-
-### Changed
 - `hoverstyle(::AbstractInteractable, ::Int)` narrowed to `hoverstyle(::AbstractInteractable)`
   — the manifest ships one hover style per layer, not per element; the old per-element
   signature implied styling that was never actually per-element.
@@ -50,11 +37,25 @@ All notable changes to this project are documented here. The format is based on
   2× DPI, 12 image px instead of 8. Pass `tol = 8 / scaling` to keep the old numeric slack, or
   rely on the new default (slightly more forgiving at typical DPI).
 
+### Removed
+- `docs/design.md`, `docs/research-findings.md`, `docs/survey-makie-surfaces.md` — superseded
+  by `docs/dev/architecture.md`/`docs/dev/roadmap.md` (kept in git history). `docs/tooltips.md`
+  — its internals moved into `docs/dev/architecture.md` §10, its user-facing half into the
+  site's Tooltips page.
+- Dead `vector`/`mount` scaffolding: `CairoBackend(; vector=false)` and the
+  `AbstractBackend` `mount` interface function (plus `WebGLBackend`'s `mount = :webgl`
+  method) had zero callers — `Holo.render` always rasterizes to PNG, and `Base.show`
+  hardcodes a PNG `<img>`. SVG output remains a roadmap item to build from scratch
+  (`docs/dev/roadmap.md`), not groundwork already in place.
+
 ### Fixed
 - `SegmentInteractable`'s `tol` keyword (lines/polylines/segments hit-test slack) is now
   wired through end-to-end: it ships in the manifest as a per-`:segments`/`:polyline`-layer
   `"tol"` field (image px), and the overlay's hit test reads it instead of always using its
-  own fixed `SEG_TOL`. Previously `tol` was accepted and stored but never read anywhere.
+  own fixed `SEG_TOL`. Previously `tol` was accepted and stored but never read anywhere. Now
+  that it feeds a manifest field, `tol` is validated at construction (`ArgumentError` unless
+  finite and positive) instead of raising a raw `InexactError` from `round(Int, …)` (`Inf`/
+  `NaN`) or silently shipping an unhittable layer (`tol <= 0`).
 - `RectInteractable(ax; rects=…, grid=…)` now raises `ArgumentError` at construction when
   both `rects` and `grid` are given, or neither is — previously `grid` silently won if both
   were passed, and passing neither surfaced a raw error later instead of a clear one.

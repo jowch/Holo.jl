@@ -184,9 +184,10 @@ describe("hitLayer + hitTest", () => {
 
 describe("segments/polyline per-layer tol", () => {
     const seg: HitLayer = { id: "segs", kind: "segments", geometry: [0, 0, 100, 0], payloads: [{}], axis: "ax1", events: ["hover"] }
-    it("custom tol resolves a hit the fallback SEG_TOL would miss the other way: distance between the two", () => {
-        // 6px from the line: within tol=10, and within the default SEG_TOL=8 too — pick a
-        // distance strictly between a tight custom tol and the fallback.
+    it("a per-layer tol overrides SEG_TOL in both directions (tighter and looser)", () => {
+        // 6px from the line: outside a tight custom tol=2, but inside a loose custom
+        // tol=20 — both bracket the default SEG_TOL=8, so this only passes if `tol` is
+        // actually read from the layer instead of falling back to SEG_TOL.
         const tight = { ...seg, tol: 2 }
         const loose = { ...seg, tol: 20 }
         expect(hitLayer(tight, 50, 6)).toBeNull()          // 6px > tol=2

@@ -1701,6 +1701,15 @@ include("makie_compat_tests.jl")
         @test_throws ArgumentError RectInteractable(ax)
         @test_throws ArgumentError RectInteractable(ax; rects = [(0.0, 0.0, 1.0, 1.0)], grid = (xe, ye, good))
 
+        # tol must be finite and positive — a raw round(Int, ...) InexactError/silent
+        # unhittable layer otherwise (same "raw downstream error" class this PR closes for
+        # RectInteractable's rects/grid)
+        @test_throws ArgumentError SegmentInteractable(ax, pts; tol = Inf)
+        @test_throws ArgumentError SegmentInteractable(ax, pts; tol = NaN)
+        @test_throws ArgumentError SegmentInteractable(ax, pts; tol = 0)
+        @test_throws ArgumentError SegmentInteractable(ax, pts; tol = -1)
+        @test SegmentInteractable(ax, pts; tol = 0.5) isa SegmentInteractable
+
         # tooltip = true fails at construction, not at manifest build — every constructor that
         # accepts `tooltip` shares the `_check_tooltip` helper; pin the contract on all of them.
         @test_throws ArgumentError PointInteractable(ax, [(0.0, 0.0)]; tooltip = true)
