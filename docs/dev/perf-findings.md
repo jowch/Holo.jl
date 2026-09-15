@@ -420,7 +420,7 @@ The per-cell scene is already small (binary), so compression is **deferred** —
   them to a shared channel is real complexity.
 
 **Revisit both only if tier-1 animation profiling (per-frame scene re-ship) shows the scene is the
-bottleneck** — tier-2 in-place patching (`docs/roadmap.md`) already ships no new scene at all.
+bottleneck** — tier-2 in-place patching (`roadmap.md`) already ships no new scene at all.
 
 ## Axis3 projection hinge spike (2026-07-01)
 

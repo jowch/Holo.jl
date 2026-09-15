@@ -15,10 +15,11 @@ large data / 3D) before calling `holo`.
 `holo"..."` for a template, or `tooltip = false` to suppress it. `true` isn't one of the
 three valid forms — see [Tooltips](@ref).
 
-### "got N payloads for M elements"
+### "got N payloads for M elements" / "payloads must match points"
 
-**Cause:** `payloads` doesn't have one entry per geometry element (e.g. `length(points)`
-points but a different-length `payloads` vector).
+**Cause:** `payloads` doesn't have one entry per geometry element. Most constructors report
+this as "got N payloads for M elements"; `PointInteractable` has its own check and says
+"payloads must match points" instead — same underlying mistake, different wording.
 **Fix:** match lengths 1:1, or omit `payloads` to get the auto-generated default.
 
 ### "mode must be :polyline or :pairs"

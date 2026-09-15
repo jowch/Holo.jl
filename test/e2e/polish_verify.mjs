@@ -1,5 +1,5 @@
 // Overlay visual-fidelity driver (LOCAL — not CI). Required by
-// docs/live-interaction-checklist.md together with kind_sweep.mjs.
+// docs/dev/live-interaction-checklist.md together with kind_sweep.mjs.
 // Runs on the kind-sweep notebooks. Asserts wash/ring/halo/overlay-pin,
 // remount fade / no pulse, steel-teal (not #ff3b30), and Pluto/OS
 // prefers-color-scheme (official Pluto has no notebook toggle).

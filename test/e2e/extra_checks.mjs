@@ -1,5 +1,5 @@
 // Extra live-verify checks for the overlay pointer-events PR, run against an already-open
-// kind-sweep Pluto server (see docs/live-interaction-checklist.md). Not part of the standing
+// kind-sweep Pluto server (see docs/dev/live-interaction-checklist.md). Not part of the standing
 // kind_sweep/polish_verify pair — this is a one-off script for this PR's specific claims:
 //   (a) a drag released outside the page/viewport still ends cleanly (pointer capture), both via
 //       an out-of-bounds pointerup and via pointercancel

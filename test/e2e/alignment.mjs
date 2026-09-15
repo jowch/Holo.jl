@@ -6,7 +6,7 @@
 // local tool: headless GL in CI is a flake source, and the bond-level Axis3 coverage already runs
 // in CI via click.mjs. Re-run this when a change could move the 3D projection ↔ canvas relation
 // (camera handling, ppu, viewport math, WGLMakie bumps). First run 2026-07-02: 0.0 px on all
-// markers — recorded in docs/perf-findings.md §"Axis3 projection hinge spike".
+// markers — recorded in docs/dev/perf-findings.md §"Axis3 projection hinge spike".
 //
 //   julia --project=. test/e2e/make_page.jl /tmp/e2e && (cd test/e2e && npm install && node alignment.mjs /tmp/e2e)
 import { chromium } from "playwright";

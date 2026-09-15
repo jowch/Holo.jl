@@ -1,4 +1,4 @@
-// Agent kind-sweep live-verify (LOCAL — not CI). Drives docs/live-interaction-checklist.md
+// Agent kind-sweep live-verify (LOCAL — not CI). Drives docs/dev/live-interaction-checklist.md
 // — interaction AND visual — across every interactable kind on one backend.
 // A 2-plot kitchen-sink is not enough. polish_verify.mjs is the required visual-chrome
 // sibling (fade + prefers-color-scheme). This file asserts fade / no-pulse per kind

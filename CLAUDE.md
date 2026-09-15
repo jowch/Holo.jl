@@ -77,9 +77,9 @@ text and the bond payload → it gets a live check on every backend × the kinds
 ## Profiling → design feedback (standing practice)
 Profiling exists to inform the design, not to sit in a file. The loop is anchored on the committed
 `bench/payload_envelope.jl` + `bench/stress.jl` → `docs/dev/perf-findings.md` pair.
-- **`perf-findings.md` is the single source of every size/latency number.** Other docs (architecture/
-  design/survey/research/roadmap) **cite** it — never restate figures (numbers duplicated across docs
-  drift; one reconciliation already had to fix exactly that).
+- **`perf-findings.md` is the single source of every size/latency number.** Other docs
+  (architecture/backend-comparison/roadmap) **cite** it — never restate figures (numbers
+  duplicated across docs drift; one reconciliation already had to fix exactly that).
 - **Re-run + reconcile whenever the wire format changes**: a new interactable kind / geometry layout, a
   new payload field (e.g. M2.3 tooltips), an encoding change, or an animation/frames slot. Each is a
   "manifest-shape change" that can invalidate the envelope. Re-run the benches, update `perf-findings.md`

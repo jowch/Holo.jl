@@ -77,7 +77,7 @@ all — `WebGLBackend` implements the same `AbstractBackend` contract (`render`/
 against a browser-GPU `<canvas>` instead of a PNG, shipped as the `HoloWGLMakieExt` weak-dep
 extension. The two backends are now co-equal peers (`_resolve_backend` in `src/render.jl`
 picks the loaded one, honors `backend=`, and defaults to Cairo if both are present); see
-`docs/backend-comparison.md` for the cost/regime tradeoff (the interaction
+`backend-comparison.md` for the cost/regime tradeoff (the interaction
 feature set is identical on both — parity is CI-enforced by the golden-manifest harness). The seam
 still also admits a future GLMakie-static backend (GPU offscreen → PNG, same contract) or a
 pure-image backend.
@@ -452,7 +452,7 @@ construction. `Surface` hit-testing is deferred on both alike (a hit-test-comple
 unbounded per-cell payload + occlusion — not a backend-capability gap);
 `MeshScatter`/wireframe/arrows are M-effort work in the M3 per-type extraction item, not
 deferred. High-frequency live redraw is the shared cost wall above,
-not a per-backend exclusion. See `docs/backend-comparison.md` and `docs/roadmap.md`.
+not a per-backend exclusion. See `backend-comparison.md` and `roadmap.md`.
 
 ## 8. Payload scaling & robustness to large inputs
 
@@ -541,7 +541,8 @@ a quadtree (§7).
 The `holo"..."` / `Markup` template system. Tooltips are its first consumer; the mechanism
 generalises to any surface that overlays structured content on hover (labels, annotations,
 panels). User-facing usage (defaults, `holo"..."` examples, styling kwargs) is on the site's
-[Tooltips page](@ref); this section is the mechanism and wire contract behind it.
+[Tooltips page](https://jowch.github.io/Holo.jl/dev/tooltips/); this section is the mechanism
+and wire contract behind it.
 
 ### 10.1 Mental model
 

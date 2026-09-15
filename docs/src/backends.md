@@ -44,8 +44,8 @@ end
 Reach for `:webgl` for **3D you want to actually rotate live**, **animation / frequent
 re-renders** (WebGL redraws a frame, `:cairo` re-rasterizes a whole PNG), and **large or
 live-updating data** where per-frame render cost dominates. For everything else — a figure
-you build once and let the user inspect — `:cairo`'s static PNG is lighter and, unlike
-`:webgl`, keeps working in an offline export.
+you build once and let the user inspect — `:cairo`'s static PNG is lighter, and its offline
+export behavior is the one that's actually verified (see below).
 
 [`examples/webgl_demo.jl`](https://github.com/jowch/Holo.jl/blob/main/examples/webgl_demo.jl)
 is a runnable gallery of the `:webgl` backend (CI runs it headlessly, same as `demo.jl`).
@@ -57,37 +57,42 @@ with the measured ones.
 
 ### What exported static HTML keeps and loses
 
-Whichever backend rendered a cell, a Pluto notebook exported to static HTML keeps hover and
-tooltip inspection (both are already baked into the manifest — no kernel needed). What it
-loses is anything that needs Julia to recompute: a click that should update `ev` and re-run
-downstream cells does nothing without a live kernel behind it, on either backend.
+On `:cairo`, a Pluto notebook exported to static HTML keeps hover and tooltip inspection —
+the PNG and the hit-test manifest are both already baked into the exported page, so no
+kernel is needed for them (verified end-to-end against a real Pluto export). On **either**
+backend, what's lost is anything that needs Julia to recompute: a click that should update
+`ev` and re-run downstream cells does nothing without a live kernel behind it. `:webgl`'s
+export behavior for hover/tooltip specifically hasn't been verified the same way — treat it
+as unconfirmed rather than assuming it matches `:cairo`.
 
 ### Choosing between them
 
 Holo resolves the backend from which extension is loaded — a missing `using` line raises an
 `ArgumentError` the first time `holo` runs; loading **both** `CairoMakie` and `WGLMakie` is
 fine, and then `backend=` picks one explicitly while an unqualified `holo(fig)` defaults to
-`:cairo` (so a Cairo-baked sysimage isn't blocked by a stray `using WGLMakie`). Pass one
-explicitly to override its own keywords:
+`:cairo` (so a Cairo-baked sysimage isn't blocked by a stray `using WGLMakie`).
+
+`max_width` — the display width to target (Pluto's column, in px; `CairoMakie` renders at
+roughly `2 × max_width` for a crisp static image) — is a keyword on `holo` itself, on both
+backends:
 
 ```julia
-holo(fig, interactables; backend = CairoBackend(; max_width = 700))
+holo(fig, interactables; max_width = 900)
 ```
 
-or
+`CairoBackend`/`WebGLBackend` are the two concrete backend types `backend=` actually takes,
+but neither is exported from `Holo` — they live in Holo's package extensions
+(`ext/HoloCairoMakieExt.jl`, `ext/HoloWGLMakieExt.jl`), reachable only via
+`Base.get_extension`, which is how `holo` itself resolves them internally. You only need this
+for a WebGL-only knob `holo` doesn't expose directly, `px_per_unit` (the canvas's
+device-pixel ratio — raise it for a sharper `:webgl` canvas at a proportional GPU/bandwidth
+cost):
 
 ```julia
-holo(fig, interactables; backend = WebGLBackend(; px_per_unit = 2.0, max_width = 700))
+holo(fig, interactables; backend = Base.get_extension(Holo, :HoloWGLMakieExt).WebGLBackend(; px_per_unit = 3.0))
 ```
 
-- `CairoBackend(; max_width = 700)` — `max_width` is the display width to target (Pluto's
-  column, in px); CairoMakie renders at roughly `2 × max_width` for a crisp static image.
-- `WebGLBackend(; px_per_unit = 2.0, max_width = 700)` — `max_width` is the same display-width
-  target; `px_per_unit` is the WebGL canvas's device-pixel ratio (raise it for a sharper canvas
-  at a proportional GPU/bandwidth cost).
-
-Both types live in Holo's package extensions (`ext/HoloCairoMakieExt.jl`,
-`ext/HoloWGLMakieExt.jl`) rather than in `Holo` itself, so they aren't in the
+Because they're unexported extension types, `CairoBackend`/`WebGLBackend` aren't in the
 [API Reference](@ref)'s `@docs` blocks — see the note there.
 
 ### Caveats

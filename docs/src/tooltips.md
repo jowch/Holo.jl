@@ -109,5 +109,28 @@ main { --holo-tip-bg: #1a1a2e; --holo-tip-color: #e0e0e0; }
 </style>
 ```
 
+A few properties are CSS-only — no Julia kwarg sets them, so this is the only way to change
+them:
+
+| Custom property | Light default | Dark default | Julia kwarg |
+|---|---|---|---|
+| `--holo-tip-bg` | `#ffffff` | `#1e1e1e` | `tooltip_bg` |
+| `--holo-tip-color` | `#1a1a1a` | `#e8e8e8` | `tooltip_color` |
+| `--holo-tip-accent` | `#6b7280` | *(same)* | `tooltip_accent` |
+| `--holo-tip-font` | `system-ui, -apple-system, sans-serif` | *(same)* | `tooltip_font` |
+| `--holo-tip-font-size` | `11px` | *(same)* | `tooltip_font_size` |
+| `--holo-tip-radius` | `4px` | *(same)* | `tooltip_radius` |
+| `--holo-tip-caret` | `block` (the caret's `display`) | *(same)* | `tooltip_caret` (`false` → `none`) |
+| `--holo-tip-padding` | `8px 12px` | *(same)* | — (CSS only) |
+| `--holo-tip-border` | `rgba(0,0,0,0.1)` | `rgba(255,255,255,0.15)` | — (CSS only) |
+| `--holo-tip-shadow` | `0 2px 4px rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.08)` | `0 2px 4px rgba(0,0,0,0.4), 0 8px 16px rgba(0,0,0,0.3)` | — (CSS only) |
+| `--holo-tip-maxwidth` | `320px` | *(same)* | — (CSS only) |
+
+### Caret
+
+When `tooltip_caret = true` (the default), a small triangle points from the tooltip toward
+the hovered element. It's offset from the cursor and clamped to stay inside the overlay bounds;
+near a figure edge it flips (`flip-x` / `flip-y`) so it still points at the hit.
+
 See [`architecture.md` §10](https://github.com/jowch/Holo.jl/blob/main/docs/dev/architecture.md)
-for the full `--holo-tip-*` reference and the wire format behind all of this.
+for the wire format behind all of this.

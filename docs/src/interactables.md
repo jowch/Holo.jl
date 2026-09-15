@@ -41,10 +41,16 @@ demonstrates both.
 ## Constructors
 
 Every interactable takes an `Axis` (or, for [`ColorbarInteractable`](@ref), a
-`Makie.Colorbar`) and geometry in **data space**. All accept `id` — the `Symbol` the event
-reports as `layer` — `payloads` — one entry per element, auto-generated with a 0-based
-`index` if omitted — and `tooltip` (`nothing` / `holo"..."` / `false`, see [Tooltips](@ref)).
-The table below lists the keywords *beyond* those three.
+`Makie.Colorbar`) and geometry in **data space**; all accept `id` — the `Symbol` the event
+reports as `layer`. The element kinds — [`PointInteractable`](@ref),
+[`SegmentInteractable`](@ref), [`RectInteractable`](@ref), [`PolygonInteractable`](@ref) —
+also accept `payloads` (one entry per element, auto-generated with a 0-based `index` if
+omitted) and `tooltip` (`nothing` / `holo"..."` / `false`, see [Tooltips](@ref)). The
+whole-axis and drag kinds — [`AxisInteractable`](@ref), [`ColorbarInteractable`](@ref),
+[`ThresholdInteractable`](@ref), [`ROIInteractable`](@ref), [`ViewInteractable`](@ref) —
+report one client-computed value per event rather than a discrete element, so they take only
+`id` plus their own keywords below; passing `payloads=`/`tooltip=` to one of these is a
+`MethodError`. The table below lists the keywords *beyond* `id`/`payloads`/`tooltip`.
 
 | Constructor | Geometry | Extra keywords | Default payload |
 |---|---|---|---|
@@ -91,10 +97,13 @@ tooltip contract, plot-specific default payload and `id`:
 | Point **+** Segment (two layers) | `Stem` (`id` = points, `id_stems` = the stems); `ScatterLines` (`id` = points, `id_line` = the line) |
 | Rect **or** Polygon (box body only) | `BoxPlot` — a rect unless the box is notched, then a polygon; whiskers/outliers are decorative, not hit-tested |
 
-`id`/`payloads` on these take the same keywords as the explicit constructors; defaults are
-the plot's own name in lowercase (`:scatter`, `:lines`, `:hist`, `:crossbar`, …). Any plot
-type not listed here — or here and in the [Constructors](@ref) table above — needs a custom
-interaction; see [Custom interactions](@ref).
+`id` on all of these, and `payloads` on most, take the same keywords as the explicit
+constructors; defaults are the plot's own name in lowercase (`:scatter`, `:lines`, `:hist`,
+`:crossbar`, …). The `Heatmap`/`Image` method is the one exception — it takes no `payloads`
+keyword at all, since grid cells resolve `{i, j, value}` client-side, same as the explicit
+`grid = (...)` form. Any plot type not listed here — or here and in the
+[Constructors](@ref) table above — needs a custom interaction; see
+[Custom interactions](@ref).
 
 ## Zero-config: `holo(fig)`
 

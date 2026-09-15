@@ -12,7 +12,7 @@ Priorities, not promises — reorder freely.
 - **YAGNI**: build a surface/feature when a real use pulls for it, not preemptively.
 - **Live-verify on every supported backend** (today CairoMakie + WGLMakie / `:webgl`; same rule
   for any future backend) before calling a user-facing change done — **interaction and
-  visual**, across the interactable kinds, via `docs/live-interaction-checklist.md` (see
+  visual**, across the interactable kinds, via `live-interaction-checklist.md` (see
   `CLAUDE.md`).
 
 ## Status — v0.1 (done)
@@ -139,7 +139,7 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 
 ## M5 — Scale & polish
 - [ ] **Spatial acceleration** (quadtree/grid) for large-N hit-testing — only when the documented O(n) ceiling is actually hit (`log()` the cap until then). *Phase 0 reframe:* hit-test is ~0 ms; the wall is manifest **payload size** (~290 ms serialize+transfer at 4.78 MB), so wire-encoding (int-pixel coords / capping `values[]`) outranks a quadtree (see Phase 4).
-- [x] **Perf benchmarking**: the unmeasured Q5 envelope — base64 size + click latency knee; confirm MsgPack fast-path engages. *Done (`bench/payload_envelope.jl` → `docs/perf-findings.md`): single plots 50–400 KB, manifest O(N) elements, heatmaps O(cells), animation = frames × PNG (the hard ceiling, 5.5–22 MB). MsgPack confirmed (generic maps, not the TypedArray fast-path). Full click round-trip measured live (headless Pluto + Chromium): ~65 ms median — render-bound, browser overhead negligible. Editor-lag knee (editor stutter, distinct from latency) deferred.*
+- [x] **Perf benchmarking**: the unmeasured Q5 envelope — base64 size + click latency knee; confirm MsgPack fast-path engages. *Done (`bench/payload_envelope.jl` → `perf-findings.md`): single plots 50–400 KB, manifest O(N) elements, heatmaps O(cells), animation = frames × PNG (the hard ceiling, 5.5–22 MB). MsgPack confirmed (generic maps, not the TypedArray fast-path). Full click round-trip measured live (headless Pluto + Chromium): ~65 ms median — render-bound, browser overhead negligible. Editor-lag knee (editor stutter, distinct from latency) deferred.*
 - [ ] **Theming**: marker-highlight styling (`highlight_*` / `--holo-hi-*`, shadow-DOM scoped). *(Tooltip card already matches official Pluto: both use `prefers-color-scheme`. Official Pluto has no notebook light/dark toggle — Settings → Dark mode is help text. Remaining work is highlight theming, not a Pluto theme hook.)*
 - [ ] **GLMakie-static backend**: GPU offscreen → PNG, same `AbstractBackend` contract (for envs with a GPU).
 - [x] **Register in General — path** *(prep)*: CHANGELOG frozen at `0.1.0` after
@@ -148,7 +148,7 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
       comments `@JuliaRegistrator register` on a CI-green `main` commit
       **after this merges** (not on the PR), then TagBot's `v0.1.0` tag. Name
       is 4 letters → AutoMerge needs a human (guideline is ≥5). See
-      `docs/releasing.md`.
+      `releasing.md`.
 - [x] **Distribution decision**: folded into `ext/HoloWGLMakieExt.jl` as a package extension of
       `Holo`, rather than shipping `HoloWGL` as a separate registered package. (This also obsoletes
       the former `HoloWGL`'s own "General-registry readiness" item — there's no longer a second
@@ -194,10 +194,10 @@ number — everything else is reorderable by demand.
 - **Everything → registration.** Last, after the API stops moving. Path is now
   ready (CHANGELOG `0.1.0` freeze); the remaining work is Jonathan's Registrator
   comment on a CI-green `main` commit after the prep PR merges — see
-  `docs/releasing.md`.
+  `releasing.md`.
 
 ### Phase 0 — Measure (front-loaded spike) ✅ *done*
-- **Perf benchmarking** — *Done. See `docs/perf-findings.md` (`bench/payload_envelope.jl` to
+- **Perf benchmarking** — *Done. See `perf-findings.md` (`bench/payload_envelope.jl` to
   re-run).* The envelope: single interactive plots land 50–400 KB (at/just above Q5's plausible
   band, not below the <10 KB anecdote); manifest is O(N) elements (int-pixel geometry; per-element bytes
   in `perf-findings.md`) and O(cells) for heatmaps; **animation = frames × per-frame PNG is the hard ceiling (5.5–22 MB) — gate it.** Tooltip
@@ -314,4 +314,4 @@ These three are independent and can run concurrently.
 - **Register in General** — path ready. Needs the committed in-tree bundle +
   CI-on-GitHub; CHANGELOG frozen at 0.1.0; Jonathan comments
   `@JuliaRegistrator register` on a CI-built `main` commit after the prep
-  merges → TagBot `v0.1.0`. See `docs/releasing.md`.
+  merges → TagBot `v0.1.0`. See `releasing.md`.

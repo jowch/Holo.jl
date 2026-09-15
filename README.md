@@ -17,7 +17,7 @@ to select — and round-trips deliberate clicks to Julia through `@bind`.
 | Output | static, publication-quality | live, GPU-rendered | static + thin overlay (`:cairo`) or live (`:webgl`) |
 | Interactivity | none | rich | light: hover tooltips, click-to-select, drag gestures |
 | Needs a live Julia process | no | yes | only for click → recompute |
-| Survives offline / static HTML export | yes | no | yes (the inspection layer keeps working) |
+| Survives offline / static HTML export | yes | no | yes on `:cairo` (verified); `:webgl` not verified |
 
 ## Install
 

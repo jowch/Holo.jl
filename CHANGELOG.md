@@ -10,8 +10,25 @@ All notable changes to this project are documented here. The format is based on
 - Vitest coverage for `frontend/src` uploads to Codecov (`flags: frontend`).
   Committed `assets/` bundles are ignored. One blended `codecov/project`
   number (Julia + `frontend/src`); `target: auto`, `threshold: 1%`.
+- A [Documenter](https://documenter.juliadocs.org) user site at
+  [jowch.github.io/Holo.jl](https://jowch.github.io/Holo.jl), built from `docs/src/`:
+  Home, Getting started, Interactables, Selection, Tooltips, Custom interactions, Backends,
+  Troubleshooting, Examples, API Reference, and a Development page. Deployed by
+  `.github/workflows/Documentation.yml`.
+
+### Changed
+- README slimmed from ~410 to ~65 lines (title, pitch, when-to-use-it table, install, quick
+  start, a pointer to the new site) — everything else it used to cover now lives on the site.
+- Maintainer/design docs moved from `docs/` to `docs/dev/` (`architecture.md`,
+  `perf-findings.md`, `roadmap.md`, `backend-comparison.md`, `live-interaction-checklist.md`,
+  `frontend-delivery.md`, `releasing.md`); `docs/README.md` is now a short index pointing at
+  the site and at `docs/dev/`.
 
 ### Removed
+- `docs/design.md`, `docs/research-findings.md`, `docs/survey-makie-surfaces.md` — superseded
+  by `docs/dev/architecture.md`/`docs/dev/roadmap.md` (kept in git history). `docs/tooltips.md`
+  — its internals moved into `docs/dev/architecture.md` §10, its user-facing half into the
+  site's Tooltips page.
 - Dead `vector`/`mount` scaffolding: `CairoBackend(; vector=false)` and the
   `AbstractBackend` `mount` interface function (plus `WebGLBackend`'s `mount = :webgl`
   method) had zero callers — `Holo.render` always rasterizes to PNG, and `Base.show`
@@ -109,8 +126,7 @@ merges. See [`docs/dev/releasing.md`](docs/dev/releasing.md).
   a substrate/cost difference; the interaction contract is identical on both. `CairoMakie`/`WGLMakie` are both weak
   dependencies gated behind package extensions; `holo(fig)` resolves whichever one is loaded
   (errors if neither is). If both are loaded, `backend=` wins and implicit `holo` defaults to
-  Cairo. See the README's "3D, animation, and large data" section and
-  `docs/dev/backend-comparison.md`.
+  Cairo. See the site's Backends page and `docs/dev/backend-comparison.md`.
 - View manipulation via `@bind` re-render: 2D `limits` zoom/pan, 3D `azimuth`/`elevation`
   rotation, and selection persistence across view re-renders (`selected=` feedback).
   Sliders need no Holo API; **drag-to-pan / drag-to-rotate** use `ViewInteractable`

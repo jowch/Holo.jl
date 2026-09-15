@@ -1,6 +1,6 @@
 // WGL context-lifecycle measurement (LOCAL tool — deliberately not wired into CI): drives a
 // PlutoUI slider through N kernel re-renders of a :webgl holo widget and counts WebGL context
-// creations vs webglcontextlost events. Asserts the property docs/perf-findings.md
+// creations vs webglcontextlost events. Asserts the property docs/dev/perf-findings.md
 // §"WGL context lifecycle" records: LIVE contexts stay at 1 across the sweep, because
 // WGLMakie's check_screen disposes any context whose canvas left the DOM (re-run and delete
 // alike). Re-run on a WGLMakie major bump; if upstream drops that disposal, this notices.
