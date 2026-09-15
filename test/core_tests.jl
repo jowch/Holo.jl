@@ -1709,6 +1709,15 @@ include("makie_compat_tests.jl")
         @test_throws ArgumentError SegmentInteractable(ax, pts; tol = 0)
         @test_throws ArgumentError SegmentInteractable(ax, pts; tol = -1)
         @test SegmentInteractable(ax, pts; tol = 0.5) isa SegmentInteractable
+        # HLines/VLines route through `_segment_with_resolve`, not the keyword constructor
+        # above — regression coverage for that separate entry point skipping the check.
+        hl = hlines!(ax, [0.5])
+        @test_throws ArgumentError SegmentInteractable(ax, hl; tol = Inf)
+        @test_throws ArgumentError SegmentInteractable(ax, hl; tol = NaN)
+        @test_throws ArgumentError SegmentInteractable(ax, hl; tol = 0)
+        @test SegmentInteractable(ax, hl; tol = 3) isa SegmentInteractable
+        vl = vlines!(ax, [0.5])
+        @test_throws ArgumentError SegmentInteractable(ax, vl; tol = -1)
 
         # tooltip = true fails at construction, not at manifest build — every constructor that
         # accepts `tooltip` shares the `_check_tooltip` helper; pin the contract on all of them.

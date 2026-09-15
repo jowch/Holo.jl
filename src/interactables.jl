@@ -143,6 +143,13 @@ _check_tooltip(tooltip) =
     ),
 )
 
+# Shared by every SegmentInteractable entry point (the keyword constructor and
+# _segment_with_resolve, used by the HLines/VLines plot-object constructors) so a bad `tol`
+# fails here, not as a raw InexactError from round(Int, ...) at manifest build.
+_check_tol(tol) =
+    isfinite(tol) && tol > 0 ||
+    throw(ArgumentError("SegmentInteractable: tol must be finite and positive, got $tol"))
+
 # ============================ PointInteractable ============================
 """
     PointInteractable(ax, points; id=:points, payloads=<auto>, radius=9, radius3d=nothing, tooltip=nothing)
@@ -296,15 +303,18 @@ function SegmentInteractable(
     _check_tooltip(tooltip)
     mode in (:polyline, :pairs) ||
         throw(ArgumentError("SegmentInteractable: mode must be :polyline or :pairs, got :$mode"))
-    isfinite(tol) && tol > 0 ||
-        throw(ArgumentError("SegmentInteractable: tol must be finite and positive, got $tol"))
+    _check_tol(tol)
     vs = [_pt3(v) for v in vertices]
     nseg = mode === :polyline ? max(0, length(vs) - 1) : length(vs) ÷ 2
     pl = payloads === nothing ? Any[(; segment_index = k - 1) for k in 1:nseg] : _check_payloads(payloads, nseg, "SegmentInteractable")
     return SegmentInteractable(ax, vs, mode, id, pl, Float64(tol), tooltip, nothing)
 end
-# Internal-only: construct with a lazy `resolve(ax) -> vertices`.
+# Internal-only: construct with a lazy `resolve(ax) -> vertices`. Called directly by the
+# HLines/VLines plot-object constructors (src/introspect.jl), bypassing the keyword
+# constructor above — validate `tol` here too, or a user-supplied bad `tol` on those two
+# recipes skips the check entirely.
 function _segment_with_resolve(ax, vertices, mode, id, payloads, tol, resolve)
+    _check_tol(tol)
     return SegmentInteractable(ax, [_pt3(v) for v in vertices], mode, id, payloads, Float64(tol), nothing, resolve)
 end
 tooltip_spec(i::SegmentInteractable) = i.tooltip
