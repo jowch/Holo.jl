@@ -197,7 +197,9 @@ end
     @test isfile(shim_path)
     shim_src = read(shim_path, String)
     # strip `//` line comments first, so a comment merely *mentioning* a symbol name (e.g.
-    # this testset's own docstring) can't be mistaken for the shim providing it.
+    # this testset's own docstring) can't be mistaken for the shim providing it. Not
+    # string-literal-aware — a future `"http://…"` in wgl-shim.ts would get truncated too;
+    # harmless today (no `//` inside any string literal in the file).
     stripped = join((replace(l, r"//.*$" => "") for l in split(shim_src, '\n')), '\n')
 
     # Scope both regions to inside makeBonitoShim() specifically — `obs()` (above it in this
@@ -215,8 +217,11 @@ end
     provided_conn = members(conn_region.captures[1])
     provided_obj = members(obj_region.captures[1])
 
-    referenced_obj = Set(m.captures[1] for m in eachmatch(r"Bonito\.([A-Za-z_]+)", bundle))
-    referenced_conn = Set(m.captures[1] for m in eachmatch(r"Connection\.([A-Za-z_]+)", bundle))
+    # identifier-boundary lookbehind: without it, a hypothetical bundle identifier like
+    # `WebSocketConnection.foo` would match `Connection\.` mid-word and inflate
+    # `referenced_conn` with a symbol the shim was never meant to provide.
+    referenced_obj = Set(m.captures[1] for m in eachmatch(r"(?<![A-Za-z0-9_])Bonito\.([A-Za-z_]+)", bundle))
+    referenced_conn = Set(m.captures[1] for m in eachmatch(r"(?<![A-Za-z0-9_])Connection\.([A-Za-z_]+)", bundle))
     @test !isempty(referenced_obj)   # a regex/region miss must not silently pass the canary
     @test !isempty(referenced_conn)
 
