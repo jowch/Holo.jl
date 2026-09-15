@@ -4,8 +4,9 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
 @testset "Drag" begin
     @testset "ThresholdInteractable (M4 drag)" begin
         # Originally read the file's shared bare `ax`/`ctx`, which by execution order was
-        # actually a TextInteractable testset's leftover text-only figure (soft-scope
-        # clobbering) — unrelated to threshold semantics. Every assertion here is
+        # actually a TextInteractable testset's leftover text-only figure (each nested
+        # `@testset`'s `let` reassigns the enclosing testset's already-existing local rather
+        # than shadowing it) — unrelated to threshold semantics. Every assertion here is
         # self-referential (computed via the same ax/ctx it tests, or kind/shape-only), so
         # the swap to `default_fixture()` is behavior-preserving and fixes the staleness.
         (; ax, ctx) = default_fixture()

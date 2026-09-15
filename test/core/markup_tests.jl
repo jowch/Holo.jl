@@ -61,8 +61,9 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
 
     @testset "tooltip_spec on interactables" begin
         # Originally read the file's shared bare `ax`, which by execution order was actually
-        # the Voronoiplot testset's leftover axis (soft-scope clobbering) — unrelated to
-        # tooltip_spec, which never touches geometry/ctx. `default_fixture()` fixes the
+        # the Voronoiplot testset's leftover axis (each nested `@testset`'s `let` reassigns
+        # the enclosing testset's already-existing local rather than shadowing it) — unrelated
+        # to tooltip_spec, which never touches geometry/ctx. `default_fixture()` fixes the
         # staleness without changing any assertion here.
         (; ax) = default_fixture()
         pts = [(1.0, 1.0), (2.0, 2.0)]

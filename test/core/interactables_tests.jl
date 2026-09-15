@@ -135,9 +135,10 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
     @testset "Segment + Axis + custom" begin
         # Originally read the file's shared bare `ax`/`ctx` — by execution order in the old
         # monolith that was actually the TextInteractable testset's leftover text-only figure
-        # (soft-scope clobbering), not the canonical scatter fixture this testset's name and
-        # its `pts` usage clearly intend. Assertions here are kind/type-only, so the swap is
-        # behavior-preserving; using `default_fixture()` fixes the underlying staleness.
+        # (each nested `@testset`'s `let` reassigns the enclosing testset's already-existing
+        # local rather than shadowing it), not the canonical scatter fixture this testset's
+        # name and its `pts` usage clearly intend. Assertions here are kind/type-only, so the
+        # swap is behavior-preserving; using `default_fixture()` fixes the underlying staleness.
         (; ax, ctx, pts) = default_fixture()
         @test only(hitlayers(SegmentInteractable(ax, pts; mode = :polyline), ctx)).kind === :polyline
         @test only(hitlayers(AxisInteractable(ax), ctx)).geometry === nothing

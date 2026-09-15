@@ -37,11 +37,16 @@ if !@isdefined(HOLO_TESTUTILS_LOADED)
         return false
     end
 
-    # The canonical fixture the original core_tests.jl built once at file scope (pts/fig/ax/
-    # bk/ppu/ctx) and many nested testsets read by bare name. Julia's top-level soft scope let
-    # later testsets silently reassign those same names (see PR "Split core_tests.jl by
-    # concern with per-testset fixtures" for the audit) — every testset moved out of that
-    # single-file chain now calls this instead of relying on leftover global state.
+    # The canonical fixture the original core_tests.jl built once, inside the outer
+    # `@testset "Holo" begin ... end` (pts/fig/ax/bk/ppu/ctx), and many nested testsets read
+    # by bare name. `@testset` wraps its body in a `let`, so those names were locals of the
+    # OUTER testset's `let` — a nested `@testset`'s own `let` assigning `fig = Figure(...)`
+    # reassigns that already-existing enclosing local rather than shadowing it (Julia's `let`
+    # closes over a name that already exists in an enclosing scope), so later testsets
+    # silently inherited whatever a previous, possibly unrelated testset last left behind
+    # (see PR "Split core_tests.jl by concern with per-testset fixtures" for the audit) —
+    # every testset moved out of that single-file chain now calls this instead of relying on
+    # leftover state from a sibling testset.
     const DEFAULT_PTS = [(1.0, 1.0), (2.0, 4.0), (3.0, 9.0)]
 
     function default_fixture(; max_width = 700)
