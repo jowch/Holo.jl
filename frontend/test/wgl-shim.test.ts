@@ -1,5 +1,8 @@
-import { describe, it, expect } from "vitest"
-import { rewrap, obs, makeBonitoShim } from "../src/wgl-shim"
+// @vitest-environment happy-dom
+import { describe, it, expect, vi, afterEach } from "vitest"
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
+import { rewrap, obs, makeBonitoShim, mountWebGL } from "../src/wgl-shim"
 
 // rewrap is the JS half of the 4-rule scene contract — it must decode exactly what `_plain`
 // in ext/HoloWGLMakieExt.jl emits. These lock that cross-language contract (previously
@@ -88,5 +91,77 @@ describe("makeBonitoShim — the no-server Bonito stand-in", () => {
         expect(() => { c.send(); c.notify() }).not.toThrow()
         expect(typeof c.on()).toBe("function")
         expect(c).toBeInstanceOf(B.Connection)
+    })
+    it("Connection.send_error logs to console.error with the error's stack when present", () => {
+        const spy = vi.spyOn(console, "error").mockImplementation(() => {})
+        const B = makeBonitoShim()
+        const err = new Error("boom")
+        B.Connection.send_error("context msg", err)
+        expect(spy).toHaveBeenCalledWith("[holo-wgl]", "context msg", err.stack)
+        spy.mockRestore()
+    })
+    it("Connection.send_error falls back to the raw value when it has no stack", () => {
+        const spy = vi.spyOn(console, "error").mockImplementation(() => {})
+        const B = makeBonitoShim()
+        B.Connection.send_error("context msg", "plain string error")
+        expect(spy).toHaveBeenCalledWith("[holo-wgl]", "context msg", "plain string error")
+        spy.mockRestore()
+    })
+})
+
+describe("mountWebGL", () => {
+    // `import(/* @vite-ignore */ url)` in mountWebGL bypasses vite's module graph and hits
+    // Node's native ESM loader directly, which only accepts file:/data: schemes — a vite-node
+    // http: URL (e.g. from import.meta.url under the dev server) is rejected. A data: URL with
+    // the fixture source inlined sidesteps module resolution entirely.
+    const fixtureSrc = readFileSync(resolve(process.cwd(), "test/fixtures/fake-wgl-bundle.mjs"), "utf8")
+    const bundleUrl = `data:text/javascript;charset=utf-8,${encodeURIComponent(fixtureSrc)}`
+
+    afterEach(() => {
+        delete (window as unknown as { Bonito?: unknown }).Bonito
+    })
+
+    it("imports the bundle, installs window.Bonito, and forwards args to setup_scene_init", async () => {
+        const canvas = document.createElement("canvas")
+        const wrapper = document.createElement("div")
+        wrapper.appendChild(canvas)
+        const scene = { __obs__: { __t__: "f32", d: [1, 2] } }
+        const result = await mountWebGL({ canvas, wglBundleUrl: bundleUrl, scene, width: 640, height: 480, pxPerUnit: 3 })
+
+        expect((window as unknown as { Bonito?: { can_send_to_julia?: () => boolean } }).Bonito).toBeTruthy()
+        expect((window as unknown as { Bonito: { can_send_to_julia: () => boolean } }).Bonito.can_send_to_julia()).toBe(true)
+
+        const [passedWrapper, passedCanvas, w, h, resizeTo, ppu, one, realSize, canvasWidth, sceneObs] = result.WGL.lastCall
+        expect(passedWrapper).toBe(wrapper)
+        expect(passedCanvas).toBe(canvas)
+        expect(w).toBe(640)
+        expect(h).toBe(480)
+        expect(resizeTo).toBeNull()
+        expect(ppu).toBe(3)
+        expect(one).toBe(1)
+        expect(realSize.value).toEqual([640, 480])
+        expect(canvasWidth.value).toEqual([640, 480])
+        // sceneObs is mountWebGL's own obs() wrapper around the already-rewrapped scene, so its
+        // .value is the inner Obs (from the {__obs__} tag), whose own .value is the TypedArray.
+        expect(sceneObs.value.value).toBeInstanceOf(Float32Array)
+        expect(Array.from(sceneObs.value.value as Float32Array)).toEqual([1, 2])
+
+        // returned scene is the same rewrapped object passed through
+        expect(result.scene.value).toBeInstanceOf(Float32Array)
+    })
+
+    it("defaults pxPerUnit to 2 when omitted", async () => {
+        const canvas = document.createElement("canvas")
+        document.createElement("div").appendChild(canvas)
+        const result = await mountWebGL({ canvas, wglBundleUrl: bundleUrl, scene: {}, width: 100, height: 50 })
+        expect(result.WGL.lastCall[5]).toBe(2)
+    })
+
+    it("sizes the canvas to fill its container via CSS after WGL's own sizing", async () => {
+        const canvas = document.createElement("canvas")
+        document.createElement("div").appendChild(canvas)
+        await mountWebGL({ canvas, wglBundleUrl: bundleUrl, scene: {}, width: 100, height: 50 })
+        expect(canvas.style.width).toBe("100%")
+        expect(canvas.style.height).toBe("auto")
     })
 })
