@@ -47,13 +47,13 @@ export function buildFocusable(manifest: Manifest): FocusRef[] {
             if (layer.kind === "polyline" && isGapSegment(layer, i)) continue
             indices.push(i)
         }
-        indices.forEach((index, k) => out.push({ layer, index, ordinal: k + 1, layerTotal: indices.length }))
+        indices.forEach((index, k) => out.push({ layer_: layer, index_: index, ordinal_: k + 1, layerTotal_: indices.length }))
     }
     return out
 }
 
 function hitFor(ref: FocusRef): Hit {
-    return { layer: ref.layer, ...hitLayerByIndex(ref.layer, ref.index) }
+    return { layer: ref.layer_, ...hitLayerByIndex(ref.layer_, ref.index_) }
 }
 
 // Anchor point (image px) for the tooltip/announcement, per kind — mirrors
@@ -64,7 +64,7 @@ function hitFor(ref: FocusRef): Hit {
 // which only ever produces one of the four handled tags for FOCUSABLE_KINDS — and are left
 // uncovered deliberately rather than tested via a fabricated, impossible geom tag.
 function anchorImgPx(hit: Hit): { x: number; y: number } {
-    const g = hit.geom as [string, ...number[]] | [string, number[]] | undefined
+    const g = hit.geom_ as [string, ...number[]] | [string, number[]] | undefined
     if (!g) return { x: 0, y: 0 }
     if (g[0] === "circle") return { x: g[1] as number, y: (g[2] as number) + (g[3] as number) }
     if (g[0] === "rect") return { x: g[1] as number, y: g[2] as number }
@@ -82,19 +82,19 @@ function anchorImgPx(hit: Hit): { x: number; y: number } {
 // Position is relative to the element's own layer ("element 3 of 10" for a 10-point Scatter
 // layer), not the flat cross-layer focus-list index — the number a user labels a Scatter
 // `label` against is its own element count, not how many other layers happen to precede it.
-// Uses ref.ordinal/layerTotal (computed once in buildFocusable), not layerNElements(layer) —
+// Uses ref.ordinal_/layerTotal_ (computed once in buildFocusable), not layerNElements(layer) —
 // they differ once a :polyline has any NaN-gap segments skipped from the focus list.
 function announceText(ref: FocusRef, plain: string): string {
-    const prefix = ref.layer.label ? `${ref.layer.label}, ` : ""
-    const pos = `element ${ref.ordinal} of ${ref.layerTotal}`
+    const prefix = ref.layer_.label ? `${ref.layer_.label}, ` : ""
+    const pos = `element ${ref.ordinal_} of ${ref.layerTotal_}`
     return plain ? `${prefix}${pos}: ${plain}` : `${prefix}${pos}`
 }
 
 function scheduleAnnounce(ctx: OverlayCtx, state: OverlayState, text: string): void {
-    if (state.announceTimer != null) clearTimeout(state.announceTimer)
-    state.announceTimer = setTimeout(() => {
-        state.announceTimer = null
-        ctx.liveRegion.textContent = text
+    if (state.announceTimer_ != null) clearTimeout(state.announceTimer_)
+    state.announceTimer_ = setTimeout(() => {
+        state.announceTimer_ = null
+        ctx.liveRegion_.textContent = text
     }, ANNOUNCE_DEBOUNCE_MS)
 }
 
@@ -102,30 +102,30 @@ function scheduleAnnounce(ctx: OverlayCtx, state: OverlayState, text: string): v
 // entry point for every nav key below — draws the ring, positions the tooltip, and schedules
 // the live-region announcement all in one place.
 export function focusTo(ctx: OverlayCtx, state: OverlayState, i: number | null): void {
-    const n = ctx.focusable.length
+    const n = ctx.focusable_.length
     if (i === null || n === 0) {
-        state.focusIdx = null
-        state.focusHit = null
-        state.focusTipHtml = null
-        state.focusTipCss = null
-        ctx.surface.classList.remove("kbd-ring")
-        clearHi(state, ctx.hiGroup, true)
+        state.focusIdx_ = null
+        state.focusHit_ = null
+        state.focusTipHtml_ = null
+        state.focusTipCss_ = null
+        ctx.surface_.classList.remove("kbd-ring")
+        clearHi(state, ctx.hiGroup_, true)
         hideTip(ctx, state)
         scheduleAnnounce(ctx, state, "")
         return
     }
     const clamped = Math.max(0, Math.min(n - 1, i))
-    state.focusIdx = clamped
-    const ref = ctx.focusable[clamped]
+    state.focusIdx_ = clamped
+    const ref = ctx.focusable_[clamped]
     const hit = hitFor(ref)
-    state.focusHit = hit
-    ctx.surface.classList.add("kbd-ring")
-    drawHi(state, ctx.hiGroup, hit)
+    state.focusHit_ = hit
+    ctx.surface_.classList.add("kbd-ring")
+    drawHi(state, ctx.hiGroup_, hit)
     const { x, y } = anchorImgPx(hit)
-    const css = cssPx(ctx.base, ctx.manifest, x, y)
+    const css = cssPx(ctx.base_, ctx.manifest_, x, y)
     const html = showTipAt(ctx, state, hit, x, y, css.x, css.y)
-    state.focusTipHtml = html
-    state.focusTipCss = html === null ? null : css
+    state.focusTipHtml_ = html
+    state.focusTipCss_ = html === null ? null : css
     scheduleAnnounce(ctx, state, announceText(ref, plainTextForHit(hit)))
 }
 
@@ -137,7 +137,7 @@ export function computeLayerStarts(list: FocusRef[]): number[] {
     const starts: number[] = []
     let last: HitLayer | null = null
     for (let i = 0; i < list.length; i++) {
-        if (list[i].layer !== last) { starts.push(i); last = list[i].layer }
+        if (list[i].layer_ !== last) { starts.push(i); last = list[i].layer_ }
     }
     return starts
 }
@@ -159,10 +159,10 @@ function adjacentLayerStart(starts: number[], cur: number, dir: 1 | -1): number 
 // being attached to it): a keydown dispatched programmatically at the surface without focus, or
 // arriving after a click moved focus elsewhere, must not steer the overlay.
 export function handleKeydown(ctx: OverlayCtx, state: OverlayState, e: KeyboardEvent): void {
-    if (ctx.shadowRoot.activeElement !== ctx.surface) return
-    const n = ctx.focusable.length
+    if (ctx.shadowRoot_.activeElement !== ctx.surface_) return
+    const n = ctx.focusable_.length
     if (n === 0) return
-    const cur = state.focusIdx
+    const cur = state.focusIdx_
     switch (e.key) {
         case "ArrowRight":
         case "ArrowDown":
@@ -184,11 +184,11 @@ export function handleKeydown(ctx: OverlayCtx, state: OverlayState, e: KeyboardE
             return
         case "PageDown":
             e.preventDefault(); e.stopPropagation()
-            focusTo(ctx, state, adjacentLayerStart(ctx.layerStarts, cur ?? -1, 1))
+            focusTo(ctx, state, adjacentLayerStart(ctx.layerStarts_, cur ?? -1, 1))
             return
         case "PageUp":
             e.preventDefault(); e.stopPropagation()
-            focusTo(ctx, state, adjacentLayerStart(ctx.layerStarts, cur ?? n, -1))
+            focusTo(ctx, state, adjacentLayerStart(ctx.layerStarts_, cur ?? n, -1))
             return
         case "Enter":
         case " ": {
@@ -197,8 +197,8 @@ export function handleKeydown(ctx: OverlayCtx, state: OverlayState, e: KeyboardE
             // focused the surface but landed nothing keyboard-focused (cur === null), or a
             // hover-only layer with no :click to dispatch.
             if (cur === null) return
-            const ref = ctx.focusable[cur]
-            if (!ref.layer.events.includes("click")) return // hover-only layer: nothing to dispatch
+            const ref = ctx.focusable_[cur]
+            if (!ref.layer_.events.includes("click")) return // hover-only layer: nothing to dispatch
             e.preventDefault(); e.stopPropagation()
             const hit = hitFor(ref)
             const { x, y } = anchorImgPx(hit)
@@ -208,7 +208,7 @@ export function handleKeydown(ctx: OverlayCtx, state: OverlayState, e: KeyboardE
         case "Escape":
             e.preventDefault(); e.stopPropagation()
             focusTo(ctx, state, null)
-            ctx.surface.blur()
+            ctx.surface_.blur()
             return
         default:
             return // notably Tab: never prevented, or the surface becomes a keyboard trap

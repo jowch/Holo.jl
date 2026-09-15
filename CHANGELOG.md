@@ -40,6 +40,13 @@ All notable changes to this project are documented here. The format is based on
   `continue-on-error: true` (advisory — does not block merges), matrixed over `cairo` and
   `webgl`, with screenshot/DOM/console-log artifacts on failure. Agents still run the sweep
   locally before calling a user-facing change done; see `docs/dev/live-interaction-checklist.md`.
+- `frontend/build.mjs` now sets esbuild's `mangleProps: /_$/`, shortening the frontend-internal
+  property names PR #72's `overlay.ts` split introduced (`OverlayState`/`OverlayCtx`/`ROIBox`/
+  `Drag`/`FocusRef`, plus `Hit`'s `geom`/`grid`/`axis`/`roiPart`) — every such field now ends in
+  a trailing underscore by convention. No property that crosses the Julia/Pluto/DOM boundary
+  (manifest, `@bind` payload, WGLMakie's `__obs__`/`__t__` wire tags) was renamed. See
+  `docs/dev/frontend-delivery.md`'s Bundle row and `docs/dev/perf-findings.md` for the measured
+  byte delta. No observable behavior change.
 
 ### Changed
 - README slimmed from ~410 to ~65 lines (title, pitch, when-to-use-it table, install, quick

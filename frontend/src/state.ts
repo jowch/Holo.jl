@@ -32,13 +32,21 @@ export const cssPx = (base: HTMLElement, manifest: Manifest, x: number, y: numbe
     return { x: x / s, y: y / s }
 }
 
+// ROIBox/Drag/OverlayCtx/OverlayState/FocusRef are frontend-only interaction state — they
+// never reach Julia, Pluto, or the DOM as object shapes (only individual field *values* do,
+// copied out into the `@bind` payload by bond.ts/drag/*.ts). Every field below therefore
+// takes the trailing-underscore convention esbuild's `mangleProps: /_$/` shortens in the
+// bundle (see frontend-delivery.md's Bundle row). The `kind` discriminant is deliberately
+// left unmangled: `.kind` is also how HitLayer's own boundary discriminant is spelled, and
+// keeping the two textually identical avoids having to thread that distinction through every
+// `.kind` read in bond.ts/hover.ts for a saving of a few bytes.
 export interface ROIBox {
-    rect: SVGRectElement
-    handles: SVGRectElement[]
-    g: { x: number; y: number; w: number; h: number }
-    handle: number
-    t: AxisTransform
-    target?: HitLayer
+    rect_: SVGRectElement
+    handles_: SVGRectElement[]
+    g_: { x: number; y: number; w: number; h: number }
+    handle_: number
+    t_: AxisTransform
+    target_?: HitLayer
 }
 
 // Every variant carries the pointerId that started it — onPointerMove/onUp/onCancel gate on
@@ -47,95 +55,95 @@ export interface ROIBox {
 // start. onDown's `if (drag) return` only stops a second pointerDOWN; without this field the
 // second pointer's move/up/cancel still routed into the first pointer's drag.
 export type Drag =
-    | { kind: "threshold"; id: string; line: SVGLineElement; tg: ThresholdGeometry; t: AxisTransform; pointerId: number }
-    | { kind: "roi"; id: string; box: ROIBox; mode: { corner: number } | { move: true }; ax: number; ay: number; target?: HitLayer; pointerId: number }
-    | { kind: "view"; id: string; g: ViewGeometry; t: AxisTransform; x0: number; y0: number; pointerId: number }
+    | { kind: "threshold"; id_: string; line_: SVGLineElement; tg_: ThresholdGeometry; t_: AxisTransform; pointerId_: number }
+    | { kind: "roi"; id_: string; box_: ROIBox; mode_: { corner: number } | { move: true }; ax_: number; ay_: number; target_?: HitLayer; pointerId_: number }
+    | { kind: "view"; id_: string; g_: ViewGeometry; t_: AxisTransform; x0_: number; y0_: number; pointerId_: number }
 
 // Construction-time DOM/manifest refs, built once by mount.ts and threaded read-mostly through
 // hover/drag/bond as `ctx`. Distinct from OverlayState, which is the mutable interaction state.
 export interface OverlayCtx {
-    manifest: Manifest
-    host: HTMLElement
-    base: HTMLElement
-    surface: HTMLElement
-    tip: HTMLElement
-    hiGroup: SVGGElement
-    selGroup: SVGGElement
-    thresholdLines: Map<string, SVGLineElement>
-    roiBoxes: Map<string, ROIBox>
-    shadowRoot: ShadowRoot // for `shadowRoot.activeElement === surface` focus gating (keyboard.ts)
-    focusable: FocusRef[] // flat, manifest-order list of element-indexed hits — keyboard.ts's nav domain
-    layerStarts: number[] // computeLayerStarts(focusable), cached once — PageUp/PageDown's layer-jump index
-    liveRegion: HTMLElement // visually-hidden aria-live="polite" announcer (NOT the tooltip)
+    manifest_: Manifest
+    host_: HTMLElement
+    base_: HTMLElement
+    surface_: HTMLElement
+    tip_: HTMLElement
+    hiGroup_: SVGGElement
+    selGroup_: SVGGElement
+    thresholdLines_: Map<string, SVGLineElement>
+    roiBoxes_: Map<string, ROIBox>
+    shadowRoot_: ShadowRoot // for `shadowRoot.activeElement === surface` focus gating (keyboard.ts)
+    focusable_: FocusRef[] // flat, manifest-order list of element-indexed hits — keyboard.ts's nav domain
+    layerStarts_: number[] // computeLayerStarts(focusable), cached once — PageUp/PageDown's layer-jump index
+    liveRegion_: HTMLElement // visually-hidden aria-live="polite" announcer (NOT the tooltip)
 }
 
 export interface OverlayState {
-    drag: Drag | null
-    justDragged: boolean
-    hiKey: string | null
-    selKeys: Set<string>
-    hiLeaveTimer: ReturnType<typeof setTimeout> | null
-    tipFlipTimer: ReturnType<typeof setTimeout> | null
-    pendingMove: MouseEvent | null
-    moveRaf: number
-    pendingDrag: PointerEvent | null
-    dragRaf: number
-    tipHtml: string
-    tipW: number
-    tipH: number
-    tipSized: boolean
-    surfaceW: number
-    surfaceH: number
-    surfaceSized: boolean
+    drag_: Drag | null
+    justDragged_: boolean
+    hiKey_: string | null
+    selKeys_: Set<string>
+    hiLeaveTimer_: ReturnType<typeof setTimeout> | null
+    tipFlipTimer_: ReturnType<typeof setTimeout> | null
+    pendingMove_: MouseEvent | null
+    moveRaf_: number
+    pendingDrag_: PointerEvent | null
+    dragRaf_: number
+    tipHtml_: string
+    tipW_: number
+    tipH_: number
+    tipSized_: boolean
+    surfaceW_: number
+    surfaceH_: number
+    surfaceSized_: boolean
     // Keyboard focus (keyboard.ts). focusIdx indexes OverlayCtx.focusable; focusHit/focusTipHtml/
     // focusTipCss are hover.ts's cache to redraw the ring/tooltip after a pointer miss clears
     // g.hi — see restoreFocus in hover.ts — without hover.ts importing keyboard.ts (no cycle).
-    focusIdx: number | null
-    focusHit: Hit | null
-    focusTipHtml: string | null
-    focusTipCss: { x: number; y: number } | null
-    announceTimer: ReturnType<typeof setTimeout> | null
+    focusIdx_: number | null
+    focusHit_: Hit | null
+    focusTipHtml_: string | null
+    focusTipCss_: { x: number; y: number } | null
+    announceTimer_: ReturnType<typeof setTimeout> | null
 }
 
 export function createOverlayState(): OverlayState {
     return {
-        drag: null,
-        justDragged: false,
-        hiKey: null,
-        selKeys: new Set(),
-        hiLeaveTimer: null,
-        tipFlipTimer: null,
-        pendingMove: null,
-        moveRaf: 0,
-        pendingDrag: null,
-        dragRaf: 0,
-        tipHtml: "",
-        tipW: 0,
-        tipH: 0,
-        tipSized: false,
-        surfaceW: 0,
-        surfaceH: 0,
-        surfaceSized: false,
-        focusIdx: null,
-        focusHit: null,
-        focusTipHtml: null,
-        focusTipCss: null,
-        announceTimer: null,
+        drag_: null,
+        justDragged_: false,
+        hiKey_: null,
+        selKeys_: new Set(),
+        hiLeaveTimer_: null,
+        tipFlipTimer_: null,
+        pendingMove_: null,
+        moveRaf_: 0,
+        pendingDrag_: null,
+        dragRaf_: 0,
+        tipHtml_: "",
+        tipW_: 0,
+        tipH_: 0,
+        tipSized_: false,
+        surfaceW_: 0,
+        surfaceH_: 0,
+        surfaceSized_: false,
+        focusIdx_: null,
+        focusHit_: null,
+        focusTipHtml_: null,
+        focusTipCss_: null,
+        announceTimer_: null,
     }
 }
 
 export function cancelPendingMove(state: OverlayState): void {
-    if (state.moveRaf) {
-        cancelAnimationFrame(state.moveRaf)
-        state.moveRaf = 0
+    if (state.moveRaf_) {
+        cancelAnimationFrame(state.moveRaf_)
+        state.moveRaf_ = 0
     }
-    state.pendingMove = null
+    state.pendingMove_ = null
 }
 
 export function cancelPendingDrag(state: OverlayState): void {
-    if (state.dragRaf) {
-        cancelAnimationFrame(state.dragRaf)
-        state.dragRaf = 0
+    if (state.dragRaf_) {
+        cancelAnimationFrame(state.dragRaf_)
+        state.dragRaf_ = 0
     }
-    state.pendingDrag = null
+    state.pendingDrag_ = null
 }

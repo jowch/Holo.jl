@@ -7,6 +7,18 @@ import { build } from "esbuild"
 
 const target = process.argv[2]
 
+// Trailing-underscore convention (frontend-delivery.md's Bundle row): any property named
+// foo_ is frontend-internal and safe to shorten. A quoted property (obj["foo_"]) is never
+// mangled by esbuild, so nothing crossing the Julia/Pluto/DOM boundary may end in "_".
+const mangleProps = /_$/
+// WGLMakie's wire tags (__obs__/__t__ in wgl-shim.ts's rewrap, mirroring HoloWGLMakieExt.jl's
+// _plain encoding) incidentally match mangleProps. wgl-shim.ts reads them via bracket access
+// so mangleProps can't reach them today, but that's a convention a future edit back to dot
+// access would silently break past lint/typecheck/unit tests (all run on source, not the
+// mangled bundle). reserveProps makes it structural instead: any dunder-shaped property is
+// exempt from mangling regardless of how it's accessed.
+const reserveProps = /^__.*__$/
+
 async function buildOverlay() {
     await build({
         entryPoints: ["src/index.ts"],
@@ -15,6 +27,8 @@ async function buildOverlay() {
         target: "es2020",
         outfile: "../assets/overlay.js",
         minify: true,
+        mangleProps,
+        reserveProps,
         legalComments: "none",
         banner: { js: "/* Holo.jl overlay — generated from frontend/src by esbuild. Do not edit. */" },
     })
@@ -29,6 +43,8 @@ async function buildShim() {
         target: "es2020",
         outfile: "../assets/holo-webgl.js",
         minify: true,
+        mangleProps,
+        reserveProps,
         legalComments: "none",
         banner: { js: "/* Holo :webgl shim — generated from frontend/src by esbuild. Do not edit. */" },
     })

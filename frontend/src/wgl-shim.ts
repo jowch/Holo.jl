@@ -55,11 +55,14 @@ export function makeBonitoShim() {
 const TA = { f32: Float32Array, i32: Int32Array, u32: Uint32Array, u8: Uint8Array } as const
 type TKey = keyof typeof TA
 
-// rebuild the structures WGLMakie's deserialize expects from the 4-rule tags
+// rebuild the structures WGLMakie's deserialize expects from the 4-rule tags. `__obs__`/`__t__`
+// are Julia's wire tags (HoloWGLMakieExt.jl's `_plain`) — bracket-accessed, not `x.__obs__`,
+// so esbuild's `mangleProps: /_$/` (which would otherwise catch the trailing "__") can never
+// touch them.
 export function rewrap(x: any): any {
     if (x && typeof x === "object" && !Array.isArray(x)) {
-        if ("__obs__" in x) return obs(rewrap(x.__obs__))    // Observable shim
-        if ("__t__" in x) return new TA[x.__t__ as TKey](x.d) // 1-D TypedArray
+        if ("__obs__" in x) return obs(rewrap(x["__obs__"]))    // Observable shim
+        if ("__t__" in x) return new TA[x["__t__"] as TKey](x.d) // 1-D TypedArray
         const o: Record<string, unknown> = {}
         for (const k in x) o[k] = rewrap(x[k])               // {array,size} recurse; nested dicts
         return o

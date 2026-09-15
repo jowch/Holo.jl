@@ -92,26 +92,32 @@ export interface Manifest {
     tipStyle?: Record<string, string> // figure-level --holo-tip-* custom properties
 }
 
+// `layer`/`index` are excluded from the trailing-underscore mangle convention (see
+// frontend-delivery.md): they're read back out into the `@bind` payload's `layer`/`index`
+// keys throughout bond.ts/drag/*.ts, and keeping the names identical there makes that
+// pass-through visible at the call site. `geom_`/`grid_`/`axis_`/`roiPart_` never leave the
+// frontend, so esbuild's `mangleProps: /_$/` shortens them in the bundle.
 export interface Hit {
     layer: HitLayer
     index: number // -1 for axis (continuous)
-    geom?: unknown[] // shape descriptor for highlight drawing
-    grid?: [number, number, number?] // [i, j, value]; value absent when values[] was dropped
-    axis?: string // transform id, for continuous inversion
-    roiPart?: { corner?: number; move?: boolean } // which sub-part of an :roi a drag grabbed
+    geom_?: unknown[] // shape descriptor for highlight drawing
+    grid_?: [number, number, number?] // [i, j, value]; value absent when values[] was dropped
+    axis_?: string // transform id, for continuous inversion
+    roiPart_?: { corner?: number; move?: boolean } // which sub-part of an :roi a drag grabbed
 }
 
 // One entry in keyboard.ts's flat, manifest-order nav list — element-indexed kinds only
 // (circles/rects/polygons/segments/polyline; grid/axis/threshold/roi/view excluded, see
 // keyboard.ts's FOCUSABLE_KINDS for why). A polyline's NaN-gap "segments" (Julia's gap
 // sentinel — see geometry.ts's hitLayer, which the mouse path already skips) never get a
-// FocusRef at all. `index` is the raw hitLayerByIndex/geometry index (used to resolve the
-// Hit); `ordinal`/`layerTotal` are the 1-based position/count among this layer's FOCUSABLE
-// elements only, announced to the user ("element `ordinal` of `layerTotal`") — not the same
-// as `index`/layerNElements(layer) once a layer has any skipped gaps.
+// FocusRef at all. `index_` is the raw hitLayerByIndex/geometry index (used to resolve the
+// Hit); `ordinal_`/`layerTotal_` are the 1-based position/count among this layer's FOCUSABLE
+// elements only, announced to the user ("element `ordinal_` of `layerTotal_`") — not the same
+// as `index_`/layerNElements(layer) once a layer has any skipped gaps. FocusRef never crosses
+// the Julia/DOM boundary, so every field takes the trailing-underscore mangle suffix.
 export interface FocusRef {
-    layer: HitLayer
-    index: number
-    ordinal: number
-    layerTotal: number
+    layer_: HitLayer
+    index_: number
+    ordinal_: number
+    layerTotal_: number
 }

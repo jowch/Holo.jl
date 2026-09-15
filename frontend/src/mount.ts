@@ -139,8 +139,9 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     const focusable = buildFocusable(manifest)
     const layerStarts = computeLayerStarts(focusable)
     const ctx: OverlayCtx = {
-        manifest, host, base, surface, tip, hiGroup, selGroup, thresholdLines, roiBoxes,
-        shadowRoot: shadow, focusable, layerStarts, liveRegion,
+        manifest_: manifest, host_: host, base_: base, surface_: surface, tip_: tip, hiGroup_: hiGroup, selGroup_: selGroup,
+        thresholdLines_: thresholdLines, roiBoxes_: roiBoxes,
+        shadowRoot_: shadow, focusable_: focusable, layerStarts_: layerStarts, liveRegion_: liveRegion,
     }
     const state = createOverlayState()
 
@@ -154,7 +155,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         shadowHost.style.top = `${br.top - hr.top}px`
         shadowHost.style.width = `${br.width}px`
         shadowHost.style.height = `${br.height}px`
-        state.surfaceSized = false
+        state.surfaceSized_ = false
     }
     syncOverlayToBase()
     const overlayRO = typeof ResizeObserver !== "undefined" ? new ResizeObserver(syncOverlayToBase) : null
@@ -220,9 +221,9 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         overlayFrames = 24
         cancelPendingMove(state)
         cancelPendingDrag(state)
-        if (state.hiLeaveTimer != null) clearTimeout(state.hiLeaveTimer)
-        if (state.tipFlipTimer != null) clearTimeout(state.tipFlipTimer)
-        if (state.announceTimer != null) clearTimeout(state.announceTimer)
+        if (state.hiLeaveTimer_ != null) clearTimeout(state.hiLeaveTimer_)
+        if (state.tipFlipTimer_ != null) clearTimeout(state.tipFlipTimer_)
+        if (state.announceTimer_ != null) clearTimeout(state.announceTimer_)
         shadowHost.remove()
     }
     invalidation?.then(cleanup)
