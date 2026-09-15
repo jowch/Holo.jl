@@ -115,7 +115,11 @@ jobs:
     # and is trivial to drop if it ever proves flaky.
     name: WGLMakie bind E2E (Pluto)
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # Worst case inside "Through-Pluto bind round-trip": 25min mount + 2×5min PLUTO_MS attempts
+    # ≈ 35min, plus the port-readiness loop (≤4min) and setup steps before it — 45min leaves
+    # headroom so a legitimate cold-cache run doesn't race the job-level timeout (which would
+    # cancel, not fail, the step and skip the artifact upload below).
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
@@ -145,11 +149,24 @@ jobs:
             sleep 2
           done
           [ -n "$up" ] || { echo "::error::Pluto never came up on :1234"; cat pluto.log; exit 1; }
-          node bind_click.mjs http://127.0.0.1:1234 "$GITHUB_WORKSPACE/test/e2e/bind_notebook.jl"
+          node bind_click.mjs http://127.0.0.1:1234 "$GITHUB_WORKSPACE/test/e2e/bind_notebook.jl" "$RUNNER_TEMP/bind-e2e-artifacts"
       - name: Pluto server log (precompile + render timing)
         if: always()
         working-directory: test/e2e
         run: tail -n 200 pluto.log || true
+      - name: Upload failure artifacts (screenshot, DOM dump, Pluto log)
+        # cancelled(), not just failure(): a job-level timeout-minutes kill marks the running
+        # step "cancelled", not "failed" — failure() alone would silently skip this exact upload
+        # on the one occasion (a genuine timeout) it matters most.
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bind-e2e-failure
+          path: |
+            ${{ runner.temp }}/bind-e2e-artifacts/
+            test/e2e/pluto.log
+          if-no-files-found: ignore
+          retention-days: 14
 
   examples:
     name: Example notebooks
