@@ -1510,6 +1510,23 @@ describe("coverage gaps: grid-value tooltip, drag-target hover cursor, rects/pol
         expect(line.classList.contains("hovered")).toBe(false)
     })
 
+    it("a vertical threshold shows ew-resize on hover, not ns-resize", () => {
+        const m: Manifest = {
+            width: 1200, height: 800, scaling: 2,
+            transforms: { ax1: { xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
+                viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false } },
+            layers: [{ id: "thr", kind: "threshold", axis: "ax1", events: ["drag"], payloads: [],
+                geometry: { orientation: "v", pos: 600, span: [0, 800] } }],
+        }
+        const { host, script } = setup()
+        mount(script, m)
+        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        // client (300,200) = image (600,400), on the vertical threshold line
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(surface.classList.contains("cur-ew")).toBe(true)
+        expect(surface.classList.contains("cur-ns")).toBe(false)
+    })
+
     it("selected= on a rects layer pre-highlights the right rect (hitLayerByIndex rects branch)", () => {
         const { host, script } = setup()
         mount(script, {
