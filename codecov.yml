@@ -1,6 +1,8 @@
 # One blended project number: Julia + frontend/src. Ignore committed
 # IIFE/ESM bundles and tests. Flags on the upload are labels only —
-# they do not split codecov/project.
+# they do not split codecov/project (that split + carryforward + components
+# was tried and reverted — see this PR's history — because it hid the
+# baseline shift from adding frontend/src instead of accepting it).
 ignore:
   - "assets/**"
   - "frontend/test/**"
@@ -12,3 +14,17 @@ coverage:
       default:
         target: auto
         threshold: 1%
+    # Unconfigured `patch` defaults to target: auto with NO threshold, which is what
+    # failed codecov/patch on #62. Same 1% leniency as `project`, not a Julia-only carve-out.
+    patch:
+      default:
+        target: auto
+        threshold: 1%
+
+# No job in CI.yml filters by changed paths — every flag uploads on every PR — so this
+# isn't path-filter resilience. It only matters if a job fails/is cancelled before its
+# upload step: without it, a dropped flag on one commit can read as a coverage cliff on
+# the next rather than "no new data this run."
+flag_management:
+  default_rules:
+    carryforward: true
