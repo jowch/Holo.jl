@@ -15,8 +15,10 @@ data needed to resolve a pointer hit to an element index and its payload. Built 
     disjoint pairs, respectively (image px)
   - `:polygons` — `Vector{Real}[]`, one flat `(x, y)`-per-vertex ring per element (image px)
   - `:grid` — a `Dict` with `"xedges"`, `"yedges"`, `"ncols"`, `"nrows"`, optional `"values"`
-  - `:axis` / `:threshold` / `:roi` / `:view` — `nothing` or a small `Dict` (viewport bbox,
-    orientation, current camera, …); not element-indexed
+  - `:axis` — `nothing` (whole-axis readout, `AxisInteractable`) or flat `Real[x, y, w, h]`
+    (the colorbar's pixel bbox, `ColorbarInteractable`); not element-indexed
+  - `:threshold` / `:roi` / `:view` — a small `Dict` (orientation/position, drag bbox +
+    handle size, or viewport + camera, respectively); not element-indexed
 - `payloads::Vector{Any}` — one JSON-serializable entry per element, positional (`payloads[k]`
   binds element `k`); empty for the element-count-free kinds above.
 - `axis::Symbol` — the id of this layer's [`AxisTransform`](@ref) in
@@ -44,22 +46,28 @@ cover most needs; implement this interface for anything else.
 
 # Interface
 
-Required:
-- `hitlayers(i, ctx::InteractionContext) -> Vector{HitLayer}` — see [`hitlayers`](@ref).
+Only `hitlayers` is exported — every other method below is a non-exported function of the
+`Holo` module. Extend them as `Holo.validate(::MyType, ctx) = …`, etc.; a bare
+`validate(::MyType, ctx) = …` at top level defines an unrelated function that `holo` never
+calls, and `holo(fig, MyType())` will build without error while silently ignoring it.
 
-Optional (default shown):
-- `validate(i, ctx::InteractionContext) -> Union{Nothing,String}` — return an error message if
-  `i` can't be built against `ctx` (`holo` raises it as `ArgumentError`), else `nothing`.
-  Default: always valid.
-- `events(i) -> Tuple` — the pointer events this interactable's layer(s) respond to (`:click`,
-  `:hover`, `:drag`). Default: `(:click, :hover)`.
-- `tooltip_spec(i)` — `nothing` for the auto name/value table, a [`Markup`](@ref) (built with
-  `holo"..."`) template, or `false` to suppress. Default: `nothing`.
-- `hoverstyle(i) -> NamedTuple` — one `(; stroke, width)` hover outline style per *layer* (the
-  manifest ships one style per layer, not per element). Default:
+Required:
+- `hitlayers(i, ctx::InteractionContext) -> Vector{HitLayer}` — see [`hitlayers`](@ref)
+  (exported).
+
+Optional (default shown; all non-exported — extend as `Holo.<name>`):
+- `Holo.validate(i, ctx::InteractionContext) -> Union{Nothing,String}` — return an error
+  message if `i` can't be built against `ctx` (`holo` raises it as `ArgumentError`), else
+  `nothing`. Default: always valid.
+- `Holo.events(i) -> Tuple` — the pointer events this interactable's layer(s) respond to
+  (`:click`, `:hover`, `:drag`). Default: `(:click, :hover)`.
+- `Holo.tooltip_spec(i)` — `nothing` for the auto name/value table, a [`Markup`](@ref) (built
+  with `holo"..."`) template, or `false` to suppress. Default: `nothing`.
+- `Holo.hoverstyle(i) -> NamedTuple` — one `(; stroke, width)` hover outline style per *layer*
+  (the manifest ships one style per layer, not per element). Default:
   `(; stroke = "#3A6F7C", width = 2)`.
 
-[`AbstractSelector`](@ref) subtypes additionally implement `selects`/`compatible_kinds`.
+[`AbstractSelector`](@ref) subtypes additionally implement `Holo.selects`/`Holo.compatible_kinds`.
 """
 abstract type AbstractInteractable end
 
@@ -85,10 +93,10 @@ hoverstyle(::AbstractInteractable) = (; stroke = "#3A6F7C", width = 2)
 
 Supertype for interactables that highlight elements on another layer — today just
 [`ROIInteractable`](@ref)'s `selects` mode, brushing a `:circles`/`:grid` layer. Subtypes
-additionally implement:
-- `selects(i) -> Union{Nothing,Symbol}` — the target layer id, or `nothing`.
-- `compatible_kinds(i) -> Tuple` — the target `HitLayer.kind`s this selector accepts; `holo`
-  raises `ArgumentError` at build time if `selects` names a layer of an unlisted kind.
+additionally implement these non-exported functions (extend as `Holo.selects(::MyType) = …`):
+- `Holo.selects(i) -> Union{Nothing,Symbol}` — the target layer id, or `nothing`.
+- `Holo.compatible_kinds(i) -> Tuple` — the target `HitLayer.kind`s this selector accepts;
+  `holo` raises `ArgumentError` at build time if `selects` names a layer of an unlisted kind.
 """
 abstract type AbstractSelector <: AbstractInteractable end
 
@@ -237,7 +245,10 @@ Lines / polylines (nearest-segment hit) or disjoint segment pairs. Produces one 
 - `id` — the layer id; becomes `InteractionEvent.layer` on a hit.
 - `payloads` — one entry per segment (count per `mode` above); `ArgumentError` if the length
   doesn't match. Default: `(; segment_index)`, 0-based.
-- `tol` — hit-test slack in px around each segment. Default `6`.
+- `tol` — accepted and stored on the interactable, but **not currently used**: the actual
+  client-side hit-test slack around a segment is a fixed 8 px (`SEG_TOL` in
+  `frontend/src/geometry.ts`), independent of this keyword's value or default (`6`). Wire it
+  through before relying on it for a tighter or looser hit target.
 - `tooltip` — `nothing` for the auto name/value table (default), `holo"..."` for a template, or
   `false` to suppress. `tooltip = true` is rejected (`ArgumentError`).
 
@@ -304,8 +315,10 @@ end
     RectInteractable(ax; grid, id=:rects, payloads=nothing, tooltip=nothing)
     RectInteractable(ax, p; id=<kind-specific>, payloads=nothing)   # from a plot object
 
-Axis-aligned rectangles: an explicit list (bars, boxes) or a compact heatmap/image grid.
-Exactly one of `rects`/`grid` must be given. Produces one `:rects` or `:grid` [`HitLayer`](@ref).
+Axis-aligned rectangles: an explicit list (bars, boxes) or a compact heatmap/image grid. Pass
+one of `rects`/`grid` (not both — this is **not** checked: `grid` silently wins if both are
+given, and passing neither errors before either's own validation runs). Produces one `:rects`
+or `:grid` [`HitLayer`](@ref).
 
 # Arguments (list form: `rects=`)
 - `rects` — data-space boxes `[(xc, yc, w, h), …]` (center + width/height).
@@ -527,7 +540,7 @@ Arbitrary filled polygons, hit-tested even-odd. Produces one `:polygons` [`HitLa
 | `p` | default `id` | rings from | notes |
 |---|---|---|---|
 | `Makie.Poly` | `:poly` | converted geometry | one ring, or many for a multi-ring `Poly` |
-| `Makie.Band` | `:band` | lower curve + reversed upper curve | one open ring per band |
+| `Makie.Band` | `:band` | lower curve + reversed upper curve | always exactly one open ring |
 | `Makie.Density` | `:density` | its descendant `Band`'s KDE fill | same shape as `Band` |
 | `Makie.Contourf` | `:contourf` | each filled level's **exterior** ring only (holes excluded — a v1 limitation: an annular band over-covers its hole at the boundary) | payload `(; low, high)`, the band edges nearest each polygon's fill color |
 | `Makie.Violin` | `:violin` | each violin's outline | payload `(; x)`, the nearest category to the ring's geometric center |

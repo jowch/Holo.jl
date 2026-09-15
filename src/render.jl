@@ -257,8 +257,8 @@ Render `fig` and overlay JS hit-testing for the declared `interactables`. Use as
   Makie-convertible color). `tooltip_font` — a font-family `String`. `tooltip_font_size`,
   `tooltip_radius` — a `Real`, rendered as `"<value>px"`. `tooltip_caret` — `Bool`, whether to
   draw the pointer caret (default `true`). Each defaults to `nothing` (the built-in style);
-  see [`docs/tooltips.md`](https://github.com/jowch/Holo.jl/blob/main/docs/tooltips.md) for the
-  full styling system (including the `--holo-tip-*` CSS escape hatch).
+  see the Tooltips page of the documentation for the full styling system (including the
+  `--holo-tip-*` CSS escape hatch).
 
 `Axis3` is supported on both backends; continuous pixel→data readout
 (`AxisInteractable`/`ThresholdInteractable`/`ROIInteractable`) fails loud (`ArgumentError`) on

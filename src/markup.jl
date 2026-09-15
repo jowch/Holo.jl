@@ -127,8 +127,8 @@ before `holo()` is ever called, with a caret pointing at the offending span. A f
 parses fine but is absent from the payload at `holo()`/`build_manifest` time raises
 `ArgumentError` instead (see [`Markup`](@ref)).
 
-See [`docs/tooltips.md`](https://github.com/jowch/Holo.jl/blob/main/docs/tooltips.md) for the
-full template/tooltip system (styling, security model, wire format).
+See the Tooltips page of the documentation for the full template/tooltip system (styling,
+security model, wire format).
 
 # Examples
 ```julia
