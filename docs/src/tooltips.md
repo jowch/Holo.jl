@@ -130,11 +130,31 @@ them:
 | `--holo-tip-shadow` | `0 2px 4px rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.08)` | `0 2px 4px rgba(0,0,0,0.4), 0 8px 16px rgba(0,0,0,0.3)` | — (CSS only) |
 | `--holo-tip-maxwidth` | `320px` | *(same)* | — (CSS only) |
 
+### Placement
+
+The tooltip is anchored to the hovered **mark**, not the cursor: it's centred horizontally on
+the mark and placed above it with a small gap, so it doesn't sit under the pointer or obscure
+neighboring marks. The anchor point depends on the kind:
+
+- circles: the marker's centre; the box sits above its top edge.
+- rects (bars): the bar's top-centre.
+- segments and polylines: the point on the segment nearest the cursor — the tooltip slides
+  along the line as the pointer moves. Keyboard focus (no cursor) uses the segment's midpoint.
+- polygons: the centroid, if it lies inside the polygon shape; otherwise the cursor point.
+- grid cells (heatmaps): the cell's centre; the box sits above the cell's top edge.
+- axis, threshold, ROI, and view (continuous/drag interactions with no discrete mark): the
+  cursor position, as before.
+
+If the box would clip the surface's top edge, it flips to sit below the mark instead. If it
+would clip a side, it shifts to stay inside the surface and the caret moves with it, so the
+caret always points at the anchor even when the box itself isn't centred on it.
+
 ### Caret
 
 When `tooltip_caret = true` (the default), a small triangle points from the tooltip toward
-the hovered element. It's offset from the cursor and clamped to stay inside the overlay bounds;
-near a figure edge it flips (`flip-x` / `flip-y`) so it still points at the hit.
+the anchor described above. For the mark-anchored kinds the caret sits at the box's bottom
+centre (or top centre, when flipped below); for the cursor-following kinds (axis/threshold/
+ROI/view) it keeps the previous cursor-relative offset and edge-clamping behavior.
 
 See [`architecture.md` §10](https://github.com/jowch/Holo.jl/blob/main/docs/dev/architecture.md)
 for the wire format behind all of this.

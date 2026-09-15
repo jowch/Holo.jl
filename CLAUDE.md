@@ -59,7 +59,10 @@ text and the bond payload → it gets a live check on every backend × the kinds
   without the kind sweep is unfinished. Overlay recipes (locked — cite, do not reopen):
   inspector ink `#3A6F7C` (not `#ff3b30`), hover = stroke only, selected closed = wash,
   selected open = ring, circle halo `r + 2`, 80–120 ms fade, OS `prefers-color-scheme`
-  (official Pluto has no notebook toggle).
+  (official Pluto has no notebook toggle), tooltip anchored ABOVE the hovered mark (not the
+  cursor) with a 10px gap and the caret on the anchor — flips below on a top-clip, shifts +
+  moves the caret (`--holo-caret-x`) on a side-clip; ROI has 8 square handles (4 corners + 4
+  edge midpoints, corners resize two axes, edges resize one) with directional resize cursors.
 - **Skip only** pure-internal refactors with zero observable delta (and say so). When unsure,
   it's user-facing — verify all backends × the kinds the change can touch, interaction
   **and** visual.

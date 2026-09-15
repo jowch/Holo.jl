@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest"
-import { distToSegment, pointInPolygon, findBin, invertAxis, hitLayer, hitTest, resolvePayload, panLimits, orbitAngles } from "../src/geometry"
-import type { AxisTransform, HitLayer, Manifest } from "../src/types"
+import {
+    distToSegment, pointInPolygon, findBin, invertAxis, hitLayer, hitTest, resolvePayload, panLimits, orbitAngles,
+    anchorFor, computeAnchoredPlacement,
+} from "../src/geometry"
+import type { AxisTransform, Hit, HitLayer, Manifest } from "../src/types"
 
 describe("primitives", () => {
     it("distToSegment", () => {
@@ -329,11 +332,29 @@ describe("threshold hit-test", () => {
 describe("roi hit-test", () => {
     const roi: HitLayer = { id: "roi", kind: "roi", axis: "ax1", events: ["drag"], payloads: [],
         geometry: { x: 100, y: 50, w: 200, h: 120, handle: 8 } }
-    it("corners take precedence, then interior, else miss", () => {
+    it("corners take precedence, then edges, then interior, else miss", () => {
         expect(hitLayer(roi, 100, 50)).toMatchObject({ roiPart_: { corner: 0 } })   // TL
         expect(hitLayer(roi, 300, 170)).toMatchObject({ roiPart_: { corner: 2 } })  // BR (x+w, y+h)
+        expect(hitLayer(roi, 200, 50)).toMatchObject({ roiPart_: { edge: "n" } })   // top midpoint
+        expect(hitLayer(roi, 200, 170)).toMatchObject({ roiPart_: { edge: "s" } })  // bottom midpoint
+        expect(hitLayer(roi, 100, 110)).toMatchObject({ roiPart_: { edge: "w" } })  // left midpoint
+        expect(hitLayer(roi, 300, 110)).toMatchObject({ roiPart_: { edge: "e" } })  // right midpoint
         expect(hitLayer(roi, 200, 110)).toMatchObject({ roiPart_: { move: true } }) // interior
         expect(hitLayer(roi, 50, 50)).toBeNull()                                    // outside
+    })
+    it("hit area is >= 2x the drawn handle half-size, floored at 6px, and never below the drawn glyph", () => {
+        const tiny: HitLayer = { ...roi, geometry: { x: 100, y: 50, w: 200, h: 120, handle: 1 } }
+        // handle=1 → drawn half-size 1px, but the hit half-size floors at 6px
+        expect(hitLayer(tiny, 100, 56)).toMatchObject({ roiPart_: { corner: 0 } }) // 6px from the TL corner
+        expect(hitLayer(tiny, 100, 40)).toBeNull() // 10px away (and outside the box entirely) → miss
+    })
+    it("on a small ROI where corner and edge hit boxes overlap, the corner wins (checked first)", () => {
+        // 20x20 ROI with handle=8 → hit half-size 16px; corner (0,0) and edge midpoints (10,0)/(0,10)
+        // are all within 16px of each other, so a point roughly between them must still resolve
+        // to the two-axis corner drag, not a one-axis edge drag.
+        const small: HitLayer = { id: "roi", kind: "roi", axis: "ax1", events: ["drag"], payloads: [],
+            geometry: { x: 0, y: 0, w: 20, h: 20, handle: 8 } }
+        expect(hitLayer(small, 3, 3)).toMatchObject({ roiPart_: { corner: 0 } })
     })
 })
 
@@ -407,5 +428,96 @@ describe("colorbar axis hit-test", () => {
         const p = resolvePayload(hit as any, manifest, 106, 150) as { value: number }
         // py=150 is the vertical midpoint (viewport y=50..250) → fy=0.5 → value=5 on ylims [0,10]
         expect(p.value).toBeCloseTo(5, 6)
+    })
+})
+
+describe("anchorFor: mark-anchored tooltip placement", () => {
+    const layer = (kind: HitLayer["kind"]): HitLayer =>
+        ({ id: "l", kind, axis: "ax1", events: ["hover"], payloads: [], geometry: null })
+
+    it("circle: anchor at centre, top edge above by r", () => {
+        const hit: Hit = { layer: layer("circles"), index: 0, geom_: ["circle", 50, 60, 10] }
+        expect(anchorFor(hit, { x: 50, y: 60 })).toEqual({ x: 50, y: 60, top: 50 })
+    })
+    it("rect (bar): anchor at top-centre — already its own top edge", () => {
+        const hit: Hit = { layer: layer("rects"), index: 0, geom_: ["rect", 100, 200, 40, 80] }
+        expect(anchorFor(hit, { x: 100, y: 200 })).toEqual({ x: 100, y: 160, top: 160 }) // cy(200) - h/2(40)
+    })
+    it("grid cell: anchor at the cell centre, top edge separate (not collapsed like a bar's)", () => {
+        // hitLayer reports a :grid cell with the same ["rect", cx, cy, w, h] geom tag as :rects,
+        // but hit.grid_ (set only for :grid) distinguishes them: the cell's anchor is its centre,
+        // not its own top edge — collapsing the two would put the flip-below case on the wrong
+        // side of the cell (see the computeAnchoredPlacement test below).
+        const hit: Hit = { layer: layer("grid"), index: 0, geom_: ["rect", 15, 25, 10, 10], grid_: [0, 0, 5] }
+        expect(anchorFor(hit, { x: 15, y: 25 })).toEqual({ x: 15, y: 25, top: 20 })
+    })
+    it("segment: nearest point on the segment to the cursor — the tooltip slides along the line", () => {
+        const hit: Hit = { layer: layer("segments"), index: 0, geom_: ["seg", 0, 0, 100, 0] }
+        expect(anchorFor(hit, { x: 30, y: 5 })).toEqual({ x: 30, y: 0, top: 0 }) // projects onto the line
+        expect(anchorFor(hit, { x: -20, y: 0 })).toEqual({ x: 0, y: 0, top: 0 }) // clamped to the endpoint
+    })
+    it("segment with no cursor (keyboard focus): falls back to the midpoint", () => {
+        const hit: Hit = { layer: layer("polyline"), index: 0, geom_: ["seg", 0, 0, 100, 100] }
+        expect(anchorFor(hit, null)).toEqual({ x: 50, y: 50, top: 50 })
+    })
+    it("polygon: centroid when it lies inside the polygon", () => {
+        const hit: Hit = { layer: layer("polygons"), index: 0, geom_: ["poly", [0, 0, 10, 0, 10, 10, 0, 10]] }
+        expect(anchorFor(hit, { x: 3, y: 3 })).toEqual({ x: 5, y: 5, top: 5 })
+    })
+    it("polygon: cursor point when the vertex-mean centroid falls outside (e.g. a concave notch)", () => {
+        // a "C"-shaped ring with a rectangular notch cut into x:[3,10] y:[3,7] on the right side —
+        // the vertex-mean centroid sits inside that notch, i.e. outside the polygon.
+        const ring = [0, 0, 10, 0, 10, 3, 3, 3, 3, 7, 10, 7, 10, 10, 0, 10]
+        expect(pointInPolygon(5.75, 5, ring)).toBe(false) // confirms the fixture's premise
+        const hit: Hit = { layer: layer("polygons"), index: 0, geom_: ["poly", ring] }
+        expect(anchorFor(hit, { x: 1, y: 5 })).toEqual({ x: 1, y: 5, top: 5 })
+    })
+    it("polygon: keyboard focus (no cursor) with an off-centroid centroid falls back to the centroid anyway", () => {
+        // Same concave "C" ring as above, but from the keyboard path (no cursor to fall back to) —
+        // keyboard.ts's focusTo calls anchorFor(hit, null), which must still return a usable anchor.
+        const ring = [0, 0, 10, 0, 10, 3, 3, 3, 3, 7, 10, 7, 10, 10, 0, 10]
+        const hit: Hit = { layer: layer("polygons"), index: 0, geom_: ["poly", ring] }
+        expect(anchorFor(hit, null)).toEqual({ x: 5.75, y: 5, top: 5 })
+    })
+    it("axis/threshold/roi/view: cursor-following, never anchored to geom (checked by layer.kind first)", () => {
+        for (const kind of ["axis", "threshold", "roi", "view"] as const) {
+            // geom tagged "seg" deliberately — same shape as :segments/:threshold — to prove the
+            // kind check runs before any geom-tag dispatch.
+            const hit: Hit = { layer: layer(kind), index: 0, geom_: ["seg", 0, 0, 100, 100] }
+            expect(anchorFor(hit, { x: 42, y: 17 })).toEqual({ x: 42, y: 17, top: 17 })
+        }
+    })
+})
+
+describe("computeAnchoredPlacement", () => {
+    it("default: box centred on the anchor, placed above the mark's top edge with a 10px gap", () => {
+        const p = computeAnchoredPlacement({ x: 100, y: 100, top: 80 }, 60, 20, 400, 300)
+        expect(p.left).toBe(70)   // 100 - 60/2
+        expect(p.top).toBe(50)    // 80 - 10 (gap) - 20 (height)
+        expect(p.caretX).toBe(30) // centred: anchor.x - left
+        expect(p.below).toBe(false)
+    })
+    it("flips below the mark when the box would clip the surface's top edge", () => {
+        const p = computeAnchoredPlacement({ x: 100, y: 20, top: 10 }, 60, 20, 400, 300)
+        // above would need top = 10 - 10 - 20 = -20 (< the 8px edge gap) → flips below;
+        // bottom = y + (y - top) = 30; below-top = 30 + 10 (gap) = 40
+        expect(p.top).toBe(40)
+        expect(p.below).toBe(true)
+    })
+    it("shifts the box inside the surface and moves the caret to stay over the anchor, near a side", () => {
+        const p = computeAnchoredPlacement({ x: 5, y: 100, top: 80 }, 60, 20, 400, 300)
+        expect(p.left).toBe(8) // edge-gap clamp (unclamped left would be 5 - 30 = -25)
+        expect(p.caretX).toBe(6) // clamped to the caret's own min inset, not the literal x-left(-3)
+    })
+    it("flip-below on a grid cell (y != top) lands clear of the cell, not on top of it", () => {
+        // A grid cell 20px tall centred at y=20 (top=10, bottom=30) near the surface's top edge —
+        // contrast with a rect/bar anchor (y === top) directly above, whose flip-below has no
+        // headroom to clear a mark at all since half-extent is 0.
+        const cell = computeAnchoredPlacement({ x: 50, y: 20, top: 10 }, 60, 20, 400, 300)
+        expect(cell.below).toBe(true)
+        expect(cell.top).toBe(40) // bottom(30) + gap(10) — below the cell's bottom edge
+        const bar = computeAnchoredPlacement({ x: 50, y: 10, top: 10 }, 60, 20, 400, 300)
+        expect(bar.below).toBe(true)
+        expect(bar.top).toBe(20) // bottom === top(10) + gap(10) — starts right at the anchor
     })
 })

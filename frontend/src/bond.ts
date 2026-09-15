@@ -1,6 +1,6 @@
 import { hitTest, resolvePayload } from "./geometry"
 import { drawHi } from "./highlight"
-import { onMove, hideTip, setTipText, setTipVisible, tipOffset, placeTip } from "./hover"
+import { onMove, hideTip, setTipText, setTipVisible, tipOffset, placeTip, setDragHoverChrome } from "./hover"
 import { imgPx, cancelPendingMove, cancelPendingDrag } from "./state"
 import type { Drag, OverlayCtx, OverlayState } from "./state"
 import * as thresholdDrag from "./drag/threshold"
@@ -87,6 +87,14 @@ export function onDown(ctx: OverlayCtx, state: OverlayState, e: PointerEvent): v
         if (!box) return
         if (hit.roiPart_.move) {
             state.drag_ = roiDrag.begin(hit.layer.id, box, { move: true }, p.x - box.g_.x, p.y - box.g_.y, e.pointerId)
+        } else if (hit.roiPart_.edge) {
+            const edge = hit.roiPart_.edge
+            // ax/ay carry the ONE fixed opposite edge for this drag (the other axis is untouched
+            // by move()'s edge branch) — same "precompute the fixed reference point" convention
+            // as the corner branch below, just one axis at a time.
+            const ax = edge === "w" ? box.g_.x + box.g_.w : edge === "e" ? box.g_.x : p.x
+            const ay = edge === "n" ? box.g_.y + box.g_.h : edge === "s" ? box.g_.y : p.y
+            state.drag_ = roiDrag.begin(hit.layer.id, box, { edge }, ax, ay, e.pointerId)
         } else {
             const k = hit.roiPart_.corner as number
             const c = [[box.g_.x, box.g_.y], [box.g_.x + box.g_.w, box.g_.y], [box.g_.x + box.g_.w, box.g_.y + box.g_.h], [box.g_.x, box.g_.y + box.g_.h]]
@@ -135,7 +143,7 @@ export function onUp(ctx: OverlayCtx, state: OverlayState, e: PointerEvent): voi
         (ctx.host_ as unknown as { value: unknown }).value = roiDrag.end(d, state, ctx.selGroup_, ctx.manifest_)
         ctx.host_.dispatchEvent(new CustomEvent("input"))
     }
-    hideTip(ctx, state); ctx.surface_.classList.remove("grabbing")
+    hideTip(ctx, state); ctx.surface_.classList.remove("grabbing"); setDragHoverChrome(ctx, state, null)
     if (d.kind === "view") {
         const dist = Math.hypot(p.x - d.x0_, p.y - d.y0_)
         state.justDragged_ = dist >= viewDrag.VIEW_MIN_PX
@@ -156,7 +164,7 @@ export function onCancel(ctx: OverlayCtx, state: OverlayState, e: PointerEvent):
     cancelPendingDrag(state)
     state.drag_ = null // claim before releasePointerCapture, same reentrancy hazard as onUp
     if (ctx.surface_.hasPointerCapture(e.pointerId)) ctx.surface_.releasePointerCapture(e.pointerId)
-    ctx.surface_.classList.remove("grabbing")
+    ctx.surface_.classList.remove("grabbing"); setDragHoverChrome(ctx, state, null)
     hideTip(ctx, state)
 }
 
@@ -166,7 +174,7 @@ export function onCancel(ctx: OverlayCtx, state: OverlayState, e: PointerEvent):
 export function onLostCapture(ctx: OverlayCtx, state: OverlayState): void {
     cancelPendingDrag(state)
     if (!state.drag_) return
-    ctx.surface_.classList.remove("grabbing")
+    ctx.surface_.classList.remove("grabbing"); setDragHoverChrome(ctx, state, null)
     hideTip(ctx, state)
     state.drag_ = null
 }

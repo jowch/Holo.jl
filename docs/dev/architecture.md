@@ -677,7 +677,8 @@ scheme survives escaping and can execute — author responsibility if a template
 | `$(field:raw)` — unescaped field interpolation | Deferred | Explicit opt-in marker (Bokeh `{safe}`-style); pre-render HTML into a payload field, inject unescaped |
 | Per-layer `tooltip_*` style override | Deferred | Non-breaking kwarg on the per-layer interactable constructor |
 | Compile-time field validation (`@generated`) | Deferred | No-op on heterogeneous payloads; build-time Phase 2 runs for `NamedTuple` payloads |
-| Caret edge-flipping / viewport-collision clamping | **Shipped** (first overlay polish PR) | Card stays inside the overlay; caret flips via `.flip-x` / `.flip-y` |
+| Mark-anchored tooltip placement (circles/rects/segments/polyline/polygons/grid) | **Shipped** (tooltip-anchor-chrome PR) | Box centred above the mark's top edge, gap 10px; flips below on top-clip, shifts + moves the caret (`--holo-caret-x`) on side-clip. `frontend/src/geometry.ts`'s `anchorFor`/`computeAnchoredPlacement` |
+| Caret edge-flipping / viewport-collision clamping (axis/threshold/ROI/view — cursor-following) | **Shipped** (first overlay polish PR) | Card stays inside the overlay; caret flips via `.flip-x` / `.flip-y` |
 | Inline date formatting | Deferred (would add `d3-time-format`) | Format dates in Julia into a payload string field |
 | Following a Pluto notebook theme toggle | **N/A** — official Pluto has none | OS `prefers-color-scheme` *is* Pluto's theme (Settings is help text; no class / `data-theme` / JS event). Revisit only if Pluto ships a real override with a stable signal. |
 

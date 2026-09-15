@@ -14,7 +14,8 @@ Declare interactables explicitly (geometry in data space):
 - [`ThresholdInteractable`](@ref) — a draggable horizontal/vertical line; drag for a live
   readout, commit the data value on mouse-up
 - [`ROIInteractable`](@ref) — a draggable + resizable rectangle; drag the interior to move, a
-  corner to resize; commit the data-space bounds on mouse-up
+  corner to resize both edges or an edge midpoint to resize just that one edge; commit the
+  data-space bounds on mouse-up
 - [`ViewInteractable`](@ref) — drag-to-pan (2D `Axis` → new `limits`) / drag-to-rotate
   (`Axis3` → `azimuth`/`elevation`); commit on mouse-up; Shift+drag wins over ROI/threshold
 - [`RegionInteractable`](@ref) / [`FunctionInteractable`](@ref) — custom interactions, no
