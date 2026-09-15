@@ -133,6 +133,17 @@ All notable changes to this project are documented here. The format is based on
   latency, split into mixed (realistic hit-rate) and guaranteed-miss (worst case) queries at N up
   to 200 000 elements — see `docs/dev/perf-findings.md`'s "JS hit-test microbenchmark". Pure
   internal change — no manifest/payload/behavior change.
+- `test/core_tests.jl` (1,985 lines, one `@testset "Holo"` with ~53 nested testsets) split
+  by concern into `test/core/backend_tests.jl`, `axis3_polar_tests.jl`,
+  `interactables_tests.jl`, `drag_tests.jl`, `introspect_tests.jl`, `markup_tests.jl`,
+  `selection_tests.jl`, and `parity_tests.jl`; `test/core_tests.jl` is now a thin includer
+  (canary → the eight files → parity → docstrings). Shared fixtures moved to
+  `test/testutils.jl` (`ctx_for`, `drawn_near`, `default_fixture`); every testset that used
+  to read the outer testset's bare `fig`/`ax`/`ctx` (rebound by later testsets via Julia's
+  top-level soft scope — a `fig = Figure(...)` inside one nested testset silently clobbered
+  the same global read by an unrelated later one) now builds its own fixture. Pure test
+  refactor — no manifest/payload/behavior change (same 526 passes across the split files,
+  identical satellite/docstring counts, `GROUP=NoBackend` unaffected).
 
 ## [0.1.0] - 2026-09-12
 
