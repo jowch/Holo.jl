@@ -14,8 +14,8 @@ no setup beyond having Pluto installed. CI runs all of them headlessly on every 
 (`examples/ci_run.jl`), so they can't rot out of sync with the package API.
 
 Every notebook below also has a static export you can open in the browser with no Julia
-installed — hover tooltips, highlights and (for `:webgl` notebooks) the live canvas all
-work; only clicks that `@bind` back to Julia need the notebook running, for which see the
+installed (it still fetches Pluto's frontend from a CDN, so it needs network) — hover
+tooltips, highlights and (for `:webgl` notebooks) the live canvas all work; only clicks that `@bind` back to Julia need the notebook running, for which see the
 clone-and-run instructions above.
 
 ## [`examples/demo.jl`](https://github.com/jowch/Holo.jl/blob/main/examples/demo.jl)
