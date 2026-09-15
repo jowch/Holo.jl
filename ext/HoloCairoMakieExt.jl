@@ -9,10 +9,22 @@ import Makie: Point2f
 """
     CairoBackend(; max_width=700)
 
-Static CairoMakie backend. Owns the render call (DPI/format/background); the user's
-figure spec is respected but its save settings are not. Render resolution is derived
-from `max_width` (the display width to target — Pluto's 700px column by default), not a
-fixed `px_per_unit`: output ≈ 2× the display width (retina-crisp, not wasteful).
+Static-image `Holo` backend (loaded when `CairoMakie` is `using`d): renders `fig` once to a
+PNG, with a transparent JS overlay doing hit-testing over it — no server, no WebGL, and the
+inspection layer keeps working in an exported, offline static HTML. This is the default
+backend `holo` picks when no `WGLMakie` extension is loaded.
+
+# Arguments
+- `max_width` — the display width to target, in px (Pluto's column is 700). Render resolution
+  is *derived* from it, not a fixed `px_per_unit`: output ≈ 2× `min(figure width, max_width)`
+  (retina-crisp, not wasteful). Owns the render call (DPI/format/background); the user's figure
+  spec is respected but its own save settings are not. Default `700`.
+
+# Examples
+```julia
+using Holo, CairoMakie
+holo(fig; backend = CairoBackend(; max_width = 900))
+```
 """
 struct CairoBackend <: AbstractBackend
     max_width::Int

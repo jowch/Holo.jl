@@ -1,8 +1,21 @@
 """
     InteractionEvent(layer, index, payload)
 
-The typed value a bond returns on click (`nothing` until the first click). `payload` is the
-JSON-serializable data the interactable attached (or `(; x, y)` for `AxisInteractable`).
+The typed value a `holo` bond returns on a deliberate click (`nothing` until the first one).
+
+# Fields
+- `layer::Symbol` — the hit `HitLayer`'s (i.e. the interactable's) `id`.
+- `index::Int` — 0-based element index within that layer (meaningless for element-count-free
+  kinds like `:axis`, which report `0`).
+- `payload::Any` — the data the interactable attached to that element, or the client-computed
+  value for kinds without static payloads (e.g. `Dict("x" => …, "y" => …)` for
+  [`AxisInteractable`](@ref)). Round-trips through JSON: a Julia `NamedTuple` payload
+  `(; label = "a")` comes back as `Dict{String,Any}("label" => "a")`, not the original
+  `NamedTuple` — index it as `ev.payload["label"]`.
+
+A `ROIInteractable` built with `selects` reports differently: the bond value is a
+`Vector{InteractionEvent}` (one entry per element the ROI contains on mouse-up), not a single
+`InteractionEvent`.
 """
 struct InteractionEvent
     layer::Symbol
@@ -217,21 +230,51 @@ function _resolve_backend(explicit; max_width)
 end
 
 """
-    holo(fig, interactables; selected=nothing)
+    holo(fig, interactables; backend=nothing, max_width=700, selected=nothing,
+         tooltip_bg=nothing, tooltip_color=nothing, tooltip_accent=nothing, tooltip_font=nothing,
+         tooltip_font_size=nothing, tooltip_radius=nothing, tooltip_caret=true) -> HoloWidget
+    holo(fig, interactable; kwargs...)   # single-interactable convenience
 
 Render `fig` and overlay JS hit-testing for the declared `interactables`. Use as a Pluto
-`@bind` source; the bond value is `nothing` until a click, then an [`InteractionEvent`](@ref).
-Needs a rendering backend loaded: `using CairoMakie` for a static base, or `using WGLMakie`
-for animation/large or frequently re-rendered data. If both are loaded, `backend=` wins and
-implicit calls default to Cairo. `Axis3` works on both backends; continuous pixel→data
-readout (Axis/Threshold/ROI) fails loud on a 3D axis.
+`@bind` source; the bond value is `nothing` until a click, then an [`InteractionEvent`](@ref)
+(or, for a `ROIInteractable` built with `selects`, a `Vector{InteractionEvent}`).
 
-`selected` (a `layer_id => indices` map) pre-highlights elements on mount. Feed a bond value
-back into it — `Dict(ev.layer => [ev.index])` — to keep clicked elements highlighted across
-re-renders. See [`build_manifest`](@ref).
+# Arguments
+- `interactables` — a `Vector{AbstractInteractable}` (or a single one, via the second method).
+- `backend` — `nothing` (default) picks the one backend implied by whichever of `CairoMakie` /
+  `WGLMakie` is loaded (`CairoBackend` / `WebGLBackend`); pass one explicitly to be unambiguous
+  or to override its own keywords (e.g. `WebGLBackend(; px_per_unit = 3.0)`). Raises
+  `ArgumentError` if neither is loaded; if both are, `backend=` wins and an implicit call
+  defaults to Cairo.
+- `max_width` — the display width to target (Pluto's column, in px); render resolution is
+  *derived* from it, not a fixed DPI (`CairoBackend` renders at ~2× this width). Default `700`.
+- `selected` — a `layer_id => indices` map (0-based, matching `InteractionEvent.index`) that
+  pre-highlights elements on mount. Supported kinds: `:circles`/`:rects`/`:polygons` (wash) and
+  `:segments`/`:polyline` (ring); any other kind or an out-of-range index raises
+  `ArgumentError`. Feed a bond value back into it (e.g. `Dict(ev.layer => [ev.index])`) to keep
+  clicked elements highlighted, flicker-free, across re-renders.
+- `tooltip_bg`, `tooltip_color`, `tooltip_accent` — tooltip card colors (a CSS string or any
+  Makie-convertible color). `tooltip_font` — a font-family `String`. `tooltip_font_size`,
+  `tooltip_radius` — a `Real`, rendered as `"<value>px"`. `tooltip_caret` — `Bool`, whether to
+  draw the pointer caret (default `true`). Each defaults to `nothing` (the built-in style);
+  see [`docs/tooltips.md`](https://github.com/jowch/Holo.jl/blob/main/docs/tooltips.md) for the
+  full styling system (including the `--holo-tip-*` CSS escape hatch).
+
+`Axis3` is supported on both backends; continuous pixel→data readout
+(`AxisInteractable`/`ThresholdInteractable`/`ROIInteractable`) fails loud (`ArgumentError`) on
+a 3D axis, since a screen pixel there is a ray, not a data point.
 
 Restores the figure's background color on return; the only mutation `holo` makes to `fig` is
 forcing it opaque during render (Makie `Figure`s can't be `deepcopy`'d to snapshot/restore).
+
+# Examples
+```julia
+using Holo, CairoMakie
+fig = Figure(); ax = Axis(fig[1, 1])
+pts = [(1.0, 1.0), (2.0, 4.0), (3.0, 9.0)]
+scatter!(ax, first.(pts), last.(pts))
+@bind sel holo(fig, [PointInteractable(ax, pts; payloads = ["a", "b", "c"])])
+```
 """
 function holo(
         fig, interactables::AbstractVector; backend::Union{Nothing, AbstractBackend} = nothing,

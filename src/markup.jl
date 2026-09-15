@@ -6,9 +6,16 @@ end
 """
     Markup
 
-A parsed `holo"..."` template: ordered `segments` (each a literal `String` or a `Field`) plus the
-unique `fields` referenced. `\$(field)` placeholders are resolved in the browser from `payloads[]`;
-they are NOT Julia interpolation. `\$(field:spec)` applies a d3-format spec browser-side.
+A parsed `holo"..."` tooltip template: ordered `segments` (each a literal `String`, emitted
+verbatim as HTML, or a `Field` placeholder) plus the unique `fields` referenced. Built by
+[`@holo_str`](@ref) — see that macro for template syntax; construct a `Markup` yourself only
+if you need `parse_template`/`check_fields` directly.
+
+Pass a `Markup` as an interactable's `tooltip=` keyword to render it client-side, from the
+hovered element's `payloads[]` entry, with no round-trip to Julia. At `holo()`/`build_manifest`
+time every field the template references is checked against the layer's actual payload keys
+(when payloads are `NamedTuple`s); a missing field raises `ArgumentError` with a "did you
+mean?" suggestion, before any figure is rendered.
 """
 struct Markup
     raw::String
@@ -93,8 +100,42 @@ function parse_template(s::AbstractString)
     return Markup(String(s), segments, unique(fields))
 end
 
-# Validate at macro-expansion (the LoadError carries the user's source file:line); rebuild the value
-# at runtime. The double-parse is cheap and keeps the early-error UX.
+"""
+    holo"..."
+
+Build a [`Markup`](@ref) tooltip template for an interactable's `tooltip=` keyword. Placeholders
+are resolved **in the browser**, from the hovered element's `payloads[]` entry — `\$(field)` is
+not Julia string interpolation, and there is no runtime `holo(string)` form.
+
+# Syntax
+- Everything outside `\$(...)` is literal HTML, inserted as-is (author-trusted, not
+  sanitized) — escape your own `<`/`&` as you would in `@htl`.
+- `\$(field)` — the hovered element's payload field `field` (an identifier), HTML-escaped at
+  hover time.
+- `\$(field:spec)` — same, formatted by a [d3-format](https://d3js.org/d3-format) `spec` before
+  escaping (e.g. `\$(population:,)`, `\$(pct:.1%)`). `spec` is checked structurally at
+  macro-expansion (valid d3-format grammar); its runtime *meaning* (precision, trim, sign) is
+  the browser's `format()` to interpret.
+- `\\\$` — a literal dollar sign.
+
+A template with no `\$(...)` at all is a fixed label, e.g. `holo"<em>static</em>"`.
+
+# Errors
+Malformed syntax (a bare `\$`, unbalanced/empty `\$()`, a non-identifier field name, or a
+structurally invalid d3-format spec) raises `TemplateValidationError` at macro-expansion —
+before `holo()` is ever called, with a caret pointing at the offending span. A field that
+parses fine but is absent from the payload at `holo()`/`build_manifest` time raises
+`ArgumentError` instead (see [`Markup`](@ref)).
+
+See [`docs/tooltips.md`](https://github.com/jowch/Holo.jl/blob/main/docs/tooltips.md) for the
+full template/tooltip system (styling, security model, wire format).
+
+# Examples
+```julia
+tooltip = holo"<b>\$(name)</b> — \$(population:,) people"
+PointInteractable(ax, pts; payloads = [(; name = "a", population = 1200)], tooltip)
+```
+"""
 macro holo_str(s)
     parse_template(s)
     return :($(parse_template)($s))

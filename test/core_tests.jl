@@ -1938,3 +1938,5 @@ else
         end
     end
 end
+
+include("docstrings_tests.jl")
