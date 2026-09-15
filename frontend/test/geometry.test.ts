@@ -182,6 +182,27 @@ describe("hitLayer + hitTest", () => {
     })
 })
 
+describe("segments/polyline per-layer tol", () => {
+    const seg: HitLayer = { id: "segs", kind: "segments", geometry: [0, 0, 100, 0], payloads: [{}], axis: "ax1", events: ["hover"] }
+    it("custom tol resolves a hit the fallback SEG_TOL would miss the other way: distance between the two", () => {
+        // 6px from the line: within tol=10, and within the default SEG_TOL=8 too — pick a
+        // distance strictly between a tight custom tol and the fallback.
+        const tight = { ...seg, tol: 2 }
+        const loose = { ...seg, tol: 20 }
+        expect(hitLayer(tight, 50, 6)).toBeNull()          // 6px > tol=2
+        expect(hitLayer(loose, 50, 6)).toMatchObject({ index: 0 }) // 6px <= tol=20
+    })
+    it("missing tol falls back to SEG_TOL", () => {
+        expect(hitLayer(seg, 50, 7)).toMatchObject({ index: 0 })  // 7px <= SEG_TOL=8
+        expect(hitLayer(seg, 50, 9)).toBeNull()                   // 9px > SEG_TOL=8
+    })
+    it("polyline honors the same per-layer tol", () => {
+        const line: HitLayer = { ...seg, kind: "polyline", geometry: [0, 0, 100, 0], tol: 3 }
+        expect(hitLayer(line, 50, 2)).toMatchObject({ index: 0 }) // 2px <= tol=3
+        expect(hitLayer(line, 50, 5)).toBeNull()                  // 5px > tol=3
+    })
+})
+
 describe("threshold hit-test", () => {
     const h: HitLayer = { id: "thr", kind: "threshold", axis: "ax1", events: ["drag"], payloads: [],
         geometry: { orientation: "h", pos: 100, span: [0, 200] } }

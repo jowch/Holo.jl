@@ -43,8 +43,21 @@ All notable changes to this project are documented here. The format is based on
   shared overlay IIFE (`assets/overlay.js`) and the `:webgl` ESM shim
   (`assets/holo-webgl.js`, source `frontend/src/wgl-shim.ts`). The old
   `frontend-webgl/` package and its CI job are gone.
+- `SegmentInteractable`'s `tol` keyword now controls the actual hit-test slack (see Fixed,
+  below). The **effective default hit slack changes**: it was a fixed 8 image px (the
+  overlay's `SEG_TOL`, ignoring `tol` entirely); it is now `tol`'s default of 6 *logical* px,
+  scaled to the rendered image's DPI like `PointInteractable`'s `radius` — e.g. at the common
+  2× DPI, 12 image px instead of 8. Pass `tol = 8 / scaling` to keep the old numeric slack, or
+  rely on the new default (slightly more forgiving at typical DPI).
 
 ### Fixed
+- `SegmentInteractable`'s `tol` keyword (lines/polylines/segments hit-test slack) is now
+  wired through end-to-end: it ships in the manifest as a per-`:segments`/`:polyline`-layer
+  `"tol"` field (image px), and the overlay's hit test reads it instead of always using its
+  own fixed `SEG_TOL`. Previously `tol` was accepted and stored but never read anywhere.
+- `RectInteractable(ax; rects=…, grid=…)` now raises `ArgumentError` at construction when
+  both `rects` and `grid` are given, or neither is — previously `grid` silently won if both
+  were passed, and passing neither surfaced a raw error later instead of a clear one.
 - `SegmentInteractable(...; mode=...)` now validates `mode` at construction
   (`ArgumentError` for anything but `:polyline`/`:pairs`) instead of silently treating any
   other symbol as `:pairs`.

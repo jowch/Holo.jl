@@ -57,7 +57,7 @@ function _payload_keys(payloads)
     return ks
 end
 
-function _layer_dict(i, L::HitLayer)
+function _layer_dict(i, L::HitLayer, ctx::InteractionContext)
     hs = hoverstyle(i)
     d = Dict{String, Any}(
         "id" => string(L.id), "kind" => string(L.kind), "axis" => string(L.axis),
@@ -65,6 +65,10 @@ function _layer_dict(i, L::HitLayer)
         "events" => [string(e) for e in L.events],
         "style" => Dict("stroke" => hs.stroke, "width" => hs.width),
     )
+    if L.kind === :segments || L.kind === :polyline
+        t = hit_tol(i)
+        t === nothing || (d["tol"] = round(Int, t * ctx.scaling))
+    end
     s = selects(i)
     s === nothing || (d["selects"] = string(s))
     spec = tooltip_spec(i)
@@ -183,7 +187,7 @@ function build_manifest(interactables, ctx::InteractionContext; selected = nothi
         msg = validate(i, ctx)
         msg === nothing || throw(ArgumentError(msg))
         for L in hitlayers(i, ctx)
-            d = _layer_dict(i, L)
+            d = _layer_dict(i, L, ctx)
             sel = selected === nothing ? nothing : get(selected, L.id, nothing)
             if sel !== nothing && !isempty(sel)
                 d["selected"] = _check_selected(L, sel)
