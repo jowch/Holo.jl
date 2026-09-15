@@ -108,6 +108,15 @@ describe("makeBonitoShim — the no-server Bonito stand-in", () => {
         expect(spy).toHaveBeenCalledWith("[holo-wgl]", "context msg", "plain string error")
         spy.mockRestore()
     })
+    it("Connection.send_warning exists, is callable, and logs at warn level without throwing", () => {
+        const spy = vi.spyOn(console, "warn").mockImplementation(() => {})
+        const B = makeBonitoShim()
+        expect(typeof B.Connection.send_warning).toBe("function")
+        // real call shape from WGLMakie's on_shader_error: a single formatted string, no error object
+        expect(() => B.Connection.send_warning("THREE.WebGLProgram: Shader Error")).not.toThrow()
+        expect(spy).toHaveBeenCalledWith("[holo-wgl]", "THREE.WebGLProgram: Shader Error")
+        spy.mockRestore()
+    })
 })
 
 describe("mountWebGL", () => {

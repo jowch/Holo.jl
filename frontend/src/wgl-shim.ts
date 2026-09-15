@@ -36,6 +36,8 @@ export function makeBonitoShim() {
         on() { return () => {} }
         static send_error = (msg: string, e: unknown) =>
             console.error("[holo-wgl]", msg, (e && (e as Error).stack) || e)
+        // WGLMakie's shader-compile-error path calls this with a single already-formatted string
+        static send_warning = (...args: unknown[]) => console.warn("[holo-wgl]", ...args)
     }
     return {
         // MUST be true: WGLMakie gates observable updates on this. comm.send is a no-op, so

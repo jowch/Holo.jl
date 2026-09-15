@@ -75,6 +75,10 @@ All notable changes to this project are documented here. The format is based on
   finalized. They now defer that axis-limits read to `hitlayers` time (resolved fresh
   against the finalized axis), matching `TextInteractable`'s existing
   construction-vs-hitlayers split for layout-dependent reads.
+- `:webgl`'s no-server Bonito shim (`frontend/src/wgl-shim.ts`) now provides
+  `Connection.send_warning`, which WGLMakie's bundled JS calls from its shader-compile-error
+  path (`on_shader_error`). Previously this threw `TypeError: Bonito.Connection.send_warning
+  is not a function` on top of the shader error it was trying to report.
 
 ### Internal
 - Every non-public Makie/WGLMakie/Bonito internal Holo relies on (`converted`, child
@@ -91,6 +95,10 @@ All notable changes to this project are documented here. The format is based on
   WGLMakie compat bumps arrive as PRs that run this canary automatically) is planned as a
   follow-up — not part of this change. Pure internal
   refactor — no manifest/payload/behavior change (parity goldens pass unchanged).
+- Added a shim-completeness canary (`test/webgl_ext_tests.jl`) that reads the installed
+  WGLMakie bundle, extracts every `Bonito.*`/`Connection.*` symbol it references, and
+  asserts the shim provides all of them — guarding against a future WGLMakie bump adding
+  another global the shim doesn't (as `send_warning`, above, did).
 
 ## [0.1.0] - 2026-09-12
 
