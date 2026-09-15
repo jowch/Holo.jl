@@ -111,6 +111,15 @@ All notable changes to this project are documented here. The format is based on
   WGLMakie bundle, extracts every `Bonito.*`/`Connection.*` symbol it references, and
   asserts the shim provides all of them — guarding against a future WGLMakie bump adding
   another global the shim doesn't (as `send_warning`, above, did).
+- `frontend/src/geometry.ts`'s `findBin` (heatmap/image `:grid` cell lookup) replaced its linear
+  scan over the edge array with a binary search — O(log n) instead of O(n), and `findBin` runs
+  twice per hover on every `:grid` layer. Identical output to the old linear scan for every input
+  (asc/desc edges, out-of-range, on-edge ties, NaN), pinned by a property test comparing the two
+  implementations over 500 randomized edge/point trials
+  (`frontend/test/geometry.test.ts`). Added `frontend/bench/hit_test.bench.ts` (`npm run bench`,
+  committed) to directly measure `hitTest` latency at N up to 200 000 elements — see
+  `docs/dev/perf-findings.md`'s "JS hit-test microbenchmark". Pure internal change — no
+  manifest/payload/behavior change.
 
 ## [0.1.0] - 2026-09-12
 

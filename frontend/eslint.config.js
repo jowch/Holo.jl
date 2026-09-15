@@ -2,7 +2,7 @@ import tseslint from "typescript-eslint"
 
 export default tseslint.config(
     {
-        files: ["src/**/*.ts", "test/**/*.ts"],
+        files: ["src/**/*.ts", "test/**/*.ts", "bench/**/*.ts"],
         extends: [...tseslint.configs.recommended],
         rules: {
             "@typescript-eslint/no-explicit-any": "off", // manifest geometry + WGLMakie interop are intentionally dynamic

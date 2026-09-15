@@ -17,6 +17,78 @@ describe("primitives", () => {
         expect(findBin([30, 20, 10, 0], 12)).toBe(1) // descending (image y)
         expect(findBin([0, 10], 99)).toBe(-1)
     })
+    it("findBin on an interior edge picks the smaller-index bin (both directions)", () => {
+        // v==10 brackets bin0=[0,10] and bin1=[10,20]; the old linear scan tested bins in
+        // increasing k order with inclusive comparisons on both ends, so bin0 won first.
+        expect(findBin([0, 10, 20, 30], 10)).toBe(0)
+        expect(findBin([0, 10, 20, 30], 20)).toBe(1)
+        // same convention holds for descending edges (image-space y)
+        expect(findBin([30, 20, 10, 0], 20)).toBe(0)
+        expect(findBin([30, 20, 10, 0], 10)).toBe(1)
+    })
+    it("findBin: exactly on the outer edges is in range, one step beyond is not", () => {
+        expect(findBin([0, 10, 20], 0)).toBe(0)
+        expect(findBin([0, 10, 20], 20)).toBe(1)
+        expect(findBin([0, 10, 20], -0.001)).toBe(-1)
+        expect(findBin([0, 10, 20], 20.001)).toBe(-1)
+        expect(findBin([20, 10, 0], 20)).toBe(0)
+        expect(findBin([20, 10, 0], 0)).toBe(1)
+    })
+    it("findBin: NaN query point never hits", () => {
+        expect(findBin([0, 10, 20, 30], NaN)).toBe(-1)
+    })
+    it("findBin: fewer than 2 edges has no bins", () => {
+        expect(findBin([], 5)).toBe(-1)
+        expect(findBin([5], 5)).toBe(-1)
+    })
+})
+
+describe("findBin: binary search matches the old linear scan (oracle)", () => {
+    // The oracle is the pre-optimization implementation this replaces: scan bins in increasing
+    // k order, inclusive on both ends, return the first match. Kept here (not in src/) purely
+    // as a reference for the property comparison below.
+    function findBinLinear(edges: number[], v: number): number {
+        for (let k = 0; k < edges.length - 1; k++) {
+            const a = edges[k], b = edges[k + 1]
+            if (v >= Math.min(a, b) && v <= Math.max(a, b)) return k
+        }
+        return -1
+    }
+
+    // Deterministic PRNG (mulberry32) so failures are reproducible without a fixed fixture list.
+    function mulberry32(seed: number): () => number {
+        let a = seed
+        return () => {
+            a |= 0; a = (a + 0x6D2B79F5) | 0
+            let t = Math.imul(a ^ (a >>> 15), 1 | a)
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+        }
+    }
+
+    it("agrees with the linear oracle over random monotonic edges and query points", () => {
+        const rng = mulberry32(20260914)
+        for (let trial = 0; trial < 500; trial++) {
+            const n = 2 + Math.floor(rng() * 30) // 2..31 edges → 1..30 bins
+            const ascending = rng() < 0.5
+            // strictly monotonic, unique values (grid edges are cell boundaries, never flat)
+            const raw = Array.from({ length: n }, () => rng() * 1000)
+            raw.sort((a, b) => a - b)
+            for (let k = 1; k < raw.length; k++) if (raw[k] <= raw[k - 1]) raw[k] = raw[k - 1] + 1e-6
+            const edges = ascending ? raw : raw.slice().reverse()
+
+            // exercise: random points spanning well outside both ends, at every edge exactly
+            // (the tie case), and at bin midpoints.
+            const queries: number[] = [edges[0] - 50, edges[n - 1] + 50]
+            for (const e of edges) queries.push(e)
+            for (let k = 0; k < n - 1; k++) queries.push((edges[k] + edges[k + 1]) / 2)
+            for (let q = 0; q < 20; q++) queries.push(edges[0] + (edges[n - 1] - edges[0]) * rng() * 1.4 - (edges[n - 1] - edges[0]) * 0.2)
+
+            for (const v of queries) {
+                expect(findBin(edges, v)).toBe(findBinLinear(edges, v))
+            }
+        }
+    })
 })
 
 describe("invertAxis", () => {

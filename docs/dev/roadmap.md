@@ -138,7 +138,7 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
       backend-selection fold-in.
 
 ## M5 — Scale & polish
-- [ ] **Spatial acceleration** (quadtree/grid) for large-N hit-testing — only when the documented O(n) ceiling is actually hit (`log()` the cap until then). *Phase 0 reframe:* hit-test is ~0 ms; the wall is manifest **payload size** (~290 ms serialize+transfer at 4.78 MB), so wire-encoding (int-pixel coords / capping `values[]`) outranks a quadtree (see Phase 4).
+- [ ] **Spatial acceleration** (quadtree/grid) for large-N hit-testing — only when the documented O(n) ceiling is actually hit (`log()` the cap until then). *Phase 0 reframe:* hit-test is ~0 ms; the wall is manifest **payload size** (~290 ms serialize+transfer at 4.78 MB), so wire-encoding (int-pixel coords / capping `values[]`) outranks a quadtree (see Phase 4). Direct `hitTest` microbenchmark (not just inferred from render time) confirms this — perf-findings.md's "JS hit-test microbenchmark".
 - [x] **Perf benchmarking**: the unmeasured Q5 envelope — base64 size + click latency knee; confirm MsgPack fast-path engages. *Done (`bench/payload_envelope.jl` → `perf-findings.md`): single plots 50–400 KB, manifest O(N) elements, heatmaps O(cells), animation = frames × PNG (the hard ceiling, 5.5–22 MB). MsgPack confirmed (generic maps, not the TypedArray fast-path). Full click round-trip measured live (headless Pluto + Chromium): ~65 ms median — render-bound, browser overhead negligible. Editor-lag knee (editor stutter, distinct from latency) deferred.*
 - [ ] **Theming**: marker-highlight styling (`highlight_*` / `--holo-hi-*`, shadow-DOM scoped). *(Tooltip card already matches official Pluto: both use `prefers-color-scheme`. Official Pluto has no notebook light/dark toggle — Settings → Dark mode is help text. Remaining work is highlight theming, not a Pluto theme hook.)*
 - [ ] **GLMakie-static backend**: GPU offscreen → PNG, same `AbstractBackend` contract (for envs with a GPU).
@@ -286,10 +286,13 @@ These three are independent and can run concurrently.
   threshold; SVG uses `pt_per_unit/0.75`, not `px_per_unit`). Sparse-plot mode only — dense plots
   stay PNG. Pairs naturally with Phase 0.
 - **Spatial acceleration** (quadtree/grid) — demand-gated; may never be built. Grids are already
-  O(1), so scope is only flat list layers (Scatter/rect-`:list`/segments). JS-only; must preserve
+  O(1) (the `findBin` binary search keeps large-edge-count grid lookups sub-microsecond), so scope
+  is only flat list layers (Scatter/rect-`:list`/segments). JS-only; must preserve
   manifest-order first-match. **Phase 0 measured hit-test at ~0 ms** (scatter-50/10k) and found the
   first wall is manifest *payload size* (serialize+transfer), not hit-test CPU — so build this *only*
   if a profile ever shows JS hit-test **specifically** (not serialize/transfer) is the bottleneck.
+  Direct measurement (not inference) now backs this: see perf-findings.md's "JS hit-test
+  microbenchmark" — even 200 000 circles / 10 000 segments cost well under 0.5 ms/call.
   (Phase 0 did not stress hit-test at extreme N≈200k; but there the 7.72 MB manifest dominates anyway.)
 - [x] **Int-pixel geometry quantization (perf win).** *Done (`src/interactables.jl`: per-element geometry
   vectors built as `Int` via `_q(x) = round(Int, x)` — circles/segments/rects/polygons/regions + grid edges).*

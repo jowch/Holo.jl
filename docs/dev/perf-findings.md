@@ -296,6 +296,42 @@ float16; lossy >2048px). Keep `AxisTransform` lims `Float64` (drag inversion) �
   `valueaxis` field and the colorbar `:axis` layer are invisible at the KB scale of the envelope
   table. The §A scatter/heatmap numbers are identical to the previous run.
 
+## JS hit-test microbenchmark
+
+Every claim above that "hit-test is ~0 ms" was from the pure-Julia render sweep, which doesn't
+touch `frontend/src/geometry.ts`'s `hitTest`. `frontend/bench/hit_test.bench.ts` (`npm run bench`,
+committed) times `hitTest` directly: for each kind × N, build one `HitLayer` of N random elements
+scattered over a 4000×4000 px canvas, fire 2000 random query points through `hitTest` (one warm-up
+pass discarded), and report the per-call median/mean in microseconds.
+
+Run 2026-09-14, Linux x86_64 (single workstation core), Node v24.15.0, `npm run bench`:
+
+| kind | N | median (µs/call) | mean (µs/call) |
+|------|---:|---:|---:|
+| circles | 1 000 | 2.08 | 2.28 |
+| circles | 10 000 | 19.13 | 18.33 |
+| circles | 50 000 | 75.40 | 64.63 |
+| circles | 200 000 | 74.65 | 105.89 |
+| segments | 1 000 | 29.20 | 30.14 |
+| segments | 10 000 | 293.09 | 300.97 |
+| polyline | 1 000 | 28.50 | 31.45 |
+| polyline | 10 000 | 284.93 | 295.16 |
+| rects | 1 000 | 2.09 | 2.10 |
+| rects | 10 000 | 19.91 | 19.72 |
+
+`circles`/`rects` scale sub-linearly per call (most random queries miss most elements but the
+early-return on a hit still saves work; median stays flat 50k→200k within run-to-run noise).
+`segments`/`polyline` have no early exit (every query walks the full element list to find the
+nearest segment) and scale linearly with N, ~10× per decade as expected for O(n).
+
+**Conclusion: even at 200 000 circles or 10 000 segments, one `hitTest` call costs well under
+0.5 ms — three orders of magnitude below the render floor (tens of ms) and manifest-transfer cost
+(hundreds of ms at the multi-MB extreme, see the stress test above).** This confirms, with a
+direct hit-test measurement rather than an inference from render time, that a spatial index
+(quadtree/grid bucketing) is not justified by the data: the wall a user would actually feel is
+still payload size, not hit-test CPU. `docs/dev/roadmap.md`'s spatial-acceleration line cites this
+section.
+
 ## MsgPack fast-path (Q5 sub-claim)
 
 `published_to_js` always serializes via **MsgPack** (not JSON) — confirmed by the format Pluto

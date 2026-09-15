@@ -25,13 +25,29 @@ export function pointInPolygon(px: number, py: number, ring: number[]): boolean 
     return inside
 }
 
-// index of the bin containing v in a monotonic (asc or desc) edge array; -1 if outside
+// index of the bin containing v in a monotonic (asc or desc) edge array; -1 if outside.
+// Binary search over edges.length-1 bins (O(log n)) — grid layers can have ~1000 edges per
+// axis and this runs twice per hover. On a value that sits exactly on an interior edge, the
+// bin bracketed by [edges[k], edges[k+1]] on the smaller-k side wins (matches the linear scan
+// this replaces, which tested bins in increasing k order with inclusive comparisons on both
+// ends and returned the first match).
 export function findBin(edges: number[], v: number): number {
-    for (let k = 0; k < edges.length - 1; k++) {
-        const a = edges[k], b = edges[k + 1]
-        if (v >= Math.min(a, b) && v <= Math.max(a, b)) return k
+    const n = edges.length
+    if (n < 2 || Number.isNaN(v)) return -1
+    const ascending = edges[n - 1] > edges[0]
+    if (ascending) {
+        if (v < edges[0] || v > edges[n - 1]) return -1
+    } else {
+        if (v > edges[0] || v < edges[n - 1]) return -1
     }
-    return -1
+    let lo = 0, hi = n - 2
+    while (lo < hi) {
+        const mid = (lo + hi) >> 1
+        const bracketsOrBefore = ascending ? v <= edges[mid + 1] : v >= edges[mid + 1]
+        if (bracketsOrBefore) hi = mid
+        else lo = mid + 1
+    }
+    return lo
 }
 
 // invert image-px → data coords via an axis transform
