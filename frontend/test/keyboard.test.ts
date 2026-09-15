@@ -168,4 +168,140 @@ describe("keyboard navigation", () => {
         down(surface, "ArrowRight")
         expect(shadow.querySelector(".hi > *")).toBeFalsy()
     })
+
+    it("ArrowDown/ArrowUp are aliases for Right/Left", () => {
+        const { surface, host } = setup(manifest)
+        surface.focus()
+        down(surface, "ArrowDown") // a[0]
+        down(surface, "ArrowDown") // a[1]
+        down(surface, "ArrowUp") // back to a[0]
+        down(surface, "Enter")
+        expect((host as unknown as { value: { layer: string; index: number } }).value).toMatchObject({ layer: "a", index: 0 })
+    })
+
+    it("PageUp with no current focus goes to the last layer's start; PageDown with none goes to the first", () => {
+        const { surface, host } = setup(manifest)
+        surface.focus()
+        down(surface, "PageUp") // no focus yet -> last layer ("b")'s first element
+        down(surface, "Enter")
+        expect((host as unknown as { value: { layer: string; index: number } }).value).toMatchObject({ layer: "b", index: 0 })
+
+        down(surface, "Escape")
+        surface.focus() // Escape blurred the surface — re-focus, same as a real Tab back in
+        down(surface, "PageDown") // no focus yet -> first layer ("a")'s first element
+        down(surface, "Enter")
+        expect((host as unknown as { value: { layer: string; index: number } }).value).toMatchObject({ layer: "a", index: 0 })
+    })
+
+    it("Enter on a hover-only layer (no :click) is a no-op — no bond dispatch", () => {
+        const hoverOnly: Manifest = {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [{ id: "h", kind: "circles", geometry: [100, 100, 10], payloads: [{ v: 1 }], axis: "ax1", events: ["hover"] }],
+        }
+        const { surface, host } = setup(hoverOnly)
+        let fired = false
+        host.addEventListener("input", () => { fired = true })
+        surface.focus()
+        down(surface, "ArrowRight")
+        down(surface, "Enter")
+        expect(fired).toBe(false)
+    })
+
+    it("focusing an element with tooltip=false shows no tooltip but still announces position", async () => {
+        vi.useFakeTimers()
+        try {
+            const noTip: Manifest = {
+                width: 1200, height: 800, scaling: 2, transforms: {},
+                layers: [{ id: "nt", kind: "circles", geometry: [100, 100, 10], payloads: [{ v: 1 }], axis: "ax1", events: ["click", "hover"], tooltip: false }],
+            }
+            const { surface, shadow } = setup(noTip)
+            surface.focus()
+            down(surface, "ArrowRight")
+            expect(shadow.querySelector(".holo-tip")?.classList.contains("show")).toBe(false)
+            vi.advanceTimersByTime(200)
+            const live = shadow.querySelector('[aria-live="polite"]') as HTMLElement
+            expect(live.textContent).toBe("element 1 of 1") // no ": <plain>" suffix — tooltip suppressed
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it("focus on a template-tooltip layer shows the template in the tooltip and announces plain text", async () => {
+        vi.useFakeTimers()
+        try {
+            const tmplManifest: Manifest = {
+                width: 1200, height: 800, scaling: 2, transforms: {},
+                layers: [{
+                    id: "t", kind: "circles", geometry: [100, 100, 10], payloads: [{ name: "A & B" }],
+                    axis: "ax1", events: ["click", "hover"],
+                    template: ["<b>", { f: "name" }, "</b>"],
+                }],
+            }
+            const { surface, shadow } = setup(tmplManifest)
+            surface.focus()
+            down(surface, "ArrowRight")
+            const tip = shadow.querySelector(".holo-tip") as HTMLElement
+            expect(tip.innerHTML).toContain("<b>")
+            expect(tip.innerHTML).toContain("&amp;") // esc() ran on the interpolated field
+            vi.advanceTimersByTime(200)
+            const live = shadow.querySelector('[aria-live="polite"]') as HTMLElement
+            // plain text: tags stripped, entities un-escaped — not "A &amp; B" or "<b>A & B</b>"
+            expect(live.textContent).toBe("element 1 of 1: A & B")
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it("moving focus off the surface (mouseover elsewhere) then Escape still clears cleanly", () => {
+        // Regression guard for restoreFocus's no-op branch: with nothing focused, a pointer
+        // miss must take the plain clearHi/hideTip path (state.focusHit is null).
+        const { surface, shadow } = setup(manifest)
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 5, clientY: 5, bubbles: true }))
+        expect(shadow.querySelector(".hi > *")).toBeFalsy()
+    })
+
+    it("a pointer miss restores a tooltip-suppressed focus's ring but no tooltip (restoreFocus's hideTip branch)", () => {
+        const noTip: Manifest = {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [{ id: "nt", kind: "circles", geometry: [100, 100, 10], payloads: [{ v: 1 }], axis: "ax1", events: ["click", "hover"], tooltip: false }],
+        }
+        const { surface, shadow } = setup(noTip)
+        surface.focus()
+        down(surface, "ArrowRight")
+        // pointer miss (nothing at 5,5) — restoreFocus should redraw the ring, and since
+        // focusTipHtml is null (tooltip suppressed), hide rather than show the tooltip.
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 5, clientY: 5, bubbles: true }))
+        expect(shadow.querySelector(".hi > *")).toBeTruthy()
+        expect(shadow.querySelector(".holo-tip")?.classList.contains("show")).toBe(false)
+    })
+
+    it("PageDown/PageUp clamp (don't wrap) at the last/first layer", () => {
+        const { surface, host } = setup(manifest)
+        surface.focus()
+        down(surface, "End") // -> b[0], the last layer
+        down(surface, "PageDown") // already in the last layer — clamp, stay at b[0]
+        down(surface, "Enter")
+        expect((host as unknown as { value: { layer: string; index: number } }).value).toMatchObject({ layer: "b", index: 0 })
+
+        down(surface, "Home") // -> a[0], the first layer
+        down(surface, "PageUp") // already in the first layer — clamp, stay at a[0]
+        down(surface, "Enter")
+        expect((host as unknown as { value: { layer: string; index: number } }).value).toMatchObject({ layer: "a", index: 0 })
+    })
+
+    it("focus anchors on a segment's midpoint and a polygon's centroid (non-circle/rect kinds)", () => {
+        const mixedManifest: Manifest = {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [
+                { id: "seg", kind: "segments", geometry: [0, 0, 100, 100], payloads: [{ v: 1 }], axis: "ax1", events: ["click", "hover"] },
+                { id: "pg", kind: "polygons", geometry: [[0, 0, 10, 0, 10, 10, 0, 10]], payloads: [{ v: 2 }], axis: "ax1", events: ["click", "hover"] },
+            ],
+        }
+        const { surface, shadow } = setup(mixedManifest)
+        surface.focus()
+        down(surface, "ArrowRight") // seg[0] — anchorImgPx's "seg" branch
+        expect(shadow.querySelector(".hi > *")?.tagName.toLowerCase()).toBe("line")
+        down(surface, "ArrowRight") // pg[0] — anchorImgPx's "poly" branch
+        expect(shadow.querySelector(".hi > *")?.tagName.toLowerCase()).toBe("polygon")
+    })
 })
