@@ -180,6 +180,57 @@ end
     @test occursin("find_plots", bundle)
 end
 
+@testset "shim-completeness canary (Bonito/Connection symbols the bundle references)" begin
+    # The bundle calls window.Bonito.<x> and window.Bonito.Connection.<x> globals with no
+    # compile-time check against our shim (frontend/src/wgl-shim.ts) — a WGLMakie bump that
+    # references a new one silently produces a browser TypeError (this guarded against
+    # `send_warning`, added after `on_shader_error` started calling it). This asserts the
+    # shim is a SUPERSET of what the installed bundle references, not equal to it — the shim
+    # also provides members like `lock_loading` that the bundle doesn't call directly.
+    # `Bonito.X` and `Connection.X` are two different namespaces (the shim object vs.
+    # `ConnStub`), so each is matched against only its own region of wgl-shim.ts — a flat
+    # symbol-name match would let e.g. a future `Bonito.on(...)` false-pass against
+    # `ConnStub`'s `on()` method.
+    bundle = read(_WGLExt._wgl_bundle_path(), String)
+
+    shim_path = joinpath(pkgdir(Holo), "frontend", "src", "wgl-shim.ts")
+    @test isfile(shim_path)
+    shim_src = read(shim_path, String)
+    # strip `//` line comments first, so a comment merely *mentioning* a symbol name (e.g.
+    # this testset's own docstring) can't be mistaken for the shim providing it. Not
+    # string-literal-aware — a future `"http://…"` in wgl-shim.ts would get truncated too;
+    # harmless today (no `//` inside any string literal in the file).
+    stripped = join((replace(l, r"//.*$" => "") for l in split(shim_src, '\n')), '\n')
+
+    # Scope both regions to inside makeBonitoShim() specifically — `obs()` (above it in this
+    # file) also has a `return { ... }` object literal, and a file-wide match would grab
+    # that one instead (verified: it did, until this was scoped).
+    shim_fn = match(r"export function makeBonitoShim\(\) \{(.*?)\n\}\n"s, stripped)
+    @test !isnothing(shim_fn)   # loud if wgl-shim.ts is restructured, not a silent no-op
+    shim_body = shim_fn.captures[1]
+    conn_region = match(r"class ConnStub \{(.*?)\n    \}"s, shim_body)
+    obj_region = match(r"return \{(.*?)\n    \}"s, shim_body)
+    @test !isnothing(conn_region)
+    @test !isnothing(obj_region)
+
+    members(s) = Set(m.captures[1] for m in eachmatch(r"^\s*(?:static\s+)?([A-Za-z_]\w*)\s*[:=(]"m, s))
+    provided_conn = members(conn_region.captures[1])
+    provided_obj = members(obj_region.captures[1])
+
+    # identifier-boundary lookbehind: without it, a hypothetical bundle identifier like
+    # `WebSocketConnection.foo` would match `Connection\.` mid-word and inflate
+    # `referenced_conn` with a symbol the shim was never meant to provide.
+    referenced_obj = Set(m.captures[1] for m in eachmatch(r"(?<![A-Za-z0-9_])Bonito\.([A-Za-z_]+)", bundle))
+    referenced_conn = Set(m.captures[1] for m in eachmatch(r"(?<![A-Za-z0-9_])Connection\.([A-Za-z_]+)", bundle))
+    @test !isempty(referenced_obj)   # a regex/region miss must not silently pass the canary
+    @test !isempty(referenced_conn)
+
+    missing_obj = setdiff(referenced_obj, provided_obj)
+    missing_conn = setdiff(referenced_conn, provided_conn)
+    @test missing_obj == Set{String}()    # `Evaluated:` on failure names exactly what's missing
+    @test missing_conn == Set{String}()
+end
+
 @testset "WGL accessors rewrap a moved internal" begin
     # Negative path for the WGL-only compat block, mirroring test/makie_compat_tests.jl's
     # "accessors rewrap a moved internal" — a shape break must produce the Holo message,
