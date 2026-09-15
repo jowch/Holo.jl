@@ -151,7 +151,7 @@ events(::AbstractInteractable)::Tuple = (:click, :hover)   # which events the ov
 # tooltip content is per-LAYER, set via the `tooltip` kwarg on each interactable
 # constructor (nothing → auto-table, Markup → template, false → suppress).
 # The per-element `tooltip(interactable, idx, payload)` dispatch is retired (M2.3).
-# See docs/tooltips.md.
+# See §10 Tooltips, below.
 # hoverstyle is per-LAYER too — the manifest ships one `style` per layer, not per element.
 hoverstyle(::AbstractInteractable)::NamedTuple = (; stroke="#3A6F7C", width=2)
 ```
@@ -298,7 +298,7 @@ FunctionInteractable(ax, f; id, events=(:click,:hover))   # f(ctx)::Vector{HitLa
 struct is *indistinguishable* from a built-in — same manifest path, same overlay, same `@bind`. Tooltip
 content comes from the per-layer `Holo.tooltip_spec(interactable)` seam (built-in interactables expose it
 as a `tooltip=` constructor kwarg; a custom struct overrides `Holo.tooltip_spec`). The `tooltip_*` kwargs
-on `holo()` are styling only. See `docs/tooltips.md`. Example:
+on `holo()` are styling only. See §10 Tooltips, below. Example:
 
 ```julia
 struct CityInteractable <: AbstractInteractable
@@ -311,7 +311,7 @@ function Holo.hitlayers(c::CityInteractable, ctx)
     [HitLayer(:cities, :circles, coords, [(; name=n) for n in c.names], :main, (:click,:hover))]
 end
 # tooltip content: add a `tooltip` field to CityInteractable and override
-# `Holo.tooltip_spec(c::CityInteractable) = c.tooltip` — see docs/tooltips.md
+# `Holo.tooltip_spec(c::CityInteractable) = c.tooltip` — see §10 Tooltips, below
 ```
 
 **Linkage = shared payloads through Pluto reactivity.** Two interactables writing the same payload field
@@ -476,7 +476,7 @@ would have added O(N × string-bytes) — the dominant inflation term at high el
 `perf-findings.md` §"Scope bounds for downstream phases" for the measured upper bounds). M2.3 avoids
 this: tooltip content ships as two O(1)-per-layer fields — `template` (pre-parsed segments, present when
 `tooltip` is a `Markup`) and a top-level `tipStyle` dict — leaving the per-element envelope unchanged.
-See `docs/tooltips.md` for the wire shape and authoring API.
+See §10 Tooltips, below, for the wire shape and authoring API.
 
 **Robustness to large inputs (assume a user *will* do this) — implemented.** We ship a tool to
 Pluto/Makie users, so assume someone overlays `holo` on a 2000²–4000² `heatmap!`/`image!` *because they
@@ -535,3 +535,134 @@ The other manifest term — heatmap/image `values[]` (§8) — is bounded not by
 it*: capping/dropping it measured **499×** smaller (4.78 MB → 9.8 KB at 1000²). Both are now shipped (the
 cap in PR #8, int-pixel coords here); they were the committed manifest-payload work — reach for them before
 a quadtree (§7).
+
+## 10. Tooltips
+
+The `holo"..."` / `Markup` template system. Tooltips are its first consumer; the mechanism
+generalises to any surface that overlays structured content on hover (labels, annotations,
+panels). User-facing usage (defaults, `holo"..."` examples, styling kwargs) is on the site's
+[Tooltips page](@ref); this section is the mechanism and wire contract behind it.
+
+### 10.1 Mental model
+
+Every Holo interactable carries a `payloads` array — one JSON-serialisable value per element,
+built at render time in Julia. **The payload is data; the template is layout.** When the user
+hovers over an element, the browser reads that element's payload entry and interpolates it
+into the template to produce the tooltip HTML — no round-trip to Julia, no live callback.
+
+This is forced by the no-server constraint: a statically-exported Holo widget has no Julia
+kernel to call. Any content the tooltip shows must already be in the manifest at render time,
+either as a template (O(1) per layer) or as data in the payload (O(N) per element, the same
+O(N) the interactable already ships for hit-testing). A per-element callback
+(`tooltip = p -> @htl"..."`) would require either a live kernel or pre-calling it for every
+element at build time — the former is unavailable offline, the latter collapses into a
+per-element string array and is O(N × string-bytes) on the wire. The template approach avoids
+both.
+
+### 10.2 The `holo"..."` macro and `Markup` type
+
+`holo"..."` is a string macro (exported; underlying function `@holo_str`) that produces a
+`Holo.Markup` value. It is the only way to author a template; there is no
+`holo(runtime_string)` form.
+
+`Markup` stores the parsed template as an ordered list of segments: each segment is either a
+literal `String` (emitted verbatim as HTML into the tooltip) or a
+`Field(name::Symbol, spec::Union{Nothing,String})` (a placeholder resolved in the browser from
+the hovered element's payload entry).
+
+`$(field)` **does not read a Julia variable** — it is a placeholder for a browser-side payload
+lookup resolved at hover time. `$(field:spec)` formats the value with a
+[d3-format](https://d3js.org/d3-format) spec before escaping. There is no Julia-object
+interpolation in templates.
+
+The literal portions of `holo"..."` are treated as raw HTML; the author is responsible for
+escaping `<` and `&` in literal text (same contract as `@htl`). Because `holo"..."` requires a
+string literal, a runtime-computed string must travel as a field inside the payload:
+pre-render it into `payloads` and reference it with `$(that_field)`.
+
+### 10.3 Validation
+
+Template validation happens at two distinct points. The **documented boundary** between them
+is: *Julia validates structure; the browser validates meaning.*
+
+**Phase 1 — macro-expansion (structural, no payload).** The macro parses the template string
+at compile time and catches unbalanced/empty/unclosed `$(...)` delimiters, non-identifier field
+names, and structurally-invalid d3-format specs. Errors surface as `TemplateValidationError`
+with a caret underline pointing at the offending span, attached to the source file and line of
+the `holo"..."` call — the user sees them the instant the cell parses, before `holo()` is ever
+called.
+
+**Phase 2 — build-time field check (payload-aware).** When `holo()` / `build_manifest` is
+called with a `Markup` tooltip, each template's field names are resolved against the actual
+payload keys. A field present in the template but absent from the payload is a build-time
+`ArgumentError`, with a "did you mean?" suggestion (Levenshtein edit distance ≤ 2). This check
+only runs when the layer's payloads are `NamedTuple`s (the default for the built-in
+interactables); for `Dict`-valued or heterogeneous payloads, it's skipped and a missing
+`$(field)` renders empty at hover instead. `:grid` (heatmap/image) layers carry no per-element
+payload; a template there resolves the synthesised fields `$(i)`, `$(j)`, and `$(value)`, which
+are likewise not field-validated at build.
+
+d3-format spec *structure* (the type character and arrangement of flags) is validated in Julia
+against d3's canonical grammar; the *meaning* of precision, trim, and sign modifiers is only
+resolved by the browser's `format()` — a spec can pass Julia and still format unexpectedly
+(check d3-format's behaviour for that type character).
+
+A `@generated` compile-time field check (to catch typos before `build_manifest`, for
+concretely-typed `NamedTuple` payloads) is deferred — it's a no-op on `Vector{Any}` /
+heterogeneous payloads, so Phase 2 stays the only build-time check for now.
+
+### 10.4 Wire format
+
+Each entry in the manifest `layers` array carries at most one of these two optional fields:
+
+| Field | Wire type | Present when |
+|---|---|---|
+| `template` | `Segment[]` | `tooltip` is a `Markup` |
+| `tooltip` | `false` | suppress requested |
+| *(neither present)* | — | auto-table default |
+
+`Segment` is `string \| { f: string, spec?: string }` — a literal run or a field placeholder.
+The template is **pre-parsed in Julia** at build time and shipped as structured data; the
+browser never re-parses a template string.
+
+The per-element `tooltips[]` string array that pre-M2.3 versions emitted is retired. Tooltip
+content is entirely client-side, rendered on hover from the existing `payloads[i]` entry — this
+keeps the tooltip wire cost O(1) per layer regardless of element count; the per-element
+envelope is unchanged (see `perf-findings.md` §"Scope bounds for downstream phases" for the
+measured comparison).
+
+The top-level manifest field `tipStyle` (`Record<string,string>`, optional) is a CSS-var dict
+of set `tooltip_*` kwargs, applied once to the shadow host at mount.
+
+`HitLayer` carries `template?: TemplateSegment[]` and `tooltip?: false`; `Manifest` carries
+`tipStyle?: Record<string, string>`. See `frontend/src/types.ts`.
+
+### 10.5 Security model
+
+**Template markup is author-trusted.** The literal HTML in `holo"..."` is inserted as
+`innerHTML` without sanitisation. The author who writes a Pluto notebook already has arbitrary
+Julia code execution, so sanitising their own template structure is theater (and a
+sanitisation library such as DOMPurify adds ~8–15 KB gzip for no real benefit in this context).
+A `<script>` tag in a literal template segment executes — expected for authors who
+intentionally embed scripts in their tooltips.
+
+**Interpolated data is escaped by default.** Every value resolved from `$(field)` and every
+cell in the auto-table is HTML-escaped with the OWASP five-character set (`& < > " '`) before
+insertion.
+
+**URL-context caveat.** HTML escaping does not neutralise scheme injection. If `$(x)` is used
+as a *whole* `href` or `src` attribute value and the data contains a `javascript:` URL, the
+scheme survives escaping and can execute — author responsibility if a template constructs
+`<a href="$(x)">` over untrusted URL data.
+
+### 10.6 Deferred / forward path
+
+| Capability | Status | Forward path |
+|---|---|---|
+| Per-element function tier (`tooltip = p -> @htl"..."`) | **Cut** — O(N) build footgun; per-element *values* belong in the payload | Partially covered by `$(field:raw)` (below) |
+| `$(field:raw)` — unescaped field interpolation | Deferred | Explicit opt-in marker (Bokeh `{safe}`-style); pre-render HTML into a payload field, inject unescaped |
+| Per-layer `tooltip_*` style override | Deferred | Non-breaking kwarg on the per-layer interactable constructor |
+| Compile-time field validation (`@generated`) | Deferred | No-op on heterogeneous payloads; build-time Phase 2 runs for `NamedTuple` payloads |
+| Caret edge-flipping / viewport-collision clamping | **Shipped** (first overlay polish PR) | Card stays inside the overlay; caret flips via `.flip-x` / `.flip-y` |
+| Inline date formatting | Deferred (would add `d3-time-format`) | Format dates in Julia into a payload string field |
+| Following a Pluto notebook theme toggle | **N/A** — official Pluto has none | OS `prefers-color-scheme` *is* Pluto's theme (Settings is help text; no class / `data-theme` / JS event). Revisit only if Pluto ships a real override with a stable signal. |

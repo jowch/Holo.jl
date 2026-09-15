@@ -38,7 +38,7 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 
 - [x] **Plot-introspection constructors**: `PointInteractable(ax, scatter)`, `RectInteractable(ax, heatmap)`, `SegmentInteractable(ax, lines)`, etc. — pull geometry from live Makie plot objects via `plot.converted[]`. *Done (`src/introspect.jl`): Scatter/Lines/LineSegments/Heatmap/Image/BarPlot/Poly delegate to the explicit constructors with identical hitlayers (tested). Gotchas handled: markersize→radius (pixel space), heatmap `EndPoints`→edge expansion, bar dodge/stack/auto-width read from the laid-out child rects. `ax` is passed (a plot has no axis back-reference); single-arg sugar arrives with M2.2's scene walk.*
 - [x] **`holo(fig)` auto-extraction**: walk the scene graph, emit a concrete `Vector{AbstractInteractable}` (the same one a user could write). Unknown plot type → skip + warn. Sugar over M2.1, not a separate path. *Done (`src/introspect.jl`): `auto_interactables(fig)` walks each `Axis`'s `scene.plots`, maps each supported plot via the M2.1 constructors, dedupes layer ids (`:scatter`, `:scatter_2`, …), and skips unsupported types with a warning. `holo(fig)` is the zero-config overlay; both exported.*
-- [x] **Richer tooltips (M2.3)** — `holo"…"` template macro, auto name/value table default, and figure-level `tooltip_*` theming. *Done (PR #10): see Phase 1 / `docs/tooltips.md`.*
+- [x] **Richer tooltips (M2.3)** — `holo"…"` template macro, auto name/value table default, and figure-level `tooltip_*` theming. *Done (PR #10): see Phase 1 / `architecture.md` §10 Tooltips.*
 
 ## M3 — Surface coverage (v2 from the survey)
 *Goal: more plot types, same primitives. Add per real demand.*
@@ -212,7 +212,7 @@ number — everything else is reorderable by demand.
   PNG — it degrades gracefully, nothing breaks.
 
 ### Phase 1 — Foundations that unblock the rest
-- [x] **M2.3 Richer tooltips** — *Done (PR #10; `docs/tooltips.md`).* Shipped as a **per-layer
+- [x] **M2.3 Richer tooltips** — *Done (PR #10; `architecture.md` §10 Tooltips).* Shipped as a **per-layer
   `holo"…"` template** interpolated browser-side from the already-shipped `payloads[]` — not the
   per-element-HTML approach first sketched here — so rich tooltips add **zero** new per-element wire
   bytes and the old per-element `tooltips[]` term was dropped (the budget concern is sidestepped, not
