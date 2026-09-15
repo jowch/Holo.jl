@@ -1,6 +1,9 @@
 using Documenter
 using Holo
 
+include("export_notebooks.jl")
+export_notebooks(joinpath(@__DIR__, "src", "notebooks"))
+
 makedocs(;
     modules = [Holo],
     authors = "Jonathan Chen <jwhc@ucla.edu>",
