@@ -20,6 +20,7 @@ makedocs(;
         "Interactables" => "interactables.md",
         "Selection" => "selection.md",
         "Tooltips" => "tooltips.md",
+        "Keyboard and screen readers" => "accessibility.md",
         "Custom interactions" => "custom.md",
         "Backends" => "backends.md",
         "Troubleshooting" => "troubleshooting.md",
