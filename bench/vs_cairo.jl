@@ -25,7 +25,7 @@ using Holo, WGLMakie, Printf, Random
 Random.seed!(0)   # mirror the Cairo subprocess seed so both sides build the SAME figures reproducibly
 # (matters at small N: an unseeded rand() shifts tick-label glyph content → the scene size drifts).
 
-# scene_payload/wglmakie_bundle_path live in the :webgl extension (WGLMakie is a weak dep of Holo),
+# scene_payload/_wgl_bundle_path live in the :webgl extension (WGLMakie is a weak dep of Holo),
 # so reach them via Base.get_extension — same pattern test/runtests.jl uses for the Cairo extension.
 const _WGLExt = Base.get_extension(Holo, :HoloWGLMakieExt)
 
@@ -139,7 +139,7 @@ function cairo_measure_all()
 end
 
 kb(b) = round(b / 1024; digits = 0)
-bundle_B = filesize(_WGLExt.wglmakie_bundle_path())
+bundle_B = filesize(_WGLExt._wgl_bundle_path())
 
 println("WGLMakie bundle (once per notebook, M2): ", round(bundle_B / 1.0e6; digits = 2), " MB\n")
 println("figure        | Cairo png+man/render | Cairo ms | WebGL scene/render | WebGL ms | crossover N")

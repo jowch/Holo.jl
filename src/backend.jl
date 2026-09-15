@@ -108,16 +108,16 @@ function make_widget end  # (backend, <backend's RenderResult-like>, manifest, d
 function _project_closure(scaling, out_h)
     return function (ax, p)
         tp = try
-            Makie.apply_transform(
-                Makie.transform_func(ax.scene),
+            _apply_transform(
+                _transform_func(ax.scene),
                 Makie.Point3(Float64(p[1]), Float64(p[2]), length(p) >= 3 ? Float64(p[3]) : 0.0)
             )
         catch e
             e isa DomainError || rethrow()
             Point3f(NaN32, NaN32, NaN32)
         end
-        q = Makie.project(ax.scene, tp)
-        o = ax.scene.viewport[].origin
+        q = _project_px(ax.scene, tp)
+        o = _scene_viewport(ax).origin
         return Point2f((q[1] + o[1]) * scaling, out_h - (q[2] + o[2]) * scaling)  # flip to image coords
     end
 end
@@ -132,9 +132,9 @@ function _cats(conv)
 end
 
 function _axis_transform(id, ax, scaling, out_h)
-    vp = ax.scene.viewport[]; o = vp.origin; wv = vp.widths
+    vp = _scene_viewport(ax); o = vp.origin; wv = vp.widths
     vpx = (o[1] * scaling, out_h - (o[2] + wv[2]) * scaling, wv[1] * scaling, wv[2] * scaling)
-    fl = ax.finallimits[]; fo = fl.origin; fw = fl.widths
+    fl = _finallimits(ax); fo = fl.origin; fw = fl.widths
     return AxisTransform(
         id,
         (fo[1], fo[1] + fw[1]), (fo[2], fo[2] + fw[2]),
@@ -151,7 +151,7 @@ end
 # validate() on is3d. Element interactables only need `ctx.ids[ax]` set: they project in
 # Julia through the shared closure, which handles the 3D camera.
 function _axis3_transform(id, ax, scaling, out_h)
-    vp = ax.scene.viewport[]; o = vp.origin; wv = vp.widths
+    vp = _scene_viewport(ax); o = vp.origin; wv = vp.widths
     vpx = (o[1] * scaling, out_h - (o[2] + wv[2]) * scaling, wv[1] * scaling, wv[2] * scaling)
     return AxisTransform(
         id, (0.0, 1.0), (0.0, 1.0), :identity, :identity,
@@ -164,7 +164,7 @@ end
 # θ/r readout needs that polar transform serialized to JS — not shipped yet — so lims are
 # degenerate and Axis/Threshold/ROI fail loud in validate() on ispolar (same shape as is3d).
 function _polar_transform(id, ax, scaling, out_h)
-    vp = ax.scene.viewport[]; o = vp.origin; wv = vp.widths
+    vp = _scene_viewport(ax); o = vp.origin; wv = vp.widths
     vpx = (o[1] * scaling, out_h - (o[2] + wv[2]) * scaling, wv[1] * scaling, wv[2] * scaling)
     return AxisTransform(
         id, (0.0, 1.0), (0.0, 1.0), :identity, :identity,
@@ -177,7 +177,7 @@ end
 # the other axis is degenerate (never read). Geometry from the laid-out block, converted with the
 # same ×scaling + y-flip as an axis viewport.
 function _colorbar_transform(id, cb, scaling, out_h)
-    bb = cb.layoutobservables.computedbbox[]
+    bb = _colorbar_bbox(cb)
     o = bb.origin; wv = bb.widths
     vpx = (o[1] * scaling, out_h - (o[2] + wv[2]) * scaling, wv[1] * scaling, wv[2] * scaling)
     lims = cb.limits[]

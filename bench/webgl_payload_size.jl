@@ -22,14 +22,14 @@
 using Holo, WGLMakie
 import JSON3
 
-# scene_payload/wglmakie_bundle_path live in the :webgl extension (WGLMakie is a weak dep of
+# scene_payload/_wgl_bundle_path live in the :webgl extension (WGLMakie is a weak dep of
 # Holo), so reach them via Base.get_extension — same pattern test/runtests.jl uses for the Cairo
 # extension.
 const _WGLExt = Base.get_extension(Holo, :HoloWGLMakieExt)
 
 println(
     "WGLMakie bundle (shipped once per notebook, M2): ",
-    round(filesize(_WGLExt.wglmakie_bundle_path()) / 1.0e6; digits = 2), " MB"
+    round(filesize(_WGLExt._wgl_bundle_path()) / 1.0e6; digits = 2), " MB"
 )
 
 # Concatenate the binary bytes of every typed numeric Vector in the payload — what Pluto's MsgPack

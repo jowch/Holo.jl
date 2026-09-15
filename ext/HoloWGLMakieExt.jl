@@ -40,6 +40,89 @@ WebGLBackend(; px_per_unit = 2.0, max_width = 700) = WebGLBackend(px_per_unit, m
 Holo._ppu(b::WebGLBackend, _fig) = b.px_per_unit
 
 # ---------------------------------------------------------------------------
+# WGL-only Makie/WGLMakie/Bonito internals: every non-public surface unique to the WebGL
+# backend goes through exactly one of these three, same fail-loud doctrine as
+# src/makie_compat.jl (which these deliberately do NOT live in — they're WGL-only and this
+# extension is the only place `WGLMakie`/`Bonito` are in scope). See test/webgl_ext_tests.jl's
+# "version-coupling guard".
+# Same version split as src/makie_compat.jl's _MAKIE_SHAPE_ERRORS: struct-field reads throw
+# `FieldError` on Julia >= 1.12 (doesn't exist before), `ErrorException` on 1.10/1.11.
+const _WGL_SHAPE_ERRORS = @static if isdefined(Base, :FieldError)
+    Union{MethodError, UndefVarError, ErrorException, KeyError, FieldError}
+else
+    Union{MethodError, UndefVarError, ErrorException, KeyError}
+end
+
+# Narrower union for `_serialize_scene`, which walks every plot's own recipe code — an
+# `ErrorException` raised there is the plot's, not a Makie internal shape change.
+const _WGL_DOWNSTREAM_ERRORS = @static if isdefined(Base, :FieldError)
+    Union{MethodError, UndefVarError, KeyError, FieldError}
+else
+    Union{MethodError, UndefVarError, KeyError}
+end
+
+_wgl_compat_error(name, expected) = error(
+    "Holo: WGLMakie/Bonito internal `$(name)` changed shape under WGLMakie v$(pkgversion(WGLMakie)) — " *
+        "expected $(expected); please open an issue"
+)
+
+# The vendored bundle is sourced at runtime from the installed WGLMakie package (so the
+# renderer always version-matches `_serialize_scene`) — no public "give me the JS bundle" API.
+function _wgl_bundle_path()
+    path = try
+        joinpath(pkgdir(WGLMakie), "src", "javascript", "WGLMakie.bundled.js")
+    catch e
+        e isa _WGL_SHAPE_ERRORS || rethrow()
+        return _wgl_compat_error("WGLMakie.bundled.js path", "`pkgdir(WGLMakie)/src/javascript/WGLMakie.bundled.js` to exist")
+    end
+    isfile(path) || return _wgl_compat_error("WGLMakie.bundled.js path", "the vendored bundle to exist at $(path)")
+    return path
+end
+
+# A NoConnection Session + headless Screen must be attached to the scene before
+# `_serialize_scene` so its atlas tracker is populated (required for marker/text glyphs) — no
+# public headless-serialization API exists in WGLMakie. `f(screen)` runs with the screen
+# attached; the screen is always detached afterward, even on error.
+function _headless_screen(f, scene)
+    screen = try
+        session = Bonito.Session(Bonito.NoConnection())
+        config = Makie.merge_screen_config(WGLMakie.ScreenConfig, Dict{Symbol, Any}())
+        s = WGLMakie.Screen(scene, config)
+        s.session = session
+        Makie.push_screen!(scene, s)
+        s
+    catch e
+        e isa _WGL_SHAPE_ERRORS || rethrow()
+        return _wgl_compat_error(
+            "headless screen construction",
+            "`Bonito.Session(Bonito.NoConnection())` + `Makie.merge_screen_config`/`WGLMakie.ScreenConfig`/" *
+                "`WGLMakie.Screen`/`Makie.push_screen!` to compose a headless screen"
+        )
+    end
+    try
+        return f(screen)
+    finally
+        try
+            Makie.delete_screen!(scene, screen)
+        catch e
+            e isa _WGL_SHAPE_ERRORS || rethrow()
+            _wgl_compat_error("delete_screen!", "`Makie.delete_screen!(scene, screen)` to detach a screen")
+        end
+    end
+end
+
+# The only way to turn a live Scene into a plain, browser-serializable payload — no public
+# headless serialization API exists in WGLMakie.
+function _serialize_scene(scene)
+    try
+        return WGLMakie.serialize_scene(scene)
+    catch e
+        e isa _WGL_DOWNSTREAM_ERRORS || rethrow()
+        return _wgl_compat_error("serialize_scene", "`WGLMakie.serialize_scene(scene)` to return a plain scene tree")
+    end
+end
+
+# ---------------------------------------------------------------------------
 # The proven 4-rule encoder (spike 08). serialize_scene leaves live Observables and raw
 # arrays; the browser shim expects each tagged so it can rebuild the structures WGLMakie's
 # own deserialize reads:
@@ -103,15 +186,8 @@ and text glyphs (spike finding: bare `serialize_scene` emits an empty atlas).
 """
 function scene_payload(fig)
     scene = fig.scene
-    session = Bonito.Session(Bonito.NoConnection())
-    config = Makie.merge_screen_config(WGLMakie.ScreenConfig, Dict{Symbol, Any}())
-    screen = WGLMakie.Screen(scene, config)
-    screen.session = session
-    Makie.push_screen!(scene, screen)
-    try
-        return _plain(WGLMakie.serialize_scene(scene))
-    finally
-        Makie.delete_screen!(scene, screen)   # don't leave the NoConnection screen attached to the user's figure
+    return _headless_screen(scene) do screen
+        _plain(_serialize_scene(scene))
     end
 end
 
@@ -177,10 +253,10 @@ function Holo.context(b::WebGLBackend, fig, ppu)
     return InteractionContext(project, transforms, ids, out_w, out_h, scaling, display_scale)
 end
 
-# Path to the committed shim bundle (vendored WGLMakie.bundled.js is sourced at runtime
-# from the installed WGLMakie package, so the renderer always version-matches serialize_scene).
+# Path to the committed shim bundle. The WGLMakie bundle itself is sourced at runtime from
+# the installed WGLMakie package (`_wgl_bundle_path`, above), so the renderer always
+# version-matches `_serialize_scene`.
 const SHIM_JS = joinpath(@__DIR__, "..", "assets", "holo-webgl.js")
-wglmakie_bundle_path() = joinpath(pkgdir(WGLMakie), "src", "javascript", "WGLMakie.bundled.js")
 
 struct WebGLWidget
     scene::Dict{String, Any}        # serialize_scene payload (4-rule encoded)
@@ -243,7 +319,7 @@ end
 # Cache the bundle (~1MB) + shim text once, not per render.
 const _BUNDLE_TEXT = Ref{String}("")
 const _SHIM_TEXT = Ref{String}("")
-_bundle_text() = (isempty(_BUNDLE_TEXT[]) && (_BUNDLE_TEXT[] = read(wglmakie_bundle_path(), String)); _BUNDLE_TEXT[])
+_bundle_text() = (isempty(_BUNDLE_TEXT[]) && (_BUNDLE_TEXT[] = read(_wgl_bundle_path(), String)); _BUNDLE_TEXT[])
 _shim_text() = (isempty(_SHIM_TEXT[]) && (_SHIM_TEXT[] = read(SHIM_JS, String)); _SHIM_TEXT[])
 
 function Base.show(io::IO, m::MIME"text/html", w::WebGLWidget)

@@ -29,6 +29,10 @@ function drawn_near(img, cx, cy; tol = 8)
     return false
 end
 
+# Canary FIRST: a Makie internal that changed shape should fail loudly here, not as a
+# scattered downstream MethodError/wrong-pixel bug in one of the testsets below.
+include("makie_compat_tests.jl")
+
 @testset "Holo" begin
     pts = [(1.0, 1.0), (2.0, 4.0), (3.0, 9.0)]
     fig = Figure(size = (600, 400)); ax = Axis(fig[1, 1])
