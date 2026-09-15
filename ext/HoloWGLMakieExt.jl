@@ -17,8 +17,23 @@ export WebGLBackend
 """
     WebGLBackend(; px_per_unit=2.0, max_width=700)
 
-Browser-GPU Holo backend. `px_per_unit` is the explicit device scale (surface DPI is a
-controllable knob); `max_width` mirrors CairoBackend (Pluto's column).
+Live, browser-GPU `Holo` backend (loaded when `WGLMakie` is `using`d): serializes `fig`'s scene
+and renders it in a WebGL `<canvas>` on the client GPU, with Holo's usual JS overlay layered on
+top — same `holo`/`@bind`/`InteractionEvent` contract as [`CairoBackend`](@ref), for animation,
+large/live data, and live 3D. Needs an explicit `backend=` if both `CairoMakie` and `WGLMakie`
+are loaded (`holo` otherwise defaults to Cairo).
+
+# Arguments
+- `px_per_unit` — the explicit device/surface scale (unlike `CairoBackend`, this is a fixed
+  knob, not derived from `max_width`). Default `2.0`.
+- `max_width` — the display width to target, in px (Pluto's column); mirrors
+  `CairoBackend`'s `max_width`. Default `700`.
+
+# Examples
+```julia
+using Holo, WGLMakie
+holo(fig; backend = WebGLBackend(; px_per_unit = 3.0))
+```
 """
 struct WebGLBackend <: AbstractBackend
     px_per_unit::Float64

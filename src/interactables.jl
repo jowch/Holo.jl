@@ -1,8 +1,29 @@
 """
     HitLayer
 
-The serialized unit: one geometry `kind` for one interactable, plus the data to resolve
-a hit to an element index + payload. `geometry` layout is keyed by `kind`.
+The unit `holo` serializes to the browser: one geometry `kind` for one interactable, plus the
+data needed to resolve a pointer hit to an element index and its payload. Built by
+[`hitlayers`](@ref); user-facing mainly when writing a [`FunctionInteractable`](@ref).
+
+# Fields
+- `id::Symbol` — the layer id; becomes `InteractionEvent.layer` on a hit.
+- `kind::Symbol` — one of `:circles`, `:polyline`, `:segments`, `:rects`, `:grid`, `:polygons`,
+  `:axis`, `:threshold`, `:roi`, `:view`. `geometry`'s layout depends on it:
+  - `:circles` — flat `Real[]`, `(cx, cy, r)` per element (image px)
+  - `:rects` — flat `Real[]`, `(cx, cy, w, h)` per element (image px)
+  - `:polyline` / `:segments` — flat `Real[]`, `(x, y)` per vertex — one connected path /
+    disjoint pairs, respectively (image px)
+  - `:polygons` — `Vector{Real}[]`, one flat `(x, y)`-per-vertex ring per element (image px)
+  - `:grid` — a `Dict` with `"xedges"`, `"yedges"`, `"ncols"`, `"nrows"`, optional `"values"`
+  - `:axis` — `nothing` (whole-axis readout, `AxisInteractable`) or flat `Real[x, y, w, h]`
+    (the colorbar's pixel bbox, `ColorbarInteractable`); not element-indexed
+  - `:threshold` / `:roi` / `:view` — a small `Dict` (orientation/position, drag bbox +
+    handle size, or viewport + camera, respectively); not element-indexed
+- `payloads::Vector{Any}` — one JSON-serializable entry per element, positional (`payloads[k]`
+  binds element `k`); empty for the element-count-free kinds above.
+- `axis::Symbol` — the id of this layer's [`AxisTransform`](@ref) in
+  `InteractionContext.transforms` (see `axis_id`).
+- `events::Tuple` — the pointer events this layer responds to (`:click`, `:hover`, `:drag`).
 """
 struct HitLayer
     id::Symbol
@@ -13,9 +34,52 @@ struct HitLayer
     events::Tuple
 end
 
+"""
+    AbstractInteractable
+
+Supertype for everything [`holo`](@ref) can turn into hit-testable JS layers. The built-in
+kinds ([`PointInteractable`](@ref), [`SegmentInteractable`](@ref), [`RectInteractable`](@ref),
+[`PolygonInteractable`](@ref), [`AxisInteractable`](@ref), [`ColorbarInteractable`](@ref),
+[`ThresholdInteractable`](@ref), [`ROIInteractable`](@ref), [`TextInteractable`](@ref),
+[`ViewInteractable`](@ref), [`RegionInteractable`](@ref), [`FunctionInteractable`](@ref))
+cover most needs; implement this interface for anything else.
+
+# Interface
+
+Only `hitlayers` is exported — every other method below is a non-exported function of the
+`Holo` module. Extend them as `Holo.validate(::MyType, ctx) = …`, etc.; a bare
+`validate(::MyType, ctx) = …` at top level defines an unrelated function that `holo` never
+calls, and `holo(fig, MyType())` will build without error while silently ignoring it.
+
+Required:
+- `hitlayers(i, ctx::InteractionContext) -> Vector{HitLayer}` — see [`hitlayers`](@ref)
+  (exported).
+
+Optional (default shown; all non-exported — extend as `Holo.<name>`):
+- `Holo.validate(i, ctx::InteractionContext) -> Union{Nothing,String}` — return an error
+  message if `i` can't be built against `ctx` (`holo` raises it as `ArgumentError`), else
+  `nothing`. Default: always valid.
+- `Holo.events(i) -> Tuple` — the pointer events this interactable's layer(s) respond to
+  (`:click`, `:hover`, `:drag`). Default: `(:click, :hover)`.
+- `Holo.tooltip_spec(i)` — `nothing` for the auto name/value table, a [`Markup`](@ref) (built
+  with `holo"..."`) template, or `false` to suppress. Default: `nothing`.
+- `Holo.hoverstyle(i) -> NamedTuple` — one `(; stroke, width)` hover outline style per *layer*
+  (the manifest ships one style per layer, not per element). Default:
+  `(; stroke = "#3A6F7C", width = 2)`.
+
+[`AbstractSelector`](@ref) subtypes additionally implement `Holo.selects`/`Holo.compatible_kinds`.
+"""
 abstract type AbstractInteractable end
 
-# hitlayers is the only required method; the rest below are defaults.
+"""
+    hitlayers(interactable, ctx::InteractionContext) -> Vector{HitLayer}
+
+Build the [`HitLayer`](@ref)(s) an interactable contributes to the manifest — the only method
+every [`AbstractInteractable`](@ref) subtype must implement. Project data-space geometry with
+`data_to_image_px(ctx, ax, point)`; never re-derive projection. Most built-ins return a single
+`HitLayer`; [`RegionInteractable`](@ref) can return several (one per region kind), and
+[`FunctionInteractable`](@ref) delegates entirely to a user function of `ctx`.
+"""
 function hitlayers end
 validate(::AbstractInteractable, ::InteractionContext) = nothing
 events(::AbstractInteractable) = (:click, :hover)
@@ -24,6 +88,16 @@ tooltip_spec(::AbstractInteractable) = nothing
 # One hover style per LAYER (the manifest ships one `style` dict per layer, not per element).
 hoverstyle(::AbstractInteractable) = (; stroke = "#3A6F7C", width = 2)
 
+"""
+    AbstractSelector
+
+Supertype for interactables that highlight elements on another layer — today just
+[`ROIInteractable`](@ref)'s `selects` mode, brushing a `:circles`/`:grid` layer. Subtypes
+additionally implement these non-exported functions (extend as `Holo.selects(::MyType) = …`):
+- `Holo.selects(i) -> Union{Nothing,Symbol}` — the target layer id, or `nothing`.
+- `Holo.compatible_kinds(i) -> Tuple` — the target `HitLayer.kind`s this selector accepts;
+  `holo` raises `ArgumentError` at build time if `selects` names a layer of an unlisted kind.
+"""
 abstract type AbstractSelector <: AbstractInteractable end
 
 # Only AbstractSelectors override these.
@@ -64,6 +138,46 @@ _check_tooltip(tooltip) =
 )
 
 # ============================ PointInteractable ============================
+"""
+    PointInteractable(ax, points; id=:points, payloads=<auto>, radius=9, radius3d=nothing, tooltip=nothing)
+    PointInteractable(ax, p::Makie.Scatter; id=:scatter, payloads=nothing, radius=nothing)
+    PointInteractable(ax, p::Makie.MeshScatter; id=:meshscatter, payloads=nothing, radius=nothing, radius3d=nothing)
+
+Scatter-style points, hit-tested as circles. Produces one `:circles` [`HitLayer`](@ref).
+
+# Arguments
+- `points` — data-space points, each a 2- or 3-element point/tuple (`Axis3` scatters use 3).
+- `id` — the layer id; becomes `InteractionEvent.layer` on a hit.
+- `payloads` — one entry per point (`ArgumentError` if the length doesn't match `points`).
+  Default: `(; index, x, y)`, or `(; index, x, y, z)` for 3-coordinate points — `index` is
+  0-based.
+- `radius` — click-target radius in px (scaled to the rendered image's DPI), the same for
+  every point. Default `9`.
+- `radius3d` — per-point data-space half-extents (`Vector{Makie.Vec3f}`), for markers whose
+  on-screen size is camera/depth-dependent (e.g. `meshscatter`). When set, overrides `radius`
+  with an axis-aligned pixel-radius approximation projected per point — it can underestimate
+  the true silhouette (worst case ~29%, at adversarial azimuth/elevation). Must have one entry
+  per point (`ArgumentError` otherwise).
+- `tooltip` — `nothing` for the auto name/value table (default), `holo"..."` for a template, or
+  `false` to suppress. `tooltip = true` is rejected (`ArgumentError`; not meaningful).
+
+# From a plot object
+`PointInteractable(ax, p::Makie.Scatter)` reads points from `p`'s converted data and derives
+`radius` from `markersize / 2` — this requires `markerspace = :pixel` (the default); pass
+`radius=` explicitly for any other markerspace, or it errors. `PointInteractable(ax,
+p::Makie.MeshScatter)` derives `radius3d` from `p`'s data-space `markersize` (a `Vec3f`, a
+`Real`, or a per-element vector of either); pass `radius=`/`radius3d=` explicitly if it can't
+be derived.
+
+# Examples
+```julia
+pts = [(1.0, 1.0), (2.0, 4.0), (3.0, 9.0)]
+PointInteractable(ax, pts; payloads = ["a", "b", "c"])
+
+p = scatter!(ax, xs, ys; markersize = 14)
+PointInteractable(ax, p)   # radius = 14/2, taken from markersize
+```
+"""
 struct PointInteractable <: AbstractInteractable
     ax; points::Vector{Point3f}; id::Symbol; payloads::Vector{Any}; radius::Float64
     # Data-space half-extents (meshscatter markers are data-sized); overrides `radius` via an
@@ -115,6 +229,53 @@ function hitlayers(i::PointInteractable, ctx)
 end
 
 # ============================ SegmentInteractable ==========================
+"""
+    SegmentInteractable(ax, vertices; mode=:polyline, id=:segments, payloads=nothing, tol=6, tooltip=nothing)
+    SegmentInteractable(ax, p; id=<kind-specific>, payloads=nothing, tol=6)   # from a plot object
+
+Lines / polylines (nearest-segment hit) or disjoint segment pairs. Produces one `:polyline` or
+`:segments` [`HitLayer`](@ref) (per `mode`).
+
+# Arguments
+- `vertices` — data-space points, each a 2- or 3-element point/tuple.
+- `mode` — `:polyline` (default): `vertices` is one connected path, `length(vertices) - 1`
+  segments, hit-tested against the nearest segment. `:pairs`: `vertices` is disjoint pairs
+  `(v1,v2), (v3,v4), …`, `length(vertices) ÷ 2` segments. Any other value raises
+  `ArgumentError`.
+- `id` — the layer id; becomes `InteractionEvent.layer` on a hit.
+- `payloads` — one entry per segment (count per `mode` above); `ArgumentError` if the length
+  doesn't match. Default: `(; segment_index)`, 0-based.
+- `tol` — accepted and stored on the interactable, but **not currently used**: the actual
+  client-side hit-test slack around a segment is a fixed 8 px (`SEG_TOL` in
+  `frontend/src/geometry.ts`), independent of this keyword's value or default (`6`). Wire it
+  through before relying on it for a tighter or looser hit target.
+- `tooltip` — `nothing` for the auto name/value table (default), `holo"..."` for a template, or
+  `false` to suppress. `tooltip = true` is rejected (`ArgumentError`).
+
+# From a plot object
+`SegmentInteractable(ax, p)` reads vertices from `p` (no `mode`/`tooltip` keyword — `mode` and
+the source geometry are fixed by the plot type):
+
+| `p` | default `id` | `mode` | vertices from |
+|---|---|---|---|
+| `Makie.Lines` | `:lines` | `:polyline` | converted data |
+| `Makie.LineSegments` | `:segments` | `:pairs` | converted data |
+| `Makie.Wireframe` | `:wireframe` | `:pairs` | the child `LineSegments`' edges (incl. mesh-triangulation diagonals) |
+| `Makie.Arrows3D` | `:arrows3d` | `:pairs` | processed `startpoints`/`endpoints` (post-align/lengthscale); default payload `(; index, x, y, z, u, v, w)` from `points`/`directions` |
+| `Makie.Stairs` | `:stairs` | `:polyline` | the child `Lines`' pre-expanded step polyline |
+| `Makie.Errorbars` | `:errorbars` | `:pairs` | each bar's low→high endpoints |
+| `Makie.Rangebars` | `:rangebars` | `:pairs` | each bar's low→high endpoints |
+| `Makie.HLines` | `:hlines` | `:pairs` | each line spanning the axis's current data range (re-resolved on limit changes) |
+| `Makie.VLines` | `:vlines` | `:pairs` | each line spanning the axis's current data range (re-resolved on limit changes) |
+
+# Examples
+```julia
+p = lines!(ax, xs, ys)
+SegmentInteractable(ax, p)                       # :polyline, nearest-segment hit
+
+SegmentInteractable(ax, [(0,0), (1,1), (2,0)]; mode = :polyline)
+```
+"""
 struct SegmentInteractable <: AbstractInteractable
     ax; vertices::Vector{Point3f}; mode::Symbol; id::Symbol; payloads::Vector{Any}; tol::Float64; tooltip::Union{Nothing, Markup, Bool}
     # When set, hitlayers calls resolve(ax) instead of using the stored vertices — for geometry
@@ -149,7 +310,61 @@ function hitlayers(i::SegmentInteractable, ctx)
 end
 
 # ============================ RectInteractable =============================
-# list: rects of (xc,yc,w,h) in DATA space. grid: (xedges, yedges, values) in DATA space.
+"""
+    RectInteractable(ax; rects, id=:rects, payloads=nothing, tooltip=nothing, clamp_to_viewport=false)
+    RectInteractable(ax; grid, id=:rects, payloads=nothing, tooltip=nothing)
+    RectInteractable(ax, p; id=<kind-specific>, payloads=nothing)   # from a plot object
+
+Axis-aligned rectangles: an explicit list (bars, boxes) or a compact heatmap/image grid. Pass
+one of `rects`/`grid` (not both — this is **not** checked: `grid` silently wins if both are
+given, and passing neither errors before either's own validation runs). Produces one `:rects`
+or `:grid` [`HitLayer`](@ref).
+
+# Arguments (list form: `rects=`)
+- `rects` — data-space boxes `[(xc, yc, w, h), …]` (center + width/height).
+- `id` — the layer id; becomes `InteractionEvent.layer` on a hit. Default `:rects`.
+- `payloads` — one entry per rect; `ArgumentError` if the length doesn't match. Default:
+  `(; index)`, 0-based.
+- `tooltip` — `nothing` for the auto name/value table (default), `holo"..."` for a template, or
+  `false` to suppress. `tooltip = true` is rejected (`ArgumentError`).
+- `clamp_to_viewport` — clamp each rect's pixel bounds to the axis viewport (inward rounding,
+  so integer quantization never expands past the edge) before shipping geometry. Used
+  internally by the `HSpan`/`VSpan` introspection methods below; rarely needed directly.
+  Default `false`.
+
+# Arguments (grid form: `grid=`)
+- `grid` — `(xedges, yedges, values)`: `xedges`/`yedges` are cell-edge vectors (length
+  `ncols+1`/`nrows+1`), `values` an `(ncols, nrows)` `Matrix` of per-cell values. Shape mismatch
+  raises `ArgumentError`. `id`/`tooltip` as above; `payloads` is unused (cell `(i, j, value)`
+  is resolved client-side from `values`). If a cell renders under ~1 screen px, `values` is
+  dropped from the manifest to bound its size (hover then shows `(i, j)` only; a `@warn` notes
+  it) — clicks still carry the cell index.
+
+# From a plot object
+`RectInteractable(ax, p)` builds `rects`/`grid` and default payloads from `p`:
+
+| `p` | default `id` | form | notes |
+|---|---|---|---|
+| `Makie.Heatmap` / `Makie.Image` | `:cells` | grid | edges from converted coordinate/coordinate-free ranges |
+| `Makie.BarPlot` | `:bars` | list | reads the laid-out child `Poly` (dodge/stack/auto-width honored); payload `(; low, high, value)` |
+| `Makie.Spy` | `:spy` | list | cell size from the child `Scatter`'s data-space `markersize` (length-2 vector or scalar; other shapes error) |
+| `Makie.Hist` | `:hist` | list | payload `(; value, low, high)` (`value` is a count only for `normalization = :none`) |
+| `Makie.Waterfall` | `:waterfall` | list | payload `(; low, high, value)` |
+| `Makie.CrossBar` | `:crossbar` | list | payload `(; midpoint, low, high)` |
+| `Makie.HSpan` | `:hspan` | list | spans the full x-range of `ax`'s current limits; `clamp_to_viewport = true`; payload `(; low, high)` (y-bounds); re-resolved on limit changes |
+| `Makie.VSpan` | `:vspan` | list | spans the full y-range of `ax`'s current limits; `clamp_to_viewport = true`; payload `(; low, high)` (x-bounds); re-resolved on limit changes |
+
+# Examples
+```julia
+RectInteractable(ax; rects = [(0.0, 0.0, 1.0, 1.0)], payloads = [(; label = "a")])
+
+xedges = 0:0.5:2; yedges = 0:1:3; vals = rand(4, 3)
+RectInteractable(ax; grid = (xedges, yedges, vals))
+
+p = heatmap!(ax, X, Y, Z)
+RectInteractable(ax, p)
+```
+"""
 struct RectInteractable <: AbstractInteractable
     ax; layout::Symbol; data::Any; id::Symbol; payloads::Vector{Any}; tooltip::Union{Nothing, Markup, Bool}
     # Spans only: clamp the pixel rect to the axis viewport with inward rounding (ceil near
@@ -235,10 +450,34 @@ function hitlayers(i::RectInteractable, ctx)
 end
 
 # ============================ TextInteractable =============================
-# Geometry is `Makie.string_boundingboxes` in SCENE-LOCAL pixel space (y-up, bottom-left
-# origin), not data space — converted directly to image px, not projected. Read only in
-# `hitlayers`, never at construction: a manually-built TextInteractable may exist before the
-# figure is finalized.
+"""
+    TextInteractable(ax, p::Makie.Text; id=:text, payloads=nothing, tooltip=nothing)
+
+Click-to-pick text labels (from `text!`/`annotation!`), hit-tested as bounding-box rects. Has
+**no explicit-geometry constructor** — this from-a-plot-object form is the only way to build
+one. Produces one `:rects` [`HitLayer`](@ref), one box per string.
+
+# Arguments
+- `p` — a `Makie.Text` plot (for `annotation!`, pass its descendant `Text`, e.g. via
+  [`auto_interactables`](@ref)).
+- `id` — the layer id; becomes `InteractionEvent.layer` on a hit. Default `:text`.
+- `payloads` — one entry per string; `ArgumentError` if the length doesn't match. Default:
+  `(; text, index, x, y)` — `text` is the string, `index` 0-based, `(x, y)` its data-space
+  anchor.
+- `tooltip` — `nothing` for the auto name/value table (default), `holo"..."` for a template, or
+  `false` to suppress. `tooltip = true` is rejected (`ArgumentError`).
+
+Geometry is each string's axis-aligned bounding box (`Makie.string_boundingboxes`), not
+projected data coordinates — a rotated label gets its expanded axis-aligned box. Boxes are
+read lazily in `hitlayers`, not at construction, so a `TextInteractable` can be built before
+the figure is finalized.
+
+# Examples
+```julia
+p = text!(ax, "hello"; position = (1.0, 2.0))
+TextInteractable(ax, p)
+```
+"""
 struct TextInteractable <: AbstractInteractable
     ax; p; id::Symbol; payloads::Vector{Any}; tooltip::Union{Nothing, Markup, Bool}   # p::Makie.Text
 end
@@ -279,6 +518,42 @@ function hitlayers(i::TextInteractable, ctx)
 end
 
 # ============================ PolygonInteractable ==========================
+"""
+    PolygonInteractable(ax, rings; id=:polygons, payloads=nothing, tooltip=nothing)
+    PolygonInteractable(ax, p; id=<kind-specific>, payloads=nothing)   # from a plot object
+
+Arbitrary filled polygons, hit-tested even-odd. Produces one `:polygons` [`HitLayer`](@ref).
+
+# Arguments
+- `rings` — `Vector{Vector{point}}`, one or more rings, each a `Vector` of 2- or 3-element
+  data-space points/tuples (one polygon per ring; a ring need not be closed — the hit-test
+  closes it implicitly).
+- `id` — the layer id; becomes `InteractionEvent.layer` on a hit. Default `:polygons`.
+- `payloads` — one entry per ring; `ArgumentError` if the length doesn't match. Default:
+  `(; index)`, 0-based.
+- `tooltip` — `nothing` for the auto name/value table (default), `holo"..."` for a template, or
+  `false` to suppress. `tooltip = true` is rejected (`ArgumentError`).
+
+# From a plot object
+`PolygonInteractable(ax, p)` builds `rings` and default payloads from `p`:
+
+| `p` | default `id` | rings from | notes |
+|---|---|---|---|
+| `Makie.Poly` | `:poly` | converted geometry | one ring, or many for a multi-ring `Poly` |
+| `Makie.Band` | `:band` | lower curve + reversed upper curve | always exactly one open ring |
+| `Makie.Density` | `:density` | its descendant `Band`'s KDE fill | same shape as `Band` |
+| `Makie.Contourf` | `:contourf` | each filled level's **exterior** ring only (holes excluded — a v1 limitation: an annular band over-covers its hole at the boundary) | payload `(; low, high)`, the band edges nearest each polygon's fill color |
+| `Makie.Violin` | `:violin` | each violin's outline | payload `(; x)`, the nearest category to the ring's geometric center |
+| `Makie.Voronoiplot` | `:voronoiplot` | each cell's exterior ring | cells come back in tessellation order (no cheap cell→generator map), so default payload is `(; index)` only |
+
+# Examples
+```julia
+PolygonInteractable(ax, [[(0,0), (1,0), (1,1), (0,1)]])
+
+p = poly!(ax, points)
+PolygonInteractable(ax, p)
+```
+"""
 struct PolygonInteractable <: AbstractInteractable
     ax; rings::Vector; id::Symbol; payloads::Vector{Any}; tooltip::Union{Nothing, Markup, Bool}
 end
@@ -302,7 +577,30 @@ function hitlayers(i::PolygonInteractable, ctx)
 end
 
 # ============================ AxisInteractable ============================
-# No regions; JS inverts pixels->data on hover/click via the shipped axis transform.
+"""
+    AxisInteractable(ax; id=:axis)
+
+The whole axis as one hit region: a click or hover anywhere returns the data coordinate under
+the cursor. No per-element geometry — the browser inverts pixels→data live via the shipped
+[`AxisTransform`](@ref) (no Julia round-trip on hover). Produces one `:axis` [`HitLayer`](@ref)
+with `geometry = nothing`.
+
+# Arguments
+- `ax` — a `Makie.Axis` (linear, log, or categorical). `id` — the layer id; becomes
+  `InteractionEvent.layer` on a hit. Default `:axis`.
+
+Payload on hit (client-side): `Dict("x" => …, "y" => …)`.
+
+`holo` raises `ArgumentError` at build time if `ax` is an `Axis3` (a screen pixel is a ray, not
+a data point — continuous readout is undefined), a `PolarAxis` (continuous θ/r inversion isn't
+shipped to JS yet), or either scale isn't client-invertible (supported: `identity`, `log10`,
+`log`; categorical axes are fine).
+
+# Examples
+```julia
+AxisInteractable(ax)
+```
+"""
 struct AxisInteractable <: AbstractInteractable
     ax; id::Symbol
 end
@@ -324,7 +622,29 @@ hitlayers(i::AxisInteractable, ctx) =
     [HitLayer(i.id, :axis, nothing, Any[], axis_id(ctx, i.ax), events(i))]
 
 # ============================ ColorbarInteractable =========================
-# Like AxisInteractable but bounded to the colorbar's bbox; transform's valueaxis makes the payload a scalar (; value).
+"""
+    ColorbarInteractable(cb; id=:colorbar)
+
+A `Makie.Colorbar` block as one hit region, bounded to its pixel bounding box: a click or
+hover anywhere on the bar inverts the cursor position to the bar's data value, client-side —
+like [`AxisInteractable`](@ref) but scoped to the colorbar and 1-D. Produces one `:axis`
+[`HitLayer`](@ref) with `geometry` set to the colorbar's pixel bbox.
+
+# Arguments
+- `cb` — a `Makie.Colorbar` (not an `Axis`). `id` — the layer id; becomes
+  `InteractionEvent.layer` on a hit. Default `:colorbar`.
+
+Payload on hit (client-side): `(; value)`.
+
+`holo` raises `ArgumentError` at build time if the colorbar's value-axis scale isn't
+client-invertible (supported: `identity`, `log10`, `log`).
+
+# Examples
+```julia
+cb = Colorbar(fig[1, 2], plotobj)
+ColorbarInteractable(cb)
+```
+"""
 struct ColorbarInteractable <: AbstractInteractable
     cb
     id::Symbol
@@ -346,8 +666,34 @@ function hitlayers(i::ColorbarInteractable, ctx)
 end
 
 # ============================ ViewInteractable =============================
-# Drag-to-pan (2D)/rotate (Axis3), commit-on-release. Shift+drag forces view even over a
-# Tier-0 ROI/threshold hit.
+"""
+    ViewInteractable(ax; id=:view)
+
+Drag-to-pan (2D `Axis`) or drag-to-rotate (`Axis3`), committed on mouse-up. Produces one
+`:view` [`HitLayer`](@ref) covering `ax`'s whole viewport; it sorts after Tier-0
+`:threshold`/`:roi` layers so an ordinary drag on those wins without a modifier —
+**Shift+drag** forces the view gesture even over a `ThresholdInteractable`/`ROIInteractable`
+hit.
+
+# Arguments
+- `ax` — a `Makie.Axis` (pan) or `Makie.Axis3` (orbit). `id` — the layer id; becomes
+  `InteractionEvent.layer` on commit. Default `:view`.
+
+Payload on commit (client-side): 2D — `Dict("xmin"=>…, "xmax"=>…, "ymin"=>…, "ymax"=>…)` (the
+new `limits`); 3D — `Dict("azimuth"=>…, "elevation"=>…)`. Drive the returned value back into
+`ax.limits[]` / `ax.azimuth[]`+`ax.elevation[]` and re-render to make the gesture stick.
+
+`holo` raises `ArgumentError` at build time if `ax` is a `PolarAxis` (continuous θ/r view
+gestures aren't shipped), a `Colorbar`'s value axis (no pan/orbit view applies), a categorical
+2D axis (pan needs numeric limits to shift), or (2D only) either scale isn't client-invertible
+(supported: `identity`, `log10`, `log`). `Axis3` has no scale/categorical restriction — camera
+angles are read live from `ax` at render time.
+
+# Examples
+```julia
+ViewInteractable(ax)
+```
+"""
 struct ViewInteractable <: AbstractInteractable
     ax; id::Symbol
 end
@@ -388,7 +734,34 @@ function hitlayers(i::ViewInteractable, ctx)
 end
 
 # ============================ ThresholdInteractable ========================
-# A draggable line; on mouse-up the pixel inverts to a data-space scalar via AxisTransform.
+"""
+    ThresholdInteractable(ax; orientation=:horizontal, value, id=:threshold)
+
+A draggable horizontal or vertical line: drag for a live client-side readout, and the pixel
+position inverts to a data-space scalar via [`AxisTransform`](@ref) on mouse-up. Produces one
+`:threshold` [`HitLayer`](@ref).
+
+# Arguments
+- `ax` — a `Makie.Axis`.
+- `orientation` — `:horizontal` (constant-y line, dragged vertically) or `:vertical`
+  (constant-x line, dragged horizontally). Any other value raises `ArgumentError`. Default
+  `:horizontal`.
+- `value` — the line's initial data-space position (a y-value for `:horizontal`, x-value for
+  `:vertical`). Required, no default.
+- `id` — the layer id; becomes `InteractionEvent.layer` on commit. Default `:threshold`.
+
+Payload on commit (client-side): the scalar data coordinate.
+
+`holo` raises `ArgumentError` at build time if `ax` is an `Axis3` (a screen pixel is a ray, not
+a data value — inversion is undefined), a `PolarAxis` (continuous inversion isn't shipped), or
+the dragged axis's scale isn't client-invertible (`:horizontal` needs the y-scale, `:vertical`
+the x-scale; supported: `identity`, `log10`, `log`).
+
+# Examples
+```julia
+ThresholdInteractable(ax; orientation = :horizontal, value = 5.0)
+```
+"""
 struct ThresholdInteractable <: AbstractInteractable
     ax; orientation::Symbol; value::Float64; id::Symbol
 end
@@ -424,8 +797,40 @@ function hitlayers(i::ThresholdInteractable, ctx)
 end
 
 # ============================ ROIInteractable ==============================
-# A draggable + resizable rectangle; on mouse-up its two opposite pixel corners invert to
-# data-space bounds via AxisTransform.
+"""
+    ROIInteractable(ax; bounds, id=:roi, selects=nothing)
+
+A draggable and resizable rectangle: drag the interior to move it, a corner to resize; on
+mouse-up its two opposite pixel corners invert to data-space bounds via
+[`AxisTransform`](@ref). An `AbstractSelector` — with `selects` set, it also brushes a
+compatible layer, reporting the contained elements. Produces one `:roi` [`HitLayer`](@ref).
+
+# Arguments
+- `ax` — a `Makie.Axis`.
+- `bounds` — initial `(xmin, xmax, ymin, ymax)` in data space. Requires `xmin < xmax` and
+  `ymin < ymax` (`ArgumentError` otherwise); length must be 4 (`ArgumentError` otherwise).
+- `id` — the layer id; becomes `InteractionEvent.layer` on commit. Default `:roi`.
+- `selects` — the `id` of a `:circles` or `:grid` layer to brush: on mouse-up, elements whose
+  geometry falls inside the ROI are reported. `holo` raises `ArgumentError` at build time if
+  `selects` names a layer absent from the same call, or one of an unsupported kind.
+
+Payload on commit (client-side, no `selects`): `Dict("xmin"=>…, "xmax"=>…, "ymin"=>…,
+"ymax"=>…)`. With `selects` set, the bond value instead becomes a `Vector{InteractionEvent}`
+(one per contained element, each layer'd to the target) — see [`InteractionEvent`](@ref).
+
+`holo` raises `ArgumentError` at build time if `ax` is an `Axis3` (a screen pixel is a ray, not
+a data point), a `PolarAxis` (continuous inversion isn't shipped), a categorical axis (bounds
+need numeric limits), or either scale isn't client-invertible (supported: `identity`, `log10`,
+`log`).
+
+# Examples
+```julia
+ROIInteractable(ax; bounds = (0.0, 1.0, 0.0, 1.0))
+
+# brush a scatter layer named :scatter
+ROIInteractable(ax; bounds = (0.0, 1.0, 0.0, 1.0), selects = :scatter)
+```
+"""
 struct ROIInteractable <: AbstractSelector
     ax; bounds::NTuple{4, Float64}; id::Symbol; selects::Union{Nothing, Symbol}   # (xmin,xmax,ymin,ymax) data space
 end
@@ -465,7 +870,39 @@ function hitlayers(i::ROIInteractable, ctx)
 end
 
 # ============================ custom: RegionInteractable (Tier A) =========
-# Declarative mixed regions in DATA space. Grouped into one layer per kind.
+"""
+    RegionInteractable(ax; regions, payloads, id=:region, tooltip=nothing, events=(:click, :hover))
+
+Declarative mixed hit regions in data space — circles, rects, and polygons in one call, no
+JavaScript required. Grouped into up to three [`HitLayer`](@ref)s (one per geometry kind
+present), so a single call can mix shapes freely.
+
+# Arguments
+- `regions` — a `Vector`, each element one of:
+  - `(:circle, (cx, cy), r)` — `r` in data units
+  - `(:rect, (cx, cy), w, h)` — `w`, `h` in data units
+  - `(:polygon, [(x, y), …])` — a ring of points
+  Any other first element raises `ArgumentError`.
+- `payloads` — one entry per region, matched 1:1 by position (`ArgumentError` on a length
+  mismatch); no auto-generated default (unlike the other built-ins, this keyword is required).
+- `id` — the base layer id. The generated layers are `Symbol(id, :_c)` (circles),
+  `Symbol(id, :_r)` (rects), `Symbol(id, :_p)` (polygons) — only the kinds actually present are
+  emitted. `InteractionEvent.layer` and `selected=` keys use these suffixed ids, not `id`
+  itself. Default `:region`.
+- `tooltip` — `nothing` for the auto name/value table (default), `holo"..."` for a template, or
+  `false` to suppress; applies to every generated layer. `tooltip = true` is rejected
+  (`ArgumentError`).
+- `events` — the pointer events all generated layers respond to. Default `(:click, :hover)`.
+
+# Examples
+```julia
+RegionInteractable(
+    ax;
+    regions = [(:circle, (0.0, 0.0), 1.0), (:rect, (3.0, 0.0), 2.0, 1.0)],
+    payloads = [(; label = "circle"), (; label = "rect")],
+)
+```
+"""
 struct RegionInteractable <: AbstractInteractable
     ax; regions::Vector; payloads::Vector{Any}; id::Symbol; tooltip::Union{Nothing, Markup, Bool}; evs::Tuple
 end
@@ -506,6 +943,27 @@ function hitlayers(i::RegionInteractable, ctx)
 end
 
 # ============================ custom: FunctionInteractable (Tier B) =======
+"""
+    FunctionInteractable(f; events=(:click, :hover))
+
+Full-control escape hatch for a geometry kind the other built-ins don't express: `f(ctx) ->
+Vector{HitLayer}` is called at manifest-build time and its result is used verbatim.
+
+# Arguments
+- `f` — a function `(ctx::InteractionContext,) -> Vector{HitLayer}`. Project data-space points
+  with `data_to_image_px(ctx, ax, point)`, and look up an axis's transform id with
+  `Holo.axis_id(ctx, ax)` (not exported) when constructing a `HitLayer`.
+- `events` — the pointer events reported by `Holo.events(::FunctionInteractable)`; `f` is free
+  to give its `HitLayer`s different `events` per layer if it wants. Default `(:click, :hover)`.
+
+# Examples
+```julia
+FunctionInteractable() do ctx
+    q = data_to_image_px(ctx, ax, (1.0, 2.0))
+    [HitLayer(:custom, :circles, [q[1], q[2], 10], [(; label = "manual")], Holo.axis_id(ctx, ax), (:click, :hover))]
+end
+```
+"""
 struct FunctionInteractable <: AbstractInteractable
     f::Function; evs::Tuple
 end

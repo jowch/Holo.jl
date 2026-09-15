@@ -50,7 +50,22 @@ struct InteractionContext
     display_scale::Float64                  # CSS px per image px on screen (image is rendered above display res)
 end
 
-"the one coordinate primitive interactables call — never re-derive projection"
+"""
+    data_to_image_px(ctx::InteractionContext, ax, p) -> Point2f
+
+Project a data-space point `p` (a 2- or 3-element point/tuple) on axis `ax` to image-pixel
+coordinates (top-left origin, y-down), applying `ax`'s transform and camera the same way
+Makie renders it. The one coordinate primitive every [`AbstractInteractable`](@ref)'s
+`hitlayers` method calls — never re-derive projection by hand. `ax` must be a `Makie.Axis`,
+`Makie.Axis3`, or `Makie.PolarAxis` that is part of the figure `holo` rendered (this function
+does not itself validate that — a mismatched `ax` silently projects against the wrong scene;
+use `axis_id(ctx, ax)` if you need the fail-loud registration check).
+
+# Examples
+```julia
+q = data_to_image_px(ctx, ax, (1.0, 2.0))   # -> Point2f in image px
+```
+"""
 data_to_image_px(ctx::InteractionContext, ax, p) = ctx.project(ax, p)
 # No fallback to a default axis: a silent fallback here once made a missing Colorbar
 # transform render a plausible-but-wrong 2-D readout instead of failing to build.
