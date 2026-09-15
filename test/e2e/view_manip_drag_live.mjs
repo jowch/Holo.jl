@@ -109,14 +109,18 @@ try {
       const b = media.getBoundingClientRect();
       const ax = b.x + b.width * 0.45, ay = b.y + b.height * 0.55;
       const bx = ax + dx, by = ay + dy;
-      surface.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, composed: true, cancelable: true, clientX: ax, clientY: ay }));
+      // dispatchEvent bypasses hit-testing/capture redirection — it always fires on the element
+      // you call it on — so drive move/up on `surface` directly (overlay.ts drives its drag path
+      // off pointer capture on the surface now, not window listeners).
+      const pid = { pointerId: 1, pointerType: "mouse", isPrimary: true };
+      surface.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, composed: true, cancelable: true, clientX: ax, clientY: ay, ...pid }));
       for (let t = 0.25; t <= 1.0; t += 0.25) {
-        window.dispatchEvent(new MouseEvent("mousemove", {
-          bubbles: true, cancelable: true,
+        surface.dispatchEvent(new PointerEvent("pointermove", {
+          bubbles: true, cancelable: true, ...pid,
           clientX: ax + (bx - ax) * t, clientY: ay + (by - ay) * t,
         }));
       }
-      window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, clientX: bx, clientY: by }));
+      surface.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true, clientX: bx, clientY: by, ...pid }));
       return true;
     }, [idx, dxCss, dyCss]);
     if (!ok) throw new Error(`dragHost(${idx}) failed — no surface`);
