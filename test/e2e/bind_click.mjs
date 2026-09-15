@@ -266,15 +266,18 @@ try {
     if (artifactDir) await captureFailure("attempt2-no-pluto");
     throw new Error(`overlay emitted ${JSON.stringify(result.emitted)} but Pluto never re-ran readout on EITHER attempt (marker 0, then marker 1): #bondout stayed "${result.before}" — ${describeResult(result)}`);
   }
-  // Read the index straight out of the readout rather than asserting `clickedIndex`: after a
-  // retry, attempt 1's own (merely late) round-trip can land during attempt 2's wait window —
-  // #bondout then flips to marker 0's value even though marker 1 was clicked last. That's still
-  // a genuine, successful `@bind` round-trip (the exact "kernel is slow, not stuck" case this PR
-  // exists to tolerate), so accept whichever of the two markers actually landed instead of
-  // requiring it to match the last click.
+  // Read the index straight out of the readout rather than asserting `clickedIndex` outright:
+  // after a retry, attempt 1's own (merely late) round-trip can land during attempt 2's wait
+  // window — #bondout then flips to marker 0's value even though marker 1 was clicked last.
+  // That's still a genuine, successful `@bind` round-trip (the exact "kernel is slow, not stuck"
+  // case this PR exists to tolerate). But this widened acceptance only makes sense once a retry
+  // has actually happened — on the plain happy path (no retry, clickedIndex still 0) a landed
+  // index of 1 can only mean a hit-test/scale regression mapped marker 0's click onto marker 1's
+  // payload, which must still fail loud, not pass silently.
   const landedMatch = /InteractionEvent\(:scatter, (\d+)/.exec(result.after);
   const landedIndex = landedMatch ? Number(landedMatch[1]) : null;
-  if (landedIndex !== 0 && landedIndex !== 1) {
+  const validIndices = clickedIndex === 1 ? [0, 1] : [0];
+  if (!validIndices.includes(landedIndex)) {
     throw new Error(`unexpected readout after click on marker ${clickedIndex}: "${result.after}"`);
   }
   if (result.emitAttempt > 0) {
