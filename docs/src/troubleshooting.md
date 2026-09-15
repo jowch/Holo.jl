@@ -123,20 +123,18 @@ the raw nested value.
 
 ### The overlay is misaligned with the figure
 
-**Cause:** almost always a custom `px_per_unit`/`max_width` mismatch between what was
-rendered and what the browser thinks the display size is — or a browser zoom level applied
-after the widget mounted (Holo re-reads `getBoundingClientRect` at runtime, so page zoom
-itself is fine, but a stale cached widget from before a `max_width` change is not).
+**Cause:** almost always a `px_per_unit`/`max_width` mismatch between what was rendered and
+what the reader's display shows. Hit-testing itself re-reads the element's actual on-screen
+size at runtime, so page zoom or window resizing after the widget mounted is not the cause.
 **Fix:** re-run the cell that calls `holo(...)`; if the misalignment persists, check that
 `max_width` on `holo`/the explicit backend struct matches the column width you expect.
 
 ### Browser console errors to look for
 
-Open the browser devtools console. A `Holo.mount is not a function` (or similar) means
-`assets/overlay.js` failed to load or is stale relative to the installed package version — a
-mismatched checkout is the usual cause. A WGLMakie serialization error in the console on
-`:webgl` usually means a `WGLMakie` version outside Holo's pinned compat range — see
-[Backends](@ref) caveats.
+Open the browser devtools console. A serialization error there on `:webgl` usually means the
+installed `WGLMakie` version is outside Holo's pinned compat range — see [Backends](@ref)
+caveats. Any other console error alongside a widget that otherwise renders is worth reporting
+as a bug rather than assuming it's expected.
 
 ### WGLMakie canvas is blank
 

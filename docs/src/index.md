@@ -13,7 +13,7 @@ for a live, browser-GPU canvas when you need animation, large data, or live 3D â
 | | CairoMakie alone | WGLMakie alone | **Holo** |
 |---|---|---|---|
 | Output | static, publication-quality | live, GPU-rendered | static + thin overlay (`:cairo`) or live (`:webgl`) |
-| Interactivity | none | rich (pan/zoom/rotate) | light: hover tooltips, click-to-select, drag-to-pan/pan/threshold/ROI |
+| Interactivity | none | rich (pan/zoom/rotate) | light: hover tooltips, click-to-select, drag-to-pan/threshold/ROI |
 | Needs a live Julia process | no | yes | only for click â†’ recompute |
 | Survives offline / static HTML export | yes | no | yes (the inspection layer keeps working) |
 

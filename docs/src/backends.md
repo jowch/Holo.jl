@@ -56,17 +56,31 @@ with the measured ones.
 Whichever backend rendered a cell, a Pluto notebook exported to static HTML keeps hover and
 tooltip inspection (both are already baked into the manifest — no kernel needed). What it
 loses is anything that needs Julia to recompute: a click that should update `ev` and re-run
-downstream cells does nothing without a live kernel behind it, on either backend. A
-`:webgl` scene additionally keeps its **last-rendered camera state** in a static export (you
-can still look at it), but pan/rotate that would normally recompute a bond has nowhere to
-send its result.
+downstream cells does nothing without a live kernel behind it, on either backend.
 
 ### Choosing between them
 
 Holo resolves the backend from which extension is loaded — a missing `using` line raises an
 `ArgumentError` the first time `holo` runs; loading **both** `CairoMakie` and `WGLMakie` is
 fine, and then `backend=` picks one explicitly while an unqualified `holo(fig)` defaults to
-`:cairo` (so a Cairo-baked sysimage isn't blocked by a stray `using WGLMakie`).
+`:cairo` (so a Cairo-baked sysimage isn't blocked by a stray `using WGLMakie`). Pass one
+explicitly to override its own keywords:
+
+```julia
+holo(fig, interactables; backend = CairoBackend(; max_width = 700))
+# or
+holo(fig, interactables; backend = WebGLBackend(; px_per_unit = 2.0, max_width = 700))
+```
+
+- `CairoBackend(; max_width = 700)` — `max_width` is the display width to target (Pluto's
+  column, in px); CairoMakie renders at roughly `2 × max_width` for a crisp static image.
+- `WebGLBackend(; px_per_unit = 2.0, max_width = 700)` — `max_width` is the same display-width
+  target; `px_per_unit` is the WebGL canvas's device-pixel ratio (raise it for a sharper canvas
+  at a proportional GPU/bandwidth cost).
+
+Both types live in Holo's package extensions (`ext/HoloCairoMakieExt.jl`,
+`ext/HoloWGLMakieExt.jl`) rather than in `Holo` itself, so they aren't in the
+[API Reference](@ref)'s `@docs` blocks — see the note there.
 
 ### Caveats
 
