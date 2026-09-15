@@ -6,6 +6,7 @@ examples live on the other pages; this page is the reference.
 ## Entry point
 
 ```@docs
+Holo
 holo
 auto_interactables
 InteractionEvent
