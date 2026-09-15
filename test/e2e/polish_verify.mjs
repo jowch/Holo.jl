@@ -48,7 +48,16 @@ try {
     if (!benign) unexpected.push(e.message);
     console.error(benign ? "PAGEERROR (known-benign):" : "PAGEERROR:", e.message);
   });
-  page.on("console", (m) => consoleLog.push(`[${m.type()}] ${m.text()}`));
+  // See kind_sweep.mjs: on :webgl, WGLMakie/Bonito canvas-context churn can outlast Pluto's
+  // own cell-busy signal and wipe a host's overlay group mid-check. Require a quiet window.
+  let lastWglChurnAt = 0;
+  const WGL_CHURN_RE = /removing WGL context/;
+  const WGL_QUIET_MS = 3000;
+  page.on("console", (m) => {
+    const text = m.text();
+    consoleLog.push(`[${m.type()}] ${text}`);
+    if (WGL_CHURN_RE.test(text)) lastWglChurnAt = Date.now();
+  });
 
   await page.goto(`${base}/open?path=${encodeURIComponent(notebook)}`, { waitUntil: "domcontentloaded", timeout: 60000 });
   const deadline = Date.now() + 900000;
@@ -74,8 +83,9 @@ try {
       };
     });
     if (st.errored) throw new Error(`${backend} errored: ${st.errText.slice(0, 400)}`);
-    if (!st.busy && st.surfaces >= 3 && st.scatter && st.lines && st.dark) { ready = true; break; }
-    if (tick % 20 === 0) console.error(`  …${backend} [${tick}s] busy=${st.busy} hosts=${st.hosts} surfaces=${st.surfaces}`);
+    const wglQuiet = !lastWglChurnAt || (Date.now() - lastWglChurnAt) > WGL_QUIET_MS;
+    if (!st.busy && st.surfaces >= 3 && st.scatter && st.lines && st.dark && wglQuiet) { ready = true; break; }
+    if (tick % 20 === 0) console.error(`  …${backend} [${tick}s] busy=${st.busy} hosts=${st.hosts} surfaces=${st.surfaces} wglQuiet=${wglQuiet}`);
     tick++;
     await new Promise((r) => setTimeout(r, 1000));
   }

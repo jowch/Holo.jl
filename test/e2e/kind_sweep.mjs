@@ -95,7 +95,19 @@ try {
     if (!benign) unexpected.push(e.message);
     console.error(benign ? "PAGEERROR (known-benign):" : "PAGEERROR:", e.message);
   });
-  page.on("console", (m) => consoleLog.push(`[${m.type()}] ${m.text()}`));
+  // On :webgl, WGLMakie/Bonito can keep tearing down and rebuilding canvas contexts
+  // ("removing WGL context, canvas is not in the DOM anymore!") for a while after Pluto's own
+  // cell-busy signal clears — seen in CI (not reproduced locally) as an instant, fade-less hi
+  // clear: the churn wipes a host's overlay group between our hover check and the following
+  // leave check. Require a quiet window with no such message before calling the page ready.
+  let lastWglChurnAt = 0;
+  const WGL_CHURN_RE = /removing WGL context/;
+  const WGL_QUIET_MS = 3000;
+  page.on("console", (m) => {
+    const text = m.text();
+    consoleLog.push(`[${m.type()}] ${text}`);
+    if (WGL_CHURN_RE.test(text)) lastWglChurnAt = Date.now();
+  });
 
   await page.goto(`${base}/open?path=${encodeURIComponent(notebook)}`, { waitUntil: "domcontentloaded", timeout: 60000 });
   const deadline = Date.now() + 1500000;
@@ -124,9 +136,10 @@ try {
       };
     });
     if (st.errored) throw new Error(`${backend} errored: ${st.errText.slice(0, 500)}`);
-    if (!st.busy && st.metaN >= 14 && st.surfaces >= st.metaN) { ready = true; break; }
+    const wglQuiet = !lastWglChurnAt || (Date.now() - lastWglChurnAt) > WGL_QUIET_MS;
+    if (!st.busy && st.metaN >= 14 && st.surfaces >= st.metaN && wglQuiet) { ready = true; break; }
     if (tick % 20 === 0) {
-      console.error(`  …${backend} [${tick}s] busy=${st.busy} hosts=${st.hosts} surfaces=${st.surfaces} meta=${st.metaN} title=${JSON.stringify(st.title || "")} url=${st.url || ""}`);
+      console.error(`  …${backend} [${tick}s] busy=${st.busy} hosts=${st.hosts} surfaces=${st.surfaces} meta=${st.metaN} wglQuiet=${wglQuiet} title=${JSON.stringify(st.title || "")} url=${st.url || ""}`);
     }
     tick++;
     await new Promise((r) => setTimeout(r, 1000));
