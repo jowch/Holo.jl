@@ -443,9 +443,13 @@ describe("anchorFor: mark-anchored tooltip placement", () => {
         const hit: Hit = { layer: layer("rects"), index: 0, geom_: ["rect", 100, 200, 40, 80] }
         expect(anchorFor(hit, { x: 100, y: 200 })).toEqual({ x: 100, y: 160, top: 160 }) // cy(200) - h/2(40)
     })
-    it("grid cell reuses the rect rule (hitLayer reports a cell as a rect geom)", () => {
+    it("grid cell: anchor at the cell centre, top edge separate (not collapsed like a bar's)", () => {
+        // hitLayer reports a :grid cell with the same ["rect", cx, cy, w, h] geom tag as :rects,
+        // but hit.grid_ (set only for :grid) distinguishes them: the cell's anchor is its centre,
+        // not its own top edge — collapsing the two would put the flip-below case on the wrong
+        // side of the cell (see the computeAnchoredPlacement test below).
         const hit: Hit = { layer: layer("grid"), index: 0, geom_: ["rect", 15, 25, 10, 10], grid_: [0, 0, 5] }
-        expect(anchorFor(hit, { x: 15, y: 25 })).toEqual({ x: 15, y: 20, top: 20 })
+        expect(anchorFor(hit, { x: 15, y: 25 })).toEqual({ x: 15, y: 25, top: 20 })
     })
     it("segment: nearest point on the segment to the cursor — the tooltip slides along the line", () => {
         const hit: Hit = { layer: layer("segments"), index: 0, geom_: ["seg", 0, 0, 100, 0] }
@@ -497,5 +501,16 @@ describe("computeAnchoredPlacement", () => {
         const p = computeAnchoredPlacement({ x: 5, y: 100, top: 80 }, 60, 20, 400, 300)
         expect(p.left).toBe(8) // edge-gap clamp (unclamped left would be 5 - 30 = -25)
         expect(p.caretX).toBe(6) // clamped to the caret's own min inset, not the literal x-left(-3)
+    })
+    it("flip-below on a grid cell (y != top) lands clear of the cell, not on top of it", () => {
+        // A grid cell 20px tall centred at y=20 (top=10, bottom=30) near the surface's top edge —
+        // contrast with a rect/bar anchor (y === top) directly above, whose flip-below has no
+        // headroom to clear a mark at all since half-extent is 0.
+        const cell = computeAnchoredPlacement({ x: 50, y: 20, top: 10 }, 60, 20, 400, 300)
+        expect(cell.below).toBe(true)
+        expect(cell.top).toBe(40) // bottom(30) + gap(10) — below the cell's bottom edge
+        const bar = computeAnchoredPlacement({ x: 50, y: 10, top: 10 }, 60, 20, 400, 300)
+        expect(bar.below).toBe(true)
+        expect(bar.top).toBe(20) // bottom === top(10) + gap(10) — starts right at the anchor
     })
 })

@@ -286,11 +286,15 @@ export function anchorFor(hit: Hit, cursor: { x: number; y: number } | null): An
         return { x: cx, y: cy, top: cy - r }
     }
     if (g[0] === "rect") {
-        // Also covers :grid (hitLayer already reports its cell as ["rect", cx, cy, w, h]):
-        // cell centre, top edge = cell top — same rule as a bar's top-centre anchor.
+        // hitLayer reports both :rects (bars) and a :grid cell as ["rect", cx, cy, w, h], but
+        // the anchor differs: a bar's anchor IS its own top edge (top-centre), while a grid
+        // cell's anchor is its centre with the top edge separate — hit.grid (set only for
+        // :grid) is the discriminator. Collapsing them to y===top for grid would make
+        // computeAnchoredPlacement's mirrored "bottom" land back on the cell's top edge
+        // instead of clear of the cell.
         const cx = g[1] as number, cy = g[2] as number, h = g[4] as number
         const top = cy - h / 2
-        return { x: cx, y: top, top }
+        return hit.grid_ !== undefined ? { x: cx, y: cy, top } : { x: cx, y: top, top }
     }
     if (g[0] === "seg") {
         const x0 = g[1] as number, y0 = g[2] as number, x1 = g[3] as number, y1 = g[4] as number
