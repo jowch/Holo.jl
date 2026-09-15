@@ -43,7 +43,7 @@ export function makeHiElement(hit: Hit, mode: HiMode = "hover"): SVGElement | nu
     if (g[0] === "circle") {
         el = document.createElementNS(SVG_NS, "circle")
         el.setAttribute("cx", String(g[1])); el.setAttribute("cy", String(g[2])); el.setAttribute("r", String((g[3] as number) + 2))
-    } else if (g[0] === "rect") {
+    } else if (g[0] === "rect" || g[0] === "rectfill") {
         el = document.createElementNS(SVG_NS, "rect")
         el.setAttribute("x", String((g[1] as number) - (g[3] as number) / 2))
         el.setAttribute("y", String((g[2] as number) - (g[4] as number) / 2))
@@ -63,12 +63,20 @@ export function makeHiElement(hit: Hit, mode: HiMode = "hover"): SVGElement | nu
     const open = g[0] === "seg"
     if (mode === "selected" && open) return makeRing(el, st.stroke)
     el.setAttribute("vector-effect", "non-scaling-stroke")
-    el.setAttribute("stroke", st.stroke)
     if (mode === "hover") {
+        el.setAttribute("stroke", st.stroke)
         el.setAttribute("fill", "none")
         el.setAttribute("stroke-width", "2")
         el.setAttribute("stroke-opacity", "0.85")
+    } else if (g[0] === "rectfill") {
+        // The grid cell-block union rect from an ROI's selects: fill only, no stroke — the ROI
+        // box itself is already drawing that outline, and stroking this rect too doubles it
+        // into two parallel edges that persist after release (see selection.ts's cellRange/grid
+        // branch for why this rect exists at all).
+        el.setAttribute("fill", colorWithAlpha(st.stroke, 0.12))
+        el.setAttribute("stroke", "none")
     } else {
+        el.setAttribute("stroke", st.stroke)
         el.setAttribute("fill", colorWithAlpha(st.stroke, 0.12))
         el.setAttribute("stroke-width", "2.5")
         el.setAttribute("stroke-opacity", "1")
