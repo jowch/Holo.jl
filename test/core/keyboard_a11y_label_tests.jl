@@ -1,17 +1,11 @@
-# `label` keyword round-trip (PR: keyboard/ARIA overlay). One constructor is enough per the
-# design doc — PointInteractable exercises the field, HitLayer's outer 6-arg constructor, and
-# `_layer_dict`'s manifest emission all at once.
-using Holo
-using Holo: hitlayers, build_manifest, HitLayer
-using CairoMakie
-import Makie
-using Test
+using Test, Holo, CairoMakie, Makie
+include(joinpath(@__DIR__, "..", "testutils.jl"))
 
+# `label` keyword round-trip. One constructor is enough per the design doc — PointInteractable
+# exercises the field, HitLayer's outer 6-arg constructor, and `_layer_dict`'s manifest
+# emission all at once.
 @testset "label: per-layer screen-reader prefix" begin
-    fig = Figure(size = (600, 400)); ax = Axis(fig[1, 1])
-    pts = [(1.0, 1.0), (2.0, 4.0)]
-    scatter!(ax, first.(pts), last.(pts))
-    bk, _, ctx = ctx_for(fig)
+    (; ax, pts, ctx) = default_fixture()
 
     @testset "absent by default" begin
         pin = PointInteractable(ax, pts; id = :unlabeled)

@@ -21,6 +21,6 @@ include("core/introspect_tests.jl")
 include("core/markup_tests.jl")
 include("core/selection_tests.jl")
 include("core/parity_tests.jl")
+include("core/keyboard_a11y_label_tests.jl")
 
 include("docstrings_tests.jl")
-include("keyboard_a11y_label_tests.jl")
