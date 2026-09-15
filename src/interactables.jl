@@ -1,12 +1,8 @@
-# The interactable seam. Every interactable — built-in or user-authored — implements
-# this one contract and flows through the identical manifest/overlay path. See architecture.md §3.
-
 """
     HitLayer
 
 The serialized unit: one geometry `kind` for one interactable, plus the data to resolve
-a hit to an element index + payload. Compact by design (a heatmap ships edges, not N rects).
-`geometry` layout is keyed by `kind` (see architecture.md §3).
+a hit to an element index + payload. `geometry` layout is keyed by `kind`.
 """
 struct HitLayer
     id::Symbol
@@ -19,62 +15,46 @@ end
 
 abstract type AbstractInteractable end
 
-# ---- the contract (hitlayers required; rest defaulted) ----
+# hitlayers is the only required method; the rest below are defaults.
 function hitlayers end
 validate(::AbstractInteractable, ::InteractionContext) = nothing
 events(::AbstractInteractable) = (:click, :hover)
-# Per-LAYER tooltip spec (applies to every element of the interactable's layers):
-#   nothing → auto name/value table (default) · Markup → template · false → suppress.
+# Per-layer: nothing = auto name/value table (default), Markup = template, false = suppress.
 tooltip_spec(::AbstractInteractable) = nothing
 # One hover style per LAYER (the manifest ships one `style` dict per layer, not per element).
 hoverstyle(::AbstractInteractable) = (; stroke = "#3A6F7C", width = 2)
 
 abstract type AbstractSelector <: AbstractInteractable end
 
-# Selection interface (only AbstractSelectors override these).
+# Only AbstractSelectors override these.
 selects(::AbstractInteractable) = nothing
 compatible_kinds(::AbstractInteractable) = ()
 
-# validate is per-capability (architecture.md §3). Element interactables project in Julia via
-# Makie.project, so they work on any Makie-projectable scale → no gate (default `nothing`).
-# Only AxisInteractable relies on client-side JS inversion, so it alone restricts scales.
+# Only AxisInteractable relies on client-side JS inversion and restricts scales.
 const _JS_INVERTIBLE = (:identity, :log10, :log)  # scales geometry.ts `invert` implements
 
-# Min on-screen cell size (CSS px) below which a heatmap/image's values[] is dropped: a cell
-# smaller than ~1 px can't be cursor-targeted, so the matrix is pure payload. See architecture.md §8.
+# A heatmap/image cell smaller than this (screen px) can't be cursor-targeted, so values[] is dropped.
 const GRID_VALUES_MIN_SCREEN_PX = 1.0
 
 _proj(ctx, ax, p) = data_to_image_px(ctx, ax, p)
 
-# One storage path for 2D and 3D geometry: points widen to Point3f with z=0 for 2-coord
-# input, so a 2D interactable's projected output is unchanged (the shared closure feeds
-# x/y/z straight through). Float32 storage caps coordinates at floatmax(Float32).
+# Points widen to Point3f (z=0 for 2-coord input) so 2D and 3D geometry share one storage path.
 _pt3(p) = Point3f(p[1], p[2], length(p) >= 3 ? p[3] : 0)
 
-# Quantize a finite geometry coordinate to integer image-px. MsgPack encodes a small Int in 1–3 bytes
-# vs a Float32's flat 5, so per-element geometry stores Int — −58% on that term, no manifest-shape change
-# (the frontend reads numbers either way), and ≤0.5px is inside the ~1px hit-test tolerance. AxisTransform
-# lims/viewport stay Float64 (drag inverts pixel→data through them). See architecture.md §9.
-#
-# Non-finite coords pass through as Float32 (NOT rounded — `round(Int, NaN/Inf)` throws): element layers
-# are un-gated on scale (above), so a log out-of-domain point projects to NaN/±Inf, and `:polyline`
-# uses NaN as a gap sentinel (types.ts/geometry.ts). Geometry vectors are therefore `Real[]` (Int for
-# finite, Float32 for non-finite) — an abstract eltype, so the value still ships generically (the
-# measured 1–3 B/coord), never via Pluto's binary typed-array path (which would be 8 B/coord for Int64).
+# Round to Int (MsgPack encodes it far more compactly than Float32). `round(Int, NaN/Inf)`
+# throws, so non-finite values pass through as Float32 — NaN is the polyline gap sentinel
+# (geometry.ts). Geometry vectors use `Real[]`, not a concrete eltype, to allow this mix.
 _q(x) = isfinite(x) ? round(Int, x) : Float32(x)
 
-# Validate a user-supplied payloads vector has exactly one entry per element (fail loud — a
-# mismatch otherwise surfaces as an `undefined` tooltip at hover time). Positional: payloads[k]
-# binds element k; a wrong ORDER is undetectable and is the caller's responsibility.
+# A payloads-length mismatch would otherwise surface as an `undefined` tooltip at hover time.
+# Positional: payloads[k] binds element k; a wrong order is undetectable here.
 function _check_payloads(payloads, n, what)
     length(payloads) == n ||
         throw(ArgumentError("$(what): got $(length(payloads)) payloads for $(n) elements"))
     return collect(Any, payloads)
 end
 
-# tooltip = true is never meaningful (Markup/false/nothing only) — fail at CONSTRUCTION so the
-# error points at the call the caller wrote, not at manifest build time deep inside holo().
-# Called from every interactable constructor that accepts `tooltip`.
+# Checked at construction (not manifest build time) so the error points at the caller's own call.
 _check_tooltip(tooltip) =
     tooltip === true && throw(
     ArgumentError(
@@ -86,12 +66,8 @@ _check_tooltip(tooltip) =
 # ============================ PointInteractable ============================
 struct PointInteractable <: AbstractInteractable
     ax; points::Vector{Point3f}; id::Symbol; payloads::Vector{Any}; radius::Float64
-    # Data-space half-extents, one per point (meshscatter: markers are data-sized, so the pixel
-    # radius depends on the camera/depth). When present, `radius` is unused and hitlayers derives
-    # each element's pixel radius by projecting the ±axis offsets — an axis-aligned approximation
-    # of the projected silhouette. It underestimates when data axes project onto nearly the same
-    # screen direction (worst case ~√2, ~29%, at adversarial azimuth/elevation; a few % on
-    # typical cameras, where HIT_TOL absorbs it). Pass radius=/radius3d= for extreme cases.
+    # Data-space half-extents (meshscatter markers are data-sized); overrides `radius` via an
+    # axis-aligned pixel-radius approximation that can underestimate the true silhouette.
     radius3d::Union{Nothing, Vector{Makie.Vec3f}}
     tooltip::Union{Nothing, Markup, Bool}
 end
@@ -114,9 +90,7 @@ function PointInteractable(
     return PointInteractable(ax, pts, id, collect(Any, payloads), Float64(radius), r3, tooltip)
 end
 tooltip_spec(i::PointInteractable) = i.tooltip
-# pixel radius of a data-sized marker: max projected displacement over the ±axis half-extents
-# (already image px — the projection closure includes ×scaling; non-finite offsets are skipped,
-# and a non-finite center yields radius 0, which can never hit)
+# Max projected displacement over the ±axis half-extents; non-finite offsets are skipped.
 function _px_radius3d(ctx, ax, p, e, q)
     m = 0.0
     for d in (
@@ -142,13 +116,8 @@ end
 # ============================ SegmentInteractable ==========================
 struct SegmentInteractable <: AbstractInteractable
     ax; vertices::Vector{Point3f}; mode::Symbol; id::Symbol; payloads::Vector{Any}; tol::Float64; tooltip::Union{Nothing, Markup, Bool}
-    # When set, hitlayers calls `resolve(ax)` for the vertices instead of the stored `vertices` —
-    # for geometry that depends on axis layout state not yet final at construction time (HLines/
-    # VLines span `ax.finallimits[]`, which is only correct AFTER `update_state_before_display!`
-    # runs; a hand-built interactable can be constructed before that, e.g. `holo(fig, ints)` where
-    # `ints` was built before `holo` finalizes). `vertices` is still populated eagerly (current
-    # best-effort) so direct field access keeps working; only hitlayers prefers `resolve`. Same
-    # construction-vs-hitlayers split TextInteractable uses for string_boundingboxes/viewport.
+    # When set, hitlayers calls resolve(ax) instead of using the stored vertices — for geometry
+    # (e.g. HLines/VLines spanning `ax.finallimits[]`) only correct after construction.
     resolve::Union{Nothing, Function}
 end
 function SegmentInteractable(
@@ -163,8 +132,7 @@ function SegmentInteractable(
     pl = payloads === nothing ? Any[(; segment_index = k - 1) for k in 1:nseg] : _check_payloads(payloads, nseg, "SegmentInteractable")
     return SegmentInteractable(ax, vs, mode, id, pl, Float64(tol), tooltip, nothing)
 end
-# Internal-only: construct with a lazy `resolve(ax) -> vertices`, used by introspection
-# constructors whose geometry depends on axis state that isn't final yet at construction time.
+# Internal-only: construct with a lazy `resolve(ax) -> vertices`.
 function _segment_with_resolve(ax, vertices, mode, id, payloads, tol, resolve)
     return SegmentInteractable(ax, [_pt3(v) for v in vertices], mode, id, payloads, Float64(tol), nothing, resolve)
 end
@@ -183,15 +151,10 @@ end
 # list: rects of (xc,yc,w,h) in DATA space. grid: (xedges, yedges, values) in DATA space.
 struct RectInteractable <: AbstractInteractable
     ax; layout::Symbol; data::Any; id::Symbol; payloads::Vector{Any}; tooltip::Union{Nothing, Markup, Bool}
-    # When true (spans only): clamp the projected pixel rect to the owning axis viewport using
-    # inward rounding (ceil for near edge, floor for far edge) so that integer quantization
-    # never expands the rect beyond the viewport bounds. See architecture.md §3.
+    # Spans only: clamp the pixel rect to the axis viewport with inward rounding (ceil near
+    # edge, floor far edge) so integer quantization never expands it past the bounds.
     clamp_to_viewport::Bool
-    # :list only. When set, hitlayers calls `resolve(ax)` for the rects instead of the stored
-    # `data` — HSpan/VSpan fill one dimension with `ax.finallimits[]`, which is only correct
-    # AFTER `update_state_before_display!` runs. Same defer-to-hitlayers split as
-    # `SegmentInteractable.resolve` (see its comment); `data` stays populated (current
-    # best-effort) for direct field access.
+    # :list only. Same resolve-in-hitlayers mechanism as SegmentInteractable.resolve.
     resolve::Union{Nothing, Function}
 end
 function RectInteractable(
@@ -216,9 +179,7 @@ function RectInteractable(
         RectInteractable(ax, :list, rs, id, pl, tooltip, clamp_to_viewport, nothing)
     end
 end
-# Internal-only: construct a :list RectInteractable with a lazy `resolve(ax) -> rects`, used by
-# introspection constructors (HSpan/VSpan) whose geometry depends on axis state that isn't final
-# yet at construction time.
+# Internal-only: construct a :list RectInteractable with a lazy `resolve(ax) -> rects`.
 function _rect_with_resolve(ax, rects, id, payloads, clamp_to_viewport, resolve)
     rs = [(Float64(r[1]), Float64(r[2]), Float64(r[3]), Float64(r[4])) for r in rects]
     return RectInteractable(ax, :list, rs, id, payloads, nothing, clamp_to_viewport, resolve)
@@ -236,11 +197,7 @@ function hitlayers(i::RectInteractable, ctx)
             if vp === nothing || !all(isfinite, (cx, cy, ww, hh))
                 append!(g, (_q(cx), _q(cy), _q(ww), _q(hh)))
             else
-                # Clamp pixel edges inward to the axis viewport (ceil near, floor far) so that
-                # integer rounding never expands the rect outside the viewport. This is the
-                # span-only fix: bars/grids use the unclamped path (clamp_to_viewport=false).
-                # Non-finite projected coords (e.g. log-axis out-of-domain bounds) fall back to
-                # the _q path above — ceil/floor on NaN/Inf throws.
+                # ceil/floor on NaN/Inf throws, so non-finite coords take the _q path above.
                 vp_x, vp_y, vp_w, vp_h = vp
                 x_lo = ceil(Int, max(cx - ww / 2, vp_x))
                 x_hi = floor(Int, min(cx + ww / 2, vp_x + vp_w))
@@ -261,10 +218,6 @@ function hitlayers(i::RectInteractable, ctx)
         geom = Dict{String, Any}(
             "xedges" => xedges, "yedges" => yedges, "ncols" => ncols, "nrows" => nrows
         )
-        # values[] is the unbounded payload term: a source-resolution matrix shipped only to power
-        # the no-round-trip (i,j)=value hover. When cells render sub-pixel on screen the user can't
-        # target a cell anyway, so drop it (the click still round-trips to the kernel, which has the
-        # matrix). Cap by expected on-screen cell size — architecture.md §8.
         cell_px = min(
             abs(xedges[end] - xedges[1]) / ncols,
             abs(yedges[end] - yedges[1]) / nrows,
@@ -281,16 +234,10 @@ function hitlayers(i::RectInteractable, ctx)
 end
 
 # ============================ TextInteractable =============================
-# Text labels as click-to-pick buttons. Geometry = Makie's cached per-string boxes
-# (`Makie.string_boundingboxes`, in SCENE-LOCAL pixel space, y-up, bottom-left origin — NOT data
-# space, so we do NOT project; we convert scene-local px → image px directly, mirroring the backend
-# `project` closure). Payload (; text, index, x, y): the string, which label (0-based, per the
-# package convention), and the DATA-space anchor (`positions`). A rotated label yields the
-# axis-aligned (expanded) box → still one `:rects` element.
-#
-# `string_boundingboxes`/`viewport` are read ONLY in `hitlayers` (during build_manifest, after
-# update_state_before_display!), never at construction: a manually-built TextInteractable may exist
-# before the figure is finalized. Payloads come from `text[]`/`positions[]` (converted input).
+# Geometry is `Makie.string_boundingboxes` in SCENE-LOCAL pixel space (y-up, bottom-left
+# origin), not data space — converted directly to image px, not projected. Read only in
+# `hitlayers`, never at construction: a manually-built TextInteractable may exist before the
+# figure is finalized.
 struct TextInteractable <: AbstractInteractable
     ax; p; id::Symbol; payloads::Vector{Any}; tooltip::Union{Nothing, Markup, Bool}   # p::Makie.Text
 end
@@ -312,17 +259,16 @@ function TextInteractable(ax, p::Makie.Text; id = :text, payloads = nothing, too
 end
 tooltip_spec(i::TextInteractable) = i.tooltip
 function hitlayers(i::TextInteractable, ctx)
-    boxes = _string_bboxes(i.p)   # Vector{Rect3d}, scene-local pixel (y-up), one per string
+    boxes = _string_bboxes(i.p)
     length(boxes) == length(i.payloads) ||
         error("TextInteractable: $(length(boxes)) boxes for $(length(i.payloads)) payloads (Makie internals changed?)")
-    o = _scene_viewport(i.ax).origin           # scene-local → figure pixel offset
+    o = _scene_viewport(i.ax).origin
     g = Real[]
-    # Empty strings are NOT skipped: a zero-area box keeps box-count == payload-count for the length guards above (deliberate).
+    # Empty strings are not skipped: a zero-area box keeps box-count == payload-count.
     for b in boxes
         bx, by = Float64(b.origin[1]), Float64(b.origin[2])
         bw, bh = Float64(b.widths[1]), Float64(b.widths[2])
-        # scene-local (y-up, bottom-left) → image px (y-down, top-left): same ×scaling + y-flip the
-        # backend `project` closure applies to a projected point (ext/HoloCairoMakieExt.jl `project`).
+        # scene-local (y-up) → image px (y-down): same ×scaling + y-flip as the backend `project` closure.
         x_left = (bx + o[1]) * ctx.scaling
         y_top = ctx.height - (by + bh + o[2]) * ctx.scaling
         w = bw * ctx.scaling; h = bh * ctx.scaling
@@ -355,7 +301,7 @@ function hitlayers(i::PolygonInteractable, ctx)
 end
 
 # ============================ AxisInteractable ============================
-# No regions; rides the axis-transform channel. JS inverts pixels->data on hover/click.
+# No regions; JS inverts pixels->data on hover/click via the shipped axis transform.
 struct AxisInteractable <: AbstractInteractable
     ax; id::Symbol
 end
@@ -377,10 +323,7 @@ hitlayers(i::AxisInteractable, ctx) =
     [HitLayer(i.id, :axis, nothing, Any[], axis_id(ctx, i.ax), events(i))]
 
 # ============================ ColorbarInteractable =========================
-# A Colorbar is a 1-D scale. Like AxisInteractable it rides the axis-transform channel (JS inverts
-# pixels->value), but its hit region is BOUNDED to the colorbar's bbox (shipped as the :axis layer's
-# geometry) so the readout fires only over the bar, and its transform carries a valueaxis so the
-# payload is a scalar (; value). Reuses AxisInteractable's scale-invertibility rule.
+# Like AxisInteractable but bounded to the colorbar's bbox; transform's valueaxis makes the payload a scalar (; value).
 struct ColorbarInteractable <: AbstractInteractable
     cb
     id::Symbol
@@ -402,10 +345,8 @@ function hitlayers(i::ColorbarInteractable, ctx)
 end
 
 # ============================ ViewInteractable =============================
-# Drag-to-pan (2D Axis) / drag-to-rotate (Axis3). Commit-on-release: the overlay tracks
-# the gesture locally; mouse-up emits new view params via @bind and Julia re-renders.
-# Live drag *preview* (per-frame re-render) shares the animation payload gate — not here.
-# Modifier arbitration: Shift+drag forces view even over a Tier-0 ROI/threshold hit.
+# Drag-to-pan (2D)/rotate (Axis3), commit-on-release. Shift+drag forces view even over a
+# Tier-0 ROI/threshold hit.
 struct ViewInteractable <: AbstractInteractable
     ax; id::Symbol
 end
@@ -446,9 +387,7 @@ function hitlayers(i::ViewInteractable, ctx)
 end
 
 # ============================ ThresholdInteractable ========================
-# A draggable horizontal/vertical line (Tier 0). Drags locally in JS; on mouse-up the
-# pixel is inverted to a data-space scalar via the shipped AxisTransform and round-tripped
-# to @bind. Lives entirely in the overlay — the base render never sees it.
+# A draggable line; on mouse-up the pixel inverts to a data-space scalar via AxisTransform.
 struct ThresholdInteractable <: AbstractInteractable
     ax; orientation::Symbol; value::Float64; id::Symbol
 end
@@ -484,9 +423,8 @@ function hitlayers(i::ThresholdInteractable, ctx)
 end
 
 # ============================ ROIInteractable ==============================
-# A draggable + resizable rectangle (Tier 0). Moves/resizes locally in JS; on mouse-up the two
-# opposite pixel corners are inverted to data-space bounds via the AxisTransform and round-tripped
-# to @bind. Lives entirely in the overlay — the base render never sees it.
+# A draggable + resizable rectangle; on mouse-up its two opposite pixel corners invert to
+# data-space bounds via AxisTransform.
 struct ROIInteractable <: AbstractSelector
     ax; bounds::NTuple{4, Float64}; id::Symbol; selects::Union{Nothing, Symbol}   # (xmin,xmax,ymin,ymax) data space
 end

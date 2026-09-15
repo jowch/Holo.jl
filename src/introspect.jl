@@ -1,19 +1,12 @@
-# Plot-introspection constructors. Pull geometry straight from a live Makie plot's
-# post-conversion `converted[]` (data space, dodge/stack/width already applied) and delegate
-# to the explicit constructor. No new types, no new manifest path — pure sugar.
-#
-# The Axis is passed explicitly: a plot holds no back-reference to its Axis, and `axis_id`
-# keys the transform by the Axis object (multi-axis figures need the right one). `holo(fig)`
-# supplies it from the scene walk; here the user already has `ax` from `plot!(ax, …)`.
+# ax is passed explicitly: a plot holds no back-reference to its Axis, and `axis_id`
+# keys the transform by the Axis object.
 
 const _GB = Makie.GeometryBasics
 
 _conv(p) = _converted(p)
 
-# ---- Scatter -> PointInteractable ----
-# markersize is a diameter in :pixel space (Makie's default markerspace) → radius = ms/2 in
-# logical px, matching the explicit `radius=` (×scaling applied at hitlayer time). Fail loud on
-# non-:pixel markerspace (e.g. :data), where ms/2 is the wrong unit — pass radius= instead.
+# markersize is a :pixel-space diameter (Makie's default markerspace); radius = ms/2. Fails
+# loud on non-:pixel markerspace (e.g. :data), where ms/2 would be the wrong unit.
 function _marker_radius(p)
     p.markerspace[] === :pixel || error(
         "PointInteractable: scatter has markerspace=$(repr(p.markerspace[])); radius can only be " *
@@ -31,14 +24,10 @@ function PointInteractable(ax, p::Makie.Scatter; id = :scatter, payloads = nothi
         PointInteractable(ax, pts; id, radius = r, payloads)
 end
 
-# ---- MeshScatter -> PointInteractable (data-sized markers) ----
-# markersize is DATA-space by construction (no markerspace attribute), so the pixel radius is
-# camera/depth-dependent — normalize it to per-element Vec3f half-extents and let hitlayers
-# project them (PointInteractable.radius3d); markersize acts as the sphere radius. The
-# projected ±axis-offset max underestimates the true silhouette when data axes project onto
-# nearly the same screen direction (worst case ~√2; a few % on typical cameras, where frontend
-# HIT_TOL absorbs it). Non-sphere `marker=` meshes ride the same half-extent approximation;
-# pass `radius=`/`radius3d=` explicitly if it's too coarse.
+# markersize is DATA-space (no markerspace attribute), so pixel radius is camera/depth-dependent;
+# normalize to per-element Vec3f half-extents (radius3d) and let hitlayers project them. The
+# axis-aligned half-extent approximation can underestimate the true silhouette; pass
+# radius=/radius3d= explicitly if it's too coarse.
 function _meshscatter_extents(ms, n)
     ms isa Makie.VecTypes{3} && return fill(Makie.Vec3f(ms...), n)
     ms isa Real && return fill(Makie.Vec3f(ms, ms, ms), n)
@@ -59,27 +48,19 @@ function PointInteractable(ax, p::Makie.MeshScatter; id = :meshscatter, payloads
         PointInteractable(ax, pts; kw..., payloads)
 end
 
-# ---- Lines -> SegmentInteractable(:polyline) / LineSegments -> (:pairs) ----
 SegmentInteractable(ax, p::Makie.Lines; id = :lines, payloads = nothing, tol = 6) =
     SegmentInteractable(ax, _conv(p)[1]; mode = :polyline, id, payloads, tol)
 SegmentInteractable(ax, p::Makie.LineSegments; id = :segments, payloads = nothing, tol = 6) =
     SegmentInteractable(ax, _conv(p)[1]; mode = :pairs, id, payloads, tol)
 
-# ---- Wireframe -> SegmentInteractable(:pairs) ----
-# The rendered edges live in the child LineSegments' converted (DATA space), including the
-# mesh-triangulation diagonals a grid-edge reconstruction would miss. Same read-the-child
-# pattern as Stairs.
+# The rendered edges live in the child LineSegments' converted (DATA space), including
+# mesh-triangulation diagonals a grid-edge reconstruction would miss.
 SegmentInteractable(ax, p::Makie.Wireframe; id = :wireframe, payloads = nothing, tol = 6) =
     SegmentInteractable(ax, _conv(_childof(p, Makie.LineSegments))[1]; mode = :pairs, id, payloads, tol)
 
-# ---- Arrows3D -> SegmentInteractable(:pairs) ----
-# Raw `pos → pos+dir` is WRONG: arrows3d autoscales (`arrowscale` from data bbox when
-# `markerscale = automatic`) and renders via three MeshScatter children (tail/shaft/tip) whose
-# positions/rotations/markersizes live in a normalized, anisotropically-scaled (float32convert)
-# space. Child quaternion × markersize.z recovers shaft+tip extents in that space, but Holo's
-# project closure expects DATA coords (it applies float32convert itself). The recipe therefore
-# reads the processed `startpoints`/`endpoints` — post-align/lengthscale/normalize ends that the
-# children span. Payloads carry the input anchor + direction.
+# Raw pos→pos+dir is wrong: arrows3d autoscales and renders via MeshScatter children in a
+# normalized, anisotropically-scaled space. Read the processed startpoints/endpoints instead
+# (already post-align/lengthscale/normalize, in DATA coords).
 function SegmentInteractable(ax, p::Makie.Arrows3D; id = :arrows3d, payloads = nothing, tol = 6)
     starts, ends_ = p.startpoints[], p.endpoints[]
     length(starts) == length(ends_) || error(
@@ -107,9 +88,8 @@ function SegmentInteractable(ax, p::Makie.Arrows3D; id = :arrows3d, payloads = n
     return SegmentInteractable(ax, verts; mode = :pairs, id, payloads, tol)
 end
 
-# ---- Heatmap / Image -> RectInteractable(:grid) ----
-# converted gives (x, y, values). Makie converts cell *centers* to an edge vector (length n+1);
-# the coordinate-free form gives `EndPoints` (length 2) which we expand to n+1 uniform edges.
+# Makie converts cell centers to an edge vector (length n+1); the coordinate-free form gives
+# `EndPoints` (length 2), expanded here to n+1 uniform edges.
 _edges(e, n) = length(e) == n + 1 ? collect(Float64, e) :
     collect(range(Float64(e[1]), Float64(e[end]); length = n + 1))
 function RectInteractable(ax, p::Union{Makie.Heatmap, Makie.Image}; id = :cells)
@@ -118,9 +98,8 @@ function RectInteractable(ax, p::Union{Makie.Heatmap, Makie.Image}; id = :cells)
     return RectInteractable(ax; grid = (_edges(xr, ncols), _edges(yr, nrows), vals), id)
 end
 
-# ---- BarPlot -> RectInteractable(:list) ----
-# The child Poly carries the final laid-out rectangles (dodge/stack/automatic-width applied),
-# so we read those instead of replaying Makie's bar solver.
+# The child Poly carries the final laid-out rectangles (dodge/stack/automatic-width applied);
+# read those instead of replaying Makie's bar solver.
 function _bar_rects(p)
     for c in _child_plots(p)
         cv = _converted(c)
@@ -133,8 +112,7 @@ function _bar_rects(p)
     end
     error("BarPlot introspection: no laid-out rectangles found in child plots (Makie internals changed?)")
 end
-# Per laid-out bar rect (cx,cy,w,h): value-axis extent + magnitude, keyed by bar `direction`
-# (:y → value runs along y, the default; :x → along x). No `index` (that's InteractionEvent.index).
+# Value-axis extent is keyed by bar `direction` (:y default runs along y, :x along x).
 function _bar_payloads(rects, direction)
     vert = direction === :y
     return Any[
@@ -151,7 +129,6 @@ function RectInteractable(ax, p::Makie.BarPlot; id = :bars, payloads = nothing)
     return RectInteractable(ax; rects = rs, id, payloads = pl)
 end
 
-# ---- Poly -> PolygonInteractable ----
 # converted[1] is a single ring (Vector{Point}) or a vector of rings (Vector{Vector{Point}}).
 function PolygonInteractable(ax, p::Makie.Poly; id = :poly, payloads = nothing)
     g = _conv(p)[1]
@@ -159,38 +136,28 @@ function PolygonInteractable(ax, p::Makie.Poly; id = :poly, payloads = nothing)
     return PolygonInteractable(ax, rings; id, payloads)
 end
 
-# ---- Band -> PolygonInteractable ----
-# A band is one filled region between a lower and an upper curve. converted[] = (lower, upper),
-# each a Vector{Point} over the same x. The ring is the lower curve followed by the reversed
-# upper curve (so the boundary closes). Vertices live directly in data space — no solver replay.
-# Open ring (last vertex ≠ first); the :polygons even-odd hit-test closes it implicitly.
+# Ring = lower curve followed by the reversed upper curve, in data space. Open ring (last
+# vertex ≠ first); the :polygons even-odd hit-test closes it implicitly.
 _band_ring(lower, upper) = vcat(collect(lower), reverse(collect(upper)))
 function PolygonInteractable(ax, p::Makie.Band; id = :band, payloads = nothing)
     lower, upper = _conv(p)
     return PolygonInteractable(ax, [_band_ring(lower, upper)]; id, payloads)
 end
 
-# ---- Density -> PolygonInteractable ----
-# density! renders its KDE fill as a descendant Band (Makie already ran the KDE at its own
-# bandwidth — read that band, don't recompute it). Reuse the Band ring builder.
+# density! renders its KDE fill as a descendant Band; read that instead of recomputing the KDE.
 function PolygonInteractable(ax, p::Makie.Density; id = :density, payloads = nothing)
     b = _descendant(p, Makie.Band)
     lower, upper = _conv(b)
     return PolygonInteractable(ax, [_band_ring(lower, upper)]; id, payloads)
 end
 
-# ---- Contourf -> PolygonInteractable ----
-# Makie lays out one GB.Polygon per filled level-piece on a child Poly (marching-squares already
-# run). Take each polygon's EXTERIOR ring only (holes excluded; `poly.exterior` is a Vector{Point}).
-# Annular bands therefore over-cover their hole at the boundary — a documented v1 limitation.
-# Exterior-only; add compound-polygon (ring-group) support if a real contour use needs it.
+# Takes each filled polygon's EXTERIOR ring only; holes are excluded, so annular bands
+# over-cover their hole at the boundary (documented v1 limitation).
 _poly_exterior_rings(polys) = [poly.exterior for poly in polys]
 
-# Payload (; low, high): each contourf polygon fills the band between two consecutive level edges.
-# Makie's `computed_levels` ARE the true edges; the child Poly's per-polygon `color` is the band
-# MIDPOINT ((edge_k + edge_{k+1})/2) — NOT the lower edge. Map each color to its band by nearest
-# midpoint, correct for uniform, non-uniform, and single-band levels alike. Constant/zero-range data
-# collapses the edges, correctly yielding a zero-width band (low == high), no crash.
+# Makie's `computed_levels` are the true band edges, but the child Poly's per-polygon `color`
+# is the band MIDPOINT, not the lower edge — map each color to its nearest midpoint to recover
+# (low, high).
 function _contourf_payloads(p, poly)
     edges = sort(Float64.(_computed_levels(p)))
     length(edges) >= 2 || error("Contourf introspection: <2 computed level edges (Makie internals changed?)")
@@ -210,13 +177,8 @@ function PolygonInteractable(ax, p::Makie.Contourf; id = :contourf, payloads = n
     return PolygonInteractable(ax, rings; id, payloads = pl)
 end
 
-# ---- Violin -> PolygonInteractable ----
-# Makie lays out one closed ring per violin on a child Poly (KDE already run). The ring's x-extent
-# is centered on the violin's category position → payload (; x). One element per violin.
-# Payload (; x) = the violin's category position. Read the CLEAN category value from Makie's
-# converted category data; use each ring's geometry-center only to pick WHICH category it is
-# (snap to nearest). Avoids Float32 projection noise and is robust to half-violin (side=:left/:right)
-# offset and ring ordering — geometry locates the ring, converted supplies the exact value.
+# Payload x is read from Makie's converted category data (not ring geometry) to avoid Float32
+# projection noise; each ring's geometry-center is used only to snap to the nearest category.
 function _violin_payloads(p, rings)
     cats = sort(unique(Float64.(_conv(p)[1])))
     return Any[
@@ -229,27 +191,22 @@ function _violin_payloads(p, rings)
 end
 function PolygonInteractable(ax, p::Makie.Violin; id = :violin, payloads = nothing)
     poly = _childof(p, Makie.Poly)
-    rings = _conv(poly)[1]                              # Vector{Vector{Point}}, one ring per violin
+    rings = _conv(poly)[1]
     pl = payloads === nothing ? _violin_payloads(p, rings) : payloads
     return PolygonInteractable(ax, rings; id, payloads = pl)
 end
 
-# ---- Voronoiplot -> PolygonInteractable ----
-# Makie tessellates and lays out one GB.Polygon per cell on a nested child Poly. Cells come back in
-# tessellation order, NOT input-site order, so there's no cheap cell→generator mapping → default
-# (; index) payload. Upgrade to (; x, y) via point-in-cell matching if a real use needs it.
+# Cells come back in tessellation order, not input-site order, so there's no cheap
+# cell→generator mapping; default payload is (; index) only.
 function PolygonInteractable(ax, p::Makie.Voronoiplot; id = :voronoiplot, payloads = nothing)
     poly = _descendant(p, Makie.Poly)
     rings = _poly_exterior_rings(_conv(poly)[1])
     return PolygonInteractable(ax, rings; id, payloads)
 end
 
-# ---- BoxPlot (box body only) -> Rect (un-notched) / Polygon (notched) ----
-# Geometry comes from the box Poly (a HyperRectangle per box, or an 11-pt notched ring per box).
-# Stats come from Makie's COMPUTED-STATS node — the node whose converted is a 4-tuple
-# (centers, medians, q1s, q3s); these equal Statistics.quantile(group, [.5,.25,.75]) exactly, i.e.
-# the numbers Makie drew the box and median line from. Read them; don't recompute or read the
-# median LineSegments. Whiskers/caps/outliers are decorative (not hit-tested).
+# Stats come from Makie's computed-stats node (converted is a 4-tuple centers/medians/q1s/q3s,
+# the exact numbers Makie drew the box and median line from) — read them rather than
+# recomputing or reading the median LineSegments.
 function _boxplot_stats_node(p)
     cv = try
         _conv(p)
@@ -292,18 +249,14 @@ function _boxplot_interactable(ax, p; id = :boxplot, payloads = nothing)
     end
 end
 
-# ====================== More recipes (same primitives) ======================
-# Each delegates to an existing explicit constructor; the only work is reading the right
-# laid-out geometry off the plot (or its children). No new types, no new manifest path.
-
 _childof(p, T) = (
     for c in _child_plots(p)
         c isa T && return c
     end; error("$(typeof(p).name.name): no $T child plot found (Makie internals changed?)")
 )
 
-# Recursive descendant search (whole subtree), fail-loud like _childof. Some recipes nest the
-# plot we need below a wrapper child (e.g. Density wraps a Band; Voronoiplot nests its Poly).
+# Recursive (whole-subtree) search: some recipes nest the target plot below a wrapper child
+# (Density wraps Band; Voronoiplot nests Poly), where _childof (direct children only) misses it.
 _descendant_or_nothing(p, T) = p isa T ? p :
     (
         for c in _child_plots(p)
@@ -317,16 +270,13 @@ function _descendant(p, T)
     return d
 end
 
-# ---- Stairs -> Segment(:polyline) ----
-# The parent `converted` is the raw input points; the rendered staircase (the actual click target)
-# lives in the child Lines as the pre-expanded step polyline — read that, don't replay the stepper.
+# The parent `converted` is the raw input points; the rendered staircase (the actual click
+# target) lives in the child Lines as the pre-expanded step polyline.
 SegmentInteractable(ax, p::Makie.Stairs; id = :stairs, payloads = nothing, tol = 6) =
     SegmentInteractable(ax, _converted(_childof(p, Makie.Lines))[1]; mode = :polyline, id, payloads, tol)
 
-# ---- Errorbars / Rangebars -> Segment(:pairs) ----
-# One disjoint pair per element; caps/whiskers are decorative. Errorbars `converted` is Vec4
-# (x, y, low, high) with low/high RELATIVE offsets; Rangebars is Vec3 (val, low, high) ABSOLUTE.
-# `direction` (:y default) picks which axis the bar runs along.
+# Errorbars `converted` is Vec4 (x, y, low, high) with low/high RELATIVE offsets; Rangebars is
+# Vec3 (val, low, high) ABSOLUTE.
 function _errorbar_pairs(p)
     horiz = p.direction[] === :x
     vs = Point2f[]
@@ -352,9 +302,8 @@ SegmentInteractable(ax, p::Makie.Errorbars; id = :errorbars, payloads = nothing,
 SegmentInteractable(ax, p::Makie.Rangebars; id = :rangebars, payloads = nothing, tol = 6) =
     SegmentInteractable(ax, _rangebar_pairs(p); mode = :pairs, id, payloads, tol)
 
-# ---- HLines / VLines -> Segment(:pairs) spanning the axis ----
-# Each line spans the full data range from `finallimits` (read post-update_state_before_display!).
-# Fractional xmin/xmax (HLines) / ymin/ymax (VLines) span attrs are ignored — full span only.
+# Each line spans the full data range from `finallimits`; fractional xmin/xmax (HLines) /
+# ymin/ymax (VLines) span attrs are ignored.
 function _span_pairs(ax, p, ishoriz)
     fl = _finallimits(ax)
     lo = fl.origin[ishoriz ? 1 : 2]; hi = lo + fl.widths[ishoriz ? 1 : 2]
@@ -378,16 +327,12 @@ function SegmentInteractable(ax, p::Makie.VLines; id = :vlines, payloads = nothi
     return _segment_with_resolve(ax, vs, :pairs, id, pl, tol, _ax -> _span_pairs(_ax, p, false))
 end
 
-# ---- Spy -> Rect(:list) ----
-# Spy renders nonzeros as a child Scatter with markerspace=:data, so markersize IS the cell size
-# in data units. One unit rect per nonzero, centered on the laid-out marker. (Delegating to
-# PointInteractable would fail: :data markerspace can't derive a pixel radius.)
-# Default {index} payloads; {i,j,value} needs nonzero↔marker ordering, deferred.
+# Spy renders nonzeros as a child Scatter with markerspace=:data, so markersize IS the cell
+# size in data units (PointInteractable would fail: :data markerspace can't derive a pixel
+# radius).
 function _spy_rects(p)
     sc = _childof(p, Makie.Scatter)
     ms = sc.markersize[]
-    # ms is a Vec2 cell size (uniform across nonzeros). Fail loud if it's ever a per-marker
-    # size vector (length != 2) — we'd silently misread ms[1]/ms[2] as width/height.
     ms isa AbstractVector && length(ms) != 2 && error(
         "Spy introspection: expected a length-2 Vec cell size, got length-$(length(ms)) markersize " *
             "(per-marker sizes unsupported)."
@@ -398,24 +343,21 @@ end
 RectInteractable(ax, p::Makie.Spy; id = :spy, payloads = nothing) =
     RectInteractable(ax; rects = _spy_rects(p), id, payloads)
 
-# ---- Hist / Waterfall -> RectInteractable(:list) (child BarPlot carries laid-out bars) ----
-# Hist: bar height = bin value (height = bin count only for default normalization=:none;
-# with :pdf/:density/:probability the height is a density/fraction — so we call it `value`).
-# Bin range = category-axis extent (cx ± w/2 for vertical).
-# Waterfall: signed delta read from p.converted[][1] (Vector{Point2}, element k = (x_k, delta_k)).
+# Hist bar height is the bin value: a count only for default normalization=:none; with
+# :pdf/:density/:probability it's a density/fraction (hence `value`, not `count`).
 function _hist_payloads(rects, direction)
     vert = direction === :y
     return Any[
         let (cx, cy, w, h) = r
-            cnt = vert ? h : w                                                  # bar height = bin value
-            lo, hi = vert ? (cx - w / 2, cx + w / 2) : (cy - h / 2, cy + h / 2)  # category axis = bin range
+            cnt = vert ? h : w
+            lo, hi = vert ? (cx - w / 2, cx + w / 2) : (cy - h / 2, cy + h / 2)
             (; value = Float64(cnt), low = Float64(lo), high = Float64(hi))
         end
             for r in rects
     ]
 end
 function _waterfall_payloads(p, rects)
-    deltas = _converted(p)[1]                      # Point2 per bar: (x, signed delta)
+    deltas = _converted(p)[1]
     return Any[
         let (cx, cy, w, h) = rects[k]
             (; low = Float64(cy - h / 2), high = Float64(cy + h / 2), value = Float64(deltas[k][2]))
@@ -436,20 +378,14 @@ function RectInteractable(ax, p::Makie.Waterfall; id = :waterfall, payloads = no
     return RectInteractable(ax; rects = rs, id, payloads = pl)
 end
 
-# ---- HSpan / VSpan -> RectInteractable(:list) ----
-# Payload: (low, high) from converted[] — the dimension the user explicitly specified.
 function _span_payloads(p)
     cv = _converted(p)                                   # HSpan (ymin,ymax) / VSpan (xmin,xmax)
     lo, hi = cv[1], cv[2]
     return Any[(; low = Float64(lo[k]), high = Float64(hi[k])) for k in eachindex(lo)]
 end
-# Geometry: build hit-rects explicitly from converted[] (band dim) + ax.finallimits[] (full-axis dim).
-# Do NOT reuse _bar_rects(p) — that reads the child Poly's HyperRectangle, which is designed for
-# BarPlot (laid-out dodge/stack geometry) and can exceed the axis limits in some Makie versions or
-# async contexts, causing the hit-rect to bleed into a neighboring axis's viewport.
-#
-# `full`: the axis direction the span fills completely (:x for HSpan, :y for VSpan).
-# converted[] = (lo_vec, hi_vec) where lo/hi are the band's own-dimension bounds.
+# Do NOT reuse _bar_rects(p): it reads the child Poly's HyperRectangle, which can exceed the
+# axis limits and bleed into a neighboring axis's viewport. `full` is the axis direction the
+# span fills completely (:x for HSpan, :y for VSpan).
 function _span_rects(ax, p, full::Symbol)
     cv = _converted(p)
     lo_vec, hi_vec = cv[1], cv[2]
@@ -476,9 +412,6 @@ function RectInteractable(ax, p::Makie.VSpan; id = :vspan, payloads = nothing)
     return _rect_with_resolve(ax, rs, id, pl, true, _ax -> _span_rects(_ax, p, :y))
 end
 
-# ---- CrossBar -> RectInteractable(:list) ----
-# Box rects are a direct child (depth 1); _bar_rects(p) finds them without _childof.
-# Semantic payload (midpoint, low, high) comes from p.converted[] = (x, midpoint, low, high).
 function _crossbar_payloads(p)
     _, midpts, lows, highs = _converted(p)
     return Any[(; midpoint = Float64(midpts[i]), low = Float64(lows[i]), high = Float64(highs[i])) for i in eachindex(midpts)]
@@ -489,9 +422,8 @@ function RectInteractable(ax, p::Makie.CrossBar; id = :crossbar, payloads = noth
     return RectInteractable(ax; rects = rs, id, payloads = pl)
 end
 
-# ---- Composites: one plot -> two layers (ScatterLines is the model) ----
-# Each half delegates to the existing child-plot constructor; the point layer keeps the base id,
-# the line/segment layer gets a suffix so the two ids stay distinct in the manifest.
+# Point layer keeps the base id; the line/segment layer gets a suffix so the two ids stay
+# distinct in the manifest.
 _stem_parts(ax, p, base) = AbstractInteractable[
     PointInteractable(ax, _childof(p, Makie.Scatter); id = base),
     SegmentInteractable(ax, _childof(p, Makie.LineSegments); id = Symbol(base, :_stems)),
@@ -501,13 +433,8 @@ _scatterlines_parts(ax, p, base) = AbstractInteractable[
     SegmentInteractable(ax, _childof(p, Makie.Lines); id = Symbol(base, :_line)),
 ]
 
-# ====================== holo(fig) auto-extraction ======================
-# Walk each Axis's top-level plots and emit the Vector{AbstractInteractable} a user could
-# hand-write, via the constructors above. Unsupported plot type → skip + warn. Pure sugar.
-
-# Text → TextInteractable, but only for DATA-anchored text: its anchor projects to a meaningful
-# (x, y). Pixel/relative-space text (rare manual overlays, most decorations) is skipped, loudly but
-# specifically (not via the generic "unsupported plot type" path).
+# Only DATA-anchored text projects to a meaningful (x, y); other space= text is skipped loudly
+# but specifically, not via the generic "unsupported plot type" path.
 function _text_interactables(ax, p::Makie.Text, id)
     if p.space[] !== :data
         @warn "holo: skipping non-data-space text (space=$(p.space[]))" maxlog = 16
@@ -584,21 +511,16 @@ end
     auto_interactables(fig) -> Vector{AbstractInteractable}
 
 Introspect a Makie `Figure`: for every supported plot in every `Axis`, `Axis3`, or `PolarAxis`,
-build the interactable its explicit constructor would (on `Axis3`: `Scatter`/`Lines`/`LineSegments`
-ride the widened constructors, `MeshScatter` gets depth-correct per-element hit radii from its
-data-space `markersize`, `Wireframe` reads its child's rendered edge segments, and `Arrows3D`
-emits start→end segments from its processed `startpoints`/`endpoints`; other 3D plot kinds are
-skipped with a warning pending their own extraction recipes, see docs/roadmap.md.
-On `PolarAxis`: `Scatter`/`Lines`/`LineSegments`/`ScatterLines` project through the shared
-`transform_func` closure — continuous θ/r readout and separable-grid recipes are deferred).
+build the interactable its explicit constructor would. On `Axis3`, only `Scatter`/`Lines`/
+`LineSegments`/`MeshScatter`/`Wireframe`/`Arrows3D` are supported; on `PolarAxis`, only
+`Scatter`/`Lines`/`LineSegments`/`ScatterLines`. Other kinds are skipped with a warning.
 Layer ids are the plot kind (`:scatter`, `:lines`, …), suffixed `_2`, `_3`, … when a kind
 repeats. Returns the same concrete vector you could pass to [`holo`](@ref) yourself — edit or
 extend it freely.
 
-Note: each interactable inherits its constructor's default per-element payloads (e.g. a
-`Scatter` materializes one `(; index, x, y)` per point), so the zero-config path on a very
-large plot allocates one payload per element. For huge data, construct the interactable with
-a lean `payloads=` yourself.
+Each interactable inherits its constructor's default per-element payloads, so the zero-config
+path on a very large plot allocates one payload per element; construct with a lean `payloads=`
+yourself for huge data.
 """
 function auto_interactables(fig)
     ints = AbstractInteractable[]
@@ -611,11 +533,8 @@ function auto_interactables(fig)
                 @warn "holo: skipping unsupported plot type $(typeof(p).name.name) (no introspection recipe)" maxlog = 16
                 continue
             end
-            # Axis3 gate: only recipes whose geometry survives a 3D camera. Every other 2D
-            # recipe extracts pixel-separable geometry (grid edges projected per-axis,
-            # axis-aligned rects, 2D anchors) that a perspective projection silently
-            # misaligns — the silent-wrong class, so skip LOUDLY rather than construct.
-            # (Per-type 3D extraction narrows this gate over time; see docs/roadmap.md.)
+            # Other 2D recipes extract pixel-separable geometry that a 3D perspective
+            # projection silently misaligns; skip loudly rather than construct.
             if ax isa Makie.Axis3 && !(
                     p isa Union{
                         Makie.Scatter, Makie.Lines, Makie.LineSegments,
@@ -627,10 +546,9 @@ function auto_interactables(fig)
                     "other kinds are roadmap scope (docs/roadmap.md M3 per-type extraction)" maxlog = 16
                 continue
             end
-            # PolarAxis gate: separable-edge / axis-aligned rect recipes assume Cartesian
-            # pixel geometry (heatmap grids, bars, spans). Polar maps those into arcs and
-            # radial wedges — constructing AABB/grid hit layers would be silently wrong.
-            # Point/segment recipes project per-vertex through transform_func and are fine.
+            # Separable-edge / axis-aligned rect recipes assume Cartesian pixel geometry;
+            # polar maps those into arcs and wedges, so an AABB/grid hit layer would be
+            # silently wrong. Point/segment recipes project per-vertex and are fine.
             if ax isa Makie.PolarAxis && !(p isa Union{Makie.Scatter, Makie.Lines, Makie.LineSegments, Makie.ScatterLines})
                 @warn "holo: skipping $(typeof(p).name.name) on PolarAxis — only Scatter/Lines/" *
                     "LineSegments/ScatterLines have polar-valid extraction today; continuous " *
@@ -643,8 +561,7 @@ function auto_interactables(fig)
             append!(ints, _construct(ax, p, id))
         end
     end
-    # Figure-block walk: Colorbar blocks live in fig.content (not in an Axis's scene). Extend the
-    # walk to emit a ColorbarInteractable per colorbar. (Legend/other blocks slot in here later.)
+    # Colorbar blocks live in fig.content, not in an Axis's scene.
     nc = 0
     for c in fig.content
         c isa Makie.Colorbar || continue

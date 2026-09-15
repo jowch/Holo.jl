@@ -1,8 +1,5 @@
 module HoloCairoMakieExt
 
-# CairoMakie: the static 2D backend. Owns the render call (DPI/format/background); the
-# user's figure spec is respected but its save settings are not.
-
 using Holo: Holo, AbstractBackend, RenderResult, InteractionContext, AxisTransform
 using CairoMakie
 using FileIO
@@ -22,18 +19,14 @@ struct CairoBackend <: AbstractBackend
 end
 CairoBackend(; max_width = 700) = CairoBackend(max_width)
 
-# px_per_unit derived from the layout fact: render at ~2× the actual display width.
 function Holo._ppu(b::CairoBackend, fig)
     sw = size(fig.scene)[1]
     return 2 * min(sw, b.max_width) / sw
 end
 
-# fig is already finalized (update_state_before_display!) by holo.
 function Holo.render(::CairoBackend, fig, ppu)
-    # backend=CairoMakie pinned explicitly: current_backend() is a bare global Ref that
-    # ANY loaded backend's __init__ can flip unconditionally on load. Holo enforces
-    # "exactly one backend loaded" at the holo() call site, but this stays pinned as
-    # defense in depth against that global state changing between the check and the call.
+    # backend=CairoMakie pinned explicitly as defense in depth: current_backend() is a bare
+    # global Ref any loaded backend's __init__ can flip unconditionally on load.
     img = Makie.colorbuffer(fig; px_per_unit = ppu, backend = CairoMakie)
     io = IOBuffer(); save(Stream{format"PNG"}(io), img)
     return RenderResult("image/png", take!(io), size(img, 2), size(img, 1), Float64(ppu))
@@ -43,18 +36,13 @@ function Holo.context(b::CairoBackend, fig, ppu)
     w, h = size(fig.scene)
     scaling = Float64(ppu)
     out_w, out_h = round(Int, w * scaling), round(Int, h * scaling)
-    # how much the rendered image is downscaled to fit Pluto's column on screen — the same
-    # display_css/image_width ratio the widget HTML uses (render.jl). Lets grid hitlayers reason
-    # in true on-screen px instead of hardcoding the 2× DPI factor.
+    # Lets grid hitlayers reason in true on-screen px instead of hardcoding the 2× DPI factor.
     display_scale = min(w, b.max_width) / out_w
 
-    # shared closure: transform_func applied, then Makie.project + viewport + scaling + y-flip
     project = Holo._project_closure(scaling, out_h)
 
-    # Fail loud, never silently wrong: an axis-like block Holo doesn't build transforms for
-    # (LScene today) would be silently dropped here, then interactables would project against
-    # the wrong axis. Reject it up front. Axis3 and PolarAxis discrete overlays are supported;
-    # LScene remains deferred (see docs/roadmap.md).
+    # An axis-like block Holo builds no transform for (LScene today) would otherwise be
+    # silently dropped, and interactables would project against the wrong axis.
     unsupported = unique(
         typeof.(
             c for c in fig.content if c isa Makie.AbstractAxis &&

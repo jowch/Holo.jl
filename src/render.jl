@@ -1,6 +1,3 @@
-# Assembles the manifest (a plain Dict — testable without Pluto), then emits the @bind widget:
-# bundle bootstrap + published_to_js manifest + mount(). See frontend-delivery.md.
-
 """
     InteractionEvent(layer, index, payload)
 
@@ -13,9 +10,7 @@ struct InteractionEvent
     payload::Any
 end
 
-# ---- tooltip styling: tooltip_* kwargs -> CSS custom-property dict (figure-level) ------------
-# Accepts a CSS string or any Makie-convertible color. Only set knobs are emitted; everything else
-# falls through to the overlay's built-in NYT defaults (incl. the dark-mode media query).
+# c can be a CSS string or any Makie-convertible color.
 function _css_color(c)
     c isa AbstractString && return c
     rgba = Makie.RGBAf(Makie.to_color(c))
@@ -23,6 +18,7 @@ function _css_color(c)
     return rgba.alpha >= 1 ? "rgb($r,$g,$b)" : "rgba($r,$g,$b,$(round(rgba.alpha; digits = 3)))"
 end
 
+# Only set kwargs are emitted; unset ones fall through to the overlay's built-in defaults.
 function tip_style_dict(;
         tooltip_bg = nothing, tooltip_color = nothing, tooltip_accent = nothing,
         tooltip_font = nothing, tooltip_font_size = nothing, tooltip_radius = nothing,
@@ -38,8 +34,6 @@ function tip_style_dict(;
     tooltip_caret === false && (d["--holo-tip-caret"] = "none")
     return d
 end
-
-# ---- manifest assembly (pure; no published_to_js, no Pluto) -----------------
 
 # union of NamedTuple field names across a payload vector (empty if none are NamedTuples)
 function _payload_keys(payloads)
@@ -72,10 +66,8 @@ function _layer_dict(i, L::HitLayer)
     return d
 end
 
-# Kinds the overlay can draw as a persistent pre-highlight (`hitLayerByIndex` / `makeHiElement`).
-# Closed kinds get the selected wash; open kinds (segments/polyline) get the ring fallback.
-# `selected=` on any other kind (grid/axis/…) fails loud, same doctrine as wrong-length
-# `payloads=` (`_check_payloads`).
+# Closed kinds get the selected wash; open kinds (:segments/:polyline) get the ring. `selected=`
+# on any other kind fails loud.
 const _SELECTED_KINDS = (:circles, :rects, :polygons, :segments, :polyline)
 
 # Element count for a HitLayer geometry, matching the JS layout in types.ts / hitLayerByIndex.
@@ -187,9 +179,8 @@ function build_manifest(interactables, ctx::InteractionContext; selected = nothi
         end
     end
     _validate_selectors(interactables, layers)
-    # View (pan/orbit) layers are catch-all viewport hits — keep them after Tier-0
-    # threshold/ROI so ordinary drag still wins without a modifier. Shift+drag still
-    # forces view in the overlay (see frontend overlay.ts).
+    # View layers are catch-all viewport hits; sort after Tier-0 threshold/ROI so ordinary
+    # drag wins without a modifier (Shift+drag still forces view in overlay.ts).
     sort!(layers; by = (d) -> (d["kind"] == "view", 0), alg = Base.Sort.DEFAULT_STABLE)
     m = Dict{String, Any}(
         "width" => ctx.width, "height" => ctx.height, "scaling" => ctx.scaling,
@@ -200,26 +191,19 @@ function build_manifest(interactables, ctx::InteractionContext; selected = nothi
     return m
 end
 
-# ---- the widget -------------------------------------------------------------
-
 struct HoloWidget
     b64::String
     manifest::Dict{String, Any}
     display_css::Int
 end
 
-# Backend choice is tied to which package extension is active — never guessed from
-# figure content. Makie's `current_backend()` is a bare global `Ref` that any loaded
-# backend's `__init__` flips unconditionally, so we do not sniff Makie state. `explicit`
-# is the caller's `backend=` override. A session with both extensions loaded (e.g. a fat
-# sysimage) is not fatal: honor `backend=` or default to Cairo. Still throw when *no*
-# renderer is loaded — that is a missing `using` line, not an ambiguous one.
+# Backend choice follows which package extension is loaded, never sniffed from Makie's global
+# `current_backend()` state. `explicit` is the caller's `backend=` override.
 function _resolve_backend(explicit; max_width)
     cairo_ext = Base.get_extension(@__MODULE__, :HoloCairoMakieExt)
     wgl_ext = Base.get_extension(@__MODULE__, :HoloWGLMakieExt)
     explicit !== nothing && return explicit
-    # Both loaded: prefer Cairo so a preloaded WGLMakie (sysimage, stray `using`) does
-    # not block the default static path. Callers who want WebGL pass `backend=`.
+    # Both loaded: prefer Cairo so a preloaded WGLMakie doesn't block the default static path.
     cairo_ext !== nothing && return cairo_ext.CairoBackend(; max_width)
     wgl_ext !== nothing && return wgl_ext.WebGLBackend(; max_width)
     throw(
@@ -237,23 +221,17 @@ end
 
 Render `fig` and overlay JS hit-testing for the declared `interactables`. Use as a Pluto
 `@bind` source; the bond value is `nothing` until a click, then an [`InteractionEvent`](@ref).
-Needs a rendering backend loaded: `using CairoMakie` for a static base, or
-`using WGLMakie` for animation/large or frequently re-rendered data. If both are loaded
-(e.g. a fat sysimage), `backend=` wins and implicit calls default to Cairo. Both expose the same
-interaction feature set — the backend choice is a cost/substrate profile, not a capability fork
-(see `docs/backend-comparison.md`). `Axis3` works on both: static overlays on `:cairo`, live
-rendering on `:webgl`; element interactables (points/segments/polygons) project through the
-same shared closure, while continuous pixel→data readout (Axis/Threshold/ROI) fails loud on a
-3D axis (a screen pixel is a ray).
+Needs a rendering backend loaded: `using CairoMakie` for a static base, or `using WGLMakie`
+for animation/large or frequently re-rendered data. If both are loaded, `backend=` wins and
+implicit calls default to Cairo. `Axis3` works on both backends; continuous pixel→data
+readout (Axis/Threshold/ROI) fails loud on a 3D axis.
 
 `selected` (a `layer_id => indices` map) pre-highlights elements on mount. Feed a bond value
 back into it — `Dict(ev.layer => [ev.index])` — to keep clicked elements highlighted across
 re-renders. See [`build_manifest`](@ref).
 
-Does not corrupt the user's figure: Makie `Figure`s can't be `deepcopy`'d (they hold module
-refs), so instead the one mutation we introduce — forcing an opaque background — is saved and
-restored. `update_state_before_display!` is also run, but that is exactly the step Makie performs
-at display/save time, so it is benign (not corruption).
+Restores the figure's background color on return; the only mutation `holo` makes to `fig` is
+forcing it opaque during render (Makie `Figure`s can't be `deepcopy`'d to snapshot/restore).
 """
 function holo(
         fig, interactables::AbstractVector; backend::Union{Nothing, AbstractBackend} = nothing,
@@ -289,9 +267,8 @@ the zero-config path. Equivalent to `holo(fig, auto_interactables(fig))`; unsupp
 types are skipped with a warning. For control over ids/payloads, build the vector yourself.
 """
 function holo(fig; kwargs...)
-    # Finalize layout BEFORE auto-extraction: introspection that reads post-layout axis state
-    # (e.g. `_span_rects`/hlines/vlines read `ax.finallimits[]`) would otherwise see stale limits,
-    # since `holo(fig, ints)` only finalizes after `auto_interactables` has already built them.
+    # Finalize layout before auto-extraction: introspection reads post-layout axis state
+    # (e.g. `ax.finallimits[]`), which `holo(fig, ints)` only finalizes afterward.
     _finalize!(fig)
     ints = auto_interactables(fig)
     isempty(ints) && @warn "holo(fig): no introspectable plots found — overlaying nothing (static image only)"
@@ -299,10 +276,8 @@ function holo(fig; kwargs...)
 end
 
 function Base.show(io::IO, m::MIME"text/html", w::HoloWidget)
-    # Inject the bundle UNCONDITIONALLY (it self-installs window.Holo and is
-    # idempotent). We do NOT wrap it in `if (!window.Holo) {…}`: running the
-    # esbuild IIFE inside an `if`-block makes it install `{}` instead of `{mount}`
-    # (a JS block-scope/strict-mode quirk). Re-parsing ~6KB per cell is negligible.
+    # Inject unconditionally: wrapping the esbuild IIFE in `if (!window.Holo) {…}` makes it
+    # install `{}` instead of `{mount}` (a JS block-scope/strict-mode quirk).
     boot = HypertextLiteral.JavaScript(_OVERLAY_JS[])
     html = @htl(
         """
@@ -318,8 +293,6 @@ function Base.show(io::IO, m::MIME"text/html", w::HoloWidget)
     )
     return show(io, m, html)
 end
-
-# ---- bond plumbing (typed value) -------------------------------------------
 
 APD.Bonds.initial_value(::HoloWidget) = nothing
 function APD.Bonds.transform_value(::HoloWidget, js)
