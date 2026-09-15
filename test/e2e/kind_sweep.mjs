@@ -4,18 +4,23 @@
 // sibling (fade + prefers-color-scheme). This file asserts fade / no-pulse per kind
 // and prefers-color-scheme once (scatter).
 //
-//   node kind_sweep.mjs <base-url> <notebook-abs-path> <cairo|webgl>
+//   node kind_sweep.mjs <base-url> <notebook-abs-path> <cairo|webgl> [artifact-dir]
 import { chromium } from "playwright";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   assertNoAlertRed, assertWash, assertRing, assertHoverRecipe,
   assertRemountStable, assertLeaveFade, assertTooltipColorScheme,
 } from "./visual_assert.mjs";
 
-const [base, notebook, backend] = process.argv.slice(2);
+const [base, notebook, backend, artifactDirArg] = process.argv.slice(2);
 if (!base || !notebook || !backend) {
-  console.error("usage: node kind_sweep.mjs <base-url> <notebook> <cairo|webgl>");
+  console.error("usage: node kind_sweep.mjs <base-url> <notebook> <cairo|webgl> [artifact-dir]");
   process.exit(2);
 }
+const artifactDir = artifactDirArg || process.env.E2E_ARTIFACT_DIR || null;
+if (artifactDir) mkdirSync(artifactDir, { recursive: true });
+const consoleLog = [];
 
 const SHIM_LEAK = /\b(?:Bonito|comm)\.\w+ is not a function/;
 const ALLOWED = [/Bonito\.decode_binary is not a function/, /Bonito\.fetch_binary is not a function/];
@@ -75,19 +80,33 @@ const browser = await chromium.launch({
 const passed = [];
 const unexpected = [];
 let failed = null;
+let context, page;
 try {
-  const context = await browser.newContext({
+  context = await browser.newContext({
     locale: "en-US", timezoneId: "UTC",
     viewport: { width: 1100, height: 1400 },
     deviceScaleFactor: 2,
     reducedMotion: "no-preference",
   });
-  const page = await context.newPage();
+  page = await context.newPage();
   page.on("pageerror", (e) => {
     const shim = SHIM_LEAK.test(e.message);
     const benign = shim && ALLOWED.some((re) => re.test(e.message));
     if (!benign) unexpected.push(e.message);
     console.error(benign ? "PAGEERROR (known-benign):" : "PAGEERROR:", e.message);
+  });
+  // On :webgl, WGLMakie/Bonito can keep tearing down and rebuilding canvas contexts
+  // ("removing WGL context, canvas is not in the DOM anymore!") for a while after Pluto's own
+  // cell-busy signal clears — seen in CI (not reproduced locally) as an instant, fade-less hi
+  // clear: the churn wipes a host's overlay group between our hover check and the following
+  // leave check. Require a quiet window with no such message before calling the page ready.
+  let lastWglChurnAt = 0;
+  const WGL_CHURN_RE = /removing WGL context/;
+  const WGL_QUIET_MS = 3000;
+  page.on("console", (m) => {
+    const text = m.text();
+    consoleLog.push(`[${m.type()}] ${text}`);
+    if (WGL_CHURN_RE.test(text)) lastWglChurnAt = Date.now();
   });
 
   await page.goto(`${base}/open?path=${encodeURIComponent(notebook)}`, { waitUntil: "domcontentloaded", timeout: 60000 });
@@ -117,15 +136,20 @@ try {
       };
     });
     if (st.errored) throw new Error(`${backend} errored: ${st.errText.slice(0, 500)}`);
-    if (!st.busy && st.metaN >= 14 && st.surfaces >= st.metaN) { ready = true; break; }
+    const wglQuiet = !lastWglChurnAt || (Date.now() - lastWglChurnAt) > WGL_QUIET_MS;
+    if (!st.busy && st.metaN >= 14 && st.surfaces >= st.metaN && wglQuiet) { ready = true; break; }
     if (tick % 20 === 0) {
-      console.error(`  …${backend} [${tick}s] busy=${st.busy} hosts=${st.hosts} surfaces=${st.surfaces} meta=${st.metaN} title=${JSON.stringify(st.title || "")} url=${st.url || ""}`);
+      console.error(`  …${backend} [${tick}s] busy=${st.busy} hosts=${st.hosts} surfaces=${st.surfaces} meta=${st.metaN} wglQuiet=${wglQuiet} title=${JSON.stringify(st.title || "")} url=${st.url || ""}`);
     }
     tick++;
     await new Promise((r) => setTimeout(r, 1000));
   }
   if (!ready) throw new Error(`${backend} timed out waiting for kind-sweep widgets`);
   console.error(`phase: widgets mounted (${backend})`);
+  // Diagnostic only (not an assertion): reports whether HOLO_DEV_ENV propagated from serve.jl
+  // into Pluto's notebook worker process, so a CI job log shows which Pkg path the run took.
+  const usedDevEnv = await page.evaluate(() => document.querySelector("#kind_env")?.textContent?.trim());
+  console.error(`HOLO_DEV_ENV propagated to notebook worker: ${usedDevEnv === "true" ? "yes" : usedDevEnv === "false" ? "no (portable path taken)" : "unknown (#kind_env missing)"}`);
 
   const meta = await page.evaluate(() => JSON.parse(document.querySelector("#kind_meta").textContent));
   const pageBackend = await page.evaluate(() => document.querySelector("#kind_backend")?.textContent?.trim());
@@ -515,6 +539,24 @@ try {
   console.log(`KIND SWEEP OK — ${backend}: ${passed.join(", ")}`);
 } catch (e) {
   failed = e;
+  // Mirrors the captureFailure shape #67 added to bind_click.mjs: screenshot + DOM dump +
+  // console log, so a CI failure ships enough evidence to diagnose without re-running locally.
+  if (artifactDir && page) {
+    try {
+      await page.screenshot({ path: join(artifactDir, `kind_sweep-${backend}-failure.png`), fullPage: true });
+      const dump = await page.evaluate(() => ({
+        title: document.title,
+        url: location.href,
+        cells: [...document.querySelectorAll("pluto-cell")].map((c) => ({ id: c.id, classes: c.className })),
+        hosts: document.querySelectorAll(".ip-host").length,
+      }));
+      writeFileSync(join(artifactDir, `kind_sweep-${backend}-dom.json`), JSON.stringify(dump, null, 2));
+      writeFileSync(join(artifactDir, `kind_sweep-${backend}-console.log`), consoleLog.join("\n"));
+      console.error(`artifact: wrote kind_sweep-${backend}-{failure.png,dom.json,console.log} to ${artifactDir}`);
+    } catch (e2) {
+      console.error("artifact capture failed:", e2.message);
+    }
+  }
 } finally {
   await browser.close();
 }

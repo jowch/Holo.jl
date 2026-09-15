@@ -43,7 +43,10 @@ node polish_verify.mjs http://127.0.0.1:1238 "$PWD/kind_sweep_webgl.jl" webgl
 ```
 
 Portable notebooks (`Pkg.develop` via `@__DIR__`) work without `HOLO_DEV_ENV`; first open
-re-resolves the Makie stack (~6 min). Both drivers are **local — not CI**.
+re-resolves the Makie stack (~6 min). Both drivers also run in CI on the `kind-sweep` job
+(matrixed `cairo`/`webgl`), but only **advisorily** (`continue-on-error: true`) — agents still
+run this playbook locally before calling a user-facing change done, until the job is promoted
+to a required check.
 `polish_verify.mjs` is **required** and still **not sufficient** alone (one wash + one ring
 + fade + color-scheme). `kind_sweep.mjs` is **required** and still **not sufficient**
 alone until `polish_verify.mjs` also PASSes on that backend.

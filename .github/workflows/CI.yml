@@ -168,6 +168,100 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  kind-sweep:
+    # Advisory (continue-on-error): CLAUDE.md's live-verification playbook
+    # (docs/dev/live-interaction-checklist.md) mandates kind_sweep.mjs + polish_verify.mjs on
+    # every backend before a user-facing change is "done", but until now only click.mjs/
+    # bind_click.mjs ran in CI. This job runs the full sweep so a regression shows up on the
+    # PR without gating merges yet — promote to required once it's proven stable.
+    name: Kind sweep (${{ matrix.backend }})
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    # kind_sweep.mjs's own mount deadline is 25min, polish_verify.mjs's is 15min — 40min of
+    # driver budget alone, before checkout/playwright-install/cold-instantiate, and the run
+    # deliberately runs polish_verify even after kind_sweep fails (both deadlines can burn).
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [cairo, webgl]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          # Pinned to 1.10, same compat floor as `webgl`/`webgl-bind-e2e` — a flake here should
+          # be attributable to the sweep, not to running a different Julia than the rest of the
+          # WGL gate.
+          version: '1.10'
+      - uses: julia-actions/cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('test/e2e/package.json') }}
+      - name: Install Playwright + Chromium
+        working-directory: test/e2e
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+      - name: Instantiate shared dev env (Holo + both Makies)
+        run: |
+          mkdir -p "$RUNNER_TEMP/holo-dev"
+          julia --project="$RUNNER_TEMP/holo-dev" -e '
+            using Pkg
+            Pkg.develop(path=pwd())
+            Pkg.add(["CairoMakie", "WGLMakie", "JSON3"])
+            Pkg.instantiate()
+          '
+          echo "HOLO_DEV_ENV=$RUNNER_TEMP/holo-dev" >> "$GITHUB_ENV"
+      - name: Kind sweep + polish verify
+        working-directory: test/e2e
+        env:
+          # Carried over from the local playbook (docs/dev/live-interaction-checklist.md) for
+          # parity; GitHub-hosted runners have no sysimage wrapper, so this is a no-op here.
+          JULIA_NOSYSIMAGE: ${{ matrix.backend == 'webgl' && '1' || '' }}
+        run: |
+          NOTEBOOK="$GITHUB_WORKSPACE/test/e2e/kind_sweep_${{ matrix.backend }}.jl"
+          ARTIFACTS="$RUNNER_TEMP/kind-sweep-artifacts"
+          mkdir -p "$ARTIFACTS"
+          julia serve.jl 1240 > pluto.log 2>&1 &
+          SERVER=$!
+          trap 'kill $SERVER 2>/dev/null || true' EXIT
+          up=
+          for i in $(seq 1 120); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:1240 || echo 000)
+            [ "$code" = "200" ] && { up=1; break; }
+            sleep 2
+          done
+          [ -n "$up" ] || { echo "::error::Pluto never came up on :1240 (${{ matrix.backend }})"; cat pluto.log; exit 1; }
+
+          status=0
+          node kind_sweep.mjs http://127.0.0.1:1240 "$NOTEBOOK" ${{ matrix.backend }} "$ARTIFACTS" || status=1
+          node polish_verify.mjs http://127.0.0.1:1240 "$NOTEBOOK" ${{ matrix.backend }} "$ARTIFACTS" || status=1
+          exit $status
+      - name: Pluto server log (${{ matrix.backend }})
+        if: always()
+        working-directory: test/e2e
+        run: tail -n 200 pluto.log || true
+      - name: Upload artifacts (${{ matrix.backend }})
+        # always(), not failure(): a job-level timeout-minutes kill marks the running step
+        # cancelled, not failed, so failure() alone would silently skip the upload on the one
+        # occasion (a genuine timeout) it matters most (see PR #67's bind-e2e-failure upload for
+        # the same reasoning). if-no-files-found: ignore keeps a passing run's upload a no-op
+        # beyond pluto.log, which is itself useful wall-time evidence.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kind-sweep-${{ matrix.backend }}
+          path: |
+            ${{ runner.temp }}/kind-sweep-artifacts/
+            test/e2e/pluto.log
+          if-no-files-found: ignore
+          retention-days: 14
+
   examples:
     name: Example notebooks
     runs-on: ubuntu-latest
