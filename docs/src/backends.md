@@ -44,8 +44,8 @@ end
 Reach for `:webgl` for **3D you want to actually rotate live**, **animation / frequent
 re-renders** (WebGL redraws a frame, `:cairo` re-rasterizes a whole PNG), and **large or
 live-updating data** where per-frame render cost dominates. For everything else — a figure
-you build once and let the user inspect — `:cairo`'s static PNG is lighter, and its offline
-export behavior is the one that's actually verified (see below).
+you build once and let the user inspect — `:cairo`'s static PNG is lighter (both backends'
+static-export behavior is verified; see below).
 
 [`examples/webgl_demo.jl`](https://github.com/jowch/Holo.jl/blob/main/examples/webgl_demo.jl)
 is a runnable gallery of the `:webgl` backend (CI runs it headlessly, same as `demo.jl`).
