@@ -15,7 +15,7 @@ for a live, browser-GPU canvas when you need animation, large data, or live 3D �
 | Output | static, publication-quality | live, GPU-rendered | static + thin overlay (`:cairo`) or live (`:webgl`) |
 | Interactivity | none | rich (pan/zoom/rotate) | light: hover tooltips, click-to-select, drag-to-pan/threshold/ROI |
 | Needs a live Julia process | no | yes | only for click → recompute |
-| Survives offline / static HTML export | yes | no | yes on `:cairo` (verified — the inspection layer keeps working); `:webgl` not verified |
+| Survives offline / static HTML export | yes | no | yes on both (verified — the inspection layer keeps working; on `:webgl` the canvas is redrawn client-side, no server needed) |
 
 Reach for Holo when you want a publication-quality static figure that also answers "what's
 this point?" on hover and "which one did I click?" in Julia — without standing up a WebGL

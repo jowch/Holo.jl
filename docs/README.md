@@ -3,6 +3,11 @@
 User docs are the [Documenter site](https://jowch.github.io/Holo.jl), built from
 [`docs/src/`](src/). Maintainer notes are [`docs/dev/`](dev/):
 
+Building the site runs every example notebook (`docs/export_notebooks.jl`) to produce its
+static export, so a local build takes several minutes on a warm depot and longer cold.
+Set `HOLO_SKIP_NOTEBOOK_EXPORT=true` to reuse the exports already in `docs/src/notebooks/`
+from a previous build when iterating on prose.
+
 | Doc | What it covers |
 |---|---|
 | [`architecture.md`](dev/architecture.md) | The design contract: `AbstractBackend`/`AbstractInteractable`, the geometry primitives between them, the manifest shape, tooltips wire format. |

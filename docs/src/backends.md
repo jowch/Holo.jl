@@ -44,8 +44,8 @@ end
 Reach for `:webgl` for **3D you want to actually rotate live**, **animation / frequent
 re-renders** (WebGL redraws a frame, `:cairo` re-rasterizes a whole PNG), and **large or
 live-updating data** where per-frame render cost dominates. For everything else — a figure
-you build once and let the user inspect — `:cairo`'s static PNG is lighter, and its offline
-export behavior is the one that's actually verified (see below).
+you build once and let the user inspect — `:cairo`'s static PNG is lighter (both backends'
+static-export behavior is verified; see below).
 
 [`examples/webgl_demo.jl`](https://github.com/jowch/Holo.jl/blob/main/examples/webgl_demo.jl)
 is a runnable gallery of the `:webgl` backend (CI runs it headlessly, same as `demo.jl`).
@@ -57,13 +57,13 @@ with the measured ones.
 
 ### What exported static HTML keeps and loses
 
-On `:cairo`, a Pluto notebook exported to static HTML keeps hover and tooltip inspection —
-the PNG and the hit-test manifest are both already baked into the exported page, so no
-kernel is needed for them (verified end-to-end against a real Pluto export). On **either**
-backend, what's lost is anything that needs Julia to recompute: a click that should update
-`ev` and re-run downstream cells does nothing without a live kernel behind it. `:webgl`'s
-export behavior for hover/tooltip specifically hasn't been verified the same way — treat it
-as unconfirmed rather than assuming it matches `:cairo`.
+On either backend, a Pluto notebook exported to static HTML keeps hover and tooltip
+inspection: the hit-test manifest is baked into the exported page, and so is the base —
+the PNG on `:cairo`, and on `:webgl` the serialized scene, which Holo's shim redraws on the
+reader's GPU without a server (both verified end-to-end against real Pluto exports; the
+page still loads Pluto's own frontend from a CDN). What's lost on either backend is anything
+that needs Julia to recompute: a click that should update `ev` and re-run downstream cells
+does nothing without a live kernel behind it.
 
 ### Choosing between them
 

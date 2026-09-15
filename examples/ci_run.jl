@@ -7,6 +7,8 @@
 # Run locally:  julia examples/ci_run.jl
 # Each notebook manages its own env (Pkg.develop the package + add whichever Makie
 # backend it needs), so this runner only needs Pluto itself.
+# docs/export_notebooks.jl runs the same notebooks to produce the docs site's static exports;
+# keep the discovery and error handling in step.
 
 import Pkg
 Pkg.activate(; temp = true)
