@@ -1,6 +1,7 @@
 # Holo.jl — Perf findings (Phase 0 spike)
 
-> Resolves `research-findings.md` Q5 / `design.md` §10 unknown (4): the payload/latency envelope.
+> Resolves the payload/latency envelope left as an open unknown by the original design spike
+> (superseded notes, kept in git history).
 > A measurement spike, not a feature — it **bounds the scope** of every payload-heavy roadmap
 > item after it (M2.3 tooltips, M4 animation, SVG output, multi-select return shape).
 >
@@ -419,7 +420,7 @@ The per-cell scene is already small (binary), so compression is **deferred** —
   them to a shared channel is real complexity.
 
 **Revisit both only if tier-1 animation profiling (per-frame scene re-ship) shows the scene is the
-bottleneck** — tier-2 in-place patching (`docs/roadmap.md`) already ships no new scene at all.
+bottleneck** — tier-2 in-place patching (`roadmap.md`) already ships no new scene at all.
 
 ## Axis3 projection hinge spike (2026-07-01)
 

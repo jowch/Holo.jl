@@ -1,6 +1,6 @@
 # Phase 0 perf spike — measure the payload envelope that bounds every payload-heavy roadmap
 # item after it (richer tooltips, animation frames, SVG, multi-select). Re-runnable so the
-# numbers can't rot as those features land. Findings live in docs/perf-findings.md.
+# numbers can't rot as those features land. Findings live in docs/dev/perf-findings.md.
 #
 # Run: julia --project=. bench/payload_envelope.jl
 #

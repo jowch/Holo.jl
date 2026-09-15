@@ -65,7 +65,7 @@ function Holo.context(b::CairoBackend, fig, ppu)
         ArgumentError(
             "Holo's CairoMakie backend supports `Makie.Axis`, `Makie.Axis3`, and `Makie.PolarAxis`; found " *
                 "unsupported $(join(unsupported, ", ")). This is Holo's own scoping guard, not a " *
-                "CairoMakie limit — `LScene` support is still deferred (docs/roadmap.md M3). " *
+                "CairoMakie limit — `LScene` support is still deferred (docs/dev/roadmap.md M3). " *
                 "Today: restart this session with `using WGLMakie` (instead of `using CairoMakie`) " *
                 "to render `LScene` live (Holo builds no overlays for it on either backend).",
         ),

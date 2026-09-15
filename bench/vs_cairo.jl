@@ -1,5 +1,5 @@
 # Cross-backend head-to-head: :webgl vs :cairo (both now backends of the same Holo package) on
-# the SAME seeded figures — the artifact behind docs/backend-comparison.md. Reports, per figure:
+# the SAME seeded figures — the artifact behind docs/dev/backend-comparison.md. Reports, per figure:
 #   - WIRE: Cairo PNG+manifest (per render) vs WebGL scene (per render) + the once-per-notebook bundle
 #   - SERVER COST per update: Cairo render+encode+PNG ms vs WebGL serialize ms. WebGL's number
 #     EXCLUDES the GPU draw *by design* — it's offloaded to the client; that offload is the win,
@@ -11,7 +11,7 @@
 # Cairo half in a subprocess so each process has a single `using` line. See src/render.jl.
 # PREREQ: the root env has both CairoMakie and WGLMakie available (both are
 # weak deps + `[extras]`/test deps in Project.toml — `Pkg.test()`'s test env resolves them, or
-# `Pkg.add` them into your own dev env). Numbers reconcile with docs/perf-findings.md's two
+# `Pkg.add` them into your own dev env). Numbers reconcile with docs/dev/perf-findings.md's two
 # envelopes (Cairo's main envelope + the `:webgl` section) and bench/stress.jl — re-run all three
 # on any wire-format change.
 #

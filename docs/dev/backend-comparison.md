@@ -20,7 +20,7 @@
 > so it is *not* a corroborating source for the `markersize=6` numbers here — the marker size drives
 > both the PNG and the raster time. **Timings (ms) are wall-clock** (`~` throughout) and vary
 > run-to-run; only sizes are exact. Last run **2026-06-30**, WGLMakie 0.13.12 / CairoMakie 0.15 /
-> Julia 1.12. Size/latency figures reconcile with `docs/perf-findings.md`'s `:webgl` section and its
+> Julia 1.12. Size/latency figures reconcile with `perf-findings.md`'s `:webgl` section and its
 > `:cairo` envelope — see that file for the full methodology.
 
 ## 1. Interaction matrix — same contract, different cost

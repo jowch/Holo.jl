@@ -1,8 +1,8 @@
 # Holo.jl — Roadmap
 
 Where v0.1 is and how the rest of the feature set gets built. Grounded in the design:
-`architecture.md` (the contract + tiers), `survey-makie-surfaces.md` (the v1/v2 surface
-map), `frontend-delivery.md` (build/delivery). Priorities, not promises — reorder freely.
+`architecture.md` (the contract + tiers), `frontend-delivery.md` (build/delivery).
+Priorities, not promises — reorder freely.
 
 ## Guiding principles (don't drift)
 - **Explicit declaration is the contract; introspection is sugar** on top of it.
@@ -12,7 +12,7 @@ map), `frontend-delivery.md` (build/delivery). Priorities, not promises — reor
 - **YAGNI**: build a surface/feature when a real use pulls for it, not preemptively.
 - **Live-verify on every supported backend** (today CairoMakie + WGLMakie / `:webgl`; same rule
   for any future backend) before calling a user-facing change done — **interaction and
-  visual**, across the interactable kinds, via `docs/live-interaction-checklist.md` (see
+  visual**, across the interactable kinds, via `live-interaction-checklist.md` (see
   `CLAUDE.md`).
 
 ## Status — v0.1 (done)
@@ -34,11 +34,11 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 - [x] **Robustness validation**: fail loud on out-of-scope configs (PolarAxis/Axis3/LScene) at `holo()` time — one `AbstractAxis`-not-`Axis` guard in `context()`.
 
 ## M2 — Ergonomics (the big unlock)
-*Goal: stop hand-writing geometry. `survey-makie-surfaces.md` has the extraction recipes.*
+*Goal: stop hand-writing geometry.*
 
 - [x] **Plot-introspection constructors**: `PointInteractable(ax, scatter)`, `RectInteractable(ax, heatmap)`, `SegmentInteractable(ax, lines)`, etc. — pull geometry from live Makie plot objects via `plot.converted[]`. *Done (`src/introspect.jl`): Scatter/Lines/LineSegments/Heatmap/Image/BarPlot/Poly delegate to the explicit constructors with identical hitlayers (tested). Gotchas handled: markersize→radius (pixel space), heatmap `EndPoints`→edge expansion, bar dodge/stack/auto-width read from the laid-out child rects. `ax` is passed (a plot has no axis back-reference); single-arg sugar arrives with M2.2's scene walk.*
 - [x] **`holo(fig)` auto-extraction**: walk the scene graph, emit a concrete `Vector{AbstractInteractable}` (the same one a user could write). Unknown plot type → skip + warn. Sugar over M2.1, not a separate path. *Done (`src/introspect.jl`): `auto_interactables(fig)` walks each `Axis`'s `scene.plots`, maps each supported plot via the M2.1 constructors, dedupes layer ids (`:scatter`, `:scatter_2`, …), and skips unsupported types with a warning. `holo(fig)` is the zero-config overlay; both exported.*
-- [x] **Richer tooltips (M2.3)** — `holo"…"` template macro, auto name/value table default, and figure-level `tooltip_*` theming. *Done (PR #10): see Phase 1 / `docs/tooltips.md`.*
+- [x] **Richer tooltips (M2.3)** — `holo"…"` template macro, auto name/value table default, and figure-level `tooltip_*` theming. *Done (PR #10): see Phase 1 / `architecture.md` §10 Tooltips.*
 
 ## M3 — Surface coverage (v2 from the survey)
 *Goal: more plot types, same primitives. Add per real demand.*
@@ -139,7 +139,7 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 
 ## M5 — Scale & polish
 - [ ] **Spatial acceleration** (quadtree/grid) for large-N hit-testing — only when the documented O(n) ceiling is actually hit (`log()` the cap until then). *Phase 0 reframe:* hit-test is ~0 ms; the wall is manifest **payload size** (~290 ms serialize+transfer at 4.78 MB), so wire-encoding (int-pixel coords / capping `values[]`) outranks a quadtree (see Phase 4).
-- [x] **Perf benchmarking**: the unmeasured Q5 envelope — base64 size + click latency knee; confirm MsgPack fast-path engages. *Done (`bench/payload_envelope.jl` → `docs/perf-findings.md`): single plots 50–400 KB, manifest O(N) elements, heatmaps O(cells), animation = frames × PNG (the hard ceiling, 5.5–22 MB). MsgPack confirmed (generic maps, not the TypedArray fast-path). Full click round-trip measured live (headless Pluto + Chromium): ~65 ms median — render-bound, browser overhead negligible. Editor-lag knee (editor stutter, distinct from latency) deferred.*
+- [x] **Perf benchmarking**: the unmeasured Q5 envelope — base64 size + click latency knee; confirm MsgPack fast-path engages. *Done (`bench/payload_envelope.jl` → `perf-findings.md`): single plots 50–400 KB, manifest O(N) elements, heatmaps O(cells), animation = frames × PNG (the hard ceiling, 5.5–22 MB). MsgPack confirmed (generic maps, not the TypedArray fast-path). Full click round-trip measured live (headless Pluto + Chromium): ~65 ms median — render-bound, browser overhead negligible. Editor-lag knee (editor stutter, distinct from latency) deferred.*
 - [ ] **Theming**: marker-highlight styling (`highlight_*` / `--holo-hi-*`, shadow-DOM scoped). *(Tooltip card already matches official Pluto: both use `prefers-color-scheme`. Official Pluto has no notebook light/dark toggle — Settings → Dark mode is help text. Remaining work is highlight theming, not a Pluto theme hook.)*
 - [ ] **GLMakie-static backend**: GPU offscreen → PNG, same `AbstractBackend` contract (for envs with a GPU).
 - [x] **Register in General — path** *(prep)*: CHANGELOG frozen at `0.1.0` after
@@ -148,7 +148,7 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
       comments `@JuliaRegistrator register` on a CI-green `main` commit
       **after this merges** (not on the PR), then TagBot's `v0.1.0` tag. Name
       is 4 letters → AutoMerge needs a human (guideline is ≥5). See
-      `docs/releasing.md`.
+      `releasing.md`.
 - [x] **Distribution decision**: folded into `ext/HoloWGLMakieExt.jl` as a package extension of
       `Holo`, rather than shipping `HoloWGL` as a separate registered package. (This also obsoletes
       the former `HoloWGL`'s own "General-registry readiness" item — there's no longer a second
@@ -183,8 +183,7 @@ number — everything else is reorderable by demand.
 **The four edges that constrain order:**
 - **Perf envelope → everything payload-heavy.** Tooltips, animation frames, SVG, and the
   multi-select return shape all inflate the base64/manifest payload, whose ceiling is an
-  *undocumented empirical unknown* (`research-findings.md` Q5, `design.md` §10). Measure it
-  first so the rest is built against a known knee.
+  *undocumented empirical unknown*. Measure it first so the rest is built against a known knee.
 - **Richer tooltips → all surface payloads.** ✅ *Landed (M2.3, PR #10).* Every surface added after
   ships a real tooltip (a `holo"…"` template or the auto-table default) instead of payload JSON. The
   per-element `tooltip()` seam was replaced by a per-layer `tooltip_spec`; M3's deferred payloads
@@ -195,10 +194,10 @@ number — everything else is reorderable by demand.
 - **Everything → registration.** Last, after the API stops moving. Path is now
   ready (CHANGELOG `0.1.0` freeze); the remaining work is Jonathan's Registrator
   comment on a CI-green `main` commit after the prep PR merges — see
-  `docs/releasing.md`.
+  `releasing.md`.
 
 ### Phase 0 — Measure (front-loaded spike) ✅ *done*
-- **Perf benchmarking** — *Done. See `docs/perf-findings.md` (`bench/payload_envelope.jl` to
+- **Perf benchmarking** — *Done. See `perf-findings.md` (`bench/payload_envelope.jl` to
   re-run).* The envelope: single interactive plots land 50–400 KB (at/just above Q5's plausible
   band, not below the <10 KB anecdote); manifest is O(N) elements (int-pixel geometry; per-element bytes
   in `perf-findings.md`) and O(cells) for heatmaps; **animation = frames × per-frame PNG is the hard ceiling (5.5–22 MB) — gate it.** Tooltip
@@ -213,7 +212,7 @@ number — everything else is reorderable by demand.
   PNG — it degrades gracefully, nothing breaks.
 
 ### Phase 1 — Foundations that unblock the rest
-- [x] **M2.3 Richer tooltips** — *Done (PR #10; `docs/tooltips.md`).* Shipped as a **per-layer
+- [x] **M2.3 Richer tooltips** — *Done (PR #10; `architecture.md` §10 Tooltips).* Shipped as a **per-layer
   `holo"…"` template** interpolated browser-side from the already-shipped `payloads[]` — not the
   per-element-HTML approach first sketched here — so rich tooltips add **zero** new per-element wire
   bytes and the old per-element `tooltips[]` term was dropped (the budget concern is sidestepped, not
@@ -260,8 +259,8 @@ pre-manifest step for all three.)
   Makie's computed values.
 - [x] **Text bboxes** (Text, Annotation) — *not* a 7th primitive, but not for the reason originally
   guessed either: the plan was that rotated text needs a degenerate-polygon `bbox` primitive plus
-  **font-metric measurement** (the one thing the coord system was built not to model, `design.md`
-  §6). Both turned out obsolete — `Makie.string_boundingboxes(p)` already returns each string's
+  **font-metric measurement** (the one thing the coord system was built not to model). Both
+  turned out obsolete — `Makie.string_boundingboxes(p)` already returns each string's
   scene-local pixel box (font metrics included), so `TextInteractable` rides plain `:rects`
   instead: a rotated label just gets its box expanded to stay axis-aligned. Payload
   `(; text, index, x, y)`; `holo(fig)` auto-detects `text!` directly and `annotation!` via
@@ -315,4 +314,4 @@ These three are independent and can run concurrently.
 - **Register in General** — path ready. Needs the committed in-tree bundle +
   CI-on-GitHub; CHANGELOG frozen at 0.1.0; Jonathan comments
   `@JuliaRegistrator register` on a CI-built `main` commit after the prep
-  merges → TagBot `v0.1.0`. See `docs/releasing.md`.
+  merges → TagBot `v0.1.0`. See `releasing.md`.

@@ -39,7 +39,7 @@ extension is loaded, or takes one explicitly via its `backend=` keyword.
 """
 abstract type AbstractBackend end
 
-# The committed overlay bundle, read once at module load (see frontend-delivery.md).
+# The committed overlay bundle, read once at module load (see docs/dev/frontend-delivery.md).
 const _OVERLAY_JS = Ref{String}("")
 function __init__()
     _OVERLAY_JS[] = read(joinpath(@__DIR__, "..", "assets", "overlay.js"), String)
