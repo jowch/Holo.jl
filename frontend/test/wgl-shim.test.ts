@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { readFileSync } from "node:fs"
-import { resolve } from "node:path"
+import { fileURLToPath } from "node:url"
+import { dirname, join } from "node:path"
 import { rewrap, obs, makeBonitoShim, mountWebGL } from "../src/wgl-shim"
 
 // rewrap is the JS half of the 4-rule scene contract — it must decode exactly what `_plain`
@@ -114,7 +115,12 @@ describe("mountWebGL", () => {
     // Node's native ESM loader directly, which only accepts file:/data: schemes — a vite-node
     // http: URL (e.g. from import.meta.url under the dev server) is rejected. A data: URL with
     // the fixture source inlined sidesteps module resolution entirely.
-    const fixtureSrc = readFileSync(resolve(process.cwd(), "test/fixtures/fake-wgl-bundle.mjs"), "utf8")
+    // Not `new URL(relative, import.meta.url)`: this file runs under `@vitest-environment
+    // happy-dom`, which shadows the global `URL` with its own polyfill — one that resolves a
+    // relative path against a `file:` base as if the base were `http://localhost:3000`
+    // (verified: `new URL("./x", "file:///…")` here yields `http://localhost:3000/x`).
+    // `fileURLToPath` on the plain `import.meta.url` string sidesteps that constructor entirely.
+    const fixtureSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "fixtures/fake-wgl-bundle.mjs"), "utf8")
     const bundleUrl = `data:text/javascript;charset=utf-8,${encodeURIComponent(fixtureSrc)}`
 
     afterEach(() => {

@@ -5,8 +5,8 @@
 # baseline shift from adding frontend/src instead of accepting it).
 ignore:
   - "assets/**"
-  - "frontend/test/**"
-  - "test/**"
+  - "frontend/test/**" # vitest specs (frontend/)
+  - "test/**"          # Julia test suite (repo root) — a different tree, not a duplicate of the line above
 
 coverage:
   status:
