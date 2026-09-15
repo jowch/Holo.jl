@@ -26,12 +26,10 @@ export function setCursorClass(surface: HTMLElement, name: string | null): void 
 // should show, based on which part of it was hit. ROI corners 0/2 (top-left, bottom-right) sit on
 // the "\" diagonal → nwse-resize; corners 1/3 (top-right, bottom-left) sit on "/" → nesw-resize.
 export function cursorForDragHit(hit: Hit): string {
-    // Unreachable via setDragHoverChrome's only real caller (applyMove, below): a :view dragHit
-    // is filtered out before setDragHoverChrome is ever called with it (applyMove's own `grab`
-    // cursor for :view goes through setCursorClass directly, not this function) — kept for
-    // cursorForDragHit's own type signature/exhaustiveness, not tested via a direct unit call
-    // that fakes the caller's guarantee.
-    if (hit.layer.kind === "view") return "grab"
+    // No explicit :view case: applyMove (below) never calls setDragHoverChrome with a :view
+    // dragHit (its own `grab` cursor for :view goes through setCursorClass directly), and the
+    // terminal `return "grab"` below already gives the right answer if it ever did — a separate
+    // `if (kind === "view") return "grab"` would be redundant with that fallback.
     if (hit.layer.kind === "threshold") {
         return (hit.layer.geometry as ThresholdGeometry).orientation === "h" ? "ns-resize" : "ew-resize"
     }
