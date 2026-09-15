@@ -1,3 +1,5 @@
+import { hitKey, prefersReducedMotion, MOTION_MS } from "./state"
+import type { OverlayState } from "./state"
 import type { Hit } from "./types"
 
 export const SVG_NS = "http://www.w3.org/2000/svg"
@@ -72,4 +74,61 @@ export function makeHiElement(hit: Hit, mode: HiMode = "hover"): SVGElement | nu
         el.setAttribute("stroke-opacity", "1")
     }
     return el
+}
+
+// --- highlight/selection DOM-lifecycle: keyed by OverlayState.hiKey / selKeys ---
+
+// Fade-out is hover-only (leave / miss). selects-ROI remounts g.sel every drag
+// frame — a leave class there would wash the box-select on every pointer tick.
+export function clearHiImmediate(state: OverlayState, hiGroup: SVGGElement): void {
+    if (state.hiLeaveTimer != null) { clearTimeout(state.hiLeaveTimer); state.hiLeaveTimer = null }
+    state.hiKey = null
+    while (hiGroup.firstChild) hiGroup.removeChild(hiGroup.firstChild)
+}
+
+export function clearHi(state: OverlayState, hiGroup: SVGGElement, fade = false): void {
+    if (!fade || !hiGroup.firstChild || prefersReducedMotion()) {
+        clearHiImmediate(state, hiGroup)
+        return
+    }
+    state.hiKey = null
+    for (const el of [...hiGroup.children]) {
+        el.classList.remove("holo-enter")
+        el.classList.add("holo-leave")
+    }
+    if (state.hiLeaveTimer != null) clearTimeout(state.hiLeaveTimer)
+    state.hiLeaveTimer = setTimeout(() => {
+        state.hiLeaveTimer = null
+        while (hiGroup.firstChild) hiGroup.removeChild(hiGroup.firstChild)
+    }, MOTION_MS)
+}
+
+export function clearSel(selGroup: SVGGElement): void {
+    while (selGroup.firstChild) selGroup.removeChild(selGroup.firstChild)
+}
+
+export function drawHi(state: OverlayState, hiGroup: SVGGElement, hit: Hit): void {
+    const key = hitKey(hit)
+    const cur = hiGroup.firstElementChild
+    if (key === state.hiKey && cur && !cur.classList.contains("holo-leave")) return
+    clearHiImmediate(state, hiGroup)
+    const el = makeHiElement(hit, "hover")
+    if (!el) return
+    el.classList.add("holo-enter")
+    hiGroup.appendChild(el)
+    state.hiKey = key
+}
+
+export function drawSelection(state: OverlayState, selGroup: SVGGElement, hits: Hit[]): void {
+    const next = new Set(hits.map(hitKey))
+    const entering = new Set<string>()
+    for (const k of next) if (!state.selKeys.has(k)) entering.add(k)
+    clearSel(selGroup)
+    for (const h of hits) {
+        const el = makeHiElement(h, "selected")
+        if (!el) continue
+        if (entering.has(hitKey(h))) el.classList.add("holo-enter")
+        selGroup.appendChild(el)
+    }
+    state.selKeys = next
 }

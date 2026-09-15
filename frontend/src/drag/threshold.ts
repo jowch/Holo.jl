@@ -1,0 +1,46 @@
+import { invertAxis } from "../geometry"
+import { SVG_NS, DEFAULT_STYLE } from "../highlight"
+import { clampX, clampY, fmt } from "../state"
+import type { Drag } from "../state"
+import type { AxisTransform, Manifest, ThresholdGeometry } from "../types"
+
+// --- draggable threshold lines (Tier 0): persistent, inverted via AxisTransform on release ---
+export function setLine(line: SVGLineElement, tg: ThresholdGeometry, pos: number): void {
+    const [lo, hi] = tg.span
+    const [x1, y1, x2, y2] = tg.orientation === "h" ? [lo, pos, hi, pos] : [pos, lo, pos, hi]
+    line.setAttribute("x1", String(x1)); line.setAttribute("y1", String(y1))
+    line.setAttribute("x2", String(x2)); line.setAttribute("y2", String(y2))
+}
+
+export function buildThresholdLines(manifest: Manifest, svg: SVGSVGElement): Map<string, SVGLineElement> {
+    const thresholdLines = new Map<string, SVGLineElement>()
+    for (const layer of manifest.layers) {
+        if (layer.kind !== "threshold") continue
+        const tg = layer.geometry as ThresholdGeometry
+        const line = document.createElementNS(SVG_NS, "line")
+        setLine(line, tg, tg.pos)
+        const st = layer.style ?? DEFAULT_STYLE
+        line.setAttribute("stroke", st.stroke); line.setAttribute("stroke-width", String(st.width))
+        line.setAttribute("vector-effect", "non-scaling-stroke")
+        svg.appendChild(line) // sibling of hiGroup → never hover-cleared
+        thresholdLines.set(layer.id, line)
+    }
+    return thresholdLines
+}
+
+export function begin(id: string, line: SVGLineElement, tg: ThresholdGeometry, t: AxisTransform, pointerId: number): Drag {
+    return { kind: "threshold", id, line, tg, t, pointerId }
+}
+
+export function move(d: Extract<Drag, { kind: "threshold" }>, p: { x: number; y: number }): string {
+    const pos = d.tg.orientation === "h" ? clampY(d.t, p.y) : clampX(d.t, p.x)
+    setLine(d.line, d.tg, pos)
+    const v = invertAxis(d.t, clampX(d.t, p.x), clampY(d.t, p.y))
+    return fmt(d.tg.orientation === "h" ? v.y : v.x)
+}
+
+export function end(d: Extract<Drag, { kind: "threshold" }>, p: { x: number; y: number }): { layer: string; index: number; payload: unknown } {
+    const v = invertAxis(d.t, clampX(d.t, p.x), clampY(d.t, p.y))
+    const payload = d.tg.orientation === "h" ? v.y : v.x
+    return { layer: d.id, index: 0, payload }
+}
