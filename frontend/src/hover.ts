@@ -9,8 +9,10 @@ const TIP_GAP = 8
 const TIP_OFFSET = 10
 
 // role="tooltip" is static markup (set at creation); aria-hidden tracks the same visibility
-// the "show" class drives, so assistive tech's view matches the sighted one. No keyboard path
-// in this PR — the tooltip is exposed to AT only via the existing pointer-driven hover/drag.
+// the "show" class drives, so assistive tech's view matches the sighted one. The tooltip itself
+// is still not an announcement path for AT (aria-hidden toggling isn't observable the way
+// aria-live is) — that's what keyboard.ts's separate live region is for; showTip/showTipAt just
+// give sighted keyboard users the same visual tooltip a mouse hover would.
 export function setTipVisible(ctx: OverlayCtx, visible: boolean): void {
     ctx.tip.classList.toggle("show", visible)
     ctx.tip.setAttribute("aria-hidden", visible ? "false" : "true")
@@ -57,28 +59,64 @@ export function placeTip(ctx: OverlayCtx, state: OverlayState, ox: number, oy: n
     ctx.tip.style.top = `${Math.max(TIP_GAP, Math.min(top, hh - th - TIP_GAP))}px`
 }
 
-export function showTip(ctx: OverlayCtx, state: OverlayState, hit: Hit, x: number, y: number, e: MouseEvent): void {
+// The html-selection branching shared by pointer hover (showTip, below) and keyboard focus
+// (keyboard.ts's focusTo) — factored out so keyboard.ts can build the same content without a
+// MouseEvent to derive an offset from.
+export function tipHtmlForHit(ctx: OverlayCtx, hit: Hit, x: number, y: number): string | null {
     const layer = hit.layer
-    if (layer.tooltip === false) { hideTip(ctx, state); return }
-    let html: string
+    if (layer.tooltip === false) return null
     if (layer.template) {
-        html = renderTemplate(layer.template, resolvePayload(hit, ctx.manifest, x, y))
+        return renderTemplate(layer.template, resolvePayload(hit, ctx.manifest, x, y))
     } else if (hit.grid) {
-        html = hit.grid[2] === undefined ? `(${hit.grid[0]},${hit.grid[1]})` : `(${hit.grid[0]},${hit.grid[1]}) = ${esc(hit.grid[2])}`
+        return hit.grid[2] === undefined ? `(${hit.grid[0]},${hit.grid[1]})` : `(${hit.grid[0]},${hit.grid[1]}) = ${esc(hit.grid[2])}`
     } else if (hit.axis) {
         const v = resolvePayload(hit, ctx.manifest, x, y) as { x?: unknown; y?: unknown; value?: unknown }
-        html = "value" in v ? esc(fmt(v.value)) : `x=${esc(fmt(v.x))}, y=${esc(fmt(v.y))}`
-    } else {
-        html = renderAutoTable(hit.layer.payloads[hit.index])
+        return "value" in v ? esc(fmt(v.value)) : `x=${esc(fmt(v.x))}, y=${esc(fmt(v.y))}`
     }
+    return renderAutoTable(hit.layer.payloads[hit.index])
+}
+
+export function applyTipHtml(ctx: OverlayCtx, state: OverlayState, html: string): void {
     if (html !== state.tipHtml) {
         ctx.tip.innerHTML = html
         state.tipHtml = html
         state.tipSized = false
     }
     setTipVisible(ctx, true)
+}
+
+export function showTip(ctx: OverlayCtx, state: OverlayState, hit: Hit, x: number, y: number, e: MouseEvent): void {
+    const html = tipHtmlForHit(ctx, hit, x, y)
+    if (html === null) { hideTip(ctx, state); return }
+    applyTipHtml(ctx, state, html)
     const p = tipOffset(ctx, e)
     placeTip(ctx, state, p.x, p.y)
+}
+
+// Same as showTip, but placed at an explicit CSS-px offset rather than derived from a
+// MouseEvent — keyboard.ts's focus has no pointer event to read clientX/Y from.
+export function showTipAt(ctx: OverlayCtx, state: OverlayState, hit: Hit, x: number, y: number, cssX: number, cssY: number): string | null {
+    const html = tipHtmlForHit(ctx, hit, x, y)
+    if (html === null) { hideTip(ctx, state); return null }
+    applyTipHtml(ctx, state, html)
+    placeTip(ctx, state, cssX, cssY)
+    return html
+}
+
+// Redraw the keyboard-focus ring/tooltip from state's cache (set by keyboard.ts's focusTo) in
+// place of a plain clear — called from applyMove's hover-miss branch and onLeave so mousing
+// over empty canvas, or off the surface, doesn't erase a focus ring that's still logically set.
+// Returns false (nothing to restore) so the caller falls back to its usual clearHi/hideTip.
+export function restoreFocus(ctx: OverlayCtx, state: OverlayState): boolean {
+    if (!state.focusHit) return false
+    drawHi(state, ctx.hiGroup, state.focusHit)
+    if (state.focusTipHtml !== null && state.focusTipCss) {
+        applyTipHtml(ctx, state, state.focusTipHtml)
+        placeTip(ctx, state, state.focusTipCss.x, state.focusTipCss.y)
+    } else {
+        hideTip(ctx, state)
+    }
+    return true
 }
 
 export function setTipText(ctx: OverlayCtx, state: OverlayState, s: string): void {
@@ -96,7 +134,7 @@ export function applyMove(ctx: OverlayCtx, state: OverlayState, e: MouseEvent): 
     const dragHit = hitTest(ctx.manifest, p.x, p.y, "drag")
     // A full-viewport :view hit must not suppress element hover.
     if (dragHit && dragHit.layer.kind !== "view") {
-        clearHi(state, ctx.hiGroup, true); hideTip(ctx, state)
+        if (!restoreFocus(ctx, state)) { clearHi(state, ctx.hiGroup, true); hideTip(ctx, state) }
         ctx.surface.classList.add("grab"); ctx.surface.classList.remove("hot")
         return
     }
@@ -105,7 +143,8 @@ export function applyMove(ctx: OverlayCtx, state: OverlayState, e: MouseEvent): 
     if (hit) {
         drawHi(state, ctx.hiGroup, hit); showTip(ctx, state, hit, p.x, p.y, e); ctx.surface.classList.add("hot")
     } else {
-        clearHi(state, ctx.hiGroup, true); hideTip(ctx, state); ctx.surface.classList.remove("hot")
+        if (!restoreFocus(ctx, state)) { clearHi(state, ctx.hiGroup, true); hideTip(ctx, state) }
+        ctx.surface.classList.remove("hot")
         if (dragHit?.layer.kind === "view") ctx.surface.classList.add("grab")
     }
 }
@@ -124,7 +163,8 @@ export function onMove(ctx: OverlayCtx, state: OverlayState, e: MouseEvent): voi
 }
 
 export function onLeave(ctx: OverlayCtx, state: OverlayState): void {
-    cancelPendingMove(state); clearHi(state, ctx.hiGroup, true); hideTip(ctx, state)
+    cancelPendingMove(state)
+    if (!restoreFocus(ctx, state)) { clearHi(state, ctx.hiGroup, true); hideTip(ctx, state) }
     // Fallback for tryCapture's uncaptured path: without real capture, leaving the surface
     // fires pointerleave (capture would otherwise suppress it until release), and the
     // pointermove/pointerup that follow off-element never reach these listeners — so drag

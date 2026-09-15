@@ -170,16 +170,17 @@ jobs:
 
   kind-sweep:
     # Advisory (continue-on-error): CLAUDE.md's live-verification playbook
-    # (docs/dev/live-interaction-checklist.md) mandates kind_sweep.mjs + polish_verify.mjs on
-    # every backend before a user-facing change is "done", but until now only click.mjs/
-    # bind_click.mjs ran in CI. This job runs the full sweep so a regression shows up on the
-    # PR without gating merges yet — promote to required once it's proven stable.
+    # (docs/dev/live-interaction-checklist.md) mandates kind_sweep.mjs + polish_verify.mjs +
+    # keyboard_a11y.mjs on every backend before a user-facing change is "done", but until now
+    # only click.mjs/bind_click.mjs ran in CI. This job runs the full sweep so a regression
+    # shows up on the PR without gating merges yet — promote to required once it's proven stable.
     name: Kind sweep (${{ matrix.backend }})
     runs-on: ubuntu-latest
     continue-on-error: true
-    # kind_sweep.mjs's own mount deadline is 25min, polish_verify.mjs's is 15min — 40min of
-    # driver budget alone, before checkout/playwright-install/cold-instantiate, and the run
-    # deliberately runs polish_verify even after kind_sweep fails (both deadlines can burn).
+    # kind_sweep.mjs's own mount deadline is 25min, polish_verify.mjs's is 15min, keyboard_a11y.mjs's
+    # is also 25min — well over an hour of driver budget alone before checkout/playwright-install/
+    # cold-instantiate, and the run deliberately keeps going after an earlier script fails (every
+    # deadline can burn).
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -241,6 +242,7 @@ jobs:
           status=0
           node kind_sweep.mjs http://127.0.0.1:1240 "$NOTEBOOK" ${{ matrix.backend }} "$ARTIFACTS" || status=1
           node polish_verify.mjs http://127.0.0.1:1240 "$NOTEBOOK" ${{ matrix.backend }} "$ARTIFACTS" || status=1
+          node keyboard_a11y.mjs http://127.0.0.1:1240 "$NOTEBOOK" ${{ matrix.backend }} "$ARTIFACTS" || status=1
           exit $status
       - name: Pluto server log (${{ matrix.backend }})
         if: always()

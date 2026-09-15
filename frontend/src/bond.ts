@@ -6,7 +6,7 @@ import type { Drag, OverlayCtx, OverlayState } from "./state"
 import * as thresholdDrag from "./drag/threshold"
 import * as roiDrag from "./drag/roi"
 import * as viewDrag from "./drag/view"
-import type { ThresholdGeometry, ViewGeometry } from "./types"
+import type { Hit, ThresholdGeometry, ViewGeometry } from "./types"
 
 // setPointerCapture throws InvalidPointerId if the UA doesn't consider this pointerId active
 // (observed live in Chromium for a synthetic/non-primary pointerId — real touch/pen input can
@@ -171,14 +171,42 @@ export function onLostCapture(ctx: OverlayCtx, state: OverlayState): void {
     state.drag = null
 }
 
+// The click→bond commit, factored out of onClick so keyboard.ts's Enter/Space can dispatch the
+// identical bond value for a keyboard-focused hit — same highlight draw, same payload
+// resolution, same "input" event.
+export function commitClick(ctx: OverlayCtx, state: OverlayState, hit: Hit, px: number, py: number): void {
+    drawHi(state, ctx.hiGroup, hit)
+    // Keep keyboard focus in sync with the mouse, but ONLY once keyboard nav is already
+    // engaged (state.focusIdx !== null) — gating on that, not just "click landed on a
+    // focus-list element", matters for a PURE mouse user: setting state.focusHit unconditionally
+    // regressed the locked hover-fade recipe, because restoreFocus's later redraw
+    // (hover.ts:restoreFocus -> highlight.ts:drawHi) is a no-op when hiKey already matches —
+    // so a click, then a miss, would leave the ring never fading at all for someone who never
+    // touched the keyboard. Gated this way: arrowing to element A then mouse-clicking element B
+    // still resyncs focusHit to B (so a later miss doesn't wrongly restore A's stale ring), but
+    // clicking B with no prior keyboard focus leaves focusHit null and the plain hover-fade
+    // path (clearHi) runs exactly as before this feature existed.
+    if (state.focusIdx !== null) {
+        // A click on a non-focus-list kind (e.g. :grid/:axis) while keyboard focus was already
+        // on some other element must leave that focus alone, not clear it.
+        const idx = ctx.focusable.findIndex((r) => r.layer === hit.layer && r.index === hit.index)
+        if (idx >= 0) {
+            state.focusIdx = idx
+            state.focusHit = hit
+            state.focusTipHtml = null
+            state.focusTipCss = null
+        }
+    }
+    ;(ctx.host as unknown as { value: unknown }).value = { layer: hit.layer.id, index: hit.index, payload: resolvePayload(hit, ctx.manifest, px, py) }
+    ctx.host.dispatchEvent(new CustomEvent("input"))
+}
+
 export function onClick(ctx: OverlayCtx, state: OverlayState, e: MouseEvent): void {
     if (state.justDragged) { state.justDragged = false; return }
     const p = imgPx(ctx.base, ctx.manifest, e)
     const hit = hitTest(ctx.manifest, p.x, p.y, "click")
     if (!hit) return // miss = no-op, no round-trip
-    drawHi(state, ctx.hiGroup, hit)
-    ;(ctx.host as unknown as { value: unknown }).value = { layer: hit.layer.id, index: hit.index, payload: resolvePayload(hit, ctx.manifest, p.x, p.y) }
-    ctx.host.dispatchEvent(new CustomEvent("input"))
+    commitClick(ctx, state, hit, p.x, p.y)
 }
 
 // Single entry point for pointermove: while a drag owns the pointer, route to the

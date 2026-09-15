@@ -1,4 +1,4 @@
-import type { AxisTransform, Hit, HitLayer, Manifest, ThresholdGeometry, ViewGeometry } from "./types"
+import type { AxisTransform, FocusRef, Hit, HitLayer, Manifest, ThresholdGeometry, ViewGeometry } from "./types"
 
 export const MOTION_MS = 100 // 80–120 ms window; prefers-reduced-motion disables below
 export const VIEW_MIN_PX = 3 // image-px; ignore accidental micro-drags
@@ -19,6 +19,17 @@ export const imgPx = (base: HTMLElement, manifest: Manifest, e: MouseEvent): { x
     const r = base.getBoundingClientRect()
     const s = manifest.width / r.width // image-px per CSS-px (manifest renderWidth ÷ live rect; never the base's intrinsic size)
     return { x: (e.clientX - r.left) * s, y: (e.clientY - r.top) * s }
+}
+
+// Inverse of imgPx's scale factor — image px → CSS px offset from the surface/base origin,
+// for placing the tooltip at a keyboard-focused element's anchor (no MouseEvent to read
+// clientX/Y from). In happy-dom, getBoundingClientRect() is all zeros, so `s` is Infinity and
+// this degenerates to {0,0} — the same degenerate branch placeTip already takes for a
+// zero-sized surface.
+export const cssPx = (base: HTMLElement, manifest: Manifest, x: number, y: number): { x: number; y: number } => {
+    const r = base.getBoundingClientRect()
+    const s = manifest.width / r.width
+    return { x: x / s, y: y / s }
 }
 
 export interface ROIBox {
@@ -52,6 +63,10 @@ export interface OverlayCtx {
     selGroup: SVGGElement
     thresholdLines: Map<string, SVGLineElement>
     roiBoxes: Map<string, ROIBox>
+    shadowRoot: ShadowRoot // for `shadowRoot.activeElement === surface` focus gating (keyboard.ts)
+    focusable: FocusRef[] // flat, manifest-order list of element-indexed hits — keyboard.ts's nav domain
+    layerStarts: number[] // computeLayerStarts(focusable), cached once — PageUp/PageDown's layer-jump index
+    liveRegion: HTMLElement // visually-hidden aria-live="polite" announcer (NOT the tooltip)
 }
 
 export interface OverlayState {
@@ -72,6 +87,14 @@ export interface OverlayState {
     surfaceW: number
     surfaceH: number
     surfaceSized: boolean
+    // Keyboard focus (keyboard.ts). focusIdx indexes OverlayCtx.focusable; focusHit/focusTipHtml/
+    // focusTipCss are hover.ts's cache to redraw the ring/tooltip after a pointer miss clears
+    // g.hi — see restoreFocus in hover.ts — without hover.ts importing keyboard.ts (no cycle).
+    focusIdx: number | null
+    focusHit: Hit | null
+    focusTipHtml: string | null
+    focusTipCss: { x: number; y: number } | null
+    announceTimer: ReturnType<typeof setTimeout> | null
 }
 
 export function createOverlayState(): OverlayState {
@@ -93,6 +116,11 @@ export function createOverlayState(): OverlayState {
         surfaceW: 0,
         surfaceH: 0,
         surfaceSized: false,
+        focusIdx: null,
+        focusHit: null,
+        focusTipHtml: null,
+        focusTipCss: null,
+        announceTimer: null,
     }
 }
 
