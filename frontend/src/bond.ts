@@ -176,21 +176,26 @@ export function onLostCapture(ctx: OverlayCtx, state: OverlayState): void {
 // resolution, same "input" event.
 export function commitClick(ctx: OverlayCtx, state: OverlayState, hit: Hit, px: number, py: number): void {
     drawHi(state, ctx.hiGroup, hit)
-    // Keep keyboard focus in sync with the mouse: without this, arrowing to element A then
-    // mouse-clicking element B leaves state.focusHit on A, so a later pointer miss calls
-    // restoreFocus (hover.ts) and redraws A's ring/tooltip even though the bond value is B's.
-    // Only when the click landed on a focus-list element (ctx.focusable) — a click on e.g. a
-    // :grid/:axis kind that isn't keyboard-focusable at all must leave existing keyboard focus
-    // alone. The cached tooltip is cleared, not recomputed: recomputing it needs hover.ts's
-    // tipHtmlForHit, and hover.ts already imports commitClick from here, so importing back
-    // would cycle. A later pointer miss then shows the ring with no tooltip (restoreFocus's
-    // existing hideTip branch) until keyboard focus visits this element and repopulates it.
-    const idx = ctx.focusable.findIndex((r) => r.layer === hit.layer && r.index === hit.index)
-    if (idx >= 0) {
-        state.focusIdx = idx
-        state.focusHit = hit
-        state.focusTipHtml = null
-        state.focusTipCss = null
+    // Keep keyboard focus in sync with the mouse, but ONLY once keyboard nav is already
+    // engaged (state.focusIdx !== null) — gating on that, not just "click landed on a
+    // focus-list element", matters for a PURE mouse user: setting state.focusHit unconditionally
+    // regressed the locked hover-fade recipe, because restoreFocus's later redraw
+    // (hover.ts:restoreFocus -> highlight.ts:drawHi) is a no-op when hiKey already matches —
+    // so a click, then a miss, would leave the ring never fading at all for someone who never
+    // touched the keyboard. Gated this way: arrowing to element A then mouse-clicking element B
+    // still resyncs focusHit to B (so a later miss doesn't wrongly restore A's stale ring), but
+    // clicking B with no prior keyboard focus leaves focusHit null and the plain hover-fade
+    // path (clearHi) runs exactly as before this feature existed.
+    if (state.focusIdx !== null) {
+        // A click on a non-focus-list kind (e.g. :grid/:axis) while keyboard focus was already
+        // on some other element must leave that focus alone, not clear it.
+        const idx = ctx.focusable.findIndex((r) => r.layer === hit.layer && r.index === hit.index)
+        if (idx >= 0) {
+            state.focusIdx = idx
+            state.focusHit = hit
+            state.focusTipHtml = null
+            state.focusTipCss = null
+        }
     }
     ;(ctx.host as unknown as { value: unknown }).value = { layer: hit.layer.id, index: hit.index, payload: resolvePayload(hit, ctx.manifest, px, py) }
     ctx.host.dispatchEvent(new CustomEvent("input"))

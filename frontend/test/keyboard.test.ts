@@ -33,6 +33,12 @@ const down = (surface: HTMLElement, key: string): KeyboardEvent => {
     return e
 }
 
+// onMove (hover.ts) rAF-coalesces: a pointermove dispatched while a previous one's frame is
+// still pending only updates the pending event, it doesn't apply synchronously. A test driving
+// two pointermoves in a row (hover, then a miss) needs to flush between them, same as
+// overlay.test.ts's identical helper.
+const flushFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()))
+
 describe("keyboard navigation", () => {
     it("ignores keys when the surface isn't focused", () => {
         const { surface } = setup(manifest)
@@ -159,6 +165,25 @@ describe("keyboard navigation", () => {
         expect(shadow.querySelectorAll(".hi > *").length).toBe(1)
     })
 
+    it("a pointer miss restores BOTH the ring and the tooltip content of the keyboard-focused element", async () => {
+        const { surface, shadow } = setup(manifest)
+        surface.focus()
+        down(surface, "ArrowRight") // focus a[0] — has a real tooltip (auto-table from {v: 1})
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        expect(tip.classList.contains("show")).toBe(true)
+        const focusedHtml = tip.innerHTML
+        // hover a different element (a[1]) — overwrites the visible tooltip with a[1]'s content
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 150, clientY: 50, bubbles: true }))
+        await flushFrame()
+        expect(tip.innerHTML).not.toBe(focusedHtml)
+        // move to empty canvas — restoreFocus (hover.ts) must bring back a[0]'s cached
+        // tooltip content, not just the ring (its focusTipHtml/focusTipCss branch).
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 5, clientY: 5, bubbles: true }))
+        await flushFrame()
+        expect(tip.classList.contains("show")).toBe(true)
+        expect(tip.innerHTML).toBe(focusedHtml)
+    })
+
     it(":grid layers are excluded from the focus list", () => {
         const gridManifest: Manifest = {
             width: 1200, height: 800, scaling: 2,
@@ -256,15 +281,7 @@ describe("keyboard navigation", () => {
         }
     })
 
-    it("moving focus off the surface (mouseover elsewhere) then Escape still clears cleanly", () => {
-        // Regression guard for restoreFocus's no-op branch: with nothing focused, a pointer
-        // miss must take the plain clearHi/hideTip path (state.focusHit is null).
-        const { surface, shadow } = setup(manifest)
-        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 5, clientY: 5, bubbles: true }))
-        expect(shadow.querySelector(".hi > *")).toBeFalsy()
-    })
-
-    it("a pointer miss restores a tooltip-suppressed focus's ring but no tooltip (restoreFocus's hideTip branch)", () => {
+    it("a pointer miss keeps a tooltip-suppressed focus ring and shows no tooltip", () => {
         const noTip: Manifest = {
             width: 1200, height: 800, scaling: 2, transforms: {},
             layers: [{ id: "nt", kind: "circles", geometry: [100, 100, 10], payloads: [{ v: 1 }], axis: "ax1", events: ["click", "hover"], tooltip: false }],
@@ -357,6 +374,25 @@ describe("keyboard navigation", () => {
         expect(ring.getAttribute("cx")).toBe("300") // a[1]'s cx, not a[0]'s (100)
     })
 
+    it("a pure-mouse click (no prior keyboard focus) does NOT pin the ring — it still fades on a later miss", async () => {
+        // Regression guard: syncing focusIdx/focusHit unconditionally on every click broke the
+        // locked hover-fade recipe for a mouse-only user — restoreFocus's later redraw is a
+        // no-op when hiKey already matches, so the ring would never fade at all. The sync must
+        // only engage once keyboard nav is already active (state.focusIdx !== null).
+        const { surface, shadow, host } = setup(manifest)
+        // hover then click a[0], via the mouse only — surface.focus() is never called.
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 50, clientY: 50, bubbles: true }))
+        await flushFrame() // let onMove's rAF coalescing settle before the next pointermove
+        surface.dispatchEvent(new MouseEvent("click", { clientX: 50, clientY: 50, bubbles: true }))
+        expect((host as unknown as { value: { layer: string; index: number } }).value).toMatchObject({ layer: "a", index: 0 })
+        expect(shadow.querySelector(".hi > *")).toBeTruthy()
+        // move to empty canvas — the ring must fade, not persist forever.
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 5, clientY: 5, bubbles: true }))
+        await flushFrame()
+        const afterMiss = shadow.querySelector(".hi > *")
+        expect(afterMiss === null || afterMiss.classList.contains("holo-leave")).toBe(true)
+    })
+
     it("a click on a non-focusable kind (e.g. :grid) leaves existing keyboard focus untouched", () => {
         const mixedManifest: Manifest = {
             width: 1200, height: 800, scaling: 2,
@@ -425,7 +461,10 @@ describe("keyboard navigation", () => {
         }
     })
 
-    it("focus anchors on a segment's midpoint and a polygon's centroid (non-circle/rect kinds)", () => {
+    it("the tooltip is placed at a segment's midpoint and a polygon's centroid, not offset elsewhere", () => {
+        // display scale = manifest.width(1200) / base rect width(600) = 2, so image px -> CSS
+        // px is /2; happy-dom has no layout engine (tip/surface report zero size), so placeTip
+        // takes its degenerate branch: CSS anchor + the fixed 10px TIP_OFFSET, exactly.
         const mixedManifest: Manifest = {
             width: 1200, height: 800, scaling: 2, transforms: {},
             layers: [
@@ -435,9 +474,12 @@ describe("keyboard navigation", () => {
         }
         const { surface, shadow } = setup(mixedManifest)
         surface.focus()
-        down(surface, "ArrowRight") // seg[0] — anchorImgPx's "seg" branch
-        expect(shadow.querySelector(".hi > *")?.tagName.toLowerCase()).toBe("line")
-        down(surface, "ArrowRight") // pg[0] — anchorImgPx's "poly" branch
-        expect(shadow.querySelector(".hi > *")?.tagName.toLowerCase()).toBe("polygon")
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        down(surface, "ArrowRight") // seg[0]: midpoint of (0,0)-(100,100) = image (50,50) -> CSS (25,25)
+        expect(tip.style.left).toBe("35px")
+        expect(tip.style.top).toBe("35px")
+        down(surface, "ArrowRight") // pg[0]: centroid of the 10x10 square = image (5,5) -> CSS (2.5,2.5)
+        expect(tip.style.left).toBe("12.5px")
+        expect(tip.style.top).toBe("12.5px")
     })
 })

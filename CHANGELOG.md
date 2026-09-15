@@ -13,7 +13,8 @@ All notable changes to this project are documented here. The format is based on
   (position, and the tooltip content as plain text) via a new `role="application"` +
   `aria-live` overlay structure. New optional `label` keyword on `PointInteractable`/
   `SegmentInteractable`/`RectInteractable`/`PolygonInteractable` sets the per-layer
-  announcement prefix. New docs page: [Keyboard and screen readers](@ref).
+  announcement prefix. New docs page:
+  [Keyboard and screen readers](https://jowch.github.io/Holo.jl/dev/accessibility/).
 - Vitest coverage for `frontend/src` uploads to Codecov (`flags: frontend`).
   Committed `assets/` bundles are ignored. One blended `codecov/project`
   number (Julia + `frontend/src`); `target: auto`, `threshold: 1%`.

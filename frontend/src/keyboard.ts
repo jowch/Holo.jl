@@ -59,7 +59,10 @@ function hitFor(ref: FocusRef): Hit {
 // Anchor point (image px) for the tooltip/announcement, per kind — mirrors
 // test/e2e/kind_sweep.mjs's hitPoint(), which computes the same points for the live-verify
 // click targets. Circle anchors below the marker (like a mouse hovering its lower edge would);
-// rect/seg/poly anchor at their visual center.
+// rect/seg/poly anchor at their visual center. The two {x:0,y:0} fallbacks below are
+// unreachable on a real focus-list Hit — every caller goes through hitFor/hitLayerByIndex,
+// which only ever produces one of the four handled tags for FOCUSABLE_KINDS — and are left
+// uncovered deliberately rather than tested via a fabricated, impossible geom tag.
 function anchorImgPx(hit: Hit): { x: number; y: number } {
     const g = hit.geom as [string, ...number[]] | [string, number[]] | undefined
     if (!g) return { x: 0, y: 0 }
