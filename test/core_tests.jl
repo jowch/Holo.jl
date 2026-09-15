@@ -223,6 +223,27 @@ include("makie_compat_tests.jl")
         @test !haskey(L.geometry, "values")                                        # the unbounded term is gone
     end
 
+    @testset "SegmentInteractable tol ships in the manifest, scaled" begin
+        fig = Figure(); axt = Axis(fig[1, 1])
+        _, _, ctxt = ctx_for(fig)
+        # default tol (6 logical px), both modes
+        d_poly = only(build_manifest([SegmentInteractable(axt, [(1.0, 1.0), (2.0, 2.0)])], ctxt)["layers"])
+        @test d_poly["tol"] == round(Int, 6 * ctxt.scaling)
+        d_pairs = only(build_manifest([SegmentInteractable(axt, [(1.0, 1.0), (2.0, 2.0)]; mode = :pairs)], ctxt)["layers"])
+        @test d_pairs["tol"] == round(Int, 6 * ctxt.scaling)
+        # custom tol scales the same way
+        d_custom = only(build_manifest([SegmentInteractable(axt, [(1.0, 1.0), (2.0, 2.0)]; tol = 20)], ctxt)["layers"])
+        @test d_custom["tol"] == round(Int, 20 * ctxt.scaling)
+        # other kinds are untouched — no "tol" key, manifest byte-identical to before this feature
+        d_pt = only(build_manifest([PointInteractable(axt, [(1.0, 1.0)])], ctxt)["layers"])
+        @test !haskey(d_pt, "tol")
+        d_rect = only(build_manifest([RectInteractable(axt; rects = [(1.0, 1.0, 1.0, 1.0)])], ctxt)["layers"])
+        @test !haskey(d_rect, "tol")
+        # Holo.hit_tol interface: nothing by default, i.tol for SegmentInteractable
+        @test Holo.hit_tol(PointInteractable(axt, [(1.0, 1.0)])) === nothing
+        @test Holo.hit_tol(SegmentInteractable(axt, [(1.0, 1.0), (2.0, 2.0)]; tol = 12)) == 12
+    end
+
     @testset "fail loud on unsupported axis types" begin
         # PolarAxis is supported since this PR; LScene remains deferred (roadmap M3).
         fu = Figure(); LScene(fu[1, 1])
@@ -1675,6 +1696,28 @@ include("makie_compat_tests.jl")
         # ArgumentError, not a bare MethodError from `size(nothing)` deep inside the check.
         @test_throws ArgumentError RectInteractable(ax; grid = (xe, ye, nothing))
         @test_throws ArgumentError RectInteractable(ax; grid = (xe, ye, [1.0, 2.0, 3.0]))
+
+        # exactly one of rects/grid — both, and neither, are construction-time errors
+        @test_throws ArgumentError RectInteractable(ax)
+        @test_throws ArgumentError RectInteractable(ax; rects = [(0.0, 0.0, 1.0, 1.0)], grid = (xe, ye, good))
+
+        # tol must be finite and positive — a raw round(Int, ...) InexactError/silent
+        # unhittable layer otherwise (same "raw downstream error" class this PR closes for
+        # RectInteractable's rects/grid)
+        @test_throws ArgumentError SegmentInteractable(ax, pts; tol = Inf)
+        @test_throws ArgumentError SegmentInteractable(ax, pts; tol = NaN)
+        @test_throws ArgumentError SegmentInteractable(ax, pts; tol = 0)
+        @test_throws ArgumentError SegmentInteractable(ax, pts; tol = -1)
+        @test SegmentInteractable(ax, pts; tol = 0.5) isa SegmentInteractable
+        # HLines/VLines route through `_segment_with_resolve`, not the keyword constructor
+        # above — regression coverage for that separate entry point skipping the check.
+        hl = hlines!(ax, [0.5])
+        @test_throws ArgumentError SegmentInteractable(ax, hl; tol = Inf)
+        @test_throws ArgumentError SegmentInteractable(ax, hl; tol = NaN)
+        @test_throws ArgumentError SegmentInteractable(ax, hl; tol = 0)
+        @test SegmentInteractable(ax, hl; tol = 3) isa SegmentInteractable
+        vl = vlines!(ax, [0.5])
+        @test_throws ArgumentError SegmentInteractable(ax, vl; tol = -1)
 
         # tooltip = true fails at construction, not at manifest build — every constructor that
         # accepts `tooltip` shares the `_check_tooltip` helper; pin the contract on all of them.

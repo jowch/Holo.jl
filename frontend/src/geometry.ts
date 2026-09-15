@@ -81,6 +81,7 @@ export function hitLayer(layer: HitLayer, px: number, py: number): Omit<Hit, "la
         }
         case "polyline": {
             const a = g as number[]
+            const tol = layer.tol ?? SEG_TOL
             let best = -1, bd = Infinity
             for (let k = 0; k < a.length / 2 - 1; k++) {
                 const x0 = a[2 * k], y0 = a[2 * k + 1], x1 = a[2 * k + 2], y1 = a[2 * k + 3]
@@ -88,17 +89,18 @@ export function hitLayer(layer: HitLayer, px: number, py: number): Omit<Hit, "la
                 const d = distToSegment(px, py, x0, y0, x1, y1)
                 if (d < bd) { bd = d; best = k }
             }
-            if (bd <= SEG_TOL) return { index: best, geom: ["seg", a[2 * best], a[2 * best + 1], a[2 * best + 2], a[2 * best + 3]] }
+            if (bd <= tol) return { index: best, geom: ["seg", a[2 * best], a[2 * best + 1], a[2 * best + 2], a[2 * best + 3]] }
             return null
         }
         case "segments": {
             const a = g as number[]
+            const tol = layer.tol ?? SEG_TOL
             let best = -1, bd = Infinity
             for (let k = 0; k < a.length / 4; k++) {
                 const d = distToSegment(px, py, a[4 * k], a[4 * k + 1], a[4 * k + 2], a[4 * k + 3])
                 if (d < bd) { bd = d; best = k }
             }
-            if (bd <= SEG_TOL) return { index: best, geom: ["seg", a[4 * best], a[4 * best + 1], a[4 * best + 2], a[4 * best + 3]] }
+            if (bd <= tol) return { index: best, geom: ["seg", a[4 * best], a[4 * best + 1], a[4 * best + 2], a[4 * best + 3]] }
             return null
         }
         case "polygons": {

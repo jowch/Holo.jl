@@ -73,6 +73,7 @@ export interface HitLayer {
     axis: string
     events: string[] // "click" | "hover" | "drag"
     style?: LayerStyle
+    tol?: number // :segments/:polyline hit-test slack, image px; absent → geometry.ts's SEG_TOL fallback
     template?: TemplateSegment[] // holo"..." parsed once per layer; $() fields fill from payloads[]
     tooltip?: false              // explicit suppress; absent + no template → auto name/value table
     selected?: number[] // element indices to draw pre-highlighted on mount

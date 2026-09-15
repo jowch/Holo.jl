@@ -66,6 +66,10 @@ Optional (default shown; all non-exported — extend as `Holo.<name>`):
 - `Holo.hoverstyle(i) -> NamedTuple` — one `(; stroke, width)` hover outline style per *layer*
   (the manifest ships one style per layer, not per element). Default:
   `(; stroke = "#3A6F7C", width = 2)`.
+- `Holo.hit_tol(i) -> Union{Nothing,Real}` — logical-px hit-test slack for `:segments`/
+  `:polyline` layers, shipped in the manifest as image px (`round(Int, hit_tol(i) *
+  ctx.scaling)`). `nothing` (default) omits the field; the overlay then falls back to its
+  own fixed slack. Only [`SegmentInteractable`](@ref) sets this.
 
 [`AbstractSelector`](@ref) subtypes additionally implement `Holo.selects`/`Holo.compatible_kinds`.
 """
@@ -87,6 +91,8 @@ events(::AbstractInteractable) = (:click, :hover)
 tooltip_spec(::AbstractInteractable) = nothing
 # One hover style per LAYER (the manifest ships one `style` dict per layer, not per element).
 hoverstyle(::AbstractInteractable) = (; stroke = "#3A6F7C", width = 2)
+# Logical-px hit-test slack for :segments/:polyline layers; nothing omits the manifest field.
+hit_tol(::AbstractInteractable) = nothing
 
 """
     AbstractSelector
@@ -136,6 +142,13 @@ _check_tooltip(tooltip) =
             "(the default), pass holo\"…\" for a template, or `false` to suppress.",
     ),
 )
+
+# Shared by every SegmentInteractable entry point (the keyword constructor and
+# _segment_with_resolve, used by the HLines/VLines plot-object constructors) so a bad `tol`
+# fails here, not as a raw InexactError from round(Int, ...) at manifest build.
+_check_tol(tol) =
+    isfinite(tol) && tol > 0 ||
+    throw(ArgumentError("SegmentInteractable: tol must be finite and positive, got $tol"))
 
 # ============================ PointInteractable ============================
 """
@@ -245,10 +258,11 @@ Lines / polylines (nearest-segment hit) or disjoint segment pairs. Produces one 
 - `id` — the layer id; becomes `InteractionEvent.layer` on a hit.
 - `payloads` — one entry per segment (count per `mode` above); `ArgumentError` if the length
   doesn't match. Default: `(; segment_index)`, 0-based.
-- `tol` — accepted and stored on the interactable, but **not currently used**: the actual
-  client-side hit-test slack around a segment is a fixed 8 px (`SEG_TOL` in
-  `frontend/src/geometry.ts`), independent of this keyword's value or default (`6`). Wire it
-  through before relying on it for a tighter or looser hit target.
+- `tol` — hit-test slack around a segment, in logical px (scaled to the rendered image's DPI
+  like [`PointInteractable`](@ref)'s `radius`). Must be finite and positive (`ArgumentError`
+  otherwise). Shipped in the manifest as a per-layer `"tol"` field; the overlay's client-side
+  default (`SEG_TOL` in `frontend/src/geometry.ts`, 8 image px) applies only when this field
+  is absent.
 - `tooltip` — `nothing` for the auto name/value table (default), `holo"..."` for a template, or
   `false` to suppress. `tooltip = true` is rejected (`ArgumentError`).
 
@@ -289,16 +303,22 @@ function SegmentInteractable(
     _check_tooltip(tooltip)
     mode in (:polyline, :pairs) ||
         throw(ArgumentError("SegmentInteractable: mode must be :polyline or :pairs, got :$mode"))
+    _check_tol(tol)
     vs = [_pt3(v) for v in vertices]
     nseg = mode === :polyline ? max(0, length(vs) - 1) : length(vs) ÷ 2
     pl = payloads === nothing ? Any[(; segment_index = k - 1) for k in 1:nseg] : _check_payloads(payloads, nseg, "SegmentInteractable")
     return SegmentInteractable(ax, vs, mode, id, pl, Float64(tol), tooltip, nothing)
 end
-# Internal-only: construct with a lazy `resolve(ax) -> vertices`.
+# Internal-only: construct with a lazy `resolve(ax) -> vertices`. Called directly by the
+# HLines/VLines plot-object constructors (src/introspect.jl), bypassing the keyword
+# constructor above — validate `tol` here too, or a user-supplied bad `tol` on those two
+# recipes skips the check entirely.
 function _segment_with_resolve(ax, vertices, mode, id, payloads, tol, resolve)
+    _check_tol(tol)
     return SegmentInteractable(ax, [_pt3(v) for v in vertices], mode, id, payloads, Float64(tol), nothing, resolve)
 end
 tooltip_spec(i::SegmentInteractable) = i.tooltip
+hit_tol(i::SegmentInteractable) = i.tol
 function hitlayers(i::SegmentInteractable, ctx)
     vs = i.resolve === nothing ? i.vertices : [_pt3(v) for v in i.resolve(i.ax)]
     g = Real[]
@@ -316,9 +336,8 @@ end
     RectInteractable(ax, p; id=<kind-specific>, payloads=nothing)   # from a plot object
 
 Axis-aligned rectangles: an explicit list (bars, boxes) or a compact heatmap/image grid. Pass
-one of `rects`/`grid` (not both — this is **not** checked: `grid` silently wins if both are
-given, and passing neither errors before either's own validation runs). Produces one `:rects`
-or `:grid` [`HitLayer`](@ref).
+exactly one of `rects`/`grid` — passing both, or neither, raises `ArgumentError` at
+construction. Produces one `:rects` or `:grid` [`HitLayer`](@ref).
 
 # Arguments (list form: `rects=`)
 - `rects` — data-space boxes `[(xc, yc, w, h), …]` (center + width/height).
@@ -378,6 +397,8 @@ function RectInteractable(
         tooltip = nothing, clamp_to_viewport = false
     )
     _check_tooltip(tooltip)
+    (rects === nothing) == (grid === nothing) &&
+        throw(ArgumentError("RectInteractable: pass exactly one of `rects` or `grid`"))
     return if grid !== nothing
         xe, ye, vals = grid
         xe = collect(Float64, xe); ye = collect(Float64, ye)

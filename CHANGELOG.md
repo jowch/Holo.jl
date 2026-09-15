@@ -23,6 +23,19 @@ All notable changes to this project are documented here. The format is based on
   `perf-findings.md`, `roadmap.md`, `backend-comparison.md`, `live-interaction-checklist.md`,
   `frontend-delivery.md`, `releasing.md`); `docs/README.md` is now a short index pointing at
   the site and at `docs/dev/`.
+- `hoverstyle(::AbstractInteractable, ::Int)` narrowed to `hoverstyle(::AbstractInteractable)`
+  — the manifest ships one hover style per layer, not per element; the old per-element
+  signature implied styling that was never actually per-element.
+- Browser TypeScript lives in one `frontend/` package with two modules: the
+  shared overlay IIFE (`assets/overlay.js`) and the `:webgl` ESM shim
+  (`assets/holo-webgl.js`, source `frontend/src/wgl-shim.ts`). The old
+  `frontend-webgl/` package and its CI job are gone.
+- `SegmentInteractable`'s `tol` keyword now controls the actual hit-test slack (see Fixed,
+  below). The **effective default hit slack changes**: it was a fixed 8 image px (the
+  overlay's `SEG_TOL`, ignoring `tol` entirely); it is now `tol`'s default of 6 *logical* px,
+  scaled to the rendered image's DPI like `PointInteractable`'s `radius` — e.g. at the common
+  2× DPI, 12 image px instead of 8. Pass `tol = 8 / scaling` to keep the old numeric slack, or
+  rely on the new default (slightly more forgiving at typical DPI).
 
 ### Removed
 - `docs/design.md`, `docs/research-findings.md`, `docs/survey-makie-surfaces.md` — superseded
@@ -35,16 +48,17 @@ All notable changes to this project are documented here. The format is based on
   hardcodes a PNG `<img>`. SVG output remains a roadmap item to build from scratch
   (`docs/dev/roadmap.md`), not groundwork already in place.
 
-### Changed
-- `hoverstyle(::AbstractInteractable, ::Int)` narrowed to `hoverstyle(::AbstractInteractable)`
-  — the manifest ships one hover style per layer, not per element; the old per-element
-  signature implied styling that was never actually per-element.
-- Browser TypeScript lives in one `frontend/` package with two modules: the
-  shared overlay IIFE (`assets/overlay.js`) and the `:webgl` ESM shim
-  (`assets/holo-webgl.js`, source `frontend/src/wgl-shim.ts`). The old
-  `frontend-webgl/` package and its CI job are gone.
-
 ### Fixed
+- `SegmentInteractable`'s `tol` keyword (lines/polylines/segments hit-test slack) is now
+  wired through end-to-end: it ships in the manifest as a per-`:segments`/`:polyline`-layer
+  `"tol"` field (image px), and the overlay's hit test reads it instead of always using its
+  own fixed `SEG_TOL`. Previously `tol` was accepted and stored but never read anywhere. Now
+  that it feeds a manifest field, `tol` is validated at construction (`ArgumentError` unless
+  finite and positive) instead of raising a raw `InexactError` from `round(Int, …)` (`Inf`/
+  `NaN`) or silently shipping an unhittable layer (`tol <= 0`).
+- `RectInteractable(ax; rects=…, grid=…)` now raises `ArgumentError` at construction when
+  both `rects` and `grid` are given, or neither is — previously `grid` silently won if both
+  were passed, and passing neither surfaced a raw error later instead of a clear one.
 - `SegmentInteractable(...; mode=...)` now validates `mode` at construction
   (`ArgumentError` for anything but `:polyline`/`:pairs`) instead of silently treating any
   other symbol as `:pairs`.

@@ -203,6 +203,11 @@ Geometry layout by `kind` (all coords image-px, top-left origin):
 | `:polygons` | `Vector{Vector{Float32}}` rings | even-odd point-in-polygon | ring index |
 | `:axis` | `nothing` (unbounded, `AxisInteractable`) or `Real[x,y,w,h]` bbox (bounded, `ColorbarInteractable`) | absent geometry = always-hit; bbox present = point-in-bbox; invert pixel via `AxisTransform` | `-1` (continuous); `valueaxis ≠ nothing` → 1-D `(; value)` |
 
+`:polyline`/`:segments`' `tol` (the hit-test slack above) is an optional per-layer manifest
+field, `"tol"` (image px) — present only when `hit_tol(i) !== nothing` (`SegmentInteractable`
+sets it from its `tol` keyword, scaled like `radius`); absent, the overlay falls back to its
+own fixed `SEG_TOL`. Every other kind's manifest is untouched by this field.
+
 This is a **closed set of six geometry kinds** (`:circles/:polyline/:segments/:rects/:grid/:polygons`)
 plus the `:axis` continuous channel. The survey confirmed every retained Makie surface projects to one
 of them; nothing in v1+v2 needs a seventh. (Text labels — the surface once speculated to need a new

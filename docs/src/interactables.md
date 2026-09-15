@@ -58,7 +58,7 @@ the keywords *beyond* `id`/`payloads`/`tooltip` for the constructors it covers.
 | Constructor | Geometry | Extra keywords | Default payload |
 |---|---|---|---|
 | `PointInteractable(ax, points; radius = 9, radius3d = nothing, id = :points)` | `points :: Vector{(x, y)}` (or `(x,y,z)` for a 3D axis) | `radius` — px click target; `radius3d` — per-point data-space half-extents on a 3D axis (overrides `radius`) | `(; index, x, y[, z])` |
-| `SegmentInteractable(ax, vertices; mode = :polyline, tol = 6, id = :segments)` | connected/disjoint vertices | `mode` — `:polyline` (connected path, nearest-segment hit) or `:pairs` (disjoint pairs); `tol` — accepted but currently unused (hit slack is a fixed 8 px in `frontend/src/geometry.ts`) | `(; segment_index)` |
+| `SegmentInteractable(ax, vertices; mode = :polyline, tol = 6, id = :segments)` | connected/disjoint vertices | `mode` — `:polyline` (connected path, nearest-segment hit) or `:pairs` (disjoint pairs); `tol` — hit-test slack around a segment, in logical px, scaled to DPI like `radius` (default 6) | `(; segment_index)` |
 | `RectInteractable(ax; rects, clamp_to_viewport = false, id = :rects)` | `rects = [(xc, yc, w, h), …]` — explicit boxes (e.g. bars) | `clamp_to_viewport` — clamp a rect that spans past the axis edge instead of letting it overflow | `(; index)` |
 | `RectInteractable(ax; grid, id = :rects)` | `grid = (xedges, yedges, values)` — a heatmap shipped as edges, not N rects | — | cell `(i, j, value)`, resolved client-side |
 | `PolygonInteractable(ax, rings; id = :polygons)` | `rings :: Vector{Vector{(x, y)}}` — one or more filled rings | — | `(; index)` |
