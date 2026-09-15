@@ -1,7 +1,7 @@
 # Holo.jl — Architecture
 
-> The coherent design. `design.md` holds the original decisions + spike validation;
-> `research-findings.md` and `survey-makie-surfaces.md` hold the evidence this rests on.
+> The coherent design. The original decisions, spike validation, and supporting research
+> are superseded by this document (kept in git history, not in the tree).
 > This document is the contract: the two interfaces (`AbstractBackend`,
 > `AbstractInteractable`), the geometry primitives between them, and how custom
 > interactions use the same infra as the built-ins.

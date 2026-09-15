@@ -7,7 +7,7 @@ plots in Pluto. Browser layer is TypeScript in `frontend/`, bundled by esbuild t
 ## Commands
 - Julia tests: `julia --project=. test/runtests.jl`
 - Frontend gate: `cd frontend && npm run lint && npm run typecheck && npm test && npm run build` (build → `../assets/overlay.js` IIFE + `../assets/holo-webgl.js` ESM)
-- Format (Runic, CI-enforced): `julia -e 'using Runic; exit(Runic.main(["--inplace","src","test","bench","gallery","examples"]))'` — pass every dir with `.jl`, since CI formats the whole repo (PR #11 slipped because `gallery/` was omitted here). **CI's `runic-action` has no `paths:` filter → it checks the WHOLE repo** (incl. `bench/`, `gallery/`, `examples/`), and tracks the latest Runic (1.7+); a locally-old Runic can pass a file CI rejects. Format every `.jl` you add, with current Runic.
+- Format (Runic, CI-enforced): `julia -e 'using Runic; exit(Runic.main(["--inplace","src","test","bench","gallery","examples","docs"]))'` — pass every dir with `.jl`, since CI formats the whole repo (PR #11 slipped because `gallery/` was omitted here). **CI's `runic-action` has no `paths:` filter → it checks the WHOLE repo** (incl. `bench/`, `gallery/`, `examples/`, `docs/make.jl`), and tracks the latest Runic (1.7+); a locally-old Runic can pass a file CI rejects. Format every `.jl` you add, with current Runic.
 - Registry name-clash check (manual, not `Pkg.test`): packed General (typical
   depot / CI) is a 129-byte `~/.julia/registries/General.toml` pointer +
   `General.tar.gz`. Package rows are inline tables (`uuid = { name = "Holo",
@@ -52,7 +52,7 @@ text and the bond payload → it gets a live check on every backend × the kinds
   (no pulse), `@bind` round-trip, geometry on the mark (not offset), no console errors —
   matches intent. Inspect the real `published_to_js` manifest in-page when the change is
   about payload shape (unit tests never call `show`). **Agents run**
-  `docs/live-interaction-checklist.md` via **both** `test/e2e/kind_sweep.mjs` **and**
+  `docs/dev/live-interaction-checklist.md` via **both** `test/e2e/kind_sweep.mjs` **and**
   `test/e2e/polish_verify.mjs` (Cairo **and** WGL) across scatter, lines/segments,
   heatmap/image, barplot, poly, polar, dark-figure scatter, arrows3d, hlines/vlines,
   threshold, ROI, and view-pan. Interaction without visual is unfinished; visual chrome
@@ -76,7 +76,7 @@ text and the bond payload → it gets a live check on every backend × the kinds
 
 ## Profiling → design feedback (standing practice)
 Profiling exists to inform the design, not to sit in a file. The loop is anchored on the committed
-`bench/payload_envelope.jl` + `bench/stress.jl` → `docs/perf-findings.md` pair.
+`bench/payload_envelope.jl` + `bench/stress.jl` → `docs/dev/perf-findings.md` pair.
 - **`perf-findings.md` is the single source of every size/latency number.** Other docs (architecture/
   design/survey/research/roadmap) **cite** it — never restate figures (numbers duplicated across docs
   drift; one reconciliation already had to fix exactly that).
@@ -89,6 +89,10 @@ Profiling exists to inform the design, not to sit in a file. The loop is anchore
   fanned out as a workflow (see how Phase 0 was propagated).
 
 ## Layout
-- Design docs in `docs/` (architecture.md = the contract; perf-findings.md = the measured payload/latency envelope + the single source of those numbers; frontend-delivery.md = build/delivery decisions). `spike/` is gitignored scratch; `bench/` holds the committed, re-runnable benchmarks.
+- User docs are the Documenter site, built from `docs/src/` (`docs/make.jl`, deployed by
+  `.github/workflows/Documentation.yml`). Maintainer/design docs live in `docs/dev/`
+  (architecture.md = the contract; perf-findings.md = the measured payload/latency envelope +
+  the single source of those numbers; frontend-delivery.md = build/delivery decisions).
+  `spike/` is gitignored scratch; `bench/` holds the committed, re-runnable benchmarks.
 - Process docs (brainstorming specs, implementation plans) go in `.superpowers/` — gitignored, local-only, not part of the package.
 - Repo folder is `InteractivePlots.jl/` but the package is `Holo` (cosmetic mismatch; remote is `Holo.jl`).

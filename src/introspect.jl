@@ -543,7 +543,7 @@ function auto_interactables(fig)
                 )
                 @warn "holo: skipping $(typeof(p).name.name) on Axis3 — only Scatter/Lines/" *
                     "LineSegments/MeshScatter/Wireframe/Arrows3D have 3D-valid extraction today; " *
-                    "other kinds are roadmap scope (docs/roadmap.md M3 per-type extraction)" maxlog = 16
+                    "other kinds are roadmap scope (docs/dev/roadmap.md M3 per-type extraction)" maxlog = 16
                 continue
             end
             # Separable-edge / axis-aligned rect recipes assume Cartesian pixel geometry;
@@ -552,7 +552,7 @@ function auto_interactables(fig)
             if ax isa Makie.PolarAxis && !(p isa Union{Makie.Scatter, Makie.Lines, Makie.LineSegments, Makie.ScatterLines})
                 @warn "holo: skipping $(typeof(p).name.name) on PolarAxis — only Scatter/Lines/" *
                     "LineSegments/ScatterLines have polar-valid extraction today; continuous " *
-                    "θ/r readout and grid/rect recipes are roadmap scope (docs/roadmap.md M3)" maxlog = 16
+                    "θ/r readout and grid/rect recipes are roadmap scope (docs/dev/roadmap.md M3)" maxlog = 16
                 continue
             end
             n = get(seen, base, 0) + 1

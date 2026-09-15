@@ -1,8 +1,8 @@
 # Re-runnable size bench for the :webgl wire format. The `:webgl` payload is a NEW format
 # (scene_payload + the vendored WGLMakie bundle), separate from Holo core's PNG+manifest envelope in
-# docs/perf-findings.md — so per the profiling standing practice it gets its own committed bench
+# docs/dev/perf-findings.md — so per the profiling standing practice it gets its own committed bench
 # here. This prints the live numbers; the recorded envelope (+ reconcile note) lives in
-# docs/perf-findings.md's "## :webgl backend (WGLMakie)" section — re-run this and update that
+# docs/dev/perf-findings.md's "## :webgl backend (WGLMakie)" section — re-run this and update that
 # section when the wire format changes.
 #
 #   julia --project=. bench/webgl_payload_size.jl
@@ -17,7 +17,7 @@
 # The two `gzip` columns measure M2's deferred compression levers reproducibly (via system gzip -9,
 # no Julia dep): gzip-of-binary is the ~3× ceiling (but needs a JS msgpack decoder to use), and
 # gzip-of-JSON is the cheap browser path (DecompressionStream → JSON.parse) — only a fraction off the
-# current wire since it starts from float-text. Both deferred — see docs/perf-findings.md.
+# current wire since it starts from float-text. Both deferred — see docs/dev/perf-findings.md.
 
 using Holo, WGLMakie
 import JSON3

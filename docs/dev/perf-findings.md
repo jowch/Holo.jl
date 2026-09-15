@@ -1,6 +1,7 @@
 # Holo.jl — Perf findings (Phase 0 spike)
 
-> Resolves `research-findings.md` Q5 / `design.md` §10 unknown (4): the payload/latency envelope.
+> Resolves the payload/latency envelope left as an open unknown by the original design spike
+> (superseded notes, kept in git history).
 > A measurement spike, not a feature — it **bounds the scope** of every payload-heavy roadmap
 > item after it (M2.3 tooltips, M4 animation, SVG output, multi-select return shape).
 >

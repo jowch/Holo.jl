@@ -1,8 +1,8 @@
 # Holo.jl — Roadmap
 
 Where v0.1 is and how the rest of the feature set gets built. Grounded in the design:
-`architecture.md` (the contract + tiers), `survey-makie-surfaces.md` (the v1/v2 surface
-map), `frontend-delivery.md` (build/delivery). Priorities, not promises — reorder freely.
+`architecture.md` (the contract + tiers), `frontend-delivery.md` (build/delivery).
+Priorities, not promises — reorder freely.
 
 ## Guiding principles (don't drift)
 - **Explicit declaration is the contract; introspection is sugar** on top of it.
@@ -34,7 +34,7 @@ paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM ·
 - [x] **Robustness validation**: fail loud on out-of-scope configs (PolarAxis/Axis3/LScene) at `holo()` time — one `AbstractAxis`-not-`Axis` guard in `context()`.
 
 ## M2 — Ergonomics (the big unlock)
-*Goal: stop hand-writing geometry. `survey-makie-surfaces.md` has the extraction recipes.*
+*Goal: stop hand-writing geometry.*
 
 - [x] **Plot-introspection constructors**: `PointInteractable(ax, scatter)`, `RectInteractable(ax, heatmap)`, `SegmentInteractable(ax, lines)`, etc. — pull geometry from live Makie plot objects via `plot.converted[]`. *Done (`src/introspect.jl`): Scatter/Lines/LineSegments/Heatmap/Image/BarPlot/Poly delegate to the explicit constructors with identical hitlayers (tested). Gotchas handled: markersize→radius (pixel space), heatmap `EndPoints`→edge expansion, bar dodge/stack/auto-width read from the laid-out child rects. `ax` is passed (a plot has no axis back-reference); single-arg sugar arrives with M2.2's scene walk.*
 - [x] **`holo(fig)` auto-extraction**: walk the scene graph, emit a concrete `Vector{AbstractInteractable}` (the same one a user could write). Unknown plot type → skip + warn. Sugar over M2.1, not a separate path. *Done (`src/introspect.jl`): `auto_interactables(fig)` walks each `Axis`'s `scene.plots`, maps each supported plot via the M2.1 constructors, dedupes layer ids (`:scatter`, `:scatter_2`, …), and skips unsupported types with a warning. `holo(fig)` is the zero-config overlay; both exported.*
@@ -183,8 +183,7 @@ number — everything else is reorderable by demand.
 **The four edges that constrain order:**
 - **Perf envelope → everything payload-heavy.** Tooltips, animation frames, SVG, and the
   multi-select return shape all inflate the base64/manifest payload, whose ceiling is an
-  *undocumented empirical unknown* (`research-findings.md` Q5, `design.md` §10). Measure it
-  first so the rest is built against a known knee.
+  *undocumented empirical unknown*. Measure it first so the rest is built against a known knee.
 - **Richer tooltips → all surface payloads.** ✅ *Landed (M2.3, PR #10).* Every surface added after
   ships a real tooltip (a `holo"…"` template or the auto-table default) instead of payload JSON. The
   per-element `tooltip()` seam was replaced by a per-layer `tooltip_spec`; M3's deferred payloads
@@ -260,8 +259,8 @@ pre-manifest step for all three.)
   Makie's computed values.
 - [x] **Text bboxes** (Text, Annotation) — *not* a 7th primitive, but not for the reason originally
   guessed either: the plan was that rotated text needs a degenerate-polygon `bbox` primitive plus
-  **font-metric measurement** (the one thing the coord system was built not to model, `design.md`
-  §6). Both turned out obsolete — `Makie.string_boundingboxes(p)` already returns each string's
+  **font-metric measurement** (the one thing the coord system was built not to model). Both
+  turned out obsolete — `Makie.string_boundingboxes(p)` already returns each string's
   scene-local pixel box (font metrics included), so `TextInteractable` rides plain `:rects`
   instead: a rotated label just gets its box expanded to stay axis-aligned. Payload
   `(; text, index, x, y)`; `holo(fig)` auto-detects `text!` directly and `annotation!` via

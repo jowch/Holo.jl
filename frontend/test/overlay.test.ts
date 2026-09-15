@@ -918,7 +918,7 @@ describe("tooltips (mount/showTip)", () => {
 
 // Overlay visual recipes (locked — cite visual-design.md, do not reopen).
 // Units are necessary, not live-verify: agents still run
-// docs/live-interaction-checklist.md (kind_sweep.mjs + polish_verify.mjs)
+// docs/dev/live-interaction-checklist.md (kind_sweep.mjs + polish_verify.mjs)
 // on Cairo and WGL for interaction AND visual.
 describe("overlay visual polish", () => {
     const ink = "#3A6F7C"

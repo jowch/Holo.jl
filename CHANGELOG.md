@@ -16,7 +16,7 @@ All notable changes to this project are documented here. The format is based on
   `AbstractBackend` `mount` interface function (plus `WebGLBackend`'s `mount = :webgl`
   method) had zero callers — `Holo.render` always rasterizes to PNG, and `Base.show`
   hardcodes a PNG `<img>`. SVG output remains a roadmap item to build from scratch
-  (`docs/roadmap.md`), not groundwork already in place.
+  (`docs/dev/roadmap.md`), not groundwork already in place.
 
 ### Changed
 - `hoverstyle(::AbstractInteractable, ::Int)` narrowed to `hoverstyle(::AbstractInteractable)`
@@ -67,13 +67,13 @@ First General release. Frozen after drag-to-pan / drag-to-rotate
 (`ViewInteractable`, #48) and the overlay visual / live-verify playbook (#50,
 #52, #53) — not a sliders-only shortcut. Jonathan comments
 `@JuliaRegistrator register` on a CI-green `main` commit after the prep PR
-merges. See [`docs/releasing.md`](docs/releasing.md).
+merges. See [`docs/dev/releasing.md`](docs/dev/releasing.md).
 
 ### Changed
 - Overlay hover skips rewriting tooltip HTML and remeasuring tip size on
   same-hit `mousemove`; extra pointer ticks coalesce to one animation frame.
   The 100 ms fade and locked wash / ring recipes are unchanged.
-- Agent live-verify playbook (`docs/live-interaction-checklist.md`) now requires
+- Agent live-verify playbook (`docs/dev/live-interaction-checklist.md`) now requires
   **visual** fidelity as well as interaction: wash / ring / halo / overlay-pin,
   remount fade (no pulse), Pluto/OS `prefers-color-scheme` (no notebook toggle),
   and steel-teal `#3A6F7C` not `#ff3b30`. Agents run `kind_sweep.mjs` **and**
@@ -110,7 +110,7 @@ merges. See [`docs/releasing.md`](docs/releasing.md).
   dependencies gated behind package extensions; `holo(fig)` resolves whichever one is loaded
   (errors if neither is). If both are loaded, `backend=` wins and implicit `holo` defaults to
   Cairo. See the README's "3D, animation, and large data" section and
-  `docs/backend-comparison.md`.
+  `docs/dev/backend-comparison.md`.
 - View manipulation via `@bind` re-render: 2D `limits` zoom/pan, 3D `azimuth`/`elevation`
   rotation, and selection persistence across view re-renders (`selected=` feedback).
   Sliders need no Holo API; **drag-to-pan / drag-to-rotate** use `ViewInteractable`

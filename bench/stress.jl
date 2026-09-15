@@ -1,6 +1,6 @@
 # Phase 0 stress sweep — push 10× past payload_envelope.jl to find where base64/manifest hit
 # MB-scale and where render time cliffs. Same dep-free msgpack sizer + seed, so these numbers are
-# reproducible too. The live round-trip numbers in docs/perf-findings.md ("Full click round-trip"
+# reproducible too. The live round-trip numbers in docs/dev/perf-findings.md ("Full click round-trip"
 # and the round-trip column of the stress table) are NOT produced here — they need a headless
 # Pluto + browser and are one-off measurements; this script covers only the Julia-side payload/
 # render terms (the rows labelled reproducible in that doc).

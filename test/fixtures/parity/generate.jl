@@ -7,7 +7,7 @@
 # same dance as test/e2e). Run BOTH commands when regenerating; commit the diffs.
 #
 # REGENERATION DISCIPLINE: goldens are regenerated on every wire-format change —
-# the same rule as the perf-findings bench re-run (docs/perf-findings.md) — and the
+# the same rule as the perf-findings bench re-run (docs/dev/perf-findings.md) — and the
 # golden diff is reviewed in the PR. A live-manifest-vs-stale-golden gap is exactly
 # the drift the within-backend testsets exist to flag.
 

@@ -158,7 +158,7 @@ include("makie_compat_tests.jl")
     end
 
     @testset "geometry quantized to integer pixels" begin
-        # finite per-element geometry ships as Int (1–3 B/coord in MsgPack vs Float32's 5) — architecture.md §9.
+        # finite per-element geometry ships as Int (1–3 B/coord in MsgPack vs Float32's 5) — docs/dev/architecture.md §9.
         # Containers are Real[] (so non-finite coords can pass through), so assert the *values*, not eltype.
         allint(g) = all(x -> !isfinite(x) || x isa Integer, g)   # finite coords are Int
         L = only(hitlayers(PointInteractable(ax, pts), ctx))
@@ -176,7 +176,7 @@ include("makie_compat_tests.jl")
     end
 
     @testset "non-finite projection degrades, never crashes" begin
-        # element layers are un-gated on scale (architecture.md §3); a log out-of-domain point projects to
+        # element layers are un-gated on scale (docs/dev/architecture.md §3); a log out-of-domain point projects to
         # NaN/±Inf. `_q` must pass it through (round(Int, NaN) throws) so holo degrades, not crashes.
         finite_int(g) = all(x -> !isfinite(x) || x isa Integer, g)
         flog = Figure(); axlog = Axis(flog[1, 1]; xscale = log10)
