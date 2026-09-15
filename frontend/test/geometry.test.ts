@@ -17,6 +17,113 @@ describe("primitives", () => {
         expect(findBin([30, 20, 10, 0], 12)).toBe(1) // descending (image y)
         expect(findBin([0, 10], 99)).toBe(-1)
     })
+    it("findBin on an interior edge picks the smaller-index bin (both directions)", () => {
+        // v==10 brackets bin0=[0,10] and bin1=[10,20]; the old linear scan tested bins in
+        // increasing k order with inclusive comparisons on both ends, so bin0 won first.
+        expect(findBin([0, 10, 20, 30], 10)).toBe(0)
+        expect(findBin([0, 10, 20, 30], 20)).toBe(1)
+        // same convention holds for descending edges (image-space y)
+        expect(findBin([30, 20, 10, 0], 20)).toBe(0)
+        expect(findBin([30, 20, 10, 0], 10)).toBe(1)
+    })
+    it("findBin: exactly on the outer edges is in range, one step beyond is not", () => {
+        expect(findBin([0, 10, 20], 0)).toBe(0)
+        expect(findBin([0, 10, 20], 20)).toBe(1)
+        expect(findBin([0, 10, 20], -0.001)).toBe(-1)
+        expect(findBin([0, 10, 20], 20.001)).toBe(-1)
+        expect(findBin([20, 10, 0], 20)).toBe(0)
+        expect(findBin([20, 10, 0], 0)).toBe(1)
+    })
+    it("findBin: NaN query point never hits", () => {
+        expect(findBin([0, 10, 20, 30], NaN)).toBe(-1)
+    })
+    it("findBin: fewer than 2 edges has no bins", () => {
+        expect(findBin([], 5)).toBe(-1)
+        expect(findBin([5], 5)).toBe(-1)
+    })
+    it("findBin: duplicate edges (sub-pixel grid, edges collapse under Int quantization)", () => {
+        // Holo quantizes edges to Int pixels; a grid with more columns than screen px produces
+        // duplicate adjacent edges on the wire. Equivalence with the old linear scan holds here
+        // (verified against the linear oracle below), including the zero-width bin[1]=[5,5].
+        expect(findBin([0, 5, 5, 10], 3)).toBe(0)
+        expect(findBin([0, 5, 5, 10], 5)).toBe(0) // ties still prefer the smaller-index bin
+        expect(findBin([0, 5, 5, 10], 7)).toBe(2)
+        expect(findBin([10, 5, 5, 0], 3)).toBe(2)
+        expect(findBin([10, 5, 5, 0], 7)).toBe(0)
+        expect(findBin([5, 5, 5], 5)).toBe(0)
+        expect(findBin([5, 5, 5], 4)).toBe(-1)
+        expect(findBin([5, 5], 5)).toBe(0)
+    })
+    it("findBin: a NaN endpoint is a documented, endpoint-only guard — not full oracle equivalence", () => {
+        // Precondition (see the findBin doc comment): finite, monotonic edges. Julia's
+        // RectInteractable enforces this before a :grid layer ships, so these inputs aren't
+        // reachable from it — this pins the defense-in-depth fallback for a hand-built HitLayer
+        // that skips that validation, so a future change can't silently regress it to a bogus
+        // hit. The guard fires whenever edges[0] or edges[n-1] is non-finite, so all three
+        // inputs below return -1 — but only the first matches the old linear scan's answer.
+        // The other two are genuine divergences the guard doesn't paper over: [0,10,NaN] has a
+        // real bin at v=5 (old scan returns 0 — the NaN only poisons the bin touching it, and v
+        // never reaches that bin), and [NaN,10,20] has a real bin at v=15 for the same reason
+        // (old scan returns 1). Both are only reachable via a hand-built HitLayer.
+        expect(findBin([NaN, NaN, NaN], 5)).toBe(-1) // matches old (-1)
+        expect(findBin([0, 10, NaN], 5)).toBe(-1) // diverges from old (0)
+        expect(findBin([NaN, 10, 20], 15)).toBe(-1) // diverges from old (1)
+    })
+})
+
+describe("findBin: binary search matches the old linear scan (oracle)", () => {
+    // The oracle is the pre-optimization implementation this replaces: scan bins in increasing
+    // k order, inclusive on both ends, return the first match. Kept here (not in src/) purely
+    // as a reference for the property comparison below.
+    function findBinLinear(edges: number[], v: number): number {
+        for (let k = 0; k < edges.length - 1; k++) {
+            const a = edges[k], b = edges[k + 1]
+            if (v >= Math.min(a, b) && v <= Math.max(a, b)) return k
+        }
+        return -1
+    }
+
+    // Deterministic PRNG (mulberry32) so failures are reproducible without a fixed fixture list.
+    function mulberry32(seed: number): () => number {
+        let a = seed
+        return () => {
+            a |= 0; a = (a + 0x6D2B79F5) | 0
+            let t = Math.imul(a ^ (a >>> 15), 1 | a)
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+        }
+    }
+
+    it("agrees with the linear oracle over random monotonic edges and query points", () => {
+        const rng = mulberry32(20260914)
+        for (let trial = 0; trial < 500; trial++) {
+            const n = 2 + Math.floor(rng() * 30) // 2..31 edges → 1..30 bins
+            const ascending = rng() < 0.5
+            // Non-decreasing, occasionally with duplicate adjacent edges (~30% of gaps) — Int
+            // quantization of a sub-pixel grid collapses edges on the wire (see the dedicated
+            // duplicate-edge unit test above); a plain "always distinct" generator would never
+            // exercise that.
+            const raw = Array.from({ length: n }, () => rng() * 1000)
+            raw.sort((a, b) => a - b)
+            for (let k = 1; k < raw.length; k++) {
+                if (raw[k] < raw[k - 1]) raw[k] = raw[k - 1]
+                else if (raw[k] === raw[k - 1]) { /* keep: exercise the duplicate-edge path */ }
+                else if (rng() < 0.3) raw[k] = raw[k - 1] // force an occasional duplicate
+            }
+            const edges = ascending ? raw : raw.slice().reverse()
+
+            // exercise: random points spanning well outside both ends, at every edge exactly
+            // (the tie case), and at bin midpoints.
+            const queries: number[] = [edges[0] - 50, edges[n - 1] + 50]
+            for (const e of edges) queries.push(e)
+            for (let k = 0; k < n - 1; k++) queries.push((edges[k] + edges[k + 1]) / 2)
+            for (let q = 0; q < 20; q++) queries.push(edges[0] + (edges[n - 1] - edges[0]) * rng() * 1.4 - (edges[n - 1] - edges[0]) * 0.2)
+
+            for (const v of queries) {
+                expect(findBin(edges, v)).toBe(findBinLinear(edges, v))
+            }
+        }
+    })
 })
 
 describe("invertAxis", () => {

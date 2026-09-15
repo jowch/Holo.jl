@@ -402,6 +402,13 @@ function RectInteractable(
     return if grid !== nothing
         xe, ye, vals = grid
         xe = collect(Float64, xe); ye = collect(Float64, ye)
+        # geometry.ts's findBin binary-searches these edges assuming strict monotonicity (asc or
+        # desc); a non-monotone array silently picks a different (still-plausible-looking) bin
+        # instead of erroring, so reject it here rather than let it degrade silently client-side.
+        (issorted(xe) || issorted(xe; rev = true)) ||
+            throw(ArgumentError("RectInteractable: grid `xedges` must be monotonic (ascending or descending)"))
+        (issorted(ye) || issorted(ye; rev = true)) ||
+            throw(ArgumentError("RectInteractable: grid `yedges` must be monotonic (ascending or descending)"))
         expected = (length(xe) - 1, length(ye) - 1)
         vals isa AbstractMatrix && size(vals) == expected || throw(
             ArgumentError(
@@ -451,6 +458,17 @@ function hitlayers(i::RectInteractable, ctx)
         xedges = Real[_q(_proj(ctx, i.ax, (x, y0))[1]) for x in xe]
         x0 = xe[1]
         yedges = Real[_q(_proj(ctx, i.ax, (x0, y))[2]) for y in ye]
+        # A DomainError inside the projection closure (e.g. log10 of a non-positive edge on a
+        # log-scale axis) degrades to a NaN point (`backend.jl`'s `_project_closure`), and `_q`
+        # passes non-finite values through unchanged. geometry.ts's findBin assumes finite,
+        # strictly monotonic edges — a NaN edge would silently pick a bogus bin (wrong tooltip/
+        # bond) instead of the old linear scan's clean no-hit. Fail loud instead.
+        all(isfinite, xedges) && all(isfinite, yedges) || throw(
+            ArgumentError(
+                "RectInteractable: grid xedges/yedges projected to a non-finite pixel coordinate " *
+                    "(check for a log-scale axis with a non-positive bin edge)",
+            ),
+        )
         ncols, nrows = length(xe) - 1, length(ye) - 1
         geom = Dict{String, Any}(
             "xedges" => xedges, "yedges" => yedges, "ncols" => ncols, "nrows" => nrows

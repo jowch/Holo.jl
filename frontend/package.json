@@ -9,9 +9,10 @@
     "build:overlay": "node build.mjs overlay",
     "build:shim": "node build.mjs shim",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src test",
+    "lint": "eslint src test bench",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "bench": "vite-node bench/hit_test.bench.ts"
   },
   "dependencies": {
     "d3-format": "^3.1.0"
@@ -24,6 +25,7 @@
     "happy-dom": "^20.10.6",
     "typescript": "^5.6.0",
     "typescript-eslint": "^8.8.0",
+    "vite-node": "^2.1.0",
     "vitest": "^2.1.0"
   }
 }

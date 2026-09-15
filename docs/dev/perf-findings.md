@@ -296,6 +296,59 @@ float16; lossy >2048px). Keep `AxisTransform` lims `Float64` (drag inversion) �
   `valueaxis` field and the colorbar `:axis` layer are invisible at the KB scale of the envelope
   table. The §A scatter/heatmap numbers are identical to the previous run.
 
+## JS hit-test microbenchmark
+
+Every claim above that "hit-test is ~0 ms" was from the pure-Julia render sweep, which doesn't
+touch `frontend/src/geometry.ts`'s `hitTest`. `frontend/bench/hit_test.bench.ts` (`npm run bench`,
+committed) times `hitTest` directly: for each kind × N, build one `HitLayer` of N random elements
+scattered over a 4000×4000 px canvas, and time 2000 query points (one warm-up pass discarded) two
+ways — **mixed** (random points over that same canvas) and **miss** (one point guaranteed to miss
+every element). The two diverge for `circles`/`rects`: `hitLayer` returns on the first hit, so a
+**mixed** query's cost depends on the *hit rate*, which rises with density — at fixed canvas size
+and growing N, mixed stops measuring a scan and starts measuring the early-return path. **miss**
+is the O(n) worst case (and the realistic case for hovering empty space on a sparse plot);
+`segments`/`polyline` have no early exit at all, so their mixed and miss numbers agree. `grid`
+(`findBin`, this PR's change) is timed the same way over an m×m-cell grid spanning the canvas —
+every mixed query lands in some cell (100% hit rate) so mixed and miss both exercise the binary
+search, just from different starting points.
+
+Run 2026-09-14, Linux x86_64 (single workstation core), Node v24.15.0, `npm run bench` (commit
+introducing this section: see PR #68):
+
+| kind | N | mixed hit rate | mixed median (µs/call) | miss median (µs/call) |
+|------|---:|---:|---:|---:|
+| circles | 1 000 | 1.5% | 2.1 | 2.1 |
+| circles | 10 000 | 16.0% | 19.1 | 19.2 |
+| circles | 50 000 | 60.4% | 75–77 | 96–97 |
+| circles | 200 000 | 97.4% | 73–77 | **380** |
+| segments | 1 000 | 2.7% | 29.4 | 28.1 |
+| segments | 10 000 | 25.1% | 294 | 294 |
+| polyline | 1 000 | 0.0% | 28.5 | 29.0 |
+| polyline | 10 000 | 0.7% | 284 | 289 |
+| rects | 1 000 | 0.4% | 2.1 | 2.1 |
+| rects | 10 000 | 5.8% | 19.9 | 19.7 |
+| grid, 100×100 cells (202 edges) | — | 100% | 0.5 | 0.1 |
+| grid, 1000×1000 cells (2002 edges) | — | 100% | 0.3 | 0.1 |
+
+`circles`/`rects` **mixed** numbers look sub-linear from 50k→200k because the hit rate climbs
+from 60% to 97% at fixed canvas size — that's early-return doing its job on *this benchmark's*
+density, not evidence hit-test itself is sub-linear. The **miss** column is the true O(n) scan
+cost and the number to read as the worst case: at 200k circles, one guaranteed-miss `hitTest`
+call costs **~0.38 ms**. `segments`/`polyline` have no early exit (every query walks the full
+element list to find the nearest segment) and scale linearly with N regardless of hit rate, ~10×
+per decade as expected for O(n). `grid`'s binary search stays sub-microsecond even at 1000 edges
+per axis (2000 comparisons/hover under the old linear scan, ~11 under the new binary search) —
+not literally O(1) as an earlier draft of this section and `roadmap.md` said, but fast enough that
+the distinction is invisible at these sizes.
+
+**Conclusion: even at 200 000 circles (worst-case miss) or 10 000 segments, one `hitTest` call
+costs well under 0.5 ms — three orders of magnitude below the render floor (tens of ms) and
+manifest-transfer cost (hundreds of ms at the multi-MB extreme, see the stress test above).**
+This confirms, with a direct hit-test measurement rather than an inference from render time, that
+a spatial index (quadtree/grid bucketing) is not justified by the data: the wall a user would
+actually feel is still payload size, not hit-test CPU. `docs/dev/roadmap.md`'s spatial-
+acceleration lines cite this section rather than restating these numbers.
+
 ## MsgPack fast-path (Q5 sub-claim)
 
 `published_to_js` always serializes via **MsgPack** (not JSON) — confirmed by the format Pluto

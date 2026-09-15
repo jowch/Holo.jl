@@ -157,6 +157,35 @@ include("makie_compat_tests.jl")
         @test all(vp[2] - 1 <= y <= vp[2] + vp[4] + 1 for y in ye)
     end
 
+    @testset "RectInteractable grid rejects non-monotonic edges and non-finite projections" begin
+        # non-monotonic edges: caught at construction, before any projection happens
+        @test_throws ArgumentError RectInteractable(ax; grid = ([0.0, 2.0, 1.0, 3.0], [0.0, 1.0, 2.0], rand(3, 2)))
+        @test_throws ArgumentError RectInteractable(ax; grid = ([0.0, 1.0, 2.0], [0.0, 2.0, 1.0], rand(2, 2)))
+        e = try
+            RectInteractable(ax; grid = ([0.0, 2.0, 1.0, 3.0], [0.0, 1.0, 2.0], rand(3, 2)))
+            nothing
+        catch err
+            err
+        end
+        @test e isa ArgumentError && occursin("monotonic", sprint(showerror, e))
+
+        # a log-scale axis edge that DomainErrors under the projection transform (same mechanism
+        # as the "out-of-domain log input degrades to non-finite geometry" PointInteractable case
+        # elsewhere in this file) must fail loud at hitlayers time instead of shipping a NaN edge.
+        # No heatmap/scatter is plotted on this axis, so this can't be Makie's own auto-limit
+        # boundingbox throwing first — the negative edge only ever reaches our own projection.
+        fn = Figure(size = (600, 400)); axn = Axis(fn[1, 1]; yscale = log10)
+        _, _, ctxn = ctx_for(fn)
+        badgrid = RectInteractable(axn; grid = ([0.0, 1.0, 2.0], [-1.0, 1.0, 10.0], rand(2, 2)))
+        eg = try
+            hitlayers(badgrid, ctxn)
+            nothing
+        catch err
+            err
+        end
+        @test eg isa ArgumentError && occursin("non-finite", sprint(showerror, eg))
+    end
+
     @testset "geometry quantized to integer pixels" begin
         # finite per-element geometry ships as Int (1–3 B/coord in MsgPack vs Float32's 5) — docs/dev/architecture.md §9.
         # Containers are Real[] (so non-finite coords can pass through), so assert the *values*, not eltype.
