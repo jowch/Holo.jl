@@ -41,6 +41,32 @@ describe("primitives", () => {
         expect(findBin([], 5)).toBe(-1)
         expect(findBin([5], 5)).toBe(-1)
     })
+    it("findBin: duplicate edges (sub-pixel grid, edges collapse under Int quantization)", () => {
+        // Holo quantizes edges to Int pixels; a grid with more columns than screen px produces
+        // duplicate adjacent edges on the wire. Equivalence with the old linear scan holds here
+        // (verified against the linear oracle below), including the zero-width bin[1]=[5,5].
+        expect(findBin([0, 5, 5, 10], 3)).toBe(0)
+        expect(findBin([0, 5, 5, 10], 5)).toBe(0) // ties still prefer the smaller-index bin
+        expect(findBin([0, 5, 5, 10], 7)).toBe(2)
+        expect(findBin([10, 5, 5, 0], 3)).toBe(2)
+        expect(findBin([10, 5, 5, 0], 7)).toBe(0)
+        expect(findBin([5, 5, 5], 5)).toBe(0)
+        expect(findBin([5, 5, 5], 4)).toBe(-1)
+        expect(findBin([5, 5], 5)).toBe(0)
+    })
+    it("findBin: a NaN endpoint is a documented, endpoint-only guard — not full oracle equivalence", () => {
+        // Precondition (see the findBin doc comment): finite, monotonic edges. Julia's
+        // RectInteractable enforces this before a :grid layer ships, so these inputs aren't
+        // reachable from it — this pins the defense-in-depth fallback for a hand-built HitLayer
+        // that skips that validation, so a future change can't silently regress it to a bogus
+        // hit. All three of these are non-finite at edges[0] or edges[n-1], so the O(1) guard
+        // returns -1 for every one, matching the old linear scan's -1 answer for the first two;
+        // the third (interior NaN with finite endpoints) is a documented exception — old and new
+        // disagree there (see the geometry.test.ts oracle describe block for the exact case).
+        expect(findBin([NaN, NaN, NaN], 5)).toBe(-1)
+        expect(findBin([0, 10, NaN], 5)).toBe(-1) // old linear scan returns 0 here — see comment
+        expect(findBin([NaN, 10, 20], 15)).toBe(-1)
+    })
 })
 
 describe("findBin: binary search matches the old linear scan (oracle)", () => {
@@ -71,10 +97,17 @@ describe("findBin: binary search matches the old linear scan (oracle)", () => {
         for (let trial = 0; trial < 500; trial++) {
             const n = 2 + Math.floor(rng() * 30) // 2..31 edges → 1..30 bins
             const ascending = rng() < 0.5
-            // strictly monotonic, unique values (grid edges are cell boundaries, never flat)
+            // Non-decreasing, occasionally with duplicate adjacent edges (~30% of gaps) — Int
+            // quantization of a sub-pixel grid collapses edges on the wire (see the dedicated
+            // duplicate-edge unit test above); a plain "always distinct" generator would never
+            // exercise that.
             const raw = Array.from({ length: n }, () => rng() * 1000)
             raw.sort((a, b) => a - b)
-            for (let k = 1; k < raw.length; k++) if (raw[k] <= raw[k - 1]) raw[k] = raw[k - 1] + 1e-6
+            for (let k = 1; k < raw.length; k++) {
+                if (raw[k] < raw[k - 1]) raw[k] = raw[k - 1]
+                else if (raw[k] === raw[k - 1]) { /* keep: exercise the duplicate-edge path */ }
+                else if (rng() < 0.3) raw[k] = raw[k - 1] // force an occasional duplicate
+            }
             const edges = ascending ? raw : raw.slice().reverse()
 
             // exercise: random points spanning well outside both ends, at every edge exactly

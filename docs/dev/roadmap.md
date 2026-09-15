@@ -286,13 +286,13 @@ These three are independent and can run concurrently.
   threshold; SVG uses `pt_per_unit/0.75`, not `px_per_unit`). Sparse-plot mode only — dense plots
   stay PNG. Pairs naturally with Phase 0.
 - **Spatial acceleration** (quadtree/grid) — demand-gated; may never be built. Grids are already
-  O(1) (the `findBin` binary search keeps large-edge-count grid lookups sub-microsecond), so scope
-  is only flat list layers (Scatter/rect-`:list`/segments). JS-only; must preserve
-  manifest-order first-match. **Phase 0 measured hit-test at ~0 ms** (scatter-50/10k) and found the
-  first wall is manifest *payload size* (serialize+transfer), not hit-test CPU — so build this *only*
-  if a profile ever shows JS hit-test **specifically** (not serialize/transfer) is the bottleneck.
-  Direct measurement (not inference) now backs this: see perf-findings.md's "JS hit-test
-  microbenchmark" — even 200 000 circles / 10 000 segments cost well under 0.5 ms/call.
+  O(log n) (the `findBin` binary search on the edge array), fast enough in practice that scope is
+  only flat list layers (Scatter/rect-`:list`/segments). JS-only; must preserve manifest-order
+  first-match. **Phase 0 measured hit-test at ~0 ms** (scatter-50/10k) and found the first wall is
+  manifest *payload size* (serialize+transfer), not hit-test CPU — so build this *only* if a
+  profile ever shows JS hit-test **specifically** (not serialize/transfer) is the bottleneck.
+  Direct measurement (not inference) now backs this — see perf-findings.md's "JS hit-test
+  microbenchmark" for the numbers (mixed vs. worst-case-miss, per kind, plus the grid case).
   (Phase 0 did not stress hit-test at extreme N≈200k; but there the 7.72 MB manifest dominates anyway.)
 - [x] **Int-pixel geometry quantization (perf win).** *Done (`src/interactables.jl`: per-element geometry
   vectors built as `Int` via `_q(x) = round(Int, x)` — circles/segments/rects/polygons/regions + grid edges).*

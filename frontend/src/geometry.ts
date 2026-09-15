@@ -31,9 +31,19 @@ export function pointInPolygon(px: number, py: number, ring: number[]): boolean 
 // bin bracketed by [edges[k], edges[k+1]] on the smaller-k side wins (matches the linear scan
 // this replaces, which tested bins in increasing k order with inclusive comparisons on both
 // ends and returned the first match).
+//
+// Precondition: `edges` is finite and monotonic (asc or desc) — Julia's `RectInteractable`
+// enforces this before a `:grid` layer ever ships (monotonicity at construction; finiteness
+// of the *projected* edges at `hitlayers` time, since a log-scale axis can turn a finite data
+// edge into a non-finite pixel one). Under that precondition this is byte-identical to the old
+// linear scan for every input, incl. duplicate edges and points exactly on an edge (pinned by
+// a property test, `geometry.test.ts`). Outside the precondition (a NaN edge from a
+// hand-built `HitLayer` that bypassed `RectInteractable`) this only guards the two endpoints —
+// an interior NaN can still pick a bogus bin — so it's a defense-in-depth fallback, not a
+// second guarantee.
 export function findBin(edges: number[], v: number): number {
     const n = edges.length
-    if (n < 2 || Number.isNaN(v)) return -1
+    if (n < 2 || Number.isNaN(v) || !Number.isFinite(edges[0]) || !Number.isFinite(edges[n - 1])) return -1
     const ascending = edges[n - 1] > edges[0]
     if (ascending) {
         if (v < edges[0] || v > edges[n - 1]) return -1
