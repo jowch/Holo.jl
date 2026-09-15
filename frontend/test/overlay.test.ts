@@ -477,6 +477,21 @@ describe("mount", () => {
         expect(r.ymin).toBeCloseTo(50)                            // image y 400 → 100*(1-400/800)
         expect(r.ymax).toBeCloseTo(87.5)                          // image y 100 → 100*(1-100/800)
     })
+
+    it("the grid cell-block selection rect is fill-only (no stroke) — the ROI box is the outline", () => {
+        // Regression: the cell-block rect used to draw the ordinary closed-selection stroke,
+        // which sat right next to the ROI's own outline and read as two overlapping boxes with
+        // parallel edges (docs gallery `image_widget`: RectInteractable(grid=...) + ROI selects).
+        const { host, script } = setup()
+        mount(script, gridSelectManifest())
+        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 125, clientY: 125, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 125, clientY: 125, bubbles: true }))
+        const el = shadowOf(host).querySelector("g.sel")!.firstElementChild as SVGElement
+        expect(el.tagName.toLowerCase()).toBe("rect")
+        expect(el.getAttribute("fill")).toBe("rgba(58, 111, 124, 0.12)")
+        expect(el.getAttribute("stroke")).toBe("none")
+    })
 })
 
 // Pointer events: capture-driven drag lifecycle (issue: overlay pointer events / capture / rAF-coalesced drag).
@@ -1540,6 +1555,9 @@ describe("coverage gaps: grid-value tooltip, drag-target hover cursor, rects/pol
         expect(el.getAttribute("y")).toBe("90")  // cy(100) - h/2(10)
         expect(el.getAttribute("width")).toBe("40")
         expect(el.getAttribute("height")).toBe("20")
+        // An element-indexed rects selection keeps its stroke — only the grid cell-block union
+        // rect from an ROI's `selects` (a distinct "rectfill" geom tag) is fill-only.
+        expect(el.getAttribute("stroke")).toBe("#3A6F7C")
     })
 
     it("selected= on a polygons layer draws a polygon wash (hitLayerByIndex + makeHiElement poly branch)", () => {

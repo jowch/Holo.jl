@@ -93,6 +93,13 @@ All notable changes to this project are documented here. The format is based on
   (`docs/dev/roadmap.md`), not groundwork already in place.
 
 ### Fixed
+- A `selects`-ROI over a `:grid` target (e.g. the gallery `image_widget` recipe:
+  `RectInteractable(; grid=...)` + `ROIInteractable(; selects=...)`) no longer draws its own
+  stroke on the enclosed cell-block rect: that rect sat beside the ROI's own outline and read
+  as two overlapping boxes with parallel edges. The cell-block rect is now fill-only (a
+  distinct `"rectfill"` geom tag in the overlay, vs. `"rect"`); a `selected=` pre-highlight or
+  a `selects`-ROI targeting `circles` keeps its stroke — only the grid cell-block union rect
+  changed.
 - `SegmentInteractable`'s `tol` keyword (lines/polylines/segments hit-test slack) is now
   wired through end-to-end: it ships in the manifest as a per-`:segments`/`:polyline`-layer
   `"tol"` field (image px), and the overlay's hit test reads it instead of always using its

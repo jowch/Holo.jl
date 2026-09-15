@@ -49,8 +49,14 @@ export function computeSelection(
             ymin: Math.min(ay, by), ymax: Math.max(ay, by),
         }
         const rx0 = gg.xedges[i0], rx1 = gg.xedges[i1 + 1], ry0 = gg.yedges[j0], ry1 = gg.yedges[j1 + 1]
+        // "rectfill", not "rect": this block sits beside the continuous ROI outline the user is
+        // actually dragging, so it must not draw its own stroke on top of/next to that outline
+        // (a stroked rect here reads as two overlapping boxes with parallel edges after release —
+        // see highlight.ts's makeHiElement). An element-indexed :rects selection (selects on a
+        // rects-kind target, or `selected=`) keeps its stroke; only this cell-block union rect
+        // — which exists only because a grid target isn't itself element-selectable — is fill-only.
         const hits: Hit[] = [{ layer: target, index: 0,
-            geom_: ["rect", (rx0 + rx1) / 2, (ry0 + ry1) / 2, Math.abs(rx1 - rx0), Math.abs(ry1 - ry0)] }]
+            geom_: ["rectfill", (rx0 + rx1) / 2, (ry0 + ry1) / 2, Math.abs(rx1 - rx0), Math.abs(ry1 - ry0)] }]
         return { items: [{ layer: target.id, index: 0, payload }], hits }
     }
     return { items: [], hits: [] } // unsupported target kind

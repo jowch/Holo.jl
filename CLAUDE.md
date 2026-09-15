@@ -62,7 +62,10 @@ text and the bond payload → it gets a live check on every backend × the kinds
   (official Pluto has no notebook toggle), tooltip anchored ABOVE the hovered mark (not the
   cursor) with a 10px gap and the caret on the anchor — flips below on a top-clip, shifts +
   moves the caret (`--holo-caret-x`) on a side-clip; ROI has 8 square handles (4 corners + 4
-  edge midpoints, corners resize two axes, edges resize one) with directional resize cursors.
+  edge midpoints, corners resize two axes, edges resize one) with directional resize cursors;
+  a `selects`-ROI's grid cell-block union rect is fill-only (no stroke, `"rectfill"` geom tag)
+  — the ROI box itself is the outline, so the rect doesn't double it into two parallel edges
+  (a `selected=` pre-highlight or a `selects`-ROI over `circles` keeps its stroke).
 - **Skip only** pure-internal refactors with zero observable delta (and say so). When unsure,
   it's user-facing — verify all backends × the kinds the change can touch, interaction
   **and** visual.
