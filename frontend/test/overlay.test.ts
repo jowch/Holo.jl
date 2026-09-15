@@ -226,6 +226,54 @@ describe("mount", () => {
         surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 400, clientY: 200, bubbles: true }))
     })
 
+    it("resizes an ROI box from the north edge, moving only the top", () => {
+        const { host, script } = setup()
+        mount(script, roiManifest())
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const box = shadow.querySelectorAll("rect")[0] as SVGRectElement
+        // north edge midpoint is image (400,200) == client (200,100); drag up to image (400,100) == client (200,50)
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 200, clientY: 100, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 200, clientY: 50, bubbles: true }))
+        expect(box.getAttribute("x")).toBe("200")     // left/width untouched — one axis only
+        expect(box.getAttribute("width")).toBe("400")
+        expect(box.getAttribute("y")).toBe("100")     // top moved up
+        expect(box.getAttribute("height")).toBe("500") // bottom (600) fixed: 600 - 100
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 200, clientY: 50, bubbles: true }))
+    })
+
+    it("resizes an ROI box from the south edge, moving only the bottom", () => {
+        const { host, script } = setup()
+        mount(script, roiManifest())
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const box = shadow.querySelectorAll("rect")[0] as SVGRectElement
+        // south edge midpoint is image (400,600) == client (200,300); drag down to image (400,700) == client (200,350)
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 200, clientY: 300, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 200, clientY: 350, bubbles: true }))
+        expect(box.getAttribute("x")).toBe("200")     // left/width untouched
+        expect(box.getAttribute("width")).toBe("400")
+        expect(box.getAttribute("y")).toBe("200")     // top (fixed) unchanged
+        expect(box.getAttribute("height")).toBe("500") // bottom moved down: 700 - 200
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 200, clientY: 350, bubbles: true }))
+    })
+
+    it("resizes an ROI box from the west edge, moving only the left", () => {
+        const { host, script } = setup()
+        mount(script, roiManifest())
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const box = shadow.querySelectorAll("rect")[0] as SVGRectElement
+        // west edge midpoint is image (200,400) == client (100,200); drag left to image (100,400) == client (50,200)
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 100, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 50, clientY: 200, bubbles: true }))
+        expect(box.getAttribute("y")).toBe("200")     // top/height untouched
+        expect(box.getAttribute("height")).toBe("400")
+        expect(box.getAttribute("x")).toBe("100")     // left moved out
+        expect(box.getAttribute("width")).toBe("500") // right (600) fixed: 600 - 100
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 50, clientY: 200, bubbles: true }))
+    })
+
     it("hovering an ROI edge/corner handle shows the matching directional resize cursor", async () => {
         const { host, script } = setup()
         mount(script, roiManifest())
@@ -249,6 +297,15 @@ describe("mount", () => {
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 200, clientY: 100, bubbles: true }))
         await flushFrame()
         expect(surface.classList.contains("cur-ns")).toBe(true)
+        // south edge midpoint image (400,600) == client (200,300) → also vertical resize (the
+        // "n" || "s" check's other operand)
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 200, clientY: 300, bubbles: true }))
+        await flushFrame()
+        expect(surface.classList.contains("cur-ns")).toBe(true)
+        // west edge midpoint image (200,400) == client (100,200) → horizontal resize
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 100, clientY: 200, bubbles: true }))
+        await flushFrame()
+        expect(surface.classList.contains("cur-ew")).toBe(true)
         // interior (move) image (400,400) == client (200,200)
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 200, clientY: 200, bubbles: true }))
         await flushFrame()

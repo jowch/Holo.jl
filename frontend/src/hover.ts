@@ -35,6 +35,10 @@ export function cursorForDragHit(hit: Hit): string {
         if (hit.roiPart_.edge) return hit.roiPart_.edge === "n" || hit.roiPart_.edge === "s" ? "ns-resize" : "ew-resize"
         if (hit.roiPart_.corner !== undefined) return hit.roiPart_.corner % 2 === 0 ? "nwse-resize" : "nesw-resize"
     }
+    // Unreachable on a real drag hit: geometry.ts's roi hitLayer case always sets exactly one of
+    // corner/edge/move on a match, so a :roi hit always returns above. Kept as a type-safe
+    // fallback (cursorForDragHit's return type is a plain string, not narrowed to the three
+    // known values), not tested via a fabricated, impossible roiPart_.
     return "grab"
 }
 

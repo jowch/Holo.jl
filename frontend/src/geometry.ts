@@ -276,10 +276,15 @@ export interface Anchor {
 // (no pointer to project a "nearest point on segment" or "cursor inside polygon" from).
 export function anchorFor(hit: Hit, cursor: { x: number; y: number } | null): Anchor {
     if (CURSOR_FOLLOWING_KINDS.has(hit.layer.kind)) {
+        // cursor is only ever null for a keyboard-focused Hit, and axis/threshold/roi/view are
+        // never in keyboard.ts's focus list — so the ?? fallback is unreachable in practice, not
+        // tested via a hand-built Hit that fakes that combination.
         const p = cursor ?? { x: 0, y: 0 }
         return { x: p.x, y: p.y, top: p.y }
     }
     const g = hit.geom_ as [string, ...number[]] | [string, number[]] | undefined
+    // Unreachable for a real Hit — every FOCUSABLE_KINDS/hover kind's hitLayer branch always
+    // sets geom_ alongside a match. Defense-in-depth for a hand-built Hit, not tested as such.
     if (!g) return cursor ? { x: cursor.x, y: cursor.y, top: cursor.y } : { x: 0, y: 0, top: 0 }
     if (g[0] === "circle") {
         const cx = g[1] as number, cy = g[2] as number, r = g[3] as number
@@ -311,6 +316,8 @@ export function anchorFor(hit: Hit, cursor: { x: number; y: number } | null): An
         if (cursor) return { x: cursor.x, y: cursor.y, top: cursor.y }
         return { x: cx, y: cy, top: cy } // keyboard focus with an off-centroid centroid: no cursor to fall back to
     }
+    // Unreachable — g[0] is always one of the four tags handled above for every real geom_ this
+    // function receives; kept as an exhaustiveness fallback, not tested via a fabricated tag.
     return cursor ? { x: cursor.x, y: cursor.y, top: cursor.y } : { x: 0, y: 0, top: 0 }
 }
 

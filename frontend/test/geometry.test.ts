@@ -472,6 +472,13 @@ describe("anchorFor: mark-anchored tooltip placement", () => {
         const hit: Hit = { layer: layer("polygons"), index: 0, geom_: ["poly", ring] }
         expect(anchorFor(hit, { x: 1, y: 5 })).toEqual({ x: 1, y: 5, top: 5 })
     })
+    it("polygon: keyboard focus (no cursor) with an off-centroid centroid falls back to the centroid anyway", () => {
+        // Same concave "C" ring as above, but from the keyboard path (no cursor to fall back to) —
+        // keyboard.ts's focusTo calls anchorFor(hit, null), which must still return a usable anchor.
+        const ring = [0, 0, 10, 0, 10, 3, 3, 3, 3, 7, 10, 7, 10, 10, 0, 10]
+        const hit: Hit = { layer: layer("polygons"), index: 0, geom_: ["poly", ring] }
+        expect(anchorFor(hit, null)).toEqual({ x: 5.75, y: 5, top: 5 })
+    })
     it("axis/threshold/roi/view: cursor-following, never anchored to geom (checked by layer.kind first)", () => {
         for (const kind of ["axis", "threshold", "roi", "view"] as const) {
             // geom tagged "seg" deliberately — same shape as :segments/:threshold — to prove the
