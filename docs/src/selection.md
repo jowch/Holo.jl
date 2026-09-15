@@ -50,7 +50,7 @@ running the cell:
 
 ```julia
 # DOESN'T WORK — ev and holo(...; selected=...) are in the same cell, feeding each other
-@bind ev holo(fig, PointInteractable(ax, pts; id = :scatter); selected = Dict(:scatter => something(ev)))
+@bind ev holo(fig, PointInteractable(ax, pts; id = :scatter); selected = Dict(:scatter => [ev.index]))
 ```
 
 Break the cycle across cells, with a persistent accumulator in between. A `Ref` initialized
@@ -75,8 +75,17 @@ end
 ```
 
 ```julia
+# a second figure of the same data, to display the persisted selection
+begin
+    fig2 = Figure()
+    ax2 = Axis(fig2[1, 1])
+    scatter!(ax2, first.(pts), last.(pts))
+end
+```
+
+```julia
 # the display: pre-highlights `selected` on mount; this widget's own bond goes unused
-@bind _ holo(fig2, PointInteractable(ax2, pts; id = :scatter); selected = selected)
+@bind _rt_ignore holo(fig2, PointInteractable(ax2, pts; id = :scatter); selected = selected)
 ```
 
 The overlay re-derives highlights from `selected` on every render, so the highlighted
@@ -90,13 +99,19 @@ under "Selection round-trip"), which CI runs headlessly on every change.
 `selects = :scatter` keyword pointing at another layer, and its drag box selects every
 element of `:scatter` it currently encloses, rather than the single `{layer, index}` an
 ordinary click reports. `selects` only works when the target layer is a `circles` or `grid`
-kind (i.e. built from [`PointInteractable`](@ref) or the grid form of
-[`RectInteractable`](@ref)) — pointing it at any other kind fails loud. The bond value becomes a `Vector{InteractionEvent}` — one entry per
-enclosed point — instead of a single `InteractionEvent`:
+kind — i.e. built from [`PointInteractable`](@ref) or the grid form of
+[`RectInteractable`](@ref) — pointing it at any other kind fails loud. The bond value becomes
+a `Vector{InteractionEvent}` — one entry per enclosed point — instead of a single
+`InteractionEvent`:
 
 ```julia
-scatter!(ax, xs, ys)
-roi = ROIInteractable(ax; bounds = (0.0, 10.0, 0.0, 10.0), selects = :scatter)
+begin
+    scatter!(ax, first.(pts), last.(pts))
+    roi = ROIInteractable(ax; bounds = (0.0, 10.0, 0.0, 10.0), selects = :scatter)
+end
+```
+
+```julia
 @bind picked holo(fig, [PointInteractable(ax, pts; id = :scatter), roi])
 # picked isa Vector{InteractionEvent} once you release a drag over some points
 ```

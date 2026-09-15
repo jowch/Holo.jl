@@ -8,13 +8,15 @@ the two ways to tell Holo what's clickable.
 Nothing Holo-specific yet:
 
 ```julia
-using CairoMakie
+begin
+    using CairoMakie
 
-pts = [(1.0, 1.0), (2.0, 4.0), (3.0, 9.0)]
-fig = Figure()
-ax = Axis(fig[1, 1])
-scatter!(ax, first.(pts), last.(pts))
-fig
+    pts = [(1.0, 1.0), (2.0, 4.0), (3.0, 9.0)]
+    fig = Figure()
+    ax = Axis(fig[1, 1])
+    scatter!(ax, first.(pts), last.(pts))
+    fig
+end
 ```
 
 ## 2. `holo(fig)` — zero-config
@@ -25,7 +27,9 @@ overlays hit-testing for all of them automatically — no interactable to write:
 
 ```julia
 using Holo
+```
 
+```julia
 @bind ev holo(fig)
 ```
 
@@ -37,11 +41,14 @@ skipped with a `@warn`, not an error.
 
 Zero-config is sugar over an explicit vector of interactables. Building it yourself gets you
 custom `payloads`, a chosen `id`, and non-default styling — on the *same* `fig`/`ax` from
-step 1, without plotting `pts` a second time:
+step 1, without plotting `pts` a second time. **Replace** the `@bind ev holo(fig)` cell
+above with this — Pluto rejects two cells that both bind `ev`:
 
 ```julia
 labels = ["a", "b", "c"]
+```
 
+```julia
 @bind ev holo(fig, [PointInteractable(ax, pts; id = :points, payloads = labels)])
 ```
 
@@ -89,6 +96,5 @@ using Holo, WGLMakie      # :webgl — live browser-GPU canvas
 ```
 
 Everything above (`holo`, `@bind`, `InteractionEvent`, every interactable) is identical on
-both — see [Backends](@ref) for when to reach for which. Loading neither raises an
-`ArgumentError` the first time you call `holo`; loading both is fine (`backend=` picks one
-explicitly, and an unqualified `holo` call defaults to `:cairo`).
+both — see [Backends](@ref) for when to reach for which, and what happens if you load
+neither or both.

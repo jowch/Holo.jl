@@ -8,7 +8,7 @@ renders:
 |---|---|---|
 | *(omitted / `nothing`)* | `Nothing` | Auto name/value table built from the payload |
 | `holo"..."` | `Markup` | Template interpolated against the hovered element's payload |
-| `false` | `Bool` | Tooltip suppressed entirely (the hover highlight still applies) |
+| `false` | `Bool` | Tooltip suppressed entirely — the hover highlight still applies |
 
 ## The default: an auto-table
 
@@ -21,12 +21,12 @@ PointInteractable(ax, pts; payloads = [(; city = "Lyon", pop = 513_000)])
 ```
 
 ```julia
-PointInteractable(ax, pts; payloads = [...], tooltip = false)   # no card at all
+PointInteractable(ax, pts; payloads = [...], tooltip = false)
 ```
 
 ## `holo"..."` templates
 
-`holo"..."` is a string macro (exported; the underlying function is `@holo_str`) that
+`holo"..."` is a string macro (exported; the underlying macro is `@holo_str`) that
 produces a `Markup` value:
 
 ```julia
@@ -52,8 +52,10 @@ Because `holo"..."` requires a string literal, a runtime-computed string has to 
 field inside the payload instead:
 
 ```julia
-payloads = [(; city, pop, label = "$(city): $(pop) residents") for (city, pop) in data]
-tooltip  = holo"$(label)"   # label is pre-rendered per element in the payload
+begin
+    payloads = [(; city, pop, label = "$(city): $(pop) residents") for (city, pop) in data]
+    tooltip  = holo"$(label)"   # label is pre-rendered per element in the payload
+end
 ```
 
 ### Field check
@@ -63,21 +65,22 @@ Two checks catch typos at different times. A malformed template (`$(pop+1)`, an 
 cell containing `holo"..."` parses — before `holo()` ever runs. A syntactically valid field
 that isn't actually a key in your payload is caught later, when `holo()` builds the
 manifest: an `ArgumentError` with a "did you mean?" suggestion for a close misspelling. This
-second check only runs for `NamedTuple` payloads (the built-in default); for `Dict` or mixed
-payloads a missing field silently renders empty at hover instead.
+check runs whenever *any* payload in the layer is a `NamedTuple` — checked against the union
+of their field names — and is skipped only when none are (e.g. every payload is a `Dict`), in
+which case a missing `$(field)` just renders empty at hover instead.
 
 ## Styling
 
 ### Dark mode is automatic
 
-The built-in card follows the OS/browser `prefers-color-scheme` signal — the same one stock
-Pluto uses for its own theme (official Pluto has no in-app light/dark toggle; Settings →
-Dark mode is help text, not a real switch). No author action needed; the card already
-matches whatever mode the reader's Pluto is in.
+The built-in tooltip follows the OS/browser `prefers-color-scheme` signal — the same one
+stock Pluto uses for its own theme (official Pluto has no in-app light/dark toggle; Settings
+→ Dark mode is help text, not a real switch). No author action needed; the tooltip already
+matches whatever mode the user's Pluto is in.
 
 ### Figure-level overrides
 
-Pin any of these to lock the card's look (this also opts that property out of dark-mode
+Pin any of these to lock the tooltip's look (this also opts that property out of dark-mode
 inversion — the author's deliberate choice):
 
 ```julia
@@ -97,12 +100,12 @@ default"; only the kwargs you actually set change anything.
 
 ### CSS escape hatch
 
-The underlying `--holo-tip-*` custom properties inherit across the shadow DOM boundary, so a
-Pluto `<style>` cell can override them without any Julia API:
+The underlying `--holo-tip-*` custom properties inherit like any CSS custom property, so
+setting one on any ancestor of the cell overrides it without any Julia API:
 
 ```html
 <style>
-  :root { --holo-tip-bg: #1a1a2e; --holo-tip-color: #e0e0e0; }
+main { --holo-tip-bg: #1a1a2e; --holo-tip-color: #e0e0e0; }
 </style>
 ```
 

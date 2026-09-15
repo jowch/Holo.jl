@@ -16,18 +16,23 @@ Mixed-kind regions in data space, grouped into one layer per kind. Each region i
 Worked example — three arbitrary shapes with a label each, hoverable and clickable:
 
 ```julia
-using Holo, CairoMakie
+begin
+    using Holo, CairoMakie
 
-fig = Figure(); ax = Axis(fig[1, 1])
-image!(ax, rand(100, 100))   # some backdrop the regions sit over
+    fig = Figure()
+    ax = Axis(fig[1, 1])
+    image!(ax, rand(100, 100))   # some backdrop the regions sit over
 
-regions = [
-    (:circle, (20.0, 20.0), 8.0),
-    (:rect, (60.0, 60.0), 15.0, 10.0),
-    (:polygon, [(30.0, 70.0), (40.0, 90.0), (20.0, 90.0)]),
-]
-payloads = [(; name = "cell A"), (; name = "cell B"), (; name = "cell C")]
+    regions = [
+        (:circle, (20.0, 20.0), 8.0),
+        (:rect, (60.0, 60.0), 15.0, 10.0),
+        (:polygon, [(30.0, 70.0), (40.0, 90.0), (20.0, 90.0)]),
+    ]
+    payloads = [(; name = "cell A"), (; name = "cell B"), (; name = "cell C")]
+end
+```
 
+```julia
 @bind ev holo(fig, RegionInteractable(ax; regions, payloads, id = :cells))
 ```
 
@@ -46,29 +51,34 @@ Worked example — a triangular hit region (not one of the built-in kinds), reus
 `:polygon` wire kind `RegionInteractable` would otherwise produce:
 
 ```julia
-using Holo, CairoMakie
+begin
+    using Holo, CairoMakie
 
-fig = Figure(); ax = Axis(fig[1, 1])
-lines!(ax, [0, 10, 5, 0], [0, 0, 8, 0])   # a triangle drawn by hand
+    fig = Figure()
+    ax = Axis(fig[1, 1])
+    lines!(ax, [0, 10, 5, 0], [0, 0, 8, 0])   # a triangle drawn by hand
 
-function triangle_layer(ctx)
-    pts = [(0.0, 0.0), (10.0, 0.0), (5.0, 8.0)]
-    ring = Float64[]   # :polygons geometry is one flat [x1,y1,x2,y2,...] vector per ring
-    for p in pts
-        q = data_to_image_px(ctx, ax, p)
-        push!(ring, q[1], q[2])
+    function triangle_layer(ctx)
+        pts = [(0.0, 0.0), (10.0, 0.0), (5.0, 8.0)]
+        ring = Float64[]   # :polygons geometry is one flat [x1,y1,x2,y2,...] vector per ring
+        for p in pts
+            q = data_to_image_px(ctx, ax, p)
+            push!(ring, q[1], q[2])
+        end
+        HitLayer[
+            HitLayer(:triangle, :polygons, [ring], [(; label = "the triangle")],
+                Holo.axis_id(ctx, ax), (:click, :hover)),
+        ]
     end
-    HitLayer[
-        HitLayer(:triangle, :polygons, [ring], [(; label = "the triangle")],
-            Holo.axis_id(ctx, ax), (:click, :hover)),
-    ]
 end
+```
 
+```julia
 @bind ev holo(fig, FunctionInteractable(triangle_layer))
 ```
 
 `f` receives the [`InteractionContext`](@ref) for the whole figure (the same one built-in
 interactables use), so it can key geometry to any `Axis` in `fig` via `Holo.axis_id(ctx, ax)`
-(not exported — qualify it, or copy its one-line definition). Use this tier when the shape
-genuinely isn't a circle/rect/polygon/polyline — for anything expressible as one of those,
+(not exported — qualify it). Use this tier when the shape genuinely isn't a
+circle/rect/polygon/polyline — for anything expressible as one of those,
 [`RegionInteractable`](@ref) is less code.

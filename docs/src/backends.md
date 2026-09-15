@@ -10,7 +10,7 @@ hit-region manifest in Julia and ships both to the browser. A small TypeScript o
 (`assets/overlay.js`) sits over the static image, hit-tests pointer events against the
 manifest, draws highlights/tooltips locally, and only sends a deliberate click back through
 `@bind`. Cost-wise: one render per `holo()` call, independent of how many elements are
-interactive — cheap for a plot you build once and let the reader hover/click, expensive if
+interactive — cheap for a plot you build once and let the user hover/click, expensive if
 you're re-rendering on every animation frame (each frame re-rasterizes the whole scene).
 
 Because the image and manifest are both embedded in the output HTML, **the inspection layer
@@ -28,19 +28,23 @@ renders live in a WebGL `<canvas>` on the client GPU, with Holo's usual overlay 
 top — no code changes beyond the `using` line:
 
 ```julia
-using Holo, WGLMakie
+begin
+    using Holo, WGLMakie
+    x, y, z = randn(200), randn(200), randn(200)
+    fig = Figure()
+    ax = Axis3(fig[1, 1])
+    scatter!(ax, x, y, z)
+end
+```
 
-fig = Figure()
-ax = Axis3(fig[1, 1])
-scatter!(ax, x, y, z)
-
+```julia
 @bind ev holo(fig)   # a live WebGL canvas + Holo's overlay; ev is an InteractionEvent on click
 ```
 
 Reach for `:webgl` for **3D you want to actually rotate live**, **animation / frequent
 re-renders** (WebGL redraws a frame, `:cairo` re-rasterizes a whole PNG), and **large or
 live-updating data** where per-frame render cost dominates. For everything else — a figure
-you build once and let the reader inspect — `:cairo`'s static PNG is lighter and, unlike
+you build once and let the user inspect — `:cairo`'s static PNG is lighter and, unlike
 `:webgl`, keeps working in an offline export.
 
 [`examples/webgl_demo.jl`](https://github.com/jowch/Holo.jl/blob/main/examples/webgl_demo.jl)
@@ -68,7 +72,11 @@ explicitly to override its own keywords:
 
 ```julia
 holo(fig, interactables; backend = CairoBackend(; max_width = 700))
-# or
+```
+
+or
+
+```julia
 holo(fig, interactables; backend = WebGLBackend(; px_per_unit = 2.0, max_width = 700))
 ```
 

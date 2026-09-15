@@ -44,12 +44,15 @@ pairs).
 tuple's first element isn't `:circle`, `:rect`, or `:polygon`.
 **Fix:** check the region tuple shapes against [Custom interactions](@ref).
 
-### "scale ... is not invertible client-side" (`AxisInteractable` / `ColorbarInteractable` / `ThresholdInteractable` / `ROIInteractable` / `ViewInteractable`)
+### A scale-related `ArgumentError` from `AxisInteractable`/`ColorbarInteractable`/`ThresholdInteractable`/`ROIInteractable`/`ViewInteractable`
 
 **Cause:** these interactables invert a pixel back to a data value *in the browser*, which
 only works for `identity`, `log10`, or `log` axis scales. Any other Makie scale
 (`Makie.pseudolog10`, `Makie.Symlog10`, a custom `ReversibleScale`, …) fails loud at
-`holo()` time instead of silently reporting the wrong coordinate.
+`holo()` time instead of silently reporting the wrong coordinate. The exact wording differs
+per kind — `AxisInteractable`/`ColorbarInteractable` say "... is not invertible client-side";
+`ThresholdInteractable`/`ROIInteractable`/`ViewInteractable` say "needs (a) client-side
+invertible ... scale(s)".
 **Fix:** switch the axis to one of the supported scales, or use an element interactable
 (`PointInteractable`, `SegmentInteractable`, …) instead of a continuous-readout one.
 
@@ -68,10 +71,13 @@ axis has none.
 
 ### "Holo's CairoMakie backend supports Makie.Axis, Makie.Axis3, and Makie.PolarAxis" (`LScene`)
 
-**Cause:** the figure contains an `LScene` block. Holo builds no overlay for `LScene` on
-either backend — this is Holo's own scoping guard, not a CairoMakie limitation.
-**Fix:** none yet on `:cairo`; `LScene` support is a roadmap item. There is no `:webgl`
-workaround either — Holo doesn't overlay `LScene` on that backend.
+**Cause:** the figure contains an `LScene` block, which the `:cairo` backend refuses to
+render at all rather than silently dropping (this is Holo's own scoping guard, not a
+CairoMakie limitation).
+**Fix:** restart the session with `using WGLMakie` instead of `CairoMakie` — the `:webgl`
+backend renders `LScene` live, just without a hit-testing overlay for it (Holo builds no
+overlay for `LScene` on either backend; `:cairo` refuses to render the figure at all rather
+than silently drop it).
 
 ### `ArgumentError` from `selected = ...`
 
@@ -93,9 +99,8 @@ version in the meantime.
 
 ### Neither backend loaded, or both loaded
 
-Loading neither `CairoMakie` nor `WGLMakie` raises the `ArgumentError` above. Loading
-**both** is allowed — `backend=` picks one explicitly, and an unqualified `holo(fig)` call
-defaults to `:cairo` even if `WGLMakie` was loaded first. See [Backends](@ref).
+Loading neither `CairoMakie` nor `WGLMakie` raises the `ArgumentError` above; loading both is
+fine. See [Choosing between them](@ref) on the Backends page for the exact rule.
 
 ### "Cyclic references" from Pluto
 
@@ -124,7 +129,7 @@ the raw nested value.
 ### The overlay is misaligned with the figure
 
 **Cause:** almost always a `px_per_unit`/`max_width` mismatch between what was rendered and
-what the reader's display shows. Hit-testing itself re-reads the element's actual on-screen
+what the user's display shows. Hit-testing itself re-reads the element's actual on-screen
 size at runtime, so page zoom or window resizing after the widget mounted is not the cause.
 **Fix:** re-run the cell that calls `holo(...)`; if the misalignment persists, check that
 `max_width` on `holo`/the explicit backend struct matches the column width you expect.

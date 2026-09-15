@@ -22,14 +22,12 @@ npm run build                                    # → ../assets/holo-webgl.js
 CI is the source of truth for both bundles (it rebuilds and commits on `main`), so committing
 your local build is optional. Julia tests are split into three `GROUP`s so each process has a
 known loaded-backend set (`Core` = Cairo only; `WebGL` = WGL first, then both at the end;
-`NoBackend` = neither). `GROUP` defaults to `Core`. Cloud `julia` may `-J` a Cairo-baked
-image — use `JULIA_NOSYSIMAGE=1` for WGL-only implicit `holo()` and for Holo source edits
-after a bake:
+`NoBackend` = neither). `GROUP` defaults to `Core`:
 
 ```bash
-JULIA_NOSYSIMAGE=1 julia --project=. -e 'using Pkg; Pkg.test()'                 # GROUP=Core
-JULIA_NOSYSIMAGE=1 GROUP=NoBackend julia --project=. -e 'using Pkg; Pkg.test()' # neither backend
-JULIA_NOSYSIMAGE=1 GROUP=WebGL julia --project=. -e 'using Pkg; Pkg.test()'     # WGL then both
+julia --project=. -e 'using Pkg; Pkg.test()'                 # GROUP=Core
+GROUP=NoBackend julia --project=. -e 'using Pkg; Pkg.test()' # neither backend
+GROUP=WebGL julia --project=. -e 'using Pkg; Pkg.test()'     # WGL then both
 ```
 
 Julia code is formatted with [Runic](https://github.com/fredrikekre/Runic.jl) (CI enforces
@@ -53,7 +51,7 @@ which also owns the deploy to GitHub Pages on `main` and tags).
 ## Live verification
 
 Unit and frontend tests check the manifest and the JS in isolation; they don't prove the
-rendered widget behaves for a reader. Any change that can alter what a user interacts with
+rendered widget behaves for a user. Any change that can alter what a user interacts with
 or sees — including a Julia-only change to the manifest shape, hit-test geometry, or hover
 text — needs to be checked live in a real Pluto + browser, on every supported backend, for
 every interactable kind it touches. This isn't optional polish; it's the actual gate before

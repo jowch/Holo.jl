@@ -6,7 +6,7 @@ through `@bind`. It renders through [`CairoMakie`](https://docs.makie.org/stable
 by default (a static, publication-quality image with a transparent JS overlay doing the
 hit-testing — no server, no WebGL), or through [`WGLMakie`](https://docs.makie.org/stable/explanations/backends/wglmakie)
 for a live, browser-GPU canvas when you need animation, large data, or live 3D — same `holo`/
-`@bind` API either way. Load exactly one of the two per Pluto session.
+`@bind` API either way.
 
 ## When to use it
 
@@ -20,7 +20,7 @@ for a live, browser-GPU canvas when you need animation, large data, or live 3D �
 Reach for Holo when you want a publication-quality static figure that also answers "what's
 this point?" on hover and "which one did I click?" in Julia — without standing up a WebGL
 scene. Reach for `WGLMakie` directly (no Holo) when you need free-form camera control, live
-data updates, or interactions Holo doesn't model (arbitrary rotation without a bond, for
+data updates, or gestures Holo doesn't wire back to Julia (arbitrary free rotation, for
 example).
 
 ## Install
@@ -30,32 +30,46 @@ julia> ] add Holo
 ```
 
 You'll also want `Pluto`, plus a Makie backend: `CairoMakie` for the default static path, or
-`WGLMakie` for animation / large data / live 3D. Loading both is allowed (`backend=` wins;
-implicit `holo` defaults to Cairo); loading neither raises an `ArgumentError`.
+`WGLMakie` for animation / large data / live 3D — see [Backends](@ref) for what happens if
+you load neither or both.
 
 ## Quick start
 
 In a Pluto notebook:
 
 ```julia
-using Holo, CairoMakie
+begin
+    using Holo, CairoMakie
 
-# 1. your figure, as usual
-fig = Figure(); ax = Axis(fig[1, 1])
-pts = [(1.0, 1.0), (2.0, 4.0), (3.0, 9.0)]
-scatter!(ax, first.(pts), last.(pts))
+    # your figure, as usual
+    fig = Figure()
+    ax = Axis(fig[1, 1])
+    pts = [(1.0, 1.0), (2.0, 4.0), (3.0, 9.0)]
+    scatter!(ax, first.(pts), last.(pts))
+end
+```
 
-# 2. declare what's interactable, bind the result
+```julia
+# declare what's interactable, bind the result
 @bind sel holo(fig, [PointInteractable(ax, pts; payloads = ["a", "b", "c"])])
 ```
 
 ```julia
-# 3. react to clicks — `sel` is `nothing` until a click, then an InteractionEvent
+# react to clicks — `sel` is `nothing` until a click, then an InteractionEvent
 sel === nothing ? "click a point" : "you picked $(sel.payload)"
 ```
 
 Hovering shows a tooltip (purely client-side, no Julia round-trip); clicking sets `sel` and
 re-runs downstream cells. Clicks on empty space are a no-op.
+
+Each of the three blocks above is a separate Pluto cell — Pluto runs exactly one top-level
+expression per cell, so any snippet on this site with more than one statement is wrapped in
+`begin ... end` (which counts as one expression) or split across cells the way it's shown
+here. Copy each fenced block into its own cell.
+
+Under the hood, `holo(...)` sends the browser a **manifest**: the rendered image plus hit
+regions grouped into **layers**, one per interactable, keyed by its `id`. The value a
+`@bind`-ed variable holds — `sel` above — is called the **bond** value.
 
 ## Where to go next
 

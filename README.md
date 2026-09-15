@@ -33,21 +33,29 @@ You'll also want `Pluto`, plus a Makie backend: `CairoMakie` for the default sta
 In a Pluto notebook:
 
 ```julia
-using Holo, CairoMakie
+begin
+    using Holo, CairoMakie
 
-# 1. your figure, as usual
-fig = Figure(); ax = Axis(fig[1, 1])
-pts = [(1.0, 1.0), (2.0, 4.0), (3.0, 9.0)]
-scatter!(ax, first.(pts), last.(pts))
+    # your figure, as usual
+    fig = Figure()
+    ax = Axis(fig[1, 1])
+    pts = [(1.0, 1.0), (2.0, 4.0), (3.0, 9.0)]
+    scatter!(ax, first.(pts), last.(pts))
+end
+```
 
-# 2. declare what's interactable, bind the result
+```julia
+# declare what's interactable, bind the result
 @bind sel holo(fig, [PointInteractable(ax, pts; payloads = ["a", "b", "c"])])
 ```
 
 ```julia
-# 3. react to clicks — `sel` is `nothing` until a click, then an InteractionEvent
+# react to clicks — `sel` is `nothing` until a click, then an InteractionEvent
 sel === nothing ? "click a point" : "you picked $(sel.payload)"
 ```
+
+(Each fenced block above is its own Pluto cell — Pluto allows one top-level expression per
+cell, so multi-statement setup goes in `begin ... end`.)
 
 ## Read the docs
 

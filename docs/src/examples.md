@@ -1,17 +1,17 @@
 # Examples
 
-Every notebook below is self-contained — it `Pkg.develop`s the local checkout and adds
-whatever Makie backend it needs, so it runs from a fresh clone with no setup beyond having
-Pluto. Open one with:
+Clone the repo, start Pluto, and open [`examples/demo.jl`](https://github.com/jowch/Holo.jl/blob/main/examples/demo.jl)
+from its landing page:
 
-```julia
-using Pluto
-Pluto.run()
-# then open the file from Pluto's landing page
+```bash
+git clone https://github.com/jowch/Holo.jl
+julia -e 'using Pluto; Pluto.run()'
 ```
 
-CI runs all of them headlessly on every change (`examples/ci_run.jl`), so they can't rot out
-of sync with the package API.
+Every notebook below works the same way — each is self-contained (it `Pkg.develop`s the
+local checkout and adds whatever Makie backend it needs), so it runs from a fresh clone with
+no setup beyond having Pluto installed. CI runs all of them headlessly on every change
+(`examples/ci_run.jl`), so they can't rot out of sync with the package API.
 
 ## [`examples/demo.jl`](https://github.com/jowch/Holo.jl/blob/main/examples/demo.jl)
 
