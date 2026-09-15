@@ -73,20 +73,24 @@ describe("keyboard navigation", () => {
     })
 
     it("Enter dispatches the identical bond payload a click on the same element would", () => {
-        const { surface, host } = setup(manifest)
+        // Two independent mounts — a mouse click now syncs keyboard focus too (see the
+        // "syncs keyboard focus to the clicked element" test below), so sharing one surface
+        // between the click and the keyboard checks would make the click's own focus-sync
+        // shift where the following ArrowRights land.
+        const clickMount = setup(manifest)
         let clickValue: unknown
-        host.addEventListener("input", () => { clickValue = (host as unknown as { value: unknown }).value })
+        clickMount.host.addEventListener("input", () => { clickValue = (clickMount.host as unknown as { value: unknown }).value })
         // click a[1] directly: circle at image (300,100), display scale 1200/600=2 -> client (150,50)
-        surface.dispatchEvent(new MouseEvent("click", { clientX: 150, clientY: 50, bubbles: true }))
-        const viaClick = clickValue
+        clickMount.surface.dispatchEvent(new MouseEvent("click", { clientX: 150, clientY: 50, bubbles: true }))
 
-        surface.focus()
-        down(surface, "ArrowRight") // a[0]
-        down(surface, "ArrowRight") // a[1]
+        const kbdMount = setup(manifest)
+        kbdMount.surface.focus()
+        down(kbdMount.surface, "ArrowRight") // a[0]
+        down(kbdMount.surface, "ArrowRight") // a[1]
         let kbdValue: unknown
-        host.addEventListener("input", () => { kbdValue = (host as unknown as { value: unknown }).value })
-        down(surface, "Enter")
-        expect(kbdValue).toEqual(viaClick)
+        kbdMount.host.addEventListener("input", () => { kbdValue = (kbdMount.host as unknown as { value: unknown }).value })
+        down(kbdMount.surface, "Enter")
+        expect(kbdValue).toEqual(clickValue)
     })
 
     it("Escape clears the ring (fade-out, same as a hover miss) and blurs the surface", () => {
@@ -287,6 +291,138 @@ describe("keyboard navigation", () => {
         down(surface, "PageUp") // already in the first layer — clamp, stay at a[0]
         down(surface, "Enter")
         expect((host as unknown as { value: { layer: string; index: number } }).value).toMatchObject({ layer: "a", index: 0 })
+    })
+
+    it("DOM focus leaving the surface (Tab-away or focus moving elsewhere) clears keyboard focus, not just Escape", () => {
+        const { surface, shadow } = setup(manifest)
+        surface.focus()
+        down(surface, "ArrowRight")
+        expect(shadow.querySelector(".hi > *")).toBeTruthy()
+        surface.blur() // stands in for "Tab moved focus elsewhere" — fires focusout either way
+        const leaving = shadow.querySelector(".hi > *")
+        expect(leaving === null || leaving.classList.contains("holo-leave")).toBe(true)
+        // A subsequent pointer miss must NOT restore a fresh ring — restoreFocus's cache
+        // should be cleared, not just visually faded, so the element the fading circle above
+        // never gets re-entered with "holo-enter" (the regression restoreFocus (hover.ts)
+        // could reintroduce if focusout didn't call focusTo(ctx, state, null)). Real timers
+        // here, so the fading circle from blur() may still be mid-fade-out in the DOM —
+        // exactly like the "Escape clears the ring" test above, that's expected, not a miss.
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 5, clientY: 5, bubbles: true }))
+        const afterMiss = shadow.querySelector(".hi > *")
+        expect(afterMiss === null || afterMiss.classList.contains("holo-leave")).toBe(true)
+        expect(afterMiss?.classList.contains("holo-enter")).not.toBe(true)
+    })
+
+    it("Enter does not preventDefault when nothing is keyboard-focused yet", () => {
+        // e.g. a mouse click focused the surface but didn't move keyboard focus (cur === null)
+        // — Enter/Space must not swallow a subsequent native action for no reason.
+        const { surface } = setup(manifest)
+        surface.focus()
+        const enterNoFocus = down(surface, "Enter")
+        expect(enterNoFocus.defaultPrevented).toBe(false)
+    })
+
+    it("Space does not preventDefault on a hover-only (no :click) focused layer", () => {
+        const hoverOnly: Manifest = {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [{ id: "h", kind: "circles", geometry: [100, 100, 10], payloads: [{ v: 1 }], axis: "ax1", events: ["hover"] }],
+        }
+        const { surface } = setup(hoverOnly)
+        surface.focus()
+        down(surface, "ArrowRight")
+        const spaceHoverOnly = down(surface, " ")
+        expect(spaceHoverOnly.defaultPrevented).toBe(false)
+    })
+
+    it("Enter DOES preventDefault when a click-eligible element is keyboard-focused", () => {
+        const { surface } = setup(manifest)
+        surface.focus()
+        down(surface, "ArrowRight")
+        const enterWithFocus = down(surface, "Enter")
+        expect(enterWithFocus.defaultPrevented).toBe(true)
+    })
+
+    it("a mouse click syncs keyboard focus to the clicked element (ring/bond agree)", () => {
+        const { surface, shadow, host } = setup(manifest)
+        surface.focus()
+        down(surface, "ArrowRight") // keyboard-focus a[0]
+        // mouse-click a[1]: circle at image (300,100), display scale 1200/600=2 -> client (150,50)
+        surface.dispatchEvent(new MouseEvent("click", { clientX: 150, clientY: 50, bubbles: true }))
+        expect((host as unknown as { value: { layer: string; index: number } }).value).toMatchObject({ layer: "a", index: 1 })
+        // A later pointer miss must restore a[1]'s ring (the clicked element), not a[0]'s
+        // (the stale keyboard focus commitClick is supposed to overwrite).
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 5, clientY: 5, bubbles: true }))
+        const ring = shadow.querySelector(".hi > *") as SVGCircleElement
+        expect(ring).toBeTruthy()
+        expect(ring.getAttribute("cx")).toBe("300") // a[1]'s cx, not a[0]'s (100)
+    })
+
+    it("a click on a non-focusable kind (e.g. :grid) leaves existing keyboard focus untouched", () => {
+        const mixedManifest: Manifest = {
+            width: 1200, height: 800, scaling: 2,
+            transforms: { ax1: { xlims: [0, 10], ylims: [0, 10], xscale: "identity", yscale: "identity",
+                viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false } },
+            layers: [
+                { id: "a", kind: "circles", geometry: [100, 100, 10], payloads: [{ v: 1 }], axis: "ax1", events: ["click", "hover"] },
+                { id: "g", kind: "grid", axis: "ax1", events: ["click", "hover"], payloads: [],
+                    geometry: { xedges: [0, 600, 1200], yedges: [0, 400, 800], ncols: 2, nrows: 2 } },
+            ],
+        }
+        const { surface, shadow, host } = setup(mixedManifest)
+        surface.focus()
+        down(surface, "ArrowRight") // keyboard-focus a[0] (the only focusable element)
+        // click a grid cell (not in the focus list): image (300,600) -> client (150,300)
+        surface.dispatchEvent(new MouseEvent("click", { clientX: 150, clientY: 300, bubbles: true }))
+        expect((host as unknown as { value: { layer: string } }).value).toMatchObject({ layer: "g" })
+        // keyboard focus (a[0]'s ring) must still be there — the grid click didn't clear it
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 5, clientY: 5, bubbles: true }))
+        expect(shadow.querySelector(".hi > *")).toBeTruthy()
+    })
+
+    // A single NaN vertex invalidates BOTH segments touching it (matches geometry.ts's own
+    // hit-test skip, which checks each segment's endpoints independently) — 5 vertices around
+    // one NaN gives 4 candidate segments, 2 valid (0 and 3) and 2 invalid (1 and 2).
+    const gappedGeometry = [0, 0, 50, 50, NaN, NaN, 100, 100, 200, 200]
+    const gappedPayloads = [{ s: 0 }, { s: 1 }, { s: 2 }, { s: 3 }]
+
+    it(":polyline skips NaN-gap segments in the focus list (matches the mouse hit-test)", () => {
+        const gappedManifest: Manifest = {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [{ id: "l", kind: "polyline", geometry: gappedGeometry, payloads: gappedPayloads, axis: "ax1", events: ["click", "hover"] }],
+        }
+        const { surface, shadow, host } = setup(gappedManifest)
+        surface.focus()
+        down(surface, "ArrowRight") // must land on segment 0 (valid)
+        let ring = shadow.querySelector(".hi > *") as SVGLineElement
+        expect(ring.getAttribute("x1")).toBe("0")
+        expect(ring.getAttribute("x2")).toBe("50")
+        down(surface, "ArrowRight") // must skip segments 1 and 2 (both touch the NaN vertex) straight to 3
+        ring = shadow.querySelector(".hi > *") as SVGLineElement
+        expect(ring.getAttribute("x1")).toBe("100")
+        expect(ring.getAttribute("x2")).toBe("200")
+        down(surface, "Enter")
+        expect((host as unknown as { value: { layer: string; index: number } }).value).toMatchObject({ layer: "l", index: 3 })
+    })
+
+    it("announces position/count over non-gap segments only, for a gapped :polyline", async () => {
+        vi.useFakeTimers()
+        try {
+            const gappedManifest: Manifest = {
+                width: 1200, height: 800, scaling: 2, transforms: {},
+                layers: [{ id: "l", kind: "polyline", geometry: gappedGeometry, payloads: gappedPayloads, axis: "ax1", events: ["click", "hover"], label: "Line" }],
+            }
+            const { surface, shadow } = setup(gappedManifest)
+            surface.focus()
+            down(surface, "ArrowRight") // segment 0 of 2 focusable (not "of 4")
+            vi.advanceTimersByTime(200)
+            const live = shadow.querySelector('[aria-live="polite"]') as HTMLElement
+            expect(live.textContent).toBe("Line, element 1 of 2: s 0")
+            down(surface, "ArrowRight") // segment 3, announced as "2 of 2"
+            vi.advanceTimersByTime(200)
+            expect(live.textContent).toBe("Line, element 2 of 2: s 3")
+        } finally {
+            vi.useRealTimers()
+        }
     })
 
     it("focus anchors on a segment's midpoint and a polygon's centroid (non-circle/rect kinds)", () => {

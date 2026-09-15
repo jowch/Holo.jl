@@ -2,7 +2,7 @@ import { SVG_NS, drawSelection } from "./highlight"
 import { hitLayerByIndex } from "./selection"
 import { onLeave } from "./hover"
 import { onDown, onUp, onCancel, onLostCapture, onClick, onPointerMove } from "./bond"
-import { buildFocusable, handleKeydown } from "./keyboard"
+import { buildFocusable, computeLayerStarts, focusTo, handleKeydown } from "./keyboard"
 import * as thresholdDrag from "./drag/threshold"
 import * as roiDrag from "./drag/roi"
 import { createOverlayState, cancelPendingMove, cancelPendingDrag, MOTION_MS } from "./state"
@@ -137,9 +137,10 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     const thresholdLines = thresholdDrag.buildThresholdLines(manifest, svg)
     const roiBoxes = roiDrag.buildROIBoxes(manifest, svg)
     const focusable = buildFocusable(manifest)
+    const layerStarts = computeLayerStarts(focusable)
     const ctx: OverlayCtx = {
         manifest, host, base, surface, tip, hiGroup, selGroup, thresholdLines, roiBoxes,
-        shadowRoot: shadow, focusable, liveRegion,
+        shadowRoot: shadow, focusable, layerStarts, liveRegion,
     }
     const state = createOverlayState()
 
@@ -175,6 +176,12 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     const lostCapture = () => onLostCapture(ctx, state)
     const click = (e: MouseEvent) => onClick(ctx, state, e)
     const keydown = (e: KeyboardEvent) => handleKeydown(ctx, state, e)
+    // DOM focus leaving the surface — Tab-away, a click landing elsewhere on the page, or the
+    // notebook cell itself losing focus — must clear keyboard focus the same way Escape does.
+    // Without this, focusIdx/focusHit/kbd-ring/the live region's last text all stay pinned to
+    // whatever was last focused, and hover.ts's restoreFocus keeps re-drawing that stale ring
+    // on every later pointer miss even though nothing is keyboard-focused anymore.
+    const focusout = () => focusTo(ctx, state, null)
 
     surface.addEventListener("pointerdown", down)
     surface.addEventListener("pointermove", move)
@@ -184,6 +191,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     surface.addEventListener("lostpointercapture", lostCapture)
     surface.addEventListener("click", click)
     surface.addEventListener("keydown", keydown)
+    surface.addEventListener("focusout", focusout)
 
     // Drawn into g.sel, not g.hi: it must survive hovers (onMove clears g.hi on every miss)
     // and support multiple selected indices (drawHi keeps only the last).
@@ -206,6 +214,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         surface.removeEventListener("lostpointercapture", lostCapture)
         surface.removeEventListener("click", click)
         surface.removeEventListener("keydown", keydown)
+        surface.removeEventListener("focusout", focusout)
         window.removeEventListener("resize", syncOverlayToBase)
         overlayRO?.disconnect()
         overlayFrames = 24

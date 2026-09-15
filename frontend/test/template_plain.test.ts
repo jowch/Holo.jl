@@ -37,6 +37,11 @@ describe("stripToPlain", () => {
     it("is a no-op on plain text with no tags or entities", () => {
         expect(stripToPlain("plain text")).toBe("plain text")
     })
+
+    it("inserts a separator between adjacent tags instead of running words together", () => {
+        // A bare tag-strip would produce "x: 1y: 2" — the two rows run together with no space.
+        expect(stripToPlain("<div>x: 1</div><div>y: 2</div>")).toBe("x: 1 y: 2")
+    })
 })
 
 describe("plainTextForHit", () => {

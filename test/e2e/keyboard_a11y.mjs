@@ -1,16 +1,21 @@
-// Agent live-verify for keyboard navigation + ARIA (LOCAL — not CI). Drives the same
-// kind_sweep_{cairo,webgl}.jl notebook kind_sweep.mjs/polish_verify.mjs use, but exercises the
-// keyboard path: Tab-reachable focus, arrow/Home/End/PageUp/PageDown navigation, Enter's bond
-// round-trip, Escape, the live region, and that :grid stays out of the focus list.
+// Agent live-verify for keyboard navigation + ARIA. Drives the same kind_sweep_{cairo,webgl}.jl
+// notebook kind_sweep.mjs/polish_verify.mjs use, but exercises the keyboard path: Tab-reachable
+// focus, arrow/Home/End/PageUp/PageDown navigation, Enter's bond round-trip, Escape, Tab-away
+// clearing focus, the live region, and that :grid stays out of the focus list.
 //
-//   node keyboard_a11y.mjs <base-url> <notebook-abs-path> <cairo|webgl>
+//   node keyboard_a11y.mjs <base-url> <notebook-abs-path> <cairo|webgl> [artifact-dir]
 import { chromium } from "playwright";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
-const [base, notebook, backend] = process.argv.slice(2);
+const [base, notebook, backend, artifactDirArg] = process.argv.slice(2);
 if (!base || !notebook || !backend) {
-  console.error("usage: node keyboard_a11y.mjs <base-url> <notebook> <cairo|webgl>");
+  console.error("usage: node keyboard_a11y.mjs <base-url> <notebook> <cairo|webgl> [artifact-dir]");
   process.exit(2);
 }
+const artifactDir = artifactDirArg || process.env.E2E_ARTIFACT_DIR || null;
+if (artifactDir) mkdirSync(artifactDir, { recursive: true });
+const consoleLog = [];
 
 const SHIM_LEAK = /\b(?:Bonito|comm)\.\w+ is not a function/;
 const ALLOWED = [/Bonito\.decode_binary is not a function/, /Bonito\.fetch_binary is not a function/];
@@ -22,6 +27,7 @@ const browser = await chromium.launch({
 const passed = [];
 const unexpected = [];
 let failed = null;
+let page;
 try {
   const context = await browser.newContext({
     locale: "en-US", timezoneId: "UTC",
@@ -29,13 +35,14 @@ try {
     deviceScaleFactor: 2,
     reducedMotion: "no-preference",
   });
-  const page = await context.newPage();
+  page = await context.newPage();
   page.on("pageerror", (e) => {
     const shim = SHIM_LEAK.test(e.message);
     const benign = shim && ALLOWED.some((re) => re.test(e.message));
     if (!benign) unexpected.push(e.message);
     console.error(benign ? "PAGEERROR (known-benign):" : "PAGEERROR:", e.message);
   });
+  page.on("console", (m) => consoleLog.push(`[${m.type()}] ${m.text()}`));
 
   await page.goto(`${base}/open?path=${encodeURIComponent(notebook)}`, { waitUntil: "domcontentloaded", timeout: 60000 });
   const deadline = Date.now() + 1500000;
@@ -155,6 +162,23 @@ try {
     passed.push(`${key}/escape`);
   }
 
+  // Tab-away (not just Escape) must clear keyboard focus — the case mount.ts's `focusout`
+  // listener exists for: leaving the surface any other way (Tab onward, a click elsewhere)
+  // must not leave the ring/tooltip pinned to the last-focused element indefinitely.
+  {
+    const key = "scatter";
+    const surface = await surfaceHandle(key);
+    await surface.focus();
+    await page.keyboard.press("ArrowRight");
+    let s = await state(key);
+    if (!s.ring) throw new Error(`${key}: ArrowRight (tab-away setup) drew no ring`);
+    await page.keyboard.press("Tab");
+    s = await state(key);
+    if (s.focused) throw new Error(`${key}: Tab did not move DOM focus off the surface`);
+    if (s.ring && !s.ring.leaving) throw new Error(`${key}: Tab-away left a non-fading ring`);
+    passed.push(`${key}/tab-away-clears-focus`);
+  }
+
   // :grid (heatmap) must never enter the focus list — arrowing must draw nothing.
   {
     const surface = await surfaceHandle("heatmap");
@@ -170,6 +194,25 @@ try {
   console.log(`KEYBOARD A11Y OK — ${backend}: ${passed.join(", ")}`);
 } catch (e) {
   failed = e;
+  // Mirrors the captureFailure shape kind_sweep.mjs/polish_verify.mjs use: screenshot + DOM
+  // dump + console log, so a CI failure ships enough evidence to diagnose without re-running.
+  if (artifactDir && page) {
+    try {
+      await page.screenshot({ path: join(artifactDir, `keyboard_a11y-${backend}-failure.png`), fullPage: true });
+      const dump = await page.evaluate(() => ({
+        title: document.title,
+        url: location.href,
+        cells: [...document.querySelectorAll("pluto-cell")].map((c) => ({ id: c.id, classes: c.className })),
+        hosts: document.querySelectorAll(".ip-host").length,
+        activeElement: document.activeElement?.tagName,
+      }));
+      writeFileSync(join(artifactDir, `keyboard_a11y-${backend}-dom.json`), JSON.stringify(dump, null, 2));
+      writeFileSync(join(artifactDir, `keyboard_a11y-${backend}-console.log`), consoleLog.join("\n"));
+      console.error(`artifact: wrote keyboard_a11y-${backend}-{failure.png,dom.json,console.log} to ${artifactDir}`);
+    } catch (e2) {
+      console.error("artifact capture failed:", e2.message);
+    }
+  }
 } finally {
   await browser.close();
 }

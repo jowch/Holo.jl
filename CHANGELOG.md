@@ -7,6 +7,13 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- Keyboard navigation for the overlay: arrow keys/Home/End move between hittable elements
+  (Page Up/Down jump between layers), Enter/Space dispatches the same `@bind` value a click
+  would, Escape clears focus. Screen readers get a live-region announcement per element
+  (position, and the tooltip content as plain text) via a new `role="application"` +
+  `aria-live` overlay structure. New optional `label` keyword on `PointInteractable`/
+  `SegmentInteractable`/`RectInteractable`/`PolygonInteractable` sets the per-layer
+  announcement prefix. New docs page: [Keyboard and screen readers](@ref).
 - Vitest coverage for `frontend/src` uploads to Codecov (`flags: frontend`).
   Committed `assets/` bundles are ignored. One blended `codecov/project`
   number (Julia + `frontend/src`); `target: auto`, `threshold: 1%`.

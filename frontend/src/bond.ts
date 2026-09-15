@@ -176,6 +176,22 @@ export function onLostCapture(ctx: OverlayCtx, state: OverlayState): void {
 // resolution, same "input" event.
 export function commitClick(ctx: OverlayCtx, state: OverlayState, hit: Hit, px: number, py: number): void {
     drawHi(state, ctx.hiGroup, hit)
+    // Keep keyboard focus in sync with the mouse: without this, arrowing to element A then
+    // mouse-clicking element B leaves state.focusHit on A, so a later pointer miss calls
+    // restoreFocus (hover.ts) and redraws A's ring/tooltip even though the bond value is B's.
+    // Only when the click landed on a focus-list element (ctx.focusable) — a click on e.g. a
+    // :grid/:axis kind that isn't keyboard-focusable at all must leave existing keyboard focus
+    // alone. The cached tooltip is cleared, not recomputed: recomputing it needs hover.ts's
+    // tipHtmlForHit, and hover.ts already imports commitClick from here, so importing back
+    // would cycle. A later pointer miss then shows the ring with no tooltip (restoreFocus's
+    // existing hideTip branch) until keyboard focus visits this element and repopulates it.
+    const idx = ctx.focusable.findIndex((r) => r.layer === hit.layer && r.index === hit.index)
+    if (idx >= 0) {
+        state.focusIdx = idx
+        state.focusHit = hit
+        state.focusTipHtml = null
+        state.focusTipCss = null
+    }
     ;(ctx.host as unknown as { value: unknown }).value = { layer: hit.layer.id, index: hit.index, payload: resolvePayload(hit, ctx.manifest, px, py) }
     ctx.host.dispatchEvent(new CustomEvent("input"))
 }

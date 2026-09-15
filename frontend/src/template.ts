@@ -53,9 +53,17 @@ export function renderAutoTablePlain(payload: unknown): string {
 const UNESC: Record<string, string> = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'" }
 
 // Strip tags from author-trusted template HTML and un-escape entities `esc()` already applied
-// — a bare tag-strip alone would announce "&amp;" as the literal text "amp;".
+// — a bare tag-strip alone would announce "&amp;" as the literal text "amp;". Tags are
+// replaced with a space, not deleted outright: a template like "<div>x: 1</div><div>y:
+// 2</div>" would otherwise announce "x: 1y: 2" with the two rows run together. The following
+// whitespace collapse absorbs the extra spaces this introduces at word boundaries that
+// already had none.
 export function stripToPlain(html: string): string {
-    return html.replace(/<[^>]*>/g, "").replace(/&amp;|&lt;|&gt;|&quot;|&#39;/g, (m) => UNESC[m])
+    return html
+        .replace(/<[^>]*>/g, " ")
+        .replace(/&amp;|&lt;|&gt;|&quot;|&#39;/g, (m) => UNESC[m])
+        .replace(/\s+/g, " ")
+        .trim()
 }
 
 // Plain-text tooltip content for one hit — the announcement body in keyboard.ts's live region.

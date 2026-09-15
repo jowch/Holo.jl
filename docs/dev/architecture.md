@@ -210,7 +210,7 @@ sets it from its `tol` keyword, scaled like `radius`); absent, the overlay falls
 own fixed `SEG_TOL`. Every other kind's manifest is untouched by this field.
 
 `label` (optional, per-layer, `String`) is a screen-reader announcement prefix for the
-keyboard-navigation overlay (§11) — e.g. `"Scatter"` in "Scatter, point 3 of 10: …". Set via
+keyboard-navigation overlay (§11) — e.g. `"Scatter"` in "Scatter, element 3 of 10: …". Set via
 the `label` keyword on `PointInteractable`/`SegmentInteractable`/`RectInteractable`
 (list form)/`PolygonInteractable` (the kinds keyboard nav visits); absent by default, and
 omitted from the manifest entirely when unset (same idiom as `selects`/`tol` above) — see

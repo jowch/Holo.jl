@@ -51,6 +51,11 @@ holo(fig, [
 ])
 ```
 
+`label` isn't yet threaded through the plot-object constructors (`PointInteractable(ax,
+p::Makie.Scatter)`, `RectInteractable(ax, p::Makie.BarPlot)`, and similar) or `holo(fig)`'s
+auto-extraction — the same gap `tooltip` has today. Build the interactable explicitly with the
+keyword-argument form above to set a label.
+
 ## [Limitations](@id accessibility-limitations)
 
 - **Grid layers** (`:grid` — heatmap/image cells) are not keyboard-focusable, for the reasons

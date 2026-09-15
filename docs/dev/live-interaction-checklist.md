@@ -35,21 +35,27 @@ cd test/e2e
 node kind_sweep.mjs http://127.0.0.1:1237 "$PWD/kind_sweep_cairo.jl" cairo
 # required visual-chrome sibling (same notebooks; not optional)
 node polish_verify.mjs http://127.0.0.1:1237 "$PWD/kind_sweep_cairo.jl" cairo
+# keyboard nav + ARIA (focus ring/tooltip, Enter bind, Escape/Tab-away, live region)
+node keyboard_a11y.mjs http://127.0.0.1:1237 "$PWD/kind_sweep_cairo.jl" cairo
 
 # second Pluto process — WGLMakie cannot share a session with Cairo
 HOLO_DEV_ENV=$HOME/.julia/environments/holo-dev JULIA_NOSYSIMAGE=1 julia test/e2e/serve.jl 1238 &
 node kind_sweep.mjs http://127.0.0.1:1238 "$PWD/kind_sweep_webgl.jl" webgl
 node polish_verify.mjs http://127.0.0.1:1238 "$PWD/kind_sweep_webgl.jl" webgl
+node keyboard_a11y.mjs http://127.0.0.1:1238 "$PWD/kind_sweep_webgl.jl" webgl
 ```
 
 Portable notebooks (`Pkg.develop` via `@__DIR__`) work without `HOLO_DEV_ENV`; first open
-re-resolves the Makie stack (~6 min). Both drivers also run in CI on the `kind-sweep` job
+re-resolves the Makie stack (~6 min). All three drivers also run in CI on the `kind-sweep` job
 (matrixed `cairo`/`webgl`), but only **advisorily** (`continue-on-error: true`) — agents still
 run this playbook locally before calling a user-facing change done, until the job is promoted
 to a required check.
 `polish_verify.mjs` is **required** and still **not sufficient** alone (one wash + one ring
 + fade + color-scheme). `kind_sweep.mjs` is **required** and still **not sufficient**
-alone until `polish_verify.mjs` also PASSes on that backend.
+alone until `polish_verify.mjs` also PASSes on that backend. `keyboard_a11y.mjs` is required
+only for a change that can touch focus/keyboard/ARIA (the overlay's `keyboard.ts`/`mount.ts`
+hooks, or a manifest field it reads, e.g. `label`) — it is not a general substitute for the
+other two.
 
 Through-Pluto `@bind` on one scatter is also `bind_click.mjs`. Frontend unit twins for
 halo / overlay-on-base / wash vs ring / remount identity / `prefers-color-scheme` CSS

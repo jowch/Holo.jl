@@ -65,6 +65,7 @@ export interface OverlayCtx {
     roiBoxes: Map<string, ROIBox>
     shadowRoot: ShadowRoot // for `shadowRoot.activeElement === surface` focus gating (keyboard.ts)
     focusable: FocusRef[] // flat, manifest-order list of element-indexed hits — keyboard.ts's nav domain
+    layerStarts: number[] // computeLayerStarts(focusable), cached once — PageUp/PageDown's layer-jump index
     liveRegion: HTMLElement // visually-hidden aria-live="polite" announcer (NOT the tooltip)
 }
 

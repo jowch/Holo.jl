@@ -25,7 +25,7 @@ data needed to resolve a pointer hit to an element index and its payload. Built 
   `InteractionContext.transforms` (see `axis_id`).
 - `events::Tuple` — the pointer events this layer responds to (`:click`, `:hover`, `:drag`).
 - `label::Union{Nothing,String}` — an optional announcement prefix for screen readers (e.g.
-  `"Scatter"`), used by the keyboard-navigation overlay ("Scatter, point 3 of 10: …"). Not to
+  `"Scatter"`), used by the keyboard-navigation overlay ("Scatter, element 3 of 10: …"). Not to
   be confused with a `label` *payload* key (e.g. `(; label = "a")` in the examples below) —
   that's per-element tooltip data; this is one string per layer. `nothing` (default) omits it
   from the manifest.
@@ -181,7 +181,7 @@ Scatter-style points, hit-tested as circles. Produces one `:circles` [`HitLayer`
 - `tooltip` — `nothing` for the auto name/value table (default), `holo"..."` for a template, or
   `false` to suppress. `tooltip = true` is rejected (`ArgumentError`; not meaningful).
 - `label` — an optional screen-reader announcement prefix for this layer (e.g. `"Scatter"`),
-  used by the overlay's keyboard navigation ("Scatter, point 3 of 10: …"). Default `nothing`
+  used by the overlay's keyboard navigation ("Scatter, element 3 of 10: …"). Default `nothing`
   (no prefix). Not the same thing as a `label` *payload* key (see the `PointInteractable`
   examples elsewhere in this file) — that's per-element tooltip data.
 
@@ -366,8 +366,9 @@ construction. Produces one `:rects` or `:grid` [`HitLayer`](@ref).
   internally by the `HSpan`/`VSpan` introspection methods below; rarely needed directly.
   Default `false`.
 - `label` — an optional screen-reader announcement prefix for this layer (see
-  [`PointInteractable`](@ref)). Default `nothing`. List form only — a `:grid` layer is not
-  keyboard-navigable (element count is unbounded), so `label` has no effect there.
+  [`PointInteractable`](@ref)). Default `nothing`. Accepted for both forms, but inert on a
+  `:grid` layer — it's still stored and shipped in the manifest, but has no effect, since a
+  `:grid` layer is not keyboard-navigable (element count is unbounded).
 
 # Arguments (grid form: `grid=`)
 - `grid` — `(xedges, yedges, values)`: `xedges`/`yedges` are cell-edge vectors (length

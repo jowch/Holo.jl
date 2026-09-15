@@ -78,7 +78,7 @@ export interface HitLayer {
     tooltip?: false              // explicit suppress; absent + no template → auto name/value table
     selected?: number[] // element indices to draw pre-highlighted on mount
     selects?: string   // id of the target layer this ROI selects; absent → bounds-ROI (no multi-select)
-    label?: string     // screen-reader announcement prefix, e.g. "Scatter, point 3 of 10: …"; absent → no prefix
+    label?: string     // screen-reader announcement prefix, e.g. "Scatter, element 3 of 10: …"; absent → no prefix
     // Bond value shape: selects-ROI mouse-up ships { items: [...] }; single-click / bounds-ROI
     // ships { layer, index, payload } directly.
 }
@@ -103,8 +103,15 @@ export interface Hit {
 
 // One entry in keyboard.ts's flat, manifest-order nav list — element-indexed kinds only
 // (circles/rects/polygons/segments/polyline; grid/axis/threshold/roi/view excluded, see
-// keyboard.ts's FOCUSABLE_KINDS for why).
+// keyboard.ts's FOCUSABLE_KINDS for why). A polyline's NaN-gap "segments" (Julia's gap
+// sentinel — see geometry.ts's hitLayer, which the mouse path already skips) never get a
+// FocusRef at all. `index` is the raw hitLayerByIndex/geometry index (used to resolve the
+// Hit); `ordinal`/`layerTotal` are the 1-based position/count among this layer's FOCUSABLE
+// elements only, announced to the user ("element `ordinal` of `layerTotal`") — not the same
+// as `index`/layerNElements(layer) once a layer has any skipped gaps.
 export interface FocusRef {
     layer: HitLayer
     index: number
+    ordinal: number
+    layerTotal: number
 }
