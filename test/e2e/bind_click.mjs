@@ -16,7 +16,11 @@
 // both evidence-based (see docs on the PR, not guessed):
 //   - The retry uses a DIFFERENT marker (index 1, not 0) — re-firing "input" on an UNCHANGED
 //     host.value is exactly what CI evidence shows doing nothing for a full 180s window; a
-//     retry that reproduces the same value would just be re-running the same non-fix.
+//     retry that reproduces the same value would just be re-running the same non-fix. This
+//     isn't about Pluto deduplicating equal bond values (checked Pluto 0.20.28's source:
+//     Bond.js fires on every "input" unconditionally, and RunBonds.jl's equality skip only
+//     gates the very first value) — it forces a genuinely new value through, in case something
+//     on either side is coalescing unchanged ones for a reason the CI evidence doesn't reveal.
 //   - Mile 3 now tracks whether ANY cell ever went busy after emit (`sawCellActivity`), so a
 //     future timeout's error message says whether the kernel picked up the bond at all
 //     (slow-but-progressing) or never did (a different failure class) instead of leaving both
@@ -39,7 +43,7 @@ if (artifactDir) mkdirSync(artifactDir, { recursive: true });
 // triplet); MARKER0 matches the value this file has pinned since #31.
 const MARKERS = [
   { x: 113, y: 500 }, // index 0
-  { x: 269, y: 444 }, // index 1 — the retry target (distinct value, defeats input-event dedup)
+  { x: 269, y: 444 }, // index 1 — the retry target (a genuinely new value, not a re-fire of the old one)
 ];
 const PLUTO_MS = 300000; // 5 min per attempt — generous vs. the observed ~90-180s CI stalls,
                          // still leaves the 40-min job cap plenty of room after two attempts.
@@ -185,7 +189,7 @@ try {
         const after = bondText(before);
         if (after !== before) {
           // Pluto already flipped — rare but treat as full success (emit implied).
-          return { before, after, emitAttempt: attempt, emitted: host.value, plutoMs: 0, sawCellActivity: false, lastState: cellState(), error: null };
+          return { before, after, emitAttempt: attempt, emitted: host.value, plutoMs: 0, inputRefires: 0, sawCellActivity: false, lastState: cellState(), error: null };
         }
         if (host.value != null) {
           emitted = host.value;
@@ -244,9 +248,15 @@ try {
   if (result.error === "no_pluto") {
     console.error(`WARNING: mile 3 (Pluto round-trip) timed out after ${result.plutoMs}ms on marker 0 — ${describeResult(result)}`);
     if (artifactDir) await captureFailure("attempt1-no-pluto");
-    console.error("RETRY: clicking a DIFFERENT marker (index 1, distinct value) and waiting again — a same-value re-click would just repeat the no-op input re-fires CI evidence already shows doing nothing.");
+    console.error("RETRY: clicking a DIFFERENT marker (index 1, a genuinely new value) and waiting again.");
     result = await attempt(MARKERS[1]);
     clickedIndex = 1;
+    // Re-check for a shim leak that first appeared during the retry — checked only once, after
+    // attempt 1, this would otherwise lose its root-cause label behind whatever error the retry
+    // itself produces (no_pluto / unexpected readout).
+    if (unexpectedErrors.length) {
+      throw new Error(`shim leak — missing window.Bonito/comm method(s): ${[...new Set(unexpectedErrors)].join(" | ")}`);
+    }
   }
 
   if (result.error === "no_emit") {
@@ -256,17 +266,26 @@ try {
     if (artifactDir) await captureFailure("attempt2-no-pluto");
     throw new Error(`overlay emitted ${JSON.stringify(result.emitted)} but Pluto never re-ran readout on EITHER attempt (marker 0, then marker 1): #bondout stayed "${result.before}" — ${describeResult(result)}`);
   }
-  const expectRe = new RegExp(`InteractionEvent\\(:scatter, ${clickedIndex}`);
-  if (!expectRe.test(result.after)) {
+  // Read the index straight out of the readout rather than asserting `clickedIndex`: after a
+  // retry, attempt 1's own (merely late) round-trip can land during attempt 2's wait window —
+  // #bondout then flips to marker 0's value even though marker 1 was clicked last. That's still
+  // a genuine, successful `@bind` round-trip (the exact "kernel is slow, not stuck" case this PR
+  // exists to tolerate), so accept whichever of the two markers actually landed instead of
+  // requiring it to match the last click.
+  const landedMatch = /InteractionEvent\(:scatter, (\d+)/.exec(result.after);
+  const landedIndex = landedMatch ? Number(landedMatch[1]) : null;
+  if (landedIndex !== 0 && landedIndex !== 1) {
     throw new Error(`unexpected readout after click on marker ${clickedIndex}: "${result.after}"`);
   }
   if (result.emitAttempt > 0) {
     console.error(`WARNING: overlay emitted only on click attempt ${result.emitAttempt} (0-based) — first click(s) missed or host not yet hittable. If this warns every run, investigate MARKER positions / layout.`);
   }
-  if (clickedIndex !== 0) {
+  if (landedIndex !== clickedIndex) {
+    console.error(`NOTE: clicked marker ${clickedIndex} but the readout shows marker ${landedIndex} — attempt 1's round-trip was merely late and landed during the retry's wait window. Treating as a genuine pass, not a failure.`);
+  } else if (clickedIndex !== 0) {
     console.error(`NOTE: bond only round-tripped after the retry (marker ${clickedIndex}) — mile 3 is flaky under load even though this run ultimately passed. Investigate if this becomes frequent.`);
   }
-  console.log(`THROUGH-PLUTO E2E OK (marker ${clickedIndex}, emit attempt ${result.emitAttempt}, pluto ${result.plutoMs}ms, inputRefires ${result.inputRefires}) —`, result.before, "->", result.after);
+  console.log(`THROUGH-PLUTO E2E OK (marker ${clickedIndex}, landed ${landedIndex}, emit attempt ${result.emitAttempt}, pluto ${result.plutoMs}ms, inputRefires ${result.inputRefires}) —`, result.before, "->", result.after);
 
   // On-failure artifact capture: a screenshot + a DOM/cell-state dump, so a future occurrence of
   // this flake in CI ships enough evidence to diagnose without re-running the job locally.
