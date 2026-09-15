@@ -23,3 +23,4 @@ include("core/selection_tests.jl")
 include("core/parity_tests.jl")
 
 include("docstrings_tests.jl")
+include("keyboard_a11y_label_tests.jl")

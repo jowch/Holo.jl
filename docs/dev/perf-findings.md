@@ -22,6 +22,17 @@
 > element/vertex — e.g. the parity corpus's `logscale`/`axis3`/`polaraxis`/`colorbar` line
 > layers each gained exactly one `"tol": 12` entry (`test/fixtures/parity/*.{cairo,webgl}.json`
 > diffs). Doesn't scale with plot size — negligible at any N;
+> and re-run for the keyboard-navigation `label` field (this PR, 2026-09-15):
+> manifest-shape change — a new optional per-layer `"label"` string field (screen-reader
+> announcement prefix), present only when the `label` keyword is set on
+> `PointInteractable`/`SegmentInteractable`/`RectInteractable`(list)/`PolygonInteractable`.
+> Envelope unchanged: neither `bench/payload_envelope.jl` nor `bench/stress.jl` sets `label`
+> on any fixture, so re-running reproduces the previous numbers byte-for-byte (scatter-1k
+> manifest still 38.0 KB, heatmap-200² still 196.8 KB, 30-frame scrub still 5.6 MB). Measured
+> the delta by direct manifest inspection instead, same method as the `tol` re-run above: one
+> MsgPack string key ("label", 6 B header+bytes) + one string value, added once per labeled
+> layer, not per element — `label = "Scatter"` costs 14 B total, `label = "Bars, quarterly
+> revenue"` costs 30 B. Doesn't scale with element count — negligible at any N.
 > baseline established after int-pixel geometry quantization, CairoMakie 0.15, Julia 1.12):
 > - **base64-PNG / manifest / render numbers** — `julia --project=. bench/payload_envelope.jl`
 >   (normal envelope) and `julia --project=. bench/stress.jl` (the 10× extremes). Both `seed!(0)`,

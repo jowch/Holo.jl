@@ -71,6 +71,7 @@ function _layer_dict(i, L::HitLayer, ctx::InteractionContext)
     end
     s = selects(i)
     s === nothing || (d["selects"] = string(s))
+    L.label === nothing || (d["label"] = L.label)
     spec = tooltip_spec(i)
     spec === true && throw(ArgumentError("tooltip = true is not meaningful — omit `tooltip` for the auto name/value table (the default), pass holo\"…\" for a template, or `false` to suppress."))
     if spec isa Markup

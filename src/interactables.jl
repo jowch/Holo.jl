@@ -24,6 +24,11 @@ data needed to resolve a pointer hit to an element index and its payload. Built 
 - `axis::Symbol` — the id of this layer's [`AxisTransform`](@ref) in
   `InteractionContext.transforms` (see `axis_id`).
 - `events::Tuple` — the pointer events this layer responds to (`:click`, `:hover`, `:drag`).
+- `label::Union{Nothing,String}` — an optional announcement prefix for screen readers (e.g.
+  `"Scatter"`), used by the keyboard-navigation overlay ("Scatter, point 3 of 10: …"). Not to
+  be confused with a `label` *payload* key (e.g. `(; label = "a")` in the examples below) —
+  that's per-element tooltip data; this is one string per layer. `nothing` (default) omits it
+  from the manifest.
 """
 struct HitLayer
     id::Symbol
@@ -32,7 +37,9 @@ struct HitLayer
     payloads::Vector{Any}
     axis::Symbol
     events::Tuple
+    label::Union{Nothing, String}
 end
+HitLayer(id, kind, geometry, payloads, axis, events) = HitLayer(id, kind, geometry, payloads, axis, events, nothing)
 
 """
     AbstractInteractable
@@ -173,6 +180,10 @@ Scatter-style points, hit-tested as circles. Produces one `:circles` [`HitLayer`
   per point (`ArgumentError` otherwise).
 - `tooltip` — `nothing` for the auto name/value table (default), `holo"..."` for a template, or
   `false` to suppress. `tooltip = true` is rejected (`ArgumentError`; not meaningful).
+- `label` — an optional screen-reader announcement prefix for this layer (e.g. `"Scatter"`),
+  used by the overlay's keyboard navigation ("Scatter, point 3 of 10: …"). Default `nothing`
+  (no prefix). Not the same thing as a `label` *payload* key (see the `PointInteractable`
+  examples elsewhere in this file) — that's per-element tooltip data.
 
 # From a plot object
 `PointInteractable(ax, p::Makie.Scatter)` reads points from `p`'s converted data and derives
@@ -198,6 +209,7 @@ struct PointInteractable <: AbstractInteractable
     # (worst case ~29%, at adversarial azimuth/elevation).
     radius3d::Union{Nothing, Vector{Makie.Vec3f}}
     tooltip::Union{Nothing, Markup, Bool}
+    label::Union{Nothing, String}
 end
 function PointInteractable(
         ax, points; id = :points,
@@ -207,7 +219,7 @@ function PointInteractable(
                 (; index = k - 1, x = Float64(p[1]), y = Float64(p[2]))
                 for (k, p) in enumerate(points)
         ],
-        radius = 9, radius3d = nothing, tooltip = nothing
+        radius = 9, radius3d = nothing, tooltip = nothing, label = nothing
     )
     _check_tooltip(tooltip)
     pts = [_pt3(p) for p in points]
@@ -215,7 +227,7 @@ function PointInteractable(
     r3 = radius3d === nothing ? nothing : Vector{Makie.Vec3f}(radius3d)
     r3 === nothing || length(r3) == length(pts) ||
         throw(ArgumentError("radius3d must have one entry per point (got $(length(r3)) for $(length(pts)))"))
-    return PointInteractable(ax, pts, id, collect(Any, payloads), Float64(radius), r3, tooltip)
+    return PointInteractable(ax, pts, id, collect(Any, payloads), Float64(radius), r3, tooltip, label === nothing ? nothing : String(label))
 end
 tooltip_spec(i::PointInteractable) = i.tooltip
 # Max projected displacement over the ±axis half-extents; non-finite offsets are skipped.
@@ -238,7 +250,7 @@ function hitlayers(i::PointInteractable, ctx)
         r = i.radius3d === nothing ? i.radius * ctx.scaling : _px_radius3d(ctx, i.ax, p, i.radius3d[k], q)
         append!(g, (_q(q[1]), _q(q[2]), _q(r)))
     end
-    return [HitLayer(i.id, :circles, g, i.payloads, axis_id(ctx, i.ax), events(i))]
+    return [HitLayer(i.id, :circles, g, i.payloads, axis_id(ctx, i.ax), events(i), i.label)]
 end
 
 # ============================ SegmentInteractable ==========================
@@ -265,6 +277,8 @@ Lines / polylines (nearest-segment hit) or disjoint segment pairs. Produces one 
   is absent.
 - `tooltip` — `nothing` for the auto name/value table (default), `holo"..."` for a template, or
   `false` to suppress. `tooltip = true` is rejected (`ArgumentError`).
+- `label` — an optional screen-reader announcement prefix for this layer (see
+  [`PointInteractable`](@ref)). Default `nothing`.
 
 # From a plot object
 `SegmentInteractable(ax, p)` reads vertices from `p` (no `mode`/`tooltip` keyword — `mode` and
@@ -295,10 +309,11 @@ struct SegmentInteractable <: AbstractInteractable
     # When set, hitlayers calls resolve(ax) instead of using the stored vertices — for geometry
     # (e.g. HLines/VLines spanning `ax.finallimits[]`) only correct after construction.
     resolve::Union{Nothing, Function}
+    label::Union{Nothing, String}
 end
 function SegmentInteractable(
         ax, vertices; mode = :polyline, id = :segments,
-        payloads = nothing, tol = 6, tooltip = nothing
+        payloads = nothing, tol = 6, tooltip = nothing, label = nothing
     )
     _check_tooltip(tooltip)
     mode in (:polyline, :pairs) ||
@@ -307,7 +322,7 @@ function SegmentInteractable(
     vs = [_pt3(v) for v in vertices]
     nseg = mode === :polyline ? max(0, length(vs) - 1) : length(vs) ÷ 2
     pl = payloads === nothing ? Any[(; segment_index = k - 1) for k in 1:nseg] : _check_payloads(payloads, nseg, "SegmentInteractable")
-    return SegmentInteractable(ax, vs, mode, id, pl, Float64(tol), tooltip, nothing)
+    return SegmentInteractable(ax, vs, mode, id, pl, Float64(tol), tooltip, nothing, label === nothing ? nothing : String(label))
 end
 # Internal-only: construct with a lazy `resolve(ax) -> vertices`. Called directly by the
 # HLines/VLines plot-object constructors (src/introspect.jl), bypassing the keyword
@@ -315,7 +330,7 @@ end
 # recipes skips the check entirely.
 function _segment_with_resolve(ax, vertices, mode, id, payloads, tol, resolve)
     _check_tol(tol)
-    return SegmentInteractable(ax, [_pt3(v) for v in vertices], mode, id, payloads, Float64(tol), nothing, resolve)
+    return SegmentInteractable(ax, [_pt3(v) for v in vertices], mode, id, payloads, Float64(tol), nothing, resolve, nothing)
 end
 tooltip_spec(i::SegmentInteractable) = i.tooltip
 hit_tol(i::SegmentInteractable) = i.tol
@@ -326,7 +341,7 @@ function hitlayers(i::SegmentInteractable, ctx)
         q = _proj(ctx, i.ax, v); append!(g, (_q(q[1]), _q(q[2])))
     end
     kind = i.mode === :polyline ? :polyline : :segments
-    return [HitLayer(i.id, kind, g, i.payloads, axis_id(ctx, i.ax), events(i))]
+    return [HitLayer(i.id, kind, g, i.payloads, axis_id(ctx, i.ax), events(i), i.label)]
 end
 
 # ============================ RectInteractable =============================
@@ -350,6 +365,9 @@ construction. Produces one `:rects` or `:grid` [`HitLayer`](@ref).
   so integer quantization never expands past the edge) before shipping geometry. Used
   internally by the `HSpan`/`VSpan` introspection methods below; rarely needed directly.
   Default `false`.
+- `label` — an optional screen-reader announcement prefix for this layer (see
+  [`PointInteractable`](@ref)). Default `nothing`. List form only — a `:grid` layer is not
+  keyboard-navigable (element count is unbounded), so `label` has no effect there.
 
 # Arguments (grid form: `grid=`)
 - `grid` — `(xedges, yedges, values)`: `xedges`/`yedges` are cell-edge vectors (length
@@ -391,14 +409,16 @@ struct RectInteractable <: AbstractInteractable
     clamp_to_viewport::Bool
     # :list only. Same resolve-in-hitlayers mechanism as SegmentInteractable.resolve.
     resolve::Union{Nothing, Function}
+    label::Union{Nothing, String}
 end
 function RectInteractable(
         ax; rects = nothing, grid = nothing, id = :rects, payloads = nothing,
-        tooltip = nothing, clamp_to_viewport = false
+        tooltip = nothing, clamp_to_viewport = false, label = nothing
     )
     _check_tooltip(tooltip)
     (rects === nothing) == (grid === nothing) &&
         throw(ArgumentError("RectInteractable: pass exactly one of `rects` or `grid`"))
+    lbl = label === nothing ? nothing : String(label)
     return if grid !== nothing
         xe, ye, vals = grid
         xe = collect(Float64, xe); ye = collect(Float64, ye)
@@ -416,17 +436,17 @@ function RectInteractable(
                     "= $(expected), got $(vals isa AbstractMatrix ? size(vals) : typeof(vals))",
             ),
         )
-        RectInteractable(ax, :grid, (xe, ye, vals), id, Any[], tooltip, false, nothing)
+        RectInteractable(ax, :grid, (xe, ye, vals), id, Any[], tooltip, false, nothing, lbl)
     else
         rs = [(Float64(r[1]), Float64(r[2]), Float64(r[3]), Float64(r[4])) for r in rects]
         pl = payloads === nothing ? Any[(; index = k - 1) for k in 1:length(rs)] : _check_payloads(payloads, length(rs), "RectInteractable")
-        RectInteractable(ax, :list, rs, id, pl, tooltip, clamp_to_viewport, nothing)
+        RectInteractable(ax, :list, rs, id, pl, tooltip, clamp_to_viewport, nothing, lbl)
     end
 end
 # Internal-only: construct a :list RectInteractable with a lazy `resolve(ax) -> rects`.
 function _rect_with_resolve(ax, rects, id, payloads, clamp_to_viewport, resolve)
     rs = [(Float64(r[1]), Float64(r[2]), Float64(r[3]), Float64(r[4])) for r in rects]
-    return RectInteractable(ax, :list, rs, id, payloads, nothing, clamp_to_viewport, resolve)
+    return RectInteractable(ax, :list, rs, id, payloads, nothing, clamp_to_viewport, resolve, nothing)
 end
 tooltip_spec(i::RectInteractable) = i.tooltip
 function hitlayers(i::RectInteractable, ctx)
@@ -451,7 +471,7 @@ function hitlayers(i::RectInteractable, ctx)
                 append!(g, (round(Int, (x_lo + x_hi) / 2), round(Int, (y_lo + y_hi) / 2), px_w, px_h))
             end
         end
-        return [HitLayer(i.id, :rects, g, i.payloads, axis_id(ctx, i.ax), events(i))]
+        return [HitLayer(i.id, :rects, g, i.payloads, axis_id(ctx, i.ax), events(i), i.label)]
     else
         xe, ye, vals = i.data
         y0 = ye[1]
@@ -484,7 +504,7 @@ function hitlayers(i::RectInteractable, ctx)
                 "(sub-pixel); dropping the values[] payload to bound manifest size. Hover shows (i,j) " *
                 "only; clicks still carry it (the kernel round-trip has your matrix)." maxlog = 1
         end
-        return [HitLayer(i.id, :grid, geom, Any[], axis_id(ctx, i.ax), events(i))]
+        return [HitLayer(i.id, :grid, geom, Any[], axis_id(ctx, i.ax), events(i), i.label)]
     end
 end
 
@@ -572,6 +592,8 @@ Arbitrary filled polygons, hit-tested even-odd. Produces one `:polygons` [`HitLa
   `(; index)`, 0-based.
 - `tooltip` — `nothing` for the auto name/value table (default), `holo"..."` for a template, or
   `false` to suppress. `tooltip = true` is rejected (`ArgumentError`).
+- `label` — an optional screen-reader announcement prefix for this layer (see
+  [`PointInteractable`](@ref)). Default `nothing`.
 
 # From a plot object
 `PolygonInteractable(ax, p)` builds `rings` and default payloads from `p`:
@@ -595,12 +617,13 @@ PolygonInteractable(ax, p)
 """
 struct PolygonInteractable <: AbstractInteractable
     ax; rings::Vector; id::Symbol; payloads::Vector{Any}; tooltip::Union{Nothing, Markup, Bool}
+    label::Union{Nothing, String}
 end
-function PolygonInteractable(ax, rings; id = :polygons, payloads = nothing, tooltip = nothing)
+function PolygonInteractable(ax, rings; id = :polygons, payloads = nothing, tooltip = nothing, label = nothing)
     _check_tooltip(tooltip)
     rs = [[_pt3(p) for p in ring] for ring in rings]
     pl = payloads === nothing ? Any[(; index = k - 1) for k in 1:length(rs)] : _check_payloads(payloads, length(rs), "PolygonInteractable")
-    return PolygonInteractable(ax, rs, id, pl, tooltip)
+    return PolygonInteractable(ax, rs, id, pl, tooltip, label === nothing ? nothing : String(label))
 end
 tooltip_spec(i::PolygonInteractable) = i.tooltip
 function hitlayers(i::PolygonInteractable, ctx)
@@ -612,7 +635,7 @@ function hitlayers(i::PolygonInteractable, ctx)
         end
         push!(geom, flat)
     end
-    return [HitLayer(i.id, :polygons, geom, i.payloads, axis_id(ctx, i.ax), events(i))]
+    return [HitLayer(i.id, :polygons, geom, i.payloads, axis_id(ctx, i.ax), events(i), i.label)]
 end
 
 # ============================ AxisInteractable ============================
