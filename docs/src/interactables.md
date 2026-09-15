@@ -103,13 +103,14 @@ tooltip contract, plot-specific default payload and `id`:
 `id` on all of these, and `payloads` on most, take the same keywords as the explicit
 constructors; defaults are the plot's own name in lowercase (`:scatter`, `:lines`, `:hist`,
 `:crossbar`, …) — **except** `Heatmap`/`Image` (`:cells`), `BarPlot` (`:bars`), and
-`LineSegments` (`:segments`). `holo(fig)`/`auto_interactables` use these same ids, so a
-`selected=`/`ev.layer` check against `:heatmap` or `:barplot` will never match — use `:cells`
-and `:bars`. The `Heatmap`/`Image` method is also the one exception that takes no `payloads`
-keyword at all, since grid cells resolve `{i, j, value}` client-side, same as the explicit
-`grid = (...)` form. Any plot type not listed here — or here and in the
-[Constructors](@ref) table above — needs a custom interaction; see
-[Custom interactions](@ref).
+`LineSegments` (`:segments`). `holo(fig)`/`auto_interactables` use these same ids, so an
+`ev.layer` check against `:heatmap` or `:barplot` will never match — use `:cells`/`:bars`,
+and for `selected=`, `:bars`. The `Heatmap`/`Image` method is also the one exception that
+takes no `payloads` keyword at all, since grid cells resolve `{i, j, value}` client-side,
+same as the explicit `grid = (...)` form — and, being a `:grid`-kind layer, its `:cells`
+elements can't be pre-highlighted via `selected=` at all (see [Selection](@ref)). Any plot
+type not listed here — or here and in the [Constructors](@ref) table above — needs a custom
+interaction; see [Custom interactions](@ref).
 
 ## Zero-config: `holo(fig)`
 
