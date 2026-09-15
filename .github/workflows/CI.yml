@@ -145,11 +145,21 @@ jobs:
             sleep 2
           done
           [ -n "$up" ] || { echo "::error::Pluto never came up on :1234"; cat pluto.log; exit 1; }
-          node bind_click.mjs http://127.0.0.1:1234 "$GITHUB_WORKSPACE/test/e2e/bind_notebook.jl"
+          node bind_click.mjs http://127.0.0.1:1234 "$GITHUB_WORKSPACE/test/e2e/bind_notebook.jl" "$RUNNER_TEMP/bind-e2e-artifacts"
       - name: Pluto server log (precompile + render timing)
         if: always()
         working-directory: test/e2e
         run: tail -n 200 pluto.log || true
+      - name: Upload failure artifacts (screenshot, DOM dump, Pluto log)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bind-e2e-failure
+          path: |
+            ${{ runner.temp }}/bind-e2e-artifacts/
+            test/e2e/pluto.log
+          if-no-files-found: ignore
+          retention-days: 14
 
   examples:
     name: Example notebooks

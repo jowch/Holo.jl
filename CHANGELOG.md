@@ -16,6 +16,18 @@ All notable changes to this project are documented here. The format is based on
   Troubleshooting, Examples, API Reference, and a Development page. Deployed by
   `.github/workflows/Documentation.yml`.
 
+### Internal
+- Hardened the `WGLMakie bind E2E (Pluto)` CI job (`test/e2e/bind_click.mjs`) against the
+  load-induced timeout seen on PRs #57/#60/#61/#65/#66: the overlay always emitted the click
+  correctly, but Pluto's kernel round-trip (`#bondout` flipping) stalled past the wait budget.
+  The per-attempt wait is now 5 minutes (was 3), a stalled first attempt retries once by
+  clicking a *different* scatter marker (a same-value re-click can't distinguish "kernel got it
+  and is slow" from "kernel never got it" — CI evidence showed the old same-value `input`
+  re-fire never once recovered the bond), and a timeout now reports whether any cell went busy
+  after the click. `test/e2e/serve.jl` flushes `stdout`/`stderr` every second so `pluto.log` is a
+  trustworthy artifact instead of a buffered dump. CI now uploads a screenshot, DOM dump, and the
+  Pluto log on failure (`actions/upload-artifact`, `if: failure()`).
+
 ### Changed
 - README slimmed from ~410 to ~65 lines (title, pitch, when-to-use-it table, install, quick
   start, a pointer to the new site) — everything else it used to cover now lives on the site.
