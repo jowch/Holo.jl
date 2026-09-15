@@ -177,7 +177,10 @@ jobs:
     name: Kind sweep (${{ matrix.backend }})
     runs-on: ubuntu-latest
     continue-on-error: true
-    timeout-minutes: 40
+    # kind_sweep.mjs's own mount deadline is 25min, polish_verify.mjs's is 15min — 40min of
+    # driver budget alone, before checkout/playwright-install/cold-instantiate, and the run
+    # deliberately runs polish_verify even after kind_sweep fails (both deadlines can burn).
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -238,11 +241,16 @@ jobs:
         if: always()
         working-directory: test/e2e
         run: tail -n 200 pluto.log || true
-      - name: Upload failure artifacts (${{ matrix.backend }})
-        if: failure()
+      - name: Upload artifacts (${{ matrix.backend }})
+        # always(), not failure(): a job-level timeout-minutes kill marks the running step
+        # cancelled, not failed, so failure() alone would silently skip the upload on the one
+        # occasion (a genuine timeout) it matters most (see PR #67's bind-e2e-failure upload for
+        # the same reasoning). if-no-files-found: ignore keeps a passing run's upload a no-op
+        # beyond pluto.log, which is itself useful wall-time evidence.
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kind-sweep-failure-${{ matrix.backend }}
+          name: kind-sweep-${{ matrix.backend }}
           path: |
             ${{ runner.temp }}/kind-sweep-artifacts/
             test/e2e/pluto.log
