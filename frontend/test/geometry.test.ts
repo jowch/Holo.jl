@@ -59,13 +59,15 @@ describe("primitives", () => {
         // RectInteractable enforces this before a :grid layer ships, so these inputs aren't
         // reachable from it — this pins the defense-in-depth fallback for a hand-built HitLayer
         // that skips that validation, so a future change can't silently regress it to a bogus
-        // hit. All three of these are non-finite at edges[0] or edges[n-1], so the O(1) guard
-        // returns -1 for every one, matching the old linear scan's -1 answer for the first two;
-        // the third (interior NaN with finite endpoints) is a documented exception — old and new
-        // disagree there (see the geometry.test.ts oracle describe block for the exact case).
-        expect(findBin([NaN, NaN, NaN], 5)).toBe(-1)
-        expect(findBin([0, 10, NaN], 5)).toBe(-1) // old linear scan returns 0 here — see comment
-        expect(findBin([NaN, 10, 20], 15)).toBe(-1)
+        // hit. The guard fires whenever edges[0] or edges[n-1] is non-finite, so all three
+        // inputs below return -1 — but only the first matches the old linear scan's answer.
+        // The other two are genuine divergences the guard doesn't paper over: [0,10,NaN] has a
+        // real bin at v=5 (old scan returns 0 — the NaN only poisons the bin touching it, and v
+        // never reaches that bin), and [NaN,10,20] has a real bin at v=15 for the same reason
+        // (old scan returns 1). Both are only reachable via a hand-built HitLayer.
+        expect(findBin([NaN, NaN, NaN], 5)).toBe(-1) // matches old (-1)
+        expect(findBin([0, 10, NaN], 5)).toBe(-1) // diverges from old (0)
+        expect(findBin([NaN, 10, 20], 15)).toBe(-1) // diverges from old (1)
     })
 })
 
