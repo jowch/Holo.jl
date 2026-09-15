@@ -1,12 +1,10 @@
-// DOM layer: builds a shadow-root overlay over the (light-DOM) base image, wires hover/click,
-// draws highlights, and round-trips clicks through the @bind element. Stateless across re-render.
 import { hitTest, invertAxis, resolvePayload, findBin, panLimits, orbitAngles } from "./geometry"
 import { renderTemplate, renderAutoTable, esc } from "./template"
 import type { AxisTransform, Hit, HitLayer, Manifest, ThresholdGeometry, ROIGeometry, GridGeometry, ViewGeometry } from "./types"
 
 const SVG_NS = "http://www.w3.org/2000/svg"
 
-// Inspector ink — locked first-polish default (visual-design.md). Not a theming API.
+// Inspector ink is a locked design decision (CLAUDE.md) — not a theming API.
 const INSPECTOR_INK = "#3A6F7C"
 const DEFAULT_STYLE = { stroke: INSPECTOR_INK, width: 2 }
 const TIP_GAP = 8
@@ -67,11 +65,8 @@ interface Mounted {
  */
 export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: Promise<unknown>): Mounted {
     const host = scriptEl.parentElement as HTMLElement | null
-    // Base-agnostic: an <img> (CairoBackend PNG) or a <canvas> (WebGLBackend). We only need its
-    // on-screen rect; the image-px scale comes from manifest.width (design.md §6), not the
-    // element's intrinsic size — so a <canvas> needs no sizer shim. Invariant: the host holds
-    // exactly one base element (Cairo emits one <img>, WGL one <canvas>); if both were ever
-    // present, document order would pick the first.
+    // Image-px scale comes from manifest.width, not the element's intrinsic size, so a
+    // <canvas> needs no sizer shim. The host is assumed to hold exactly one base element.
     const base = host?.querySelector("img, canvas") as HTMLElement | null
     const noop: Mounted = { cleanup: () => {} }
     if (!host || !base) return noop
@@ -116,9 +111,8 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     let pendingDrag: PointerEvent | null = null
     let dragRaf = 0
 
-    // Pin the overlay to the BASE (img/canvas), not the host. WGLMakie can size the
-    // <canvas> differently from `.ip-host` (DPR / setup_scene_init), which left g.sel
-    // sitting beside the marker when the SVG was `inset:0` on the host.
+    // Pinned to the base (img/canvas), not the host: WGLMakie can size the <canvas>
+    // differently from `.ip-host`, which left g.sel offset when the SVG was `inset:0` on the host.
     const syncOverlayToBase = () => {
         const hr = host.getBoundingClientRect()
         const br = base.getBoundingClientRect()
@@ -201,13 +195,9 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
             hdl.setAttribute("fill", st.stroke)
             svg.appendChild(hdl); handles.push(hdl)
         }
-        // Alias box.g to the manifest ROIGeometry so that drag mutations (box.g.x = …) are
-        // immediately visible to hitLayer, which reads layer.geometry directly. Without this
-        // alias, hit-testing uses stale original bounds after the box is moved or resized.
-        // The manifest is rebuilt fresh on every Pluto re-render, so this mutation is scoped
-        // to the current mount session — exactly the "box stays where you left it" behavior.
-        // Resolve a selects-ROI's target layer once at build time (mirrors the cached `t`),
-        // rather than on every mousedown. undefined when this ROI has no `selects` (bounds-only).
+        // box.g aliases the manifest ROIGeometry so drag mutations stay visible to hitLayer,
+        // which reads layer.geometry directly. `target` is resolved once here, not per mousedown;
+        // undefined when this ROI has no `selects` (bounds-only).
         const target = layer.selects ? (manifest.layers.find((l) => l.id === layer.selects) as HitLayer | undefined) : undefined
         const box: ROIBox = { rect, handles, g: rg, handle: rg.handle, t: manifest.transforms[layer.axis], target }
         setROI(box)
@@ -385,8 +375,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         if (drag) return
         const p = imgPx(e)
         const dragHit = hitTest(manifest, p.x, p.y, "drag")
-        // Full-viewport :view must not suppress element hover — only sparse Tier-0
-        // drag targets (threshold / ROI) take the grab early-return.
+        // A full-viewport :view hit must not suppress element hover.
         if (dragHit && dragHit.layer.kind !== "view") {
             clearHi(true); hideTip()
             surface.classList.add("grab"); surface.classList.remove("hot")
@@ -655,11 +644,8 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     surface.addEventListener("lostpointercapture", onLostCapture)
     surface.addEventListener("click", onClick)
 
-    // persistent selected-state from the manifest (re-derived each render) — drawn into the
-    // PERSISTENT selection group (g.sel, z-below hover), NOT the transient hover group: it
-    // must survive hovers (onMove clears g.hi on every miss) and support multiple selected
-    // indices (drawHi keeps only the last). Pre-#38 this used drawHi — an M1.2 leftover from
-    // before box-select introduced the persistent group.
+    // Drawn into g.sel, not g.hi: it must survive hovers (onMove clears g.hi on every miss)
+    // and support multiple selected indices (drawHi keeps only the last).
     {
         const pre: Hit[] = []
         for (const layer of manifest.layers) {
@@ -799,10 +785,8 @@ function computeSelection(
         const ci = cellRange(gg.xedges, xlo, xhi), cj = cellRange(gg.yedges, ylo, yhi)
         if (!ci || !cj) return { items: [], hits: [] }
         const [i0, i1] = ci, [j0, j1] = cj
-        // Note: i0..j1 are the covered CELL indices (clamped to the grid by cellRange), while
-        // xmin..ymax are the data-space bounds of the raw drawn BOX (unclamped). For a box that
-        // overhangs the grid these describe different extents — consumers slicing the array use the
-        // cell indices; the box bounds are where the user dragged.
+        // i0..j1 are cell indices clamped to the grid; xmin..ymax are the unclamped drawn-box
+        // bounds — the two differ when the box overhangs the grid.
         const a = invertAxis(t, xlo, ylo), b = invertAxis(t, xhi, yhi)
         const ax = a.x as number, bx = b.x as number, ay = a.y as number, by = b.y as number
         const payload = {
@@ -836,9 +820,8 @@ function layerNElements(layer: import("./types").HitLayer): number {
     return 0
 }
 
-// Resolve a layer element by index to a highlight geom (for pre-selected drawing).
-// Fail loud on unsupported kinds / OOB indices — Julia `build_manifest` validates the same;
-// this is the defense-in-depth path when a hand-built / stale manifest reaches mount.
+// Fail loud on unsupported kinds / OOB indices — defense in depth for a stale manifest, since
+// Julia `build_manifest` validates the same thing.
 function hitLayerByIndex(layer: import("./types").HitLayer, index: number): Omit<Hit, "layer"> {
     if (!SELECTED_KINDS.has(layer.kind)) {
         throw new Error(

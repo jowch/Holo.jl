@@ -1,6 +1,4 @@
-// The Julia↔JS contract. Mirrors the Julia structs in src/interactables.jl / src/backend.jl.
-// Keep in sync — drift here is the bug class TS exists to catch.
-
+// Mirrors the Julia structs in src/interactables.jl / src/backend.jl; keep in sync.
 export type Kind =
     | "circles"   // geometry: [cx,cy,r, …]
     | "polyline"  // geometry: [x,y, …]  (NaN = gap); segment i = (v[i], v[i+1])
@@ -56,12 +54,8 @@ export interface AxisTransform {
     xcats?: string[] | null // categorical tick labels, if any
     ycats?: string[] | null
     valueaxis?: "x" | "y" | null // 1-D colorbar readout: which axis carries the value; absent/null = 2-D {x,y}
-    is3d?: boolean // Axis3: lims are degenerate and pixel→data inversion is undefined (a pixel is a ray).
-    // Julia's validate() rejects every inversion consumer (axis/threshold/roi layers) on an is3d
-    // transform, so invertAxis is never reached with one — the flag is the wire contract, not a JS branch.
-    ispolar?: boolean // PolarAxis: discrete hits project server-side via transform_func; continuous θ/r
-    // readout needs the polar transform in JS (not yet shipped). Julia validate() rejects inversion
-    // consumers on ispolar the same way as is3d.
+    is3d?: boolean // lims are degenerate; Julia validate() rejects inversion consumers on is3d, so invertAxis is never reached with one
+    ispolar?: boolean // continuous θ/r inversion not yet shipped to JS; Julia validate() rejects inversion consumers the same way as is3d
 }
 
 export interface LayerStyle {
@@ -83,9 +77,8 @@ export interface HitLayer {
     tooltip?: false              // explicit suppress; absent + no template → auto name/value table
     selected?: number[] // element indices to draw pre-highlighted on mount
     selects?: string   // id of the target layer this ROI selects; absent → bounds-ROI (no multi-select)
-    // Bond shapes:
-    //   selects-ROI mouse-up  → { items: Array<{ layer: string; index: number; payload: unknown }> }
-    //   single-click / bounds-ROI → { layer: string; index: number; payload: unknown }
+    // Bond value shape: selects-ROI mouse-up ships { items: [...] }; single-click / bounds-ROI
+    // ships { layer, index, payload } directly.
 }
 
 export interface Manifest {

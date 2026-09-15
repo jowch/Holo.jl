@@ -1,23 +1,14 @@
-# Every non-public Makie internal Holo relies on is called through exactly one of the
-# accessors below — a Makie bump that moves one of these surfaces as ONE clear error here,
-# not a scattered wrong-pixel or MethodError somewhere downstream. See test/makie_compat_tests.jl
-# (the canary).
-
-# Struct-field reads (`p.converted`, `ax.finallimits`, `scene.viewport`, ...) throw
-# `ErrorException("type X has no field y")` on Julia 1.10/1.11 but `FieldError` on >= 1.12
-# (FieldError doesn't exist before 1.12, hence the version guard). Plot *attributes*
-# (`.converted`, `.computed_levels`) resolve through `Base.getproperty(::Plot)` into a `Dict`
-# lookup, which throws `KeyError` when the attribute is gone, regardless of Julia version.
+# Struct-field reads throw FieldError on Julia >= 1.12, ErrorException on 1.10/1.11; plot
+# attribute access (a Dict lookup) throws KeyError when the attribute is gone, any version.
 const _MAKIE_SHAPE_ERRORS = @static if isdefined(Base, :FieldError)
     Union{MethodError, UndefVarError, ErrorException, KeyError, FieldError}
 else
     Union{MethodError, UndefVarError, ErrorException, KeyError}
 end
 
-# A narrower union for accessors that run arbitrary downstream code (user observable
-# callbacks, other plots' recipes) rather than just reading a field/attribute off the object
-# passed in. `ErrorException` is excluded here: rewrapping it would re-headline a `error(...)`
-# raised by that downstream code as "Makie internal changed shape", hiding the real cause.
+# Narrower union for accessors that run arbitrary downstream code (user callbacks, other
+# plots' recipes): excludes ErrorException so a real `error(...)` from that code isn't
+# re-headlined as a Makie compat break.
 const _MAKIE_DOWNSTREAM_ERRORS = @static if isdefined(Base, :FieldError)
     Union{MethodError, UndefVarError, KeyError, FieldError}
 else
@@ -29,8 +20,7 @@ _makie_compat_error(name, expected) = error(
         "expected $(expected); please open an issue"
 )
 
-# `converted[]` is a plot's post-conversion argument tuple (dodge/stack/width/etc. already
-# applied) — Makie keeps it "for backwards compatibility" but ships no public replacement in 0.24.
+# Wraps `p.converted[]`; no public replacement ships in Makie 0.24.
 function _converted(p)
     try
         return p.converted[]
@@ -40,8 +30,7 @@ function _converted(p)
     end
 end
 
-# `.plots` is a plot's (or a Scene's) child-plot list — how Holo reads recipe-drawn geometry
-# (e.g. BarPlot's laid-out rects, a Text's rendered glyphs); no public child-plot API exists.
+# Wraps `.plots`, a plot/Scene's child-plot list; no public child-plot API exists.
 function _child_plots(p)
     plots = try
         p.plots
@@ -53,8 +42,7 @@ function _child_plots(p)
     return plots
 end
 
-# `ax.finallimits[]` is the axis's post-layout data limits — needed post-`_finalize!` for
-# geometry that spans the full axis (HLines/VLines/HSpan/VSpan); no public equivalent.
+# Wraps `ax.finallimits[]`, the axis's post-layout data limits; no public equivalent.
 function _finallimits(ax)
     fl = try
         ax.finallimits[]
@@ -62,14 +50,12 @@ function _finallimits(ax)
         e isa _MAKIE_SHAPE_ERRORS || rethrow()
         return _makie_compat_error("finallimits", "an Axis to expose `.finallimits[]`")
     end
-    # Axis3.finallimits is a Rect3d, not a Rect2 — accept any-dimension Rect; every caller
-    # only ever indexes origin/widths[1:2] (2D geometry), so a Rect3 is equally usable.
+    # Axis3.finallimits is a Rect3d, not a Rect2; accept any-dimension Rect.
     fl isa Makie.Rect || return _makie_compat_error("finallimits", "`.finallimits[]` to be a `Rect`")
     return fl
 end
 
-# `scene.viewport[]` is the pixel rectangle a scene occupies in the figure — the geometric
-# basis for every image-px coordinate Holo emits; no public equivalent.
+# Wraps `scene.viewport[]`, the pixel rectangle a scene occupies; no public equivalent.
 function _scene_viewport(scene_or_ax)
     vp = try
         scene = scene_or_ax isa Makie.Scene ? scene_or_ax : scene_or_ax.scene
@@ -82,8 +68,7 @@ function _scene_viewport(scene_or_ax)
     return vp
 end
 
-# `p.computed_levels[]` is Contourf's true (post-marching-squares) level edges — the child
-# Poly's `color` only gives band midpoints, so there's no public way to recover the edges.
+# Wraps `p.computed_levels[]`, Contourf's true level edges; no public way to recover them.
 function _computed_levels(p)
     lv = try
         p.computed_levels[]
@@ -95,8 +80,7 @@ function _computed_levels(p)
     return lv
 end
 
-# `cb.layoutobservables.computedbbox[]` is a Colorbar's laid-out pixel bbox — the only way to
-# get its on-screen geometry (Colorbar has no public bbox accessor).
+# Wraps `cb.layoutobservables.computedbbox[]`; Colorbar has no public bbox accessor.
 function _colorbar_bbox(cb)
     bb = try
         cb.layoutobservables.computedbbox[]
@@ -108,8 +92,7 @@ function _colorbar_bbox(cb)
     return bb
 end
 
-# `Makie.string_boundingboxes` is unexported but docstring'd — the only way to get Text's
-# per-string cached pixel boxes (needed for click-to-pick hit rects).
+# Wraps `Makie.string_boundingboxes`, unexported but docstring'd; the only way to get Text's boxes.
 function _string_bboxes(p)
     boxes = try
         Makie.string_boundingboxes(p)
@@ -121,8 +104,7 @@ function _string_bboxes(p)
     return boxes
 end
 
-# `Makie.transform_func(scene)` returns the scene's data-transform closure (e.g. log10 on a
-# log axis) — no public accessor exists; needed to feed `_apply_transform` before projecting.
+# Wraps `Makie.transform_func(scene)`, the scene's data-transform closure; no public accessor exists.
 function _transform_func(scene)
     try
         return Makie.transform_func(scene)
@@ -132,9 +114,8 @@ function _transform_func(scene)
     end
 end
 
-# `Makie.apply_transform(f, pt)` applies that closure to a point — semi-public, no better
-# alternative; DomainError (out-of-domain, e.g. log10 of a negative) is a caller-handled
-# degrade-to-non-finite case, not a shape change, so it is never rewrapped here.
+# Wraps `Makie.apply_transform`, semi-public with no better alternative; DomainError is not a
+# shape error and is never rewrapped here — callers degrade it to a non-finite point.
 function _apply_transform(f, pt)
     try
         return Makie.apply_transform(f, pt)
@@ -145,8 +126,7 @@ function _apply_transform(f, pt)
     end
 end
 
-# `Makie.project(scene, pt)` is the low-level data(transformed)->pixel projector every
-# coordinate Holo emits goes through; no public wrapper exists at this level.
+# Wraps `Makie.project`, the low-level data(transformed)->pixel projector; no public wrapper exists.
 function _project_px(scene, pt)
     q = try
         Makie.project(scene, pt)
@@ -158,11 +138,9 @@ function _project_px(scene, pt)
     return q
 end
 
-# `Makie.update_state_before_display!(fig)` is the finalize step Makie itself runs at
-# display/save time — semi-public, no better alternative for finalizing layout before hitlayers.
-# Runs user observable callbacks (e.g. `on(ax.finallimits) do ... end`), so it uses the
-# DOWNSTREAM union: an `ErrorException` raised by a user callback must propagate as-is, not
-# get re-headlined as a Makie compat break.
+# Wraps `Makie.update_state_before_display!`, the finalize step Makie runs at display/save time.
+# Runs user observable callbacks, so it uses the DOWNSTREAM union: a real error from user code
+# must propagate as-is, not get re-headlined as a Makie compat break.
 function _finalize!(fig)
     try
         Makie.update_state_before_display!(fig)

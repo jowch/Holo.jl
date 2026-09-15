@@ -1,14 +1,5 @@
 module HoloWGLMakieExt
 
-# The :webgl backend — render the figure live in a WGLMakie <canvas> on the client GPU,
-# with Holo's overlay layered on top. Same interaction contract as CairoBackend (2D and
-# Axis3 alike — the shared projection closure handles both); the difference is COST: the
-# live canvas makes animation, large data, and frequent re-renders cheap where the static
-# PNG re-rasterizes. Ships NO Bonito runtime and NO server: the scene is serialized to a
-# plain payload (published_to_js) and drawn by a vendored WGLMakie bundle + a ~30-line
-# shim (assets/holo-webgl.js). Validated by spikes 06/08: full 2D+3D fidelity, 1-2px
-# overlay alignment, client-side animation hook.
-
 using Holo: Holo, AbstractBackend, InteractionContext, build_manifest, InteractionEvent, auto_interactables
 using WGLMakie
 import Makie
@@ -16,11 +7,9 @@ import Makie: Observable, Point2f
 import AbstractPlutoDingetjes as APD
 using HypertextLiteral: @htl, JavaScript
 
-# WGLMakie already depends on Bonito (bare `using Bonito` at WGLMakie.jl:4, which binds
-# the module name into WGLMakie's own namespace) — reached qualified so Holo never
-# declares its own Bonito dependency. This couples to WGLMakie's own import STYLE (a bare
-# `using Bonito`, not a selective `using Bonito: X`) — the version-coupling guard testset
-# in test/webgl_ext_tests.jl fails loudly if a WGLMakie bump ever changes that.
+# WGLMakie already depends on Bonito (bare `using Bonito`, binding it into WGLMakie's own
+# namespace); reached qualified here so Holo never declares its own Bonito dependency. This
+# couples to that import style — test/webgl_ext_tests.jl's version-coupling guard checks it.
 const Bonito = WGLMakie.Bonito
 
 export WebGLBackend
@@ -28,8 +17,8 @@ export WebGLBackend
 """
     WebGLBackend(; px_per_unit=2.0, max_width=700)
 
-Browser-GPU Holo backend. `px_per_unit` is the explicit device scale (the spike confirmed
-surface DPI is a controllable knob); `max_width` mirrors CairoBackend (Pluto's column).
+Browser-GPU Holo backend. `px_per_unit` is the explicit device scale (surface DPI is a
+controllable knob); `max_width` mirrors CairoBackend (Pluto's column).
 """
 struct WebGLBackend <: AbstractBackend
     px_per_unit::Float64
@@ -39,22 +28,18 @@ WebGLBackend(; px_per_unit = 2.0, max_width = 700) = WebGLBackend(px_per_unit, m
 
 Holo._ppu(b::WebGLBackend, _fig) = b.px_per_unit
 
-# ---------------------------------------------------------------------------
-# WGL-only Makie/WGLMakie/Bonito internals: every non-public surface unique to the WebGL
-# backend goes through exactly one of these three, same fail-loud doctrine as
-# src/makie_compat.jl (which these deliberately do NOT live in — they're WGL-only and this
-# extension is the only place `WGLMakie`/`Bonito` are in scope). See test/webgl_ext_tests.jl's
-# "version-coupling guard".
+# Every non-public WGLMakie/Bonito surface goes through one of these three (this extension is
+# the only place WGLMakie/Bonito are in scope); see test/webgl_ext_tests.jl's version-coupling guard.
 # Same version split as src/makie_compat.jl's _MAKIE_SHAPE_ERRORS: struct-field reads throw
-# `FieldError` on Julia >= 1.12 (doesn't exist before), `ErrorException` on 1.10/1.11.
+# FieldError on Julia >= 1.12, ErrorException on 1.10/1.11.
 const _WGL_SHAPE_ERRORS = @static if isdefined(Base, :FieldError)
     Union{MethodError, UndefVarError, ErrorException, KeyError, FieldError}
 else
     Union{MethodError, UndefVarError, ErrorException, KeyError}
 end
 
-# Narrower union for `_serialize_scene`, which walks every plot's own recipe code — an
-# `ErrorException` raised there is the plot's, not a Makie internal shape change.
+# Narrower union for `_serialize_scene`: an ErrorException there is the plot's own recipe
+# code, not a Makie internal shape change.
 const _WGL_DOWNSTREAM_ERRORS = @static if isdefined(Base, :FieldError)
     Union{MethodError, UndefVarError, KeyError, FieldError}
 else
@@ -66,8 +51,8 @@ _wgl_compat_error(name, expected) = error(
         "expected $(expected); please open an issue"
 )
 
-# The vendored bundle is sourced at runtime from the installed WGLMakie package (so the
-# renderer always version-matches `_serialize_scene`) — no public "give me the JS bundle" API.
+# Sourced at runtime from the installed WGLMakie package, so the renderer always version-matches
+# `_serialize_scene` — no public "give me the JS bundle" API exists.
 function _wgl_bundle_path()
     path = try
         joinpath(pkgdir(WGLMakie), "src", "javascript", "WGLMakie.bundled.js")
@@ -79,10 +64,9 @@ function _wgl_bundle_path()
     return path
 end
 
-# A NoConnection Session + headless Screen must be attached to the scene before
-# `_serialize_scene` so its atlas tracker is populated (required for marker/text glyphs) — no
-# public headless-serialization API exists in WGLMakie. `f(screen)` runs with the screen
-# attached; the screen is always detached afterward, even on error.
+# A NoConnection Session + headless Screen must be attached before `_serialize_scene` so its
+# atlas tracker is populated (required for marker/text glyphs) — no public API for this exists.
+# `f(screen)` runs with the screen attached; it is always detached afterward, even on error.
 function _headless_screen(f, scene)
     screen = try
         session = Bonito.Session(Bonito.NoConnection())
@@ -111,8 +95,8 @@ function _headless_screen(f, scene)
     end
 end
 
-# The only way to turn a live Scene into a plain, browser-serializable payload — no public
-# headless serialization API exists in WGLMakie.
+# No public headless-serialization API exists in WGLMakie; this is the only way to turn a
+# live Scene into a plain, browser-serializable payload.
 function _serialize_scene(scene)
     try
         return WGLMakie.serialize_scene(scene)
@@ -122,18 +106,11 @@ function _serialize_scene(scene)
     end
 end
 
-# ---------------------------------------------------------------------------
-# The proven 4-rule encoder (spike 08). serialize_scene leaves live Observables and raw
-# arrays; the browser shim expects each tagged so it can rebuild the structures WGLMakie's
-# own deserialize reads:
-#   Observable  -> {__obs__: v}          (JS rebuilds a {value, on, notify} shim)
-#   1-D buffer  -> {__t__, d}            (JS rebuilds a TypedArray)
-#   N-D array   -> {array, size}         (JS recurses; .array becomes a TypedArray)
-# Symbols -> strings, closures -> dropped. This is the ENTIRE data bridge.
-# Non-finite floats (NaN/±Inf) are scrubbed: JSON3 (and the self-contained e2e HTML path that
-# uses it) rejects NaN, and Makie occasionally emits NaN in transformed-position buffers for
-# decorative/empty slots. Zero is a safe GPU placeholder (those slots are not drawn as data).
-# ---------------------------------------------------------------------------
+# serialize_scene leaves live Observables and raw arrays; the browser shim expects each tagged
+# so it can rebuild the structures WGLMakie's own deserialize reads:
+#   Observable -> {__obs__: v}   1-D buffer -> {__t__, d}   N-D array -> {array, size}
+# Symbols -> strings, closures -> dropped. Non-finite floats are scrubbed to 0 (JSON3 rejects
+# NaN, and Makie occasionally emits it in transformed-position buffers for decorative slots).
 _json_float(x::Real) = (f = Float32(x); isfinite(f) ? f : Float32(0))
 function _plain(x)
     if x isa Observable
@@ -150,17 +127,13 @@ function _plain(x)
         return Dict{String, Any}("array" => _plain(vec(x)), "size" => collect(size(x)))
     elseif x isa AbstractVector && eltype(x) <: Number
         T = eltype(x)
-        # Vector{T}(x) FORCES a plain Base.Vector. Neither Float32.(x) nor collect(T, x) does:
-        # on a StaticArray/Vec/SizedVector both preserve the static type, which published_to_js
-        # rejects ("only simple objects... vectors and dictionaries"). Real-Pluto bug; JSON3 hid it.
+        # Vector{T}(x) forces a plain Base.Vector; neither Float32.(x) nor collect(T, x) does —
+        # on a StaticArray/Vec/SizedVector both preserve the static type, which published_to_js rejects.
         T === UInt32 && return Dict{String, Any}("__t__" => "u32", "d" => Vector{UInt32}(x))
         T === Int32 && return Dict{String, Any}("__t__" => "i32", "d" => Vector{Int32}(x))
         T === UInt8 && return Dict{String, Any}("__t__" => "u8", "d" => Vector{UInt8}(x))
-        # Everything else (Float32/16/64, Int64 indices, N0f8, …) -> Float32: matches WebGL, which is
-        # f32-only, so this is the renderer's own precision. Lossy for Int64 indices / Float64 beyond
-        # ~7 digits — fine for plot coordinates, which is all serialize_scene emits here.
-        # Scrub non-finite so JSON3.write(scene) (e2e / unit HTML) never trips "NaN not allowed".
-        # Build a plain Base.Vector (not StaticArrays) — same force as Vector{Float32}(x).
+        # Everything else -> Float32 (WebGL is f32-only); lossy for Int64/Float64 beyond ~7 digits,
+        # fine for plot coordinates.
         d = Vector{Float32}(undef, length(x))
         @inbounds for (i, v) in enumerate(x)
             d[i] = _json_float(v)
@@ -171,8 +144,7 @@ function _plain(x)
     elseif x isa AbstractFloat
         return isfinite(x) ? x : Float32(0)
     else
-        # Drop anything published_to_js / JSON3 can't carry (Enums, Colorants, custom structs).
-        # Scalars that are already JSON-safe pass through.
+        # Drop anything published_to_js/JSON3 can't carry (Enums, Colorants, custom structs).
         return x isa Union{Real, AbstractString, Bool, Nothing} ? x : nothing
     end
 end
@@ -180,9 +152,7 @@ end
 """
     scene_payload(fig) -> Dict
 
-Serialize a finalized figure to the browser payload. A `NoConnection` session + screen is
-attached first so `serialize_scene`'s atlas tracker is populated — required for markers
-and text glyphs (spike finding: bare `serialize_scene` emits an empty atlas).
+Serialize a finalized figure to the browser payload.
 """
 function scene_payload(fig)
     scene = fig.scene
@@ -191,9 +161,7 @@ function scene_payload(fig)
     end
 end
 
-# The render result for :webgl — a payload to publish (via Holo's published_to_js), not
-# raster bytes. (The :webgl mount intentionally does NOT fit render()->bytes; pixels live
-# in the browser canvas.)
+# A payload to publish (via published_to_js), not raster bytes — pixels live in the browser canvas.
 struct WebGLResult
     scene::Dict{String, Any}
     width::Int
@@ -206,11 +174,8 @@ function Holo.render(b::WebGLBackend, fig, ppu)
     return WebGLResult(scene_payload(fig), w, h, Float64(ppu))
 end
 
-# context: the same shared projection closure as CairoBackend (transform_func applied,
-# then Makie.project + viewport + scaling + y-flip — Holo._project_closure). The spike
-# measured this lands within 1-2px of where WGLMakie draws the data, so the STATIC-camera
-# overlay rides the existing manifest unchanged; Axis3 rides the same closure (3D enters
-# only at the projection step — src/backend.jl).
+# Uses the same shared projection closure as CairoBackend, landing within 1-2px of where
+# WGLMakie draws the data.
 function Holo.context(b::WebGLBackend, fig, ppu)
     w, h = size(fig.scene)
     scaling = Float64(ppu)
@@ -225,12 +190,8 @@ function Holo.context(b::WebGLBackend, fig, ppu)
     for (k, ax) in enumerate(axes)
         id = Symbol("ax", k)
         ids[ax] = id
-        # Populate the per-axis transform exactly as CairoBackend does. Without this, every
-        # axis-keyed interactable (Threshold/ROI/Region/box-select) KeyErrors at manifest build
-        # (interactables.jl indexes ctx.transforms[axis_id]). We call the shared constructors
-        # directly (both backends share them, per src/backend.jl) rather than duplicating the
-        # loop — CairoBackend now lives in a sibling extension we can't (and don't need to)
-        # reach from here. PolarAxis rides `_polar_transform` (ispolar; continuous θ/r deferred).
+        # Without this, every axis-keyed interactable KeyErrors at manifest build
+        # (interactables.jl indexes ctx.transforms[axis_id]).
         transforms[id] = if ax isa Makie.Axis3
             Holo._axis3_transform(id, ax, scaling, out_h)
         elseif ax isa Makie.PolarAxis
@@ -239,11 +200,7 @@ function Holo.context(b::WebGLBackend, fig, ppu)
             Holo._axis_transform(id, ax, scaling, out_h)
         end
     end
-    # Colorbar transforms, exactly as CairoBackend builds them. This loop was missing
-    # (the one-sided context() divergence the parity goldens now pin): a ColorbarInteractable
-    # then fell through axis_id's old :ax1 fallback and silently rendered a whole-plot 2-D
-    # {x,y} readout instead of the 1-D colorbar value. Caught by the cross-backend parity
-    # invariant (colorbar figure + valueaxis oracle) in test/no_backend_tests.jl.
+    # Required so a ColorbarInteractable resolves its own transform instead of the wrong axis.
     cbs = [c for c in fig.content if c isa Makie.Colorbar]
     for (k, cb) in enumerate(cbs)
         id = Symbol("cb", k)
@@ -253,9 +210,8 @@ function Holo.context(b::WebGLBackend, fig, ppu)
     return InteractionContext(project, transforms, ids, out_w, out_h, scaling, display_scale)
 end
 
-# Path to the committed shim bundle. The WGLMakie bundle itself is sourced at runtime from
-# the installed WGLMakie package (`_wgl_bundle_path`, above), so the renderer always
-# version-matches `_serialize_scene`.
+# Path to the committed shim bundle (the WGLMakie bundle itself is sourced at runtime; see
+# `_wgl_bundle_path`).
 const SHIM_JS = joinpath(@__DIR__, "..", "assets", "holo-webgl.js")
 
 struct WebGLWidget
@@ -270,15 +226,13 @@ end
 Holo.make_widget(b::WebGLBackend, result::WebGLResult, manifest, display_css) =
     WebGLWidget(result.scene, manifest, display_css, result.width, result.height, result.px_per_unit)
 
-# Build the widget HTML. `*_expr`/`*_js` are JS expressions yielding the data/text:
-# published_to_js for Pluto (ships over Pluto's data channel — works local/remote/export, no
-# server), or inlined JSON for self-contained/testing. The bundle + shim text become blob
-# URLs in the browser so `import()` works without any file:// path or hosted asset.
+# `*_expr`/`*_js` are JS expressions yielding the data/text: published_to_js for Pluto, or
+# inlined JSON for self-contained/testing.
 function _widget_html(w::WebGLWidget; scene_expr, manifest_expr, bundle_js, shim_js)
-    overlay = JavaScript(Holo._OVERLAY_JS[])   # reuse Holo's committed overlay bundle verbatim
+    overlay = JavaScript(Holo._OVERLAY_JS[])
     # Holo's overlay is base-agnostic (`querySelector("img, canvas")`; image-px scale from
-    # `manifest.width`, not the element's intrinsic size — design.md §6), so it binds directly to
-    # our <canvas>. No transparent SVG sizer shim anymore (M3.1).
+    # `manifest.width`, not the element's intrinsic size), so it binds directly to our
+    # <canvas> with no sizer shim needed.
     return @htl(
         """
         <div class="ip-host" style="position:relative; display:inline-block; width:100%; max-width:$(w.display_css)px;">
@@ -323,16 +277,8 @@ _bundle_text() = (isempty(_BUNDLE_TEXT[]) && (_BUNDLE_TEXT[] = read(_wgl_bundle_
 _shim_text() = (isempty(_SHIM_TEXT[]) && (_SHIM_TEXT[] = read(SHIM_JS, String)); _SHIM_TEXT[])
 
 function Base.show(io::IO, m::MIME"text/html", w::WebGLWidget)
-    # Everything ships over Pluto's published_to_js data channel — scene + manifest + the
-    # bundle/shim text — so there is no server and no file:// path (works remote + export).
-    # The bundle is shared once per notebook (M2), wire half: published_to_js ids are content-
-    # addressed (notebook_id/objectid) and objectid(::String) is content-based, so this one cached
-    # string always gets the same stable id. That id crosses the wire exactly once: across cells,
-    # Pluto's notebook merge keeps a single copy on load; across re-runs of a cell, Pluto nulls
-    # already-known ids before sending (known_published_objects from the prior run + format_output),
-    # so a re-run re-ships only its new scene, never the stable-id bundle (re-publish != re-send).
-    # The browser half — caching the blob URL on window.__HoloWGL so the module imports once — is in
-    # _widget_html.
+    # published_to_js ids are content-addressed, so this one cached bundle string (_bundle_text)
+    # always gets the same id and crosses the wire once per notebook, not once per widget.
     pub = APD.Display.published_to_js
     html = _widget_html(
         w;

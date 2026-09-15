@@ -1,4 +1,4 @@
-// Pure hit-test math — no DOM. All coordinates are image pixels. Unit-tested in test/geometry.test.ts.
+// All coordinates here are image pixels.
 import type { AxisTransform, GridGeometry, Hit, HitLayer, Manifest, ThresholdGeometry, ROIGeometry, ViewGeometry } from "./types"
 
 const HIT_TOL = 4 // px slack for circles/rects

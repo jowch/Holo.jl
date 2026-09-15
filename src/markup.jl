@@ -1,6 +1,3 @@
-# The `holo"..."` template system: a layer-level HTML template whose $(field) placeholders are
-# resolved browser-side from payloads[] (escaped) + an optional d3-format spec. See docs/tooltips.md.
-
 struct Field
     name::Symbol
     spec::Union{Nothing, String}
@@ -30,9 +27,7 @@ function Base.showerror(io::IO, e::TemplateValidationError)
     return nothing
 end
 
-# d3-format specifier grammar with `type` restricted to d3's MEANINGFUL set, so typos like `.2z` are
-# rejected rather than silently aliased to the default (stricter than d3 — better UX). Structural
-# only: precision/trim/sign *meaning* is the browser's d3 format() to enforce. See docs/tooltips.md.
+# Structural check only: precision/trim/sign meaning is the browser's d3 format() to enforce.
 const _D3_SPEC = r"^(?:.?[<>=^])?[-+( ]?[$#]?0?(?:\d+)?,?(?:\.\d+)?~?[dboxXfegrspcn%]?$"
 _valid_spec(s::AbstractString) = occursin(_D3_SPEC, s)
 

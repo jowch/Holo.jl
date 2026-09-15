@@ -1,9 +1,3 @@
-# The backend seam. A backend owns: produce the displayable artifact, project
-# data->image-px, and build the @bind widget — behind which each rendering backend's
-# specifics live. See architecture.md §2. Concrete backends (CairoBackend, WebGLBackend)
-# live in package extensions (ext/HoloCairoMakieExt.jl, ext/HoloWGLMakieExt.jl) — this
-# file only holds what's shared across all backends.
-
 """
     RenderResult
 
@@ -32,11 +26,11 @@ struct AxisTransform
     viewport::NTuple{4, Float64}      # (x,y,w,h) image px, top-left origin
     xreversed::Bool
     yreversed::Bool
-    xcats::Union{Nothing, Vector{String}}   # categorical tick map (v1; nothing if not categorical)
+    xcats::Union{Nothing, Vector{String}}   # nothing if not categorical
     ycats::Union{Nothing, Vector{String}}
-    valueaxis::Union{Nothing, Symbol}       # nothing = 2-D {x,y} readout; :x/:y = 1-D colorbar value readout
-    is3d::Bool                              # Axis3: pixel→data inversion is undefined (a pixel is a ray) — lims degenerate, JS never inverts
-    ispolar::Bool                           # PolarAxis: discrete hits project via transform_func; continuous θ/r readout needs the polar transform in JS (not yet shipped)
+    valueaxis::Union{Nothing, Symbol}       # nothing = 2-D {x,y}; :x/:y = 1-D colorbar readout axis
+    is3d::Bool                              # pixel→data inversion is undefined on a 3D axis; lims are degenerate
+    ispolar::Bool                           # continuous θ/r readout not shipped to JS; lims are degenerate
 end
 
 """
@@ -58,12 +52,8 @@ end
 
 "the one coordinate primitive interactables call — never re-derive projection"
 data_to_image_px(ctx::InteractionContext, ax, p) = ctx.project(ax, p)
-# Fail loud, never silently wrong: the old `:ax1` fallback silently absorbed any
-# fig.content block a backend forgot to register (a Colorbar, tomorrow a Legend) and
-# rebound it to the main axis — turning a missing transform into a plausible-but-WRONG
-# widget (whole-plot 2-D readout instead of the colorbar value; validate passed). An
-# unregistered block is a backend context() bug or an interactable keyed to an axis
-# that isn't part of the rendered figure — both must surface at build time.
+# No fallback to a default axis: a silent fallback here once made a missing Colorbar
+# transform render a plausible-but-wrong 2-D readout instead of failing to build.
 axis_id(ctx::InteractionContext, ax) =
     get(ctx.ids, ax) do
     throw(
@@ -76,35 +66,18 @@ axis_id(ctx::InteractionContext, ax) =
     )
 end
 
-# ---- interface (every backend extension implements methods for these) ----
+# every backend extension implements methods for these (bodies stay empty here)
 function render end
 function context end
 function _ppu end         # (backend, fig) -> px_per_unit / device scale
 function make_widget end  # (backend, <backend's RenderResult-like>, manifest, display_css) -> the @bind widget
 
-# ---- shared projection + axis-transform helpers: both CairoBackend and WebGLBackend
-# build the same projection closure and AxisTransform shape off a 2D Makie.Axis.
-# WebGLBackend's context() calls these directly (see ext/HoloWGLMakieExt.jl) rather
-# than duplicating them. ----
-
-# The shared data→image-px projection closure — both backends' context() build it with
-# this (ONE fix site, not two). The 2-arg `Makie.project(scene, p)` expects TRANSFORMED
-# (post-transform_func) coordinates — it does NOT apply the scene's transform_func
-# (verified empirically on Makie 0.24.12: raw feed lands 0/5 on a log-axis scatter's
-# rendered markers; transformed feed 5/5 at 0.0px) — so apply the axis transform first,
-# in input (Float64) precision: `project` f32-converts afterward, and a Float32-first
-# cast would lose precision on large-magnitude coords and overflow to Inf above
-# floatmax(Float32) (e.g. x=1e39 on a log axis is fine in Float64: log10 → 39).
-# Out-of-domain input (e.g. log10 of a negative) throws DomainError inside
-# apply_transform: NaN-guard it so the point degrades to a non-finite projection.
-# (log10(0.0) is -Inf WITHOUT throwing — that degrades through the same non-finite
-# path, no guard needed.) Element layers are un-gated on scale; `_q` passes non-finite
-# through — see interactables.jl and the log-scale testset in core_tests.jl.
-# 3D enters ONLY here (WS-3D): points widen to Point3 (z=0 for 2-coord input, so the 2D
-# path is unchanged — spike-verified byte-identical incl. on log axes), Makie's 2-tuple
-# transform_func applies to x/y and preserves z, Axis3's transform_func is `identity`,
-# and `Makie.project` handles the 3D camera. The output stays a 2D image-px point:
-# hit-testing is 2D pixel geometry on both backends regardless of scene dimensionality.
+# `Makie.project` expects post-transform_func coordinates; transform in Float64 first —
+# an early Float32 cast can overflow (e.g. log10(1e39)) or lose precision. DomainError
+# (e.g. log10 of a negative) degrades to a NaN point rather than throwing; `_q` in
+# interactables.jl passes non-finite coordinates through unchanged. Points widen to
+# Point3 so this same closure also projects 3D scenes (Axis3's transform_func is
+# `identity`; `Makie.project` applies the 3D camera itself).
 function _project_closure(scaling, out_h)
     return function (ax, p)
         tp = try
@@ -144,12 +117,9 @@ function _axis_transform(id, ax, scaling, out_h)
     )
 end
 
-# An Axis3's transform carries only what is well-defined for a 3D scene: its pixel viewport
-# and is3d=true. Continuous pixel→data inversion has no meaning on a projected 3D axis (a
-# screen pixel is a ray, not a data point), so lims are degenerate and the JS side never
-# inverts them — interactables that NEED inversion (Axis/Threshold/ROI) fail loud in
-# validate() on is3d. Element interactables only need `ctx.ids[ax]` set: they project in
-# Julia through the shared closure, which handles the 3D camera.
+# A screen pixel on a 3D axis is a ray, not a data point, so pixel→data inversion is
+# undefined; lims here are placeholders and Axis/Threshold/ROI must fail loud in
+# validate() on is3d rather than use them.
 function _axis3_transform(id, ax, scaling, out_h)
     vp = _scene_viewport(ax); o = vp.origin; wv = vp.widths
     vpx = (o[1] * scaling, out_h - (o[2] + wv[2]) * scaling, wv[1] * scaling, wv[2] * scaling)
@@ -159,10 +129,8 @@ function _axis3_transform(id, ax, scaling, out_h)
     )
 end
 
-# A PolarAxis's transform carries its pixel viewport and ispolar=true. Discrete element hits
-# project in Julia through the shared closure (Makie.Polar lives in transform_func). Continuous
-# θ/r readout needs that polar transform serialized to JS — not shipped yet — so lims are
-# degenerate and Axis/Threshold/ROI fail loud in validate() on ispolar (same shape as is3d).
+# Continuous θ/r inversion needs the polar transform serialized to JS, not shipped yet;
+# lims are placeholders and Axis/Threshold/ROI must fail loud in validate() on ispolar.
 function _polar_transform(id, ax, scaling, out_h)
     vp = _scene_viewport(ax); o = vp.origin; wv = vp.widths
     vpx = (o[1] * scaling, out_h - (o[2] + wv[2]) * scaling, wv[1] * scaling, wv[2] * scaling)
@@ -172,10 +140,8 @@ function _polar_transform(id, ax, scaling, out_h)
     )
 end
 
-# A Colorbar is a 1-D scale: its value runs along the long axis (y if vertical, x if horizontal).
-# Build an AxisTransform whose value axis carries cb.limits/scale over the colorbar's pixel bbox;
-# the other axis is degenerate (never read). Geometry from the laid-out block, converted with the
-# same ×scaling + y-flip as an axis viewport.
+# The value axis carries cb.limits/scale over the colorbar's pixel bbox; the other
+# axis is degenerate and never read.
 function _colorbar_transform(id, cb, scaling, out_h)
     bb = _colorbar_bbox(cb)
     o = bb.origin; wv = bb.widths

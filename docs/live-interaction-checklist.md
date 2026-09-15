@@ -1,14 +1,13 @@
-# Live interaction **and** visual playbook (agents)
+# Live interaction **and** visual playbook
 
-**Audience: agents.** The maintainer does not click through plots. A user-facing change is not
-done until **you** have driven this playbook in a real Pluto + browser on **every supported
-backend** (today `:cairo` and `:webgl`) **across the interactable kinds** below. A 2-plot
-kitchen-sink (scatter wash + line ring) is a chrome smoke, not verification.
+A user-facing change is not done until this playbook has been driven in a real Pluto + browser
+on **every supported backend** (today `:cairo` and `:webgl`) **across the interactable kinds**
+below. A 2-plot kitchen-sink (scatter wash + line ring) is a chrome smoke, not verification.
 
 This playbook is **interaction and visual**. Both halves are required. Do not treat
 `KIND SWEEP OK` as visual fidelity, and do not treat kitchen-sink chrome as the kind sweep.
 
-## Locked visual language (cite, do not reopen)
+## Visual language (settled)
 
 Recipes: inspector ink `#3A6F7C` (**not** iOS / alert red `#ff3b30`), hover = stroke only
 (2px @ 0.85, `fill: none`), selected closed = wash `rgba(58, 111, 124, 0.12)` + 2.5px
@@ -18,13 +17,13 @@ no pulse on a same-hit remount. Tooltip dark follows OS `prefers-color-scheme` �
 Pluto has **no notebook light/dark toggle** (Settings → Dark mode is help text; Pluto
 itself uses the same media query).
 
-Cite the locked recipes above; do not re-litigate identity, wash vs ring, first-PR
-scope, or Pluto coupling.
+These decisions are settled: cite the recipes above rather than re-litigating identity,
+wash vs ring, first-PR scope, or Pluto coupling.
 
-## How to run (you, not a human)
+## How to run
 
-Exactly one Makie backend per notebook process. Do not attach to a maintainer Try Live Pluto
-session — leave it up. Start your own.
+Exactly one Makie backend per notebook process. Do not attach to an existing Try Live Pluto
+session — start a separate one.
 
 ```text
 # Fast loop when holo-dev already has Holo + both Makies:
@@ -113,8 +112,8 @@ bake it; hover/click or drag only.
 
 ## Visual fidelity (required — not optional)
 
-These were the #50 gaps. They are checklist items. Drivers must **exercise** them, not
-only mention them.
+These are required visual-fidelity checks, not optional nice-to-haves. Drivers must
+**exercise** them, not only mention them.
 
 | Item | What “pass” looks like | Driver |
 | --- | --- | --- |
@@ -133,4 +132,5 @@ motion so fade is observable.
 - [ ] `polish_verify.mjs` **PASS** on `:cairo` (wash/ring/halo/pin + dark-figure wash + remount fade + color-scheme + no `#ff3b30`)
 - [ ] `polish_verify.mjs` **PASS** on `:webgl` (same boxes)
 - [ ] Every row in the table above was exercised (not a subset)
-- [ ] You did **not** ask the maintainer to click through plots
+- [ ] Verification was done by driving the playbook directly, not by asking someone else
+      to click through plots
