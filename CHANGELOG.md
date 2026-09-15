@@ -27,6 +27,11 @@ All notable changes to this project are documented here. The format is based on
   after the click. `test/e2e/serve.jl` flushes `stdout`/`stderr` every second so `pluto.log` is a
   trustworthy artifact instead of a buffered dump. CI now uploads a screenshot, DOM dump, and the
   Pluto log on failure (`actions/upload-artifact`, `if: failure()`).
+- CI runs the live kind sweep (`test/e2e/kind_sweep.mjs` + `test/e2e/polish_verify.mjs`
+  against `kind_sweep_cairo.jl`/`kind_sweep_webgl.jl`) on a new `kind-sweep` job,
+  `continue-on-error: true` (advisory — does not block merges), matrixed over `cairo` and
+  `webgl`, with screenshot/DOM/console-log artifacts on failure. Agents still run the sweep
+  locally before calling a user-facing change done; see `docs/dev/live-interaction-checklist.md`.
 
 ### Changed
 - README slimmed from ~410 to ~65 lines (title, pitch, when-to-use-it table, install, quick
@@ -103,11 +108,6 @@ All notable changes to this project are documented here. The format is based on
   WGLMakie compat bumps arrive as PRs that run this canary automatically) is planned as a
   follow-up — not part of this change. Pure internal
   refactor — no manifest/payload/behavior change (parity goldens pass unchanged).
-- CI runs the live kind sweep (`test/e2e/kind_sweep.mjs` + `test/e2e/polish_verify.mjs`
-  against `kind_sweep_cairo.jl`/`kind_sweep_webgl.jl`) on a new `kind-sweep` job,
-  `continue-on-error: true` (advisory — does not block merges), matrixed over `cairo` and
-  `webgl`, with screenshot/DOM/console-log artifacts on failure. Agents still run the sweep
-  locally before calling a user-facing change done; see `docs/dev/live-interaction-checklist.md`.
 
 ## [0.1.0] - 2026-09-12
 
