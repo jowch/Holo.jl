@@ -328,15 +328,16 @@ export interface AnchoredPlacement {
     below: boolean // true when clipping at the surface's top edge flipped the box below the mark
 }
 
-const ANCHOR_GAP = 10 // px between the mark and the box
+export const ANCHOR_GAP = 10 // px between the mark and the box
 const EDGE_GAP = 8 // px margin kept between the box and the surface edge
 
 // Pure placement math (css px in, css px out) shared by the pointer and keyboard-focus tooltip
 // paths, so "pointer and keyboard look identical" holds structurally, not by convention.
 export function computeAnchoredPlacement(a: Anchor, tipW: number, tipH: number, surfW: number, surfH: number): AnchoredPlacement {
     // The mark's bottom edge, mirrored around the anchor point from its top edge — exact for a
-    // circle (top=cy-r, bottom=cy+r); degenerates to the anchor itself for a rect/seg/poly/grid
-    // anchor, which is already its own top edge (half-extent 0), so "below" starts right at it.
+    // circle (top=cy-r, bottom=cy+r) and a grid cell (top=cy-h/2, same half-extent mirroring);
+    // degenerates to the anchor itself for a bar/seg/poly anchor, which IS its own top edge
+    // (half-extent 0, y===top — see anchorFor's rect branch), so "below" starts right at it.
     const bottom = a.y + (a.y - a.top)
     let top = a.top - ANCHOR_GAP - tipH
     let below = false

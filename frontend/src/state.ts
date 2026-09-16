@@ -22,21 +22,10 @@ export const imgPx = (base: HTMLElement, manifest: Manifest, e: MouseEvent): { x
     return { x: (e.clientX - r.left) * s, y: (e.clientY - r.top) * s }
 }
 
-// Inverse of imgPx's scale factor — image px → CSS px offset from the surface/base origin,
-// for placing the tooltip at a keyboard-focused element's anchor (no MouseEvent to read
-// clientX/Y from). In happy-dom, getBoundingClientRect() is all zeros, so `s` is Infinity and
-// this degenerates to {0,0} — the same degenerate branch placeTip already takes for a
-// zero-sized surface.
-export const cssPx = (base: HTMLElement, manifest: Manifest, x: number, y: number): { x: number; y: number } => {
-    const r = base.getBoundingClientRect()
-    const s = manifest.width / r.width
-    return { x: x / s, y: y / s }
-}
-
 // Anchor (image px, from geometry.ts's anchorFor) → css px, for the tooltip placement math —
 // shared by the pointer (hover.ts) and keyboard (keyboard.ts) paths so both convert identically.
-// One getBoundingClientRect() (not three, via cssPx) — this runs on every hover-path mousemove
-// for the mark-anchored kinds, same rAF-throttled budget as imgPx's own per-move read.
+// One getBoundingClientRect() per call — this runs on every hover-path mousemove for the
+// mark-anchored kinds, same rAF-throttled budget as imgPx's own per-move read.
 export const cssAnchor = (base: HTMLElement, manifest: Manifest, a: Anchor): Anchor => {
     const r = base.getBoundingClientRect()
     const s = manifest.width / r.width

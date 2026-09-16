@@ -10,7 +10,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   assertNoAlertRed, assertWash, assertRing, assertHoverRecipe,
-  assertRemountStable, assertLeaveFade, assertTooltipColorScheme,
+  assertRemountStable, assertLeaveFade, assertTooltipColorScheme, assertCaretAtAnchor,
 } from "./visual_assert.mjs";
 
 const [base, notebook, backend, artifactDirArg] = process.argv.slice(2);
@@ -211,6 +211,31 @@ try {
   if (tip.sel < 1) throw new Error("g.sel gone during hover");
   passed.push("tooltip");
   passed.push("hover-distinct");
+
+  // Caret apex vs. anchor: a real-layout check (calc()/border-box math no jsdom/happy-dom unit
+  // test can do) that the "caret on the anchor" contract actually holds on screen, not just that
+  // --holo-caret-x was assigned some value. hx/hy is element 1's circle centre, i.e. exactly its
+  // anchor (anchorFor's circle case) — so the anchor's page-space x is the same b.left+hx*s the
+  // hover itself was dispatched at.
+  const caret = await page.evaluate(([ix]) => {
+    const span = document.querySelector("#coords_scatter");
+    const hosts = [...document.querySelectorAll(".ip-host")];
+    const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
+    let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
+    const b = host.querySelector("img, canvas").getBoundingClientRect();
+    const outW = sr.querySelector("svg").viewBox.baseVal.width;
+    const s = b.width / outW;
+    const t = sr.querySelector(".holo-tip");
+    const tipRect = t.getBoundingClientRect();
+    const tipBorderLeft = parseFloat(getComputedStyle(t).borderLeftWidth);
+    const before = getComputedStyle(t, "::before");
+    const pseudoLeft = parseFloat(before.left);
+    const pseudoBorderLeft = parseFloat(before.borderLeftWidth);
+    const apexX = tipRect.left + tipBorderLeft + pseudoLeft + pseudoBorderLeft;
+    return { apexX, anchorX: b.left + ix * s };
+  }, [hx]);
+  assertCaretAtAnchor(caret.apexX, caret.anchorX, "scatter/caret");
+  passed.push("caret-at-anchor");
 
   const hiStable = await page.evaluate(([ix, iy]) => {
     const span = document.querySelector("#coords_scatter");

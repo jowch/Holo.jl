@@ -226,6 +226,23 @@ describe("mount", () => {
         surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 400, clientY: 200, bubbles: true }))
     })
 
+    it("an edge drag past its own fixed opposite edge flips, same as a corner", () => {
+        const { host, script } = setup()
+        mount(script, roiManifest())
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const box = shadow.querySelectorAll("rect")[0] as SVGRectElement
+        // grab the east edge (image 600,400 == client 300,200; fixed opposite is the west
+        // edge, image x=200) and drag PAST it to image x=100 == client 50,200
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 300, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 50, clientY: 200, bubbles: true }))
+        expect(box.getAttribute("x")).toBe("100")     // min(200, 100)
+        expect(box.getAttribute("width")).toBe("100") // |100 - 200|
+        expect(box.getAttribute("y")).toBe("200")     // vertical extent untouched — still one axis only
+        expect(box.getAttribute("height")).toBe("400")
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 50, clientY: 200, bubbles: true }))
+    })
+
     it("resizes an ROI box from the north edge, moving only the top", () => {
         const { host, script } = setup()
         mount(script, roiManifest())
@@ -499,6 +516,22 @@ describe("pointer capture, cancel, and coalesced drag release", () => {
         expect(surface.hasPointerCapture(0)).toBe(false)
     })
 
+    it("pointerup after a drag clears the hover cursor and threshold-hover chrome, not just pointer capture", () => {
+        const { host, script } = setup()
+        mount(script, thresholdManifest())
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const line = shadow.querySelector(".holo-threshold-line") as SVGLineElement
+        // establish the hover chrome the drag will inherit — onDown alone never sets it
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(surface.classList.contains("cur-ns")).toBe(true)
+        expect(line.classList.contains("hovered")).toBe(true)
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 300, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 300, clientY: 300, bubbles: true }))
+        expect(surface.classList.contains("cur-ns")).toBe(false)
+        expect(line.classList.contains("hovered")).toBe(false)
+    })
+
     it("a throwing setPointerCapture (real Chromium: InvalidPointerId for a non-active pointerId) does not abort onDown", () => {
         // Live-verify finding: Chromium's setPointerCapture throws InvalidPointerId for a
         // pointerId the UA doesn't consider active (happy-dom's is a bare Set.add and never
@@ -529,15 +562,23 @@ describe("pointer capture, cancel, and coalesced drag release", () => {
     it("pointercancel mid-drag ends the drag cleanly: no commit, capture released, cursor unstuck", () => {
         const { host, script } = setup()
         mount(script, thresholdManifest())
-        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const line = shadow.querySelector(".holo-threshold-line") as SVGLineElement
         let fired = false
         host.addEventListener("input", () => { fired = true })
+        // establish the hover chrome the drag will inherit — onDown alone never sets it
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(surface.classList.contains("cur-ns")).toBe(true)
+        expect(line.classList.contains("hovered")).toBe(true)
         surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 300, clientY: 200, bubbles: true }))
         expect(surface.classList.contains("grabbing")).toBe(true)
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 300, bubbles: true }))
         surface.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true }))
         expect(fired).toBe(false)                                  // cancel discards, it does not commit
         expect(surface.classList.contains("grabbing")).toBe(false) // cursor is not left stuck
+        expect(surface.classList.contains("cur-ns")).toBe(false)   // nor the drag-target resize cursor
+        expect(line.classList.contains("hovered")).toBe(false)     // nor the threshold hover-thicken
         expect(surface.hasPointerCapture(0)).toBe(false)
         // a stray pointerup arriving after cancel must not resurrect the drag or commit late
         surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 300, clientY: 300, bubbles: true }))
@@ -547,11 +588,18 @@ describe("pointer capture, cancel, and coalesced drag release", () => {
     it("lostpointercapture mid-drag resets state as a safety net (capture taken away some other way)", () => {
         const { host, script } = setup()
         mount(script, thresholdManifest())
-        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const line = shadow.querySelector(".holo-threshold-line") as SVGLineElement
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(surface.classList.contains("cur-ns")).toBe(true)
+        expect(line.classList.contains("hovered")).toBe(true)
         surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 300, clientY: 200, bubbles: true }))
         expect(surface.classList.contains("grabbing")).toBe(true)
         surface.dispatchEvent(new PointerEvent("lostpointercapture", { bubbles: true }))
         expect(surface.classList.contains("grabbing")).toBe(false)
+        expect(surface.classList.contains("cur-ns")).toBe(false)
+        expect(line.classList.contains("hovered")).toBe(false)
         // the drag is gone — a plain pointerup now must not commit
         let fired = false
         host.addEventListener("input", () => { fired = true })

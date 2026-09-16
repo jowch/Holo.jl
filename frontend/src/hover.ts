@@ -1,4 +1,4 @@
-import { anchorFor, computeAnchoredPlacement, hitTest, resolvePayload, CURSOR_FOLLOWING_KINDS } from "./geometry"
+import { anchorFor, computeAnchoredPlacement, hitTest, resolvePayload, CURSOR_FOLLOWING_KINDS, ANCHOR_GAP } from "./geometry"
 import type { Anchor } from "./geometry"
 import { renderTemplate, renderAutoTable, esc } from "./template"
 import { drawHi, clearHi } from "./highlight"
@@ -108,8 +108,6 @@ export function placeTip(ctx: OverlayCtx, state: OverlayState, ox: number, oy: n
     ctx.tip_.style.left = `${Math.max(TIP_GAP, Math.min(left, hw - tw - TIP_GAP))}px`
     ctx.tip_.style.top = `${Math.max(TIP_GAP, Math.min(top, hh - th - TIP_GAP))}px`
 }
-
-const ANCHOR_GAP = 10 // px between the mark and the box — mirrors geometry.ts's ANCHOR_GAP
 
 // Places the tooltip above (or, if that clips the surface's top, below) a mark's anchor point —
 // used for every kind except the cursor-following four (geometry.ts's CURSOR_FOLLOWING_KINDS).
