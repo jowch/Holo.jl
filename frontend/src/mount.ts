@@ -43,10 +43,10 @@ svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: n
    of it, so the derived surface is always a flat near-white or near-black grey (chroma/hue 0),
    never a tint of the figure's own hue — the mark accent (added by tooltip_* / colors, not
    here) is the only place the figure's actual colour is allowed to show through. The trailing
-   the trailing / 1 forces full opacity: omitting the alpha component of lch(from …) inherits
-   the ORIGIN colour's own alpha, and holo() always forces the figure's background opaque
-   before building the manifest, but a caller building the manifest directly (build_manifest's
-   background kwarg, not through holo()) isn't guaranteed to. */
+   / 1 forces full opacity: omitting the alpha component of lch(from …) inherits the ORIGIN
+   colour's own alpha, and holo() always forces the figure's background opaque before building
+   the manifest, but a caller building the manifest directly (build_manifest's background
+   kwarg, not through holo()) isn't guaranteed to. */
 @property --holo-fig-bg { syntax: "<color>"; inherits: true; initial-value: #ffffff; }
 :host {
   --holo-tip-bg-resolved: var(--holo-tip-bg, lch(from var(--holo-fig-bg) clamp(12, calc((l - 49.44) * infinity), 100) 0 0 / 1));
