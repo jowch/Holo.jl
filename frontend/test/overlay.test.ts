@@ -741,6 +741,27 @@ describe("tooltips (mount/showTip)", () => {
         (shadow.querySelector(".surface") as HTMLElement)
             .dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
 
+    it("a second hide before the first's flip-class cleanup fires replaces the pending timer, not stacks it", async () => {
+        // hideTip schedules a delayed removal of flip-x/flip-y (so a fast re-show doesn't visibly
+        // flash the caret back to its default side). Leaving twice in quick succession — e.g. the
+        // pointer re-enters and leaves again before the first timer fires — must clear the stale
+        // timer rather than let it fire later and race the second hide's own cleanup.
+        const { host, script } = setup()
+        mount(script, tipManifest({ template: ["<b>", { f: "name" }, "</b>"] }))
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        hoverMarker(shadow)
+        expect(tip.classList.contains("show")).toBe(true)
+        surface.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }))
+        expect(tip.classList.contains("show")).toBe(false)
+        // second leave before MOTION_MS elapses — must replace, not duplicate, the pending timer
+        surface.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 150))
+        expect(tip.classList.contains("flip-x")).toBe(false)
+        expect(tip.classList.contains("flip-y")).toBe(false)
+    })
+
     it("applies tipStyle custom properties to the shadow host", () => {
         const { host, script } = setup()
         mount(script, tipManifest({}, { "--holo-tip-bg": "rgb(1,2,3)" }))
@@ -795,6 +816,34 @@ describe("tooltips (mount/showTip)", () => {
         expect(tip.classList.contains("show")).toBe(true)
         expect(tip.innerHTML).toBe("5.000")
         expect(tip.innerHTML).not.toContain("undefined")
+    })
+
+    it("cursor-following tooltip offset uses the surface's real rect, not the raw event offset, when one is available", () => {
+        // tipOffset falls back to e.offsetX/e.offsetY only when the surface's own
+        // getBoundingClientRect is degenerate (width/height 0, as happy-dom defaults to) — with
+        // a real rect it must use clientX/Y - rect.left/top instead. offsetX/Y are 0 in happy-dom
+        // regardless, so a surface rect at a non-zero origin is the only way to tell the two
+        // branches apart. Hit-testing itself goes through the BASE element's rect (unmocked here,
+        // setup()'s default), not the surface's — client (110,150) is the same point the existing
+        // "colorbar axis hover" test above uses, so it's a known hit; the surface rect below is
+        // independent, only exercising the offset math.
+        const { host, script } = setup()
+        const cbManifest: Manifest = {
+            width: 1200, height: 800, scaling: 2,
+            transforms: { cb1: { xlims: [0, 1], ylims: [0, 10], xscale: "identity", yscale: "identity",
+                viewport: [200, 100, 24, 400], xreversed: false, yreversed: false, valueaxis: "y" } },
+            layers: [{ id: "colorbar", kind: "axis", geometry: [200, 100, 24, 400], payloads: [], axis: "cb1", events: ["hover"] }],
+        }
+        mount(script, cbManifest)
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        surface.getBoundingClientRect = () =>
+            ({ left: 30, top: 20, width: 600, height: 400, right: 630, bottom: 420, x: 30, y: 20, toJSON() {} }) as DOMRect
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 110, clientY: 150, bubbles: true }))
+        expect(tip.classList.contains("show")).toBe(true)
+        expect(tip.style.left).toBe(`${110 - 30 + 10}px`) // TIP_OFFSET = 10
+        expect(tip.style.top).toBe(`${150 - 20 + 10}px`)
     })
 
     it("plain axis hover shows x=… y=… tooltip (no valueaxis)", () => {
