@@ -33,6 +33,23 @@
 > MsgPack string key ("label", 6 B header+bytes) + one string value, added once per labeled
 > layer, not per element — `label = "Scatter"` costs 14 B total, `label = "Bars, quarterly
 > revenue"` costs 30 B. Doesn't scale with element count — negligible at any N.
+> and re-run for the figure-background tooltip theme + per-element `colors` accent (this PR,
+> 2026-09-15): two manifest-shape changes — an optional top-level `"background"` string
+> (always present; `holo()` ships the figure's own background colour) and an optional
+> per-layer `"colors"` field (a uniform CSS string, or a shared palette + one index per
+> element for colormap/categorical data), present only on a `PointInteractable(ax,
+> p::Makie.Scatter)`-derived `:circles` layer whose colour resolves. Envelope unchanged at the
+> KB-rounded numbers this file tracks: scatter-1k manifest still 38.1 KB (was 38.0 KB),
+> heatmap-200² still 196.8 KB (`:grid` layers never carry `colors`), 30-frame scrub still
+> 5.6 MB (PNG-only, untouched by a manifest-only change). Measured the exact delta directly:
+> `background` costs 28 B (key + `"rgb(255,255,255)"` value), once per manifest, not per
+> layer or element; a uniform `colors` costs ~22 B (key + one CSS colour string), once per
+> Scatter layer. `holo(f)`'s default un-coloured scatter already carries a uniform `colors`
+> (Makie's own default marker colour) — 50 B total added to the scatter-1000 row above.
+> A colormapped/categorical `colors` instead ships a shared palette (`_COLOR_PALETTE_SIZE =
+> 32` stops) + one small int per element — bounded by the fixed palette size regardless of N,
+> plus ~1–2 B/element for the index, not measured directly here since neither bench fixture
+> sets a numeric/vector `color=`.
 > baseline established after int-pixel geometry quantization, CairoMakie 0.15, Julia 1.12):
 > - **base64-PNG / manifest / render numbers** — `julia --project=. bench/payload_envelope.jl`
 >   (normal envelope) and `julia --project=. bench/stress.jl` (the 10× extremes). Both `seed!(0)`,

@@ -1,9 +1,42 @@
 {
+    "transforms": {
+        "ax1": {
+            "xscale": "identity",
+            "xreversed": false,
+            "yscale": "log10",
+            "ylims": [
+                0.06309573401504136,
+                1584.8932033370284
+            ],
+            "xlims": [
+                0.8999999985098839,
+                3.100000001490116
+            ],
+            "yreversed": false,
+            "ispolar": false,
+            "xcats": null,
+            "is3d": false,
+            "ycats": null,
+            "viewport": [
+                104,
+                32,
+                1064,
+                690
+            ],
+            "valueaxis": null
+        }
+    },
+    "scaling": 2,
     "height": 800,
+    "width": 1200,
     "layers": [
         {
+            "events": [
+                "click",
+                "hover"
+            ],
             "kind": "circles",
-            "id": "scatter",
+            "axis": "ax1",
             "geometry": [
                 152,
                 691,
@@ -15,6 +48,12 @@
                 63,
                 9
             ],
+            "id": "scatter",
+            "style": {
+                "stroke": "#3A6F7C",
+                "width": 2
+            },
+            "colors": "rgb(0,114,178)",
             "payloads": [
                 {
                     "index": 0,
@@ -31,20 +70,16 @@
                     "x": 3,
                     "y": 1000
                 }
-            ],
-            "axis": "ax1",
-            "style": {
-                "width": 2,
-                "stroke": "#3A6F7C"
-            },
-            "events": [
-                "click",
-                "hover"
             ]
         },
         {
+            "events": [
+                "click",
+                "hover"
+            ],
             "kind": "polyline",
-            "id": "lines",
+            "tol": 12,
+            "axis": "ax1",
             "geometry": [
                 152,
                 534,
@@ -53,6 +88,11 @@
                 1120,
                 220
             ],
+            "id": "lines",
+            "style": {
+                "stroke": "#3A6F7C",
+                "width": 2
+            },
             "payloads": [
                 {
                     "segment_index": 0
@@ -60,46 +100,7 @@
                 {
                     "segment_index": 1
                 }
-            ],
-            "axis": "ax1",
-            "style": {
-                "width": 2,
-                "stroke": "#3A6F7C"
-            },
-            "tol": 12,
-            "events": [
-                "click",
-                "hover"
             ]
         }
-    ],
-    "transforms": {
-        "ax1": {
-            "xscale": "identity",
-            "ylims": [
-                0.06309573401504136,
-                1584.8932033370284
-            ],
-            "xlims": [
-                0.8999999985098839,
-                3.100000001490116
-            ],
-            "valueaxis": null,
-            "is3d": false,
-            "xreversed": false,
-            "ycats": null,
-            "xcats": null,
-            "yreversed": false,
-            "yscale": "log10",
-            "viewport": [
-                104,
-                32,
-                1064,
-                690
-            ],
-            "ispolar": false
-        }
-    },
-    "width": 1200,
-    "scaling": 2
+    ]
 }

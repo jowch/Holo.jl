@@ -79,6 +79,10 @@ export interface HitLayer {
     selected?: number[] // element indices to draw pre-highlighted on mount
     selects?: string   // id of the target layer this ROI selects; absent → bounds-ROI (no multi-select)
     label?: string     // screen-reader announcement prefix, e.g. "Scatter, element 3 of 10: …"; absent → no prefix
+    // Per-element tooltip accent colour: one CSS colour string (uniform across the layer), or a
+    // shared palette + one 0-based palette index per element (colormapped/categorical data).
+    // Absent → no accent (unresolvable or not attempted for this plot kind).
+    colors?: string | { palette: string[]; index: number[] }
     // Bond value shape: selects-ROI mouse-up ships { items: [...] }; single-click / bounds-ROI
     // ships { layer, index, payload } directly.
 }
@@ -90,6 +94,7 @@ export interface Manifest {
     layers: HitLayer[]
     transforms: Record<string, AxisTransform>
     tipStyle?: Record<string, string> // figure-level --holo-tip-* custom properties
+    background?: string // the figure's background colour (CSS string) — drives the tooltip's light/dark theme
 }
 
 // `layer`/`index` are excluded from the trailing-underscore mangle convention (see

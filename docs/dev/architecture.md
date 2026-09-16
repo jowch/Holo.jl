@@ -648,8 +648,21 @@ measured comparison).
 The top-level manifest field `tipStyle` (`Record<string,string>`, optional) is a CSS-var dict
 of set `tooltip_*` kwargs, applied once to the shadow host at mount.
 
-`HitLayer` carries `template?: TemplateSegment[]` and `tooltip?: false`; `Manifest` carries
-`tipStyle?: Record<string, string>`. See `frontend/src/types.ts`.
+The top-level `background` field (CSS colour string; optional on `build_manifest` directly, but
+`holo()` always sets it) is the figure's own
+background colour (`fig.scene.backgroundcolor[]`) — the tooltip's light/dark theme is derived
+from it client-side via CSS relative-colour syntax (`lch(from var(--holo-fig-bg) …)`, with a
+static-light/OS-dark `@supports not (…)` fallback for browsers without it), not just OS
+`prefers-color-scheme`, so a dark figure on a light Pluto page still gets a dark tooltip. A
+per-layer `colors` field (optional; a single CSS string, or a shared palette + one index per
+element) drives a 3px accent border in the hovered element's own colour — resolved only for a
+`PointInteractable(ax, p::Makie.Scatter)`-derived layer whose colour is resolvable; omitted
+(no accent) otherwise. Both are O(1)-per-manifest/per-layer, same cost-model rationale as
+`tipStyle` above (see `perf-findings.md`'s figure-background/`colors` reconciliation entry).
+
+`HitLayer` carries `template?: TemplateSegment[]`, `tooltip?: false`, and `colors?: string |
+{palette, index}`; `Manifest` carries `tipStyle?: Record<string, string>` and `background?:
+string`. See `frontend/src/types.ts`.
 
 ### 10.5 Security model
 
