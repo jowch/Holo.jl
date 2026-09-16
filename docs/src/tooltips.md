@@ -75,12 +75,25 @@ which case a missing `$(field)` just renders empty at hover instead.
 
 ## Styling
 
-### Dark mode is automatic
+### Dark mode follows the figure
 
-The built-in tooltip follows the OS/browser `prefers-color-scheme` signal — the same one
-stock Pluto uses for its own theme (official Pluto has no in-app light/dark toggle; Settings
-→ Dark mode is help text, not a real switch). No author action needed; the tooltip already
-matches whatever mode the user's Pluto is in.
+The built-in tooltip's light/dark theme is derived from **the figure's own background
+colour** — not just the OS/browser `prefers-color-scheme` signal (the one stock Pluto uses for
+its own theme; official Pluto has no in-app light/dark toggle). No author action needed: a
+`Figure(backgroundcolor = :gray12)` on an otherwise-light Pluto page gets a dark tooltip, and a
+default white figure on a dark OS gets a light one — the tooltip matches the plot it's
+attached to.
+
+This uses CSS relative-colour syntax (`lch(from …)`); browsers without it (older than
+~2023) fall back to the previous behaviour — a static light tooltip, dark only via OS
+`prefers-color-scheme` — automatically, no author action needed either way.
+
+### Accent colour
+
+When Holo can resolve the hovered element's own colour (currently: a `scatter!` plot's
+`color=`, uniform or colormapped), the tooltip gets a 3px accent border in that colour — the
+tooltip text itself stays neutral. Nothing to opt into; it's omitted (a plain 1px border, same
+as the other three sides) whenever the colour can't be resolved.
 
 ### Figure-level overrides
 
@@ -114,21 +127,26 @@ main { --holo-tip-bg: #1a1a2e; --holo-tip-color: #e0e0e0; }
 ```
 
 A few properties are CSS-only — no Julia kwarg sets them, so this is the only way to change
-them:
+them. `--holo-tip-bg`/`--holo-tip-color`/`--holo-tip-border` no longer have one fixed
+light/dark pair of defaults — they're derived from the figure's background (see above) unless
+set explicitly here or via a `tooltip_*` kwarg; the "Legacy fallback" column is what a browser
+without CSS relative-colour syntax uses instead (static light, dark only via OS
+`prefers-color-scheme`):
 
-| Custom property | Light default | Dark default | Julia kwarg |
-|---|---|---|---|
-| `--holo-tip-bg` | `#ffffff` | `#1e1e1e` | `tooltip_bg` |
-| `--holo-tip-color` | `#1a1a1a` | `#e8e8e8` | `tooltip_color` |
-| `--holo-tip-accent` | `#6b7280` | *(same)* | `tooltip_accent` |
-| `--holo-tip-font` | `system-ui, -apple-system, sans-serif` | *(same)* | `tooltip_font` |
-| `--holo-tip-font-size` | `11px` | *(same)* | `tooltip_font_size` |
-| `--holo-tip-radius` | `4px` | *(same)* | `tooltip_radius` |
-| `--holo-tip-caret` | `block` (the caret's `display`) | *(same)* | `tooltip_caret` (`false` → `none`) |
-| `--holo-tip-padding` | `8px 12px` | *(same)* | — (CSS only) |
-| `--holo-tip-border` | `rgba(0,0,0,0.1)` | `rgba(255,255,255,0.15)` | — (CSS only) |
-| `--holo-tip-shadow` | `0 2px 4px rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.08)` | `0 2px 4px rgba(0,0,0,0.4), 0 8px 16px rgba(0,0,0,0.3)` | — (CSS only) |
-| `--holo-tip-maxwidth` | `320px` | *(same)* | — (CSS only) |
+| Custom property | Legacy fallback (light / dark) | Julia kwarg |
+|---|---|---|
+| `--holo-tip-bg` | `#ffffff` / `#1e1e1e` | `tooltip_bg` |
+| `--holo-tip-color` | `#1a1a1a` / `#e8e8e8` | `tooltip_color` |
+| `--holo-tip-border` | `rgba(0,0,0,0.1)` / `rgba(255,255,255,0.15)` | — (CSS only) |
+| `--holo-tip-accent` | `#6b7280` | `tooltip_accent` |
+| `--holo-tip-font` | `system-ui, -apple-system, sans-serif` | `tooltip_font` |
+| `--holo-tip-font-size` | `11px` | `tooltip_font_size` |
+| `--holo-tip-radius` | `4px` | `tooltip_radius` |
+| `--holo-tip-caret` | `block` (the caret's `display`) | `tooltip_caret` (`false` → `none`) |
+| `--holo-tip-padding` | `8px 12px` | — (CSS only) |
+| `--holo-tip-shadow` | `0 2px 4px rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.08)` / `0 2px 4px rgba(0,0,0,0.4), 0 8px 16px rgba(0,0,0,0.3)` | — (CSS only) |
+| `--holo-tip-maxwidth` | `320px` | — (CSS only) |
+| `--holo-mark-border` | *(unset — plain 1px border)* | — (set automatically from the hovered element's `colors`, see "Accent colour" above) |
 
 ### Placement
 

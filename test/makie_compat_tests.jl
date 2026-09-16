@@ -16,6 +16,7 @@
     cb = Colorbar(fig[1, 2], hm)
     ax3 = Axis3(fig[2, 1:2])
     sc3 = scatter!(ax3, Makie.Point3f[(1, 2, 3), (4, 5, 6)])
+    scc = scatter!(ax, [1.0, 2.0, 3.0], [3.0, 2.0, 1.0]; color = [1.0, 2.0, 3.0], colormap = :viridis)
 
     Holo._finalize!(fig)   # exercises _finalize!; everything below needs a finalized layout
 
@@ -91,6 +92,15 @@
         @test q3 isa Makie.VecTypes
     end
 
+    @testset "_scaled_color + _scaled_colorrange + _raw_colormap" begin
+        vals = Holo._scaled_color(scc)
+        @test vals isa AbstractVector && length(vals) == 3
+        lo, hi = Holo._scaled_colorrange(scc)
+        @test lo <= minimum(vals) && maximum(vals) <= hi
+        cmap = Holo._raw_colormap(scc)
+        @test cmap isa AbstractVector{<:Makie.RGBAf} && length(cmap) > 2
+    end
+
     @testset "_finalize! is idempotent" begin
         @test Holo._finalize!(fig) === nothing
         @test fig.scene.viewport[] isa Makie.Rect2   # actually re-ran layout, not a no-op
@@ -111,6 +121,9 @@
         @test_throws r"^Holo: Makie internal `transform_func`" Holo._transform_func(nothing)
         @test_throws r"^Holo: Makie internal `project`" Holo._project_px(nothing, Makie.Point3(0.0, 0.0, 0.0))
         @test_throws DomainError Holo._apply_transform(log10, Makie.Point3(-1.0, 1.0, 0.0))   # pass-through preserved
+        @test_throws r"^Holo: Makie internal `scaled_color`" Holo._scaled_color(nothing)
+        @test_throws r"^Holo: Makie internal `scaled_colorrange`" Holo._scaled_colorrange(nothing)
+        @test_throws r"^Holo: Makie internal `raw_colormap`" Holo._raw_colormap(nothing)
     end
 
     # _finalize! must NOT rewrap an error raised by the user's own observable callback as a

@@ -266,14 +266,16 @@ try {
   if (afterLeave.sel < 1) throw new Error("g.sel dropped after fade");
   passed.push("selected-survives-unhover");
 
+  const darkPts = (await layersOf("scatter_dark")).find((l) => l.kind === "circles");
+  const dhx = darkPts.geometry[3], dhy = darkPts.geometry[4];
   await assertTooltipColorScheme(page, {
     css: () => inspect("scatter").then((m) => m.css),
-    computed: async () => {
-      const t = await hoverAt("scatter", hx, hy);
+    computedFor: async (which) => {
+      const t = which === "dark" ? await hoverAt("scatter_dark", dhx, dhy) : await hoverAt("scatter", hx, hy);
       return { bg: t.bg, color: t.color };
     },
   });
-  passed.push("prefers-color-scheme");
+  passed.push("tooltip-theme-follows-figure-bg");
 
   if (unexpected.length) throw new Error(`page errors: ${unexpected.join(" | ")}`);
   passed.push("no-console-errors");
