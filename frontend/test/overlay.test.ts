@@ -477,6 +477,21 @@ describe("mount", () => {
         expect(r.ymin).toBeCloseTo(50)                            // image y 400 → 100*(1-400/800)
         expect(r.ymax).toBeCloseTo(87.5)                          // image y 100 → 100*(1-100/800)
     })
+
+    it("the grid cell-block selection rect is fill-only (no stroke) — the ROI box is the outline", () => {
+        // Regression: the cell-block rect used to draw the ordinary closed-selection stroke,
+        // which sat right next to the ROI's own outline and read as two overlapping boxes with
+        // parallel edges (docs gallery `image_widget`: RectInteractable(grid=...) + ROI selects).
+        const { host, script } = setup()
+        mount(script, gridSelectManifest())
+        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 125, clientY: 125, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 125, clientY: 125, bubbles: true }))
+        const el = shadowOf(host).querySelector("g.sel")!.firstElementChild as SVGElement
+        expect(el.tagName.toLowerCase()).toBe("rect")
+        expect(el.getAttribute("fill")).toBe("rgba(58, 111, 124, 0.12)")
+        expect(el.getAttribute("stroke")).toBe("none")
+    })
 })
 
 // Pointer events: capture-driven drag lifecycle (issue: overlay pointer events / capture / rAF-coalesced drag).
@@ -697,6 +712,55 @@ describe("tooltips (mount/showTip)", () => {
         const { host, script } = setup()
         mount(script, tipManifest({}, { "--holo-tip-bg": "rgb(1,2,3)" }))
         expect((host.lastElementChild as HTMLElement).style.getPropertyValue("--holo-tip-bg")).toBe("rgb(1,2,3)")
+    })
+
+    it("applies the manifest's background as --holo-fig-bg on the shadow host", () => {
+        const { host, script } = setup()
+        mount(script, { ...tipManifest({}), background: "rgb(30,30,30)" })
+        expect((host.lastElementChild as HTMLElement).style.getPropertyValue("--holo-fig-bg")).toBe("rgb(30,30,30)")
+    })
+
+    it("sets --holo-mark-border from the hovered element's colors, and clears it on an uncolored one", async () => {
+        const { host, script } = setup()
+        // two circles, side by side: "colored" carries a uniform accent colour, "plain" doesn't
+        const twoLayerManifest: Manifest = {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [
+                { id: "colored", kind: "circles", geometry: [600, 400, 20], payloads: [{ name: "a" }], axis: "ax1", events: ["hover"], colors: "rgb(9,9,9)" },
+                { id: "plain", kind: "circles", geometry: [900, 400, 20], payloads: [{ name: "b" }], axis: "ax1", events: ["hover"] },
+            ],
+        }
+        mount(script, twoLayerManifest)
+        const shadow = shadowOf(host)
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(tip.style.getPropertyValue("--holo-mark-border")).toBe("3px solid rgb(9,9,9)")
+        await flushFrame() // onMove rAF-coalesces; the pending move above must land before the next one
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 450, clientY: 200, bubbles: true }))
+        expect(tip.style.getPropertyValue("--holo-mark-border")).toBe("")
+    })
+
+    it("resolves a palette+index colors field per element", async () => {
+        const { host, script } = setup()
+        const palettedManifest: Manifest = {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [{
+                id: "pts", kind: "circles", axis: "ax1", events: ["hover"],
+                geometry: [600, 400, 20, 900, 400, 20],
+                payloads: [{ name: "a" }, { name: "b" }],
+                colors: { palette: ["rgb(1,1,1)", "rgb(2,2,2)"], index: [1, 0] },
+            }],
+        }
+        mount(script, palettedManifest)
+        const shadow = shadowOf(host)
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(tip.style.getPropertyValue("--holo-mark-border")).toBe("3px solid rgb(2,2,2)")
+        await flushFrame()
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 450, clientY: 200, bubbles: true }))
+        expect(tip.style.getPropertyValue("--holo-mark-border")).toBe("3px solid rgb(1,1,1)")
     })
 
     it("renders a template tooltip as HTML on hover (markup live, data escaped)", () => {
@@ -1540,6 +1604,9 @@ describe("coverage gaps: grid-value tooltip, drag-target hover cursor, rects/pol
         expect(el.getAttribute("y")).toBe("90")  // cy(100) - h/2(10)
         expect(el.getAttribute("width")).toBe("40")
         expect(el.getAttribute("height")).toBe("20")
+        // An element-indexed rects selection keeps its stroke — only the grid cell-block union
+        // rect from an ROI's `selects` (a distinct "rectfill" geom tag) is fill-only.
+        expect(el.getAttribute("stroke")).toBe("#3A6F7C")
     })
 
     it("selected= on a polygons layer draws a polygon wash (hitLayerByIndex + makeHiElement poly branch)", () => {

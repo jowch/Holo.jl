@@ -72,6 +72,9 @@ function _layer_dict(i, L::HitLayer, ctx::InteractionContext)
     s = selects(i)
     s === nothing || (d["selects"] = string(s))
     L.label === nothing || (d["label"] = L.label)
+    if L.colors !== nothing
+        d["colors"] = L.colors isa AbstractString ? L.colors : Dict("palette" => L.colors.palette, "index" => L.colors.index)
+    end
     spec = tooltip_spec(i)
     spec === true && throw(ArgumentError("tooltip = true is not meaningful — omit `tooltip` for the auto name/value table (the default), pass holo\"…\" for a template, or `false` to suppress."))
     if spec isa Markup
@@ -182,7 +185,7 @@ tests call this directly; the Pluto-only `published_to_js` step happens later in
 `Symbol` a click returns in `InteractionEvent.layer`. The overlay re-derives highlights from
 it each render, so threading a bond value back keeps a selection flicker-free across re-renders.
 """
-function build_manifest(interactables, ctx::InteractionContext; selected = nothing, tip_style = nothing)
+function build_manifest(interactables, ctx::InteractionContext; selected = nothing, tip_style = nothing, background = nothing)
     layers = Any[]
     for i in interactables
         msg = validate(i, ctx)
@@ -206,6 +209,7 @@ function build_manifest(interactables, ctx::InteractionContext; selected = nothi
         "transforms" => Dict(string(id) => _transform_dict(t) for (id, t) in ctx.transforms),
     )
     (tip_style === nothing || isempty(tip_style)) || (m["tipStyle"] = tip_style)
+    background === nothing || (m["background"] = _css_color(background))
     return m
 end
 
@@ -297,7 +301,7 @@ function holo(
         tip_style = tip_style_dict(;
             tooltip_bg, tooltip_color, tooltip_accent, tooltip_font, tooltip_font_size, tooltip_radius, tooltip_caret,
         )
-        manifest = build_manifest(interactables, ctx; selected, tip_style)
+        manifest = build_manifest(interactables, ctx; selected, tip_style, background = fig.scene.backgroundcolor[])
         result = render(backend, fig, ppu)
         display_css = round(Int, min(size(fig.scene)[1], backend.max_width))
         return make_widget(backend, result, manifest, display_css)

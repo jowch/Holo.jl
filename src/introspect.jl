@@ -16,12 +16,84 @@ function _marker_radius(p)
     d = ms isa AbstractVector ? (isempty(ms) ? 0.0 : Float64(maximum(ms))) : Float64(ms)
     return d / 2
 end
-function PointInteractable(ax, p::Makie.Scatter; id = :scatter, payloads = nothing, radius = nothing)
+# Tooltip accent colour for a Scatter's points (HitLayer's `colors` field): a shared palette of
+# CSS strings + one 0-based index per point, or a single CSS string when every point is the same
+# colour. `nothing` (no accent) for anything not shaped one of those two ways — not an error,
+# since an accent is a nice-to-have, not something a plot must support.
+const _COLOR_PALETTE_SIZE = 32
+function _resolve_scatter_colors(p)
+    c = p.color[]
+    c isa AbstractVector || return _css_color(c)
+    if eltype(c) <: Real
+        return _colormap_palette_index(p, c)
+    end
+    return _categorical_palette_index(c)
+end
+
+# c's elements are already resolved Colorants (Makie converts non-numeric `color=` up front) —
+# de-duplicate into a palette so a small number of distinct colours (the common categorical case)
+# stays compact on the wire, same shape as the colormap branch below. A Dict lookup (not
+# `findfirst` per element) keeps this O(n) — a large explicit per-point colour vector is exactly
+# the case this is meant to compress, not blow up quadratically on.
+function _categorical_palette_index(c)
+    palette = String[]
+    seen = Dict{String, Int}()
+    index = Vector{Int}(undef, length(c))
+    for (k, v) in enumerate(c)
+        s = _css_color(v)
+        idx = get(seen, s, nothing)
+        if idx === nothing
+            push!(palette, s)
+            idx = length(palette) - 1
+            seen[s] = idx
+        end
+        index[k] = idx
+    end
+    return (; palette, index)
+end
+
+# values are the RAW numbers (colormap not yet applied to them); resolve via the same
+# ComputePipeline nodes Makie's own colour lookup reads (`scaled_color`/`scaled_colorrange`,
+# post-`colorscale`; `raw_colormap`, the resolved colour ramp) — `Makie.numbers_to_colors`
+# itself takes a mid-render "primitive" dict a live plot doesn't have, not a plot object.
+# `raw_colormap` is downsampled to `_COLOR_PALETTE_SIZE` stops: a 3px accent border doesn't need
+# the full 256-entry ramp, and a smaller palette keeps the manifest small (see perf-findings.md).
+function _colormap_palette_index(p, values)
+    cmap = _raw_colormap(p)
+    lo, hi = Float64.(_scaled_colorrange(p))
+    scaled = _scaled_color(p)
+    length(scaled) == length(values) || return nothing
+    isfinite(lo) && isfinite(hi) || return nothing   # e.g. every value NaN — nothing to derive
+    step = max(1, length(cmap) ÷ _COLOR_PALETTE_SIZE)
+    palette = [_css_color(c) for c in cmap[1:step:length(cmap)]]
+    n = length(palette)
+    span = hi - lo
+    # A non-finite element (NaN/Inf — Makie renders it via `nan_color`) can't map into the
+    # palette; round(Int, NaN) throws before clamp can help, so check first. An element Makie
+    # has clamped to something merely huge (not literally Inf, e.g. a saturated Float32) still
+    # overflows Int64 in round(Int, huge*n) — clamp the FLOAT index into [0, n-1] before
+    # rounding, not just after, so no magnitude of finite input can escape. Falls back to
+    # palette[1] rather than erroring — the accent is a nice-to-have, not a rendering guarantee.
+    index = if span == 0
+        fill(0, length(scaled))
+    else
+        [
+            let idxf = (Float64(v) - lo) / span * (n - 1)
+                isfinite(idxf) ? round(Int, clamp(idxf, 0.0, Float64(n - 1))) : 0
+            end
+                for v in scaled
+        ]
+    end
+    return (; palette, index)
+end
+
+function PointInteractable(ax, p::Makie.Scatter; id = :scatter, payloads = nothing, radius = nothing, colors = _resolve_scatter_colors(p))
     pts = _conv(p)[1]
     r = radius === nothing ? _marker_radius(p) : radius
+    kw = (; id, radius = r, colors)
     return payloads === nothing ?
-        PointInteractable(ax, pts; id, radius = r) :
-        PointInteractable(ax, pts; id, radius = r, payloads)
+        PointInteractable(ax, pts; kw...) :
+        PointInteractable(ax, pts; kw..., payloads)
 end
 
 # markersize is DATA-space (no markerspace attribute), so pixel radius is camera/depth-dependent;

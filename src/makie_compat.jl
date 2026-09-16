@@ -150,3 +150,41 @@ function _finalize!(fig)
     end
     return nothing
 end
+
+# Wraps `p.scaled_color[]`, ComputePipeline's colour value(s) after `colorscale` is applied but
+# before the colormap lookup — same domain as `_scaled_colorrange`. Only called for a plot whose
+# `color[]` is already known numeric (Holo.jl's own check), so a KeyError here means Scatter
+# stopped exposing this node, a real compat break; no public accessor exists.
+function _scaled_color(p)
+    v = try
+        p.scaled_color[]
+    catch e
+        e isa _MAKIE_SHAPE_ERRORS || rethrow()
+        return _makie_compat_error("scaled_color", "a plot to expose `.scaled_color[]`")
+    end
+    return v
+end
+
+# Wraps `p.scaled_colorrange[]`, the resolved (possibly auto-computed) colour range in the same
+# scaled domain as `_scaled_color`; no public accessor exists.
+function _scaled_colorrange(p)
+    v = try
+        p.scaled_colorrange[]
+    catch e
+        e isa _MAKIE_SHAPE_ERRORS || rethrow()
+        return _makie_compat_error("scaled_colorrange", "a plot to expose `.scaled_colorrange[]`")
+    end
+    return v
+end
+
+# Wraps `p.raw_colormap[]`, the plot's colormap resolved to a dense `Vector{RGBAf}` sample; no
+# public accessor for the *resolved* form exists (`p.colormap[]` is the unresolved Symbol/spec).
+function _raw_colormap(p)
+    v = try
+        p.raw_colormap[]
+    catch e
+        e isa _MAKIE_SHAPE_ERRORS || rethrow()
+        return _makie_compat_error("raw_colormap", "a plot to expose `.raw_colormap[]`")
+    end
+    return v
+end

@@ -58,11 +58,18 @@ text and the bond payload → it gets a live check on every backend × the kinds
   threshold, ROI, and view-pan. Interaction without visual is unfinished; visual chrome
   without the kind sweep is unfinished. Overlay recipes (locked — cite, do not reopen):
   inspector ink `#3A6F7C` (not `#ff3b30`), hover = stroke only, selected closed = wash,
-  selected open = ring, circle halo `r + 2`, 80–120 ms fade, OS `prefers-color-scheme`
-  (official Pluto has no notebook toggle), tooltip anchored ABOVE the hovered mark (not the
-  cursor) with a 10px gap and the caret on the anchor — flips below on a top-clip, shifts +
-  moves the caret (`--holo-caret-x`) on a side-clip; ROI has 8 square handles (4 corners + 4
-  edge midpoints, corners resize two axes, edges resize one) with directional resize cursors.
+  selected open = ring, circle halo `r + 2`, 80–120 ms fade, tooltip theme derived from the
+  FIGURE's own background (CSS relative-colour syntax, `--holo-fig-bg`) — not just OS
+  `prefers-color-scheme` (official Pluto has no notebook toggle), which is now only the
+  fallback for browsers without relative-colour support — tooltip anchored ABOVE the hovered
+  mark (not the cursor) with a 10px gap and the caret on the anchor — flips below on a
+  top-clip, shifts + moves the caret (`--holo-caret-x`) on a side-clip; a resolvable
+  per-element `colors` (currently: `scatter!`'s `color=`) adds a 3px tooltip accent border in
+  that colour (`--holo-mark-border`), text stays neutral; ROI has 8 square handles (4 corners +
+  4 edge midpoints, corners resize two axes, edges resize one) with directional resize cursors;
+  a `selects`-ROI's grid cell-block union rect is fill-only (no stroke, `"rectfill"` geom tag)
+  — the ROI box itself is the outline, so the rect doesn't double it into two parallel edges
+  (a `selected=` pre-highlight or a `selects`-ROI over `circles` keeps its stroke).
 - **Skip only** pure-internal refactors with zero observable delta (and say so). When unsure,
   it's user-facing — verify all backends × the kinds the change can touch, interaction
   **and** visual.
