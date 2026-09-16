@@ -103,7 +103,7 @@ export interface Hit {
     geom_?: unknown[] // shape descriptor for highlight drawing
     grid_?: [number, number, number?] // [i, j, value]; value absent when values[] was dropped
     axis_?: string // transform id, for continuous inversion
-    roiPart_?: { corner?: number; move?: boolean } // which sub-part of an :roi a drag grabbed
+    roiPart_?: { corner?: number; edge?: "n" | "s" | "w" | "e"; move?: boolean } // which sub-part of an :roi a drag grabbed
 }
 
 // One entry in keyboard.ts's flat, manifest-order nav list — element-indexed kinds only

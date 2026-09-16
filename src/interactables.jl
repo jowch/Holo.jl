@@ -863,8 +863,9 @@ end
 """
     ROIInteractable(ax; bounds, id=:roi, selects=nothing)
 
-A draggable and resizable rectangle: drag the interior to move it, a corner to resize; on
-mouse-up its two opposite pixel corners invert to data-space bounds via
+A draggable and resizable rectangle: drag the interior to move it, a corner to resize both
+edges or an edge midpoint to resize just that one edge; on mouse-up its two opposite pixel
+corners invert to data-space bounds via
 [`AxisTransform`](@ref). An `AbstractSelector` — with `selects` set, it also brushes a
 compatible layer, reporting the contained elements. Produces one `:roi` [`HitLayer`](@ref).
 

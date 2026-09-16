@@ -1,3 +1,4 @@
+import type { Anchor } from "./geometry"
 import type { AxisTransform, FocusRef, Hit, HitLayer, Manifest, ThresholdGeometry, ViewGeometry } from "./types"
 
 export const MOTION_MS = 100 // 80–120 ms window; prefers-reduced-motion disables below
@@ -21,15 +22,14 @@ export const imgPx = (base: HTMLElement, manifest: Manifest, e: MouseEvent): { x
     return { x: (e.clientX - r.left) * s, y: (e.clientY - r.top) * s }
 }
 
-// Inverse of imgPx's scale factor — image px → CSS px offset from the surface/base origin,
-// for placing the tooltip at a keyboard-focused element's anchor (no MouseEvent to read
-// clientX/Y from). In happy-dom, getBoundingClientRect() is all zeros, so `s` is Infinity and
-// this degenerates to {0,0} — the same degenerate branch placeTip already takes for a
-// zero-sized surface.
-export const cssPx = (base: HTMLElement, manifest: Manifest, x: number, y: number): { x: number; y: number } => {
+// Anchor (image px, from geometry.ts's anchorFor) → css px, for the tooltip placement math —
+// shared by the pointer (hover.ts) and keyboard (keyboard.ts) paths so both convert identically.
+// One getBoundingClientRect() per call — this runs on every hover-path mousemove for the
+// mark-anchored kinds, same rAF-throttled budget as imgPx's own per-move read.
+export const cssAnchor = (base: HTMLElement, manifest: Manifest, a: Anchor): Anchor => {
     const r = base.getBoundingClientRect()
     const s = manifest.width / r.width
-    return { x: x / s, y: y / s }
+    return { x: a.x / s, y: a.y / s, top: a.top / s }
 }
 
 // ROIBox/Drag/OverlayCtx/OverlayState/FocusRef are frontend-only interaction state — they
@@ -56,7 +56,11 @@ export interface ROIBox {
 // second pointer's move/up/cancel still routed into the first pointer's drag.
 export type Drag =
     | { kind: "threshold"; id_: string; line_: SVGLineElement; tg_: ThresholdGeometry; t_: AxisTransform; pointerId_: number }
-    | { kind: "roi"; id_: string; box_: ROIBox; mode_: { corner: number } | { move: true }; ax_: number; ay_: number; target_?: HitLayer; pointerId_: number }
+    | {
+        kind: "roi"; id_: string; box_: ROIBox
+        mode_: { corner: number } | { edge: "n" | "s" | "w" | "e" } | { move: true }
+        ax_: number; ay_: number; target_?: HitLayer; pointerId_: number
+    }
     | { kind: "view"; id_: string; g_: ViewGeometry; t_: AxisTransform; x0_: number; y0_: number; pointerId_: number }
 
 // Construction-time DOM/manifest refs, built once by mount.ts and threaded read-mostly through
@@ -101,8 +105,11 @@ export interface OverlayState {
     focusIdx_: number | null
     focusHit_: Hit | null
     focusTipHtml_: string | null
-    focusTipCss_: { x: number; y: number } | null
+    focusTipCss_: Anchor | null
     announceTimer_: ReturnType<typeof setTimeout> | null
+    // :threshold layer id currently drawn thicker for drag-hover feedback; cleared on any miss
+    // (hover.ts's setDragHoverChrome) so it can never point at a line no longer under the cursor.
+    hoveredThresholdId_: string | null
 }
 
 export function createOverlayState(): OverlayState {
@@ -129,6 +136,7 @@ export function createOverlayState(): OverlayState {
         focusTipHtml_: null,
         focusTipCss_: null,
         announceTimer_: null,
+        hoveredThresholdId_: null,
     }
 }
 

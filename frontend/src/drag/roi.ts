@@ -6,6 +6,8 @@ import type { Drag, OverlayState, ROIBox } from "../state"
 import type { HitLayer, Manifest, ROIGeometry } from "../types"
 
 // --- draggable + resizable ROI boxes (Tier 0) ---
+// handles_[0..3] are the corners (unchanged indices/order); handles_[4..7] are the edge
+// midpoints in n,s,w,e order, matching hitLayer's roi case in geometry.ts.
 export function setROI(box: ROIBox): void {
     const { x, y, w, h } = box.g_
     box.rect_.setAttribute("x", String(x)); box.rect_.setAttribute("y", String(y))
@@ -16,6 +18,15 @@ export function setROI(box: ROIBox): void {
         box.handles_[k].setAttribute("y", String(corners[k][1] - box.handle_))
         box.handles_[k].setAttribute("width", String(2 * box.handle_))
         box.handles_[k].setAttribute("height", String(2 * box.handle_))
+    }
+    const midX = x + w / 2, midY = y + h / 2
+    const edges = [[midX, y], [midX, y + h], [x, midY], [x + w, midY]] // n, s, w, e
+    for (let k = 0; k < 4; k++) {
+        const hdl = box.handles_[4 + k]
+        hdl.setAttribute("x", String(edges[k][0] - box.handle_))
+        hdl.setAttribute("y", String(edges[k][1] - box.handle_))
+        hdl.setAttribute("width", String(2 * box.handle_))
+        hdl.setAttribute("height", String(2 * box.handle_))
     }
 }
 
@@ -36,7 +47,7 @@ export function buildROIBoxes(manifest: Manifest, svg: SVGSVGElement): Map<strin
         rect.setAttribute("stroke-width", String(st.width)); rect.setAttribute("vector-effect", "non-scaling-stroke")
         svg.appendChild(rect)
         const handles: SVGRectElement[] = []
-        for (let k = 0; k < 4; k++) {
+        for (let k = 0; k < 8; k++) {
             const hdl = document.createElementNS(SVG_NS, "rect")
             hdl.setAttribute("fill", st.stroke)
             svg.appendChild(hdl); handles.push(hdl)
@@ -52,7 +63,10 @@ export function buildROIBoxes(manifest: Manifest, svg: SVGSVGElement): Map<strin
     return roiBoxes
 }
 
-export function begin(id: string, box: ROIBox, mode: { corner: number } | { move: true }, ax: number, ay: number, pointerId: number): Drag {
+export function begin(
+    id: string, box: ROIBox, mode: { corner: number } | { edge: "n" | "s" | "w" | "e" } | { move: true },
+    ax: number, ay: number, pointerId: number,
+): Drag {
     return { kind: "roi", id_: id, box_: box, mode_: mode, ax_: ax, ay_: ay, target_: box.target_, pointerId_: pointerId }
 }
 
@@ -61,6 +75,16 @@ export function move(d: Extract<Drag, { kind: "roi" }>, state: OverlayState, sel
     if ("move" in d.mode_) {
         box.g_.x = Math.max(vx, Math.min(vx + vw - box.g_.w, p.x - d.ax_))
         box.g_.y = Math.max(vy, Math.min(vy + vh - box.g_.h, p.y - d.ay_))
+    } else if ("edge" in d.mode_) {
+        // One axis only — the perpendicular axis's extent is untouched, unlike a corner drag.
+        // d.ax_/d.ay_ carry the single fixed opposite edge, precomputed by bond.ts's onDown.
+        const cx = clampX(box.t_, p.x), cy = clampY(box.t_, p.y)
+        switch (d.mode_.edge) {
+            case "n": box.g_.y = Math.min(cy, d.ay_); box.g_.h = Math.abs(d.ay_ - cy); break
+            case "s": box.g_.y = Math.min(cy, d.ay_); box.g_.h = Math.abs(cy - d.ay_); break
+            case "w": box.g_.x = Math.min(cx, d.ax_); box.g_.w = Math.abs(d.ax_ - cx); break
+            case "e": box.g_.x = Math.min(cx, d.ax_); box.g_.w = Math.abs(cx - d.ax_); break
+        }
     } else {
         const cx = clampX(box.t_, p.x), cy = clampY(box.t_, p.y)
         box.g_.x = Math.min(d.ax_, cx); box.g_.y = Math.min(d.ay_, cy)

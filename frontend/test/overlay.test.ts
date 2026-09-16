@@ -155,13 +155,19 @@ describe("mount", () => {
         expect(afterClick.layer).toBe("thr")
     })
 
-    it("draws an ROI box + 4 handles and commits inverted bounds after a move", () => {
+    it("draws an ROI box + 8 handles (4 corners + 4 edge midpoints) and commits inverted bounds after a move", () => {
         const { host, script } = setup()
         mount(script, roiManifest())
         const shadow = shadowOf(host)
         const surface = shadow.querySelector(".surface") as HTMLElement
         const rects = shadow.querySelectorAll("rect")
-        expect(rects.length).toBe(5)                 // 1 box + 4 corner handles
+        expect(rects.length).toBe(9)                 // 1 box + 4 corner handles + 4 edge handles
+        // geometry x:200,y:200,w:400,h:400,handle:16 → edge midpoints at n(400,200) s(400,600) w(200,400) e(600,400)
+        const edgeHandles = [...rects].slice(5)
+        const edgeCenters = edgeHandles.map((r) => ({
+            x: Number(r.getAttribute("x")) + 16, y: Number(r.getAttribute("y")) + 16,
+        }))
+        expect(edgeCenters).toEqual([{ x: 400, y: 200 }, { x: 400, y: 600 }, { x: 200, y: 400 }, { x: 600, y: 400 }])
         const box = rects[0] as SVGRectElement
         expect(box.getAttribute("x")).toBe("200")
         let committed: { layer: string; index: number; payload: { xmin: number; xmax: number; ymin: number; ymax: number } } | null = null
@@ -202,6 +208,127 @@ describe("mount", () => {
         expect(committed!.payload.xmax).toBeCloseTo(10 * 800 / 1200)
         expect(committed!.payload.ymin).toBeCloseTo(0)    // image y 800 → data 100*(1-800/800)=0
         expect(committed!.payload.ymax).toBeCloseTo(75)   // image y 200 → data 100*(1-200/800)=75
+    })
+
+    it("resizes an ROI box from an edge handle, moving only that one edge", () => {
+        const { host, script } = setup()
+        mount(script, roiManifest())
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const box = shadow.querySelectorAll("rect")[0] as SVGRectElement
+        // east edge midpoint is image (600,400) == client (300,200); drag to image (800,400) == client (400,200)
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 300, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 400, clientY: 200, bubbles: true }))
+        expect(box.getAttribute("x")).toBe("200")     // left edge untouched
+        expect(box.getAttribute("y")).toBe("200")     // top/height untouched — an edge drag is one axis only
+        expect(box.getAttribute("height")).toBe("400")
+        expect(box.getAttribute("width")).toBe("600") // 800 - 200
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 400, clientY: 200, bubbles: true }))
+    })
+
+    it("an edge drag past its own fixed opposite edge flips, same as a corner", () => {
+        const { host, script } = setup()
+        mount(script, roiManifest())
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const box = shadow.querySelectorAll("rect")[0] as SVGRectElement
+        // grab the east edge (image 600,400 == client 300,200; fixed opposite is the west
+        // edge, image x=200) and drag PAST it to image x=100 == client 50,200
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 300, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 50, clientY: 200, bubbles: true }))
+        expect(box.getAttribute("x")).toBe("100")     // min(200, 100)
+        expect(box.getAttribute("width")).toBe("100") // |100 - 200|
+        expect(box.getAttribute("y")).toBe("200")     // vertical extent untouched — still one axis only
+        expect(box.getAttribute("height")).toBe("400")
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 50, clientY: 200, bubbles: true }))
+    })
+
+    it("resizes an ROI box from the north edge, moving only the top", () => {
+        const { host, script } = setup()
+        mount(script, roiManifest())
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const box = shadow.querySelectorAll("rect")[0] as SVGRectElement
+        // north edge midpoint is image (400,200) == client (200,100); drag up to image (400,100) == client (200,50)
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 200, clientY: 100, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 200, clientY: 50, bubbles: true }))
+        expect(box.getAttribute("x")).toBe("200")     // left/width untouched — one axis only
+        expect(box.getAttribute("width")).toBe("400")
+        expect(box.getAttribute("y")).toBe("100")     // top moved up
+        expect(box.getAttribute("height")).toBe("500") // bottom (600) fixed: 600 - 100
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 200, clientY: 50, bubbles: true }))
+    })
+
+    it("resizes an ROI box from the south edge, moving only the bottom", () => {
+        const { host, script } = setup()
+        mount(script, roiManifest())
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const box = shadow.querySelectorAll("rect")[0] as SVGRectElement
+        // south edge midpoint is image (400,600) == client (200,300); drag down to image (400,700) == client (200,350)
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 200, clientY: 300, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 200, clientY: 350, bubbles: true }))
+        expect(box.getAttribute("x")).toBe("200")     // left/width untouched
+        expect(box.getAttribute("width")).toBe("400")
+        expect(box.getAttribute("y")).toBe("200")     // top (fixed) unchanged
+        expect(box.getAttribute("height")).toBe("500") // bottom moved down: 700 - 200
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 200, clientY: 350, bubbles: true }))
+    })
+
+    it("resizes an ROI box from the west edge, moving only the left", () => {
+        const { host, script } = setup()
+        mount(script, roiManifest())
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const box = shadow.querySelectorAll("rect")[0] as SVGRectElement
+        // west edge midpoint is image (200,400) == client (100,200); drag left to image (100,400) == client (50,200)
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 100, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 50, clientY: 200, bubbles: true }))
+        expect(box.getAttribute("y")).toBe("200")     // top/height untouched
+        expect(box.getAttribute("height")).toBe("400")
+        expect(box.getAttribute("x")).toBe("100")     // left moved out
+        expect(box.getAttribute("width")).toBe("500") // right (600) fixed: 600 - 100
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 50, clientY: 200, bubbles: true }))
+    })
+
+    it("hovering an ROI edge/corner handle shows the matching directional resize cursor", async () => {
+        const { host, script } = setup()
+        mount(script, roiManifest())
+        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        // onMove rAF-coalesces bursts of moves (like hover's), so each move here needs a frame
+        // to actually apply before asserting — see "coalesces extra same-frame mousemove".
+        // TL corner image (200,200) == client (100,100) → "\" diagonal
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 100, clientY: 100, bubbles: true }))
+        await flushFrame()
+        expect(surface.classList.contains("cur-nwse")).toBe(true)
+        // TR corner image (600,200) == client (300,100) → "/" diagonal
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 100, bubbles: true }))
+        await flushFrame()
+        expect(surface.classList.contains("cur-nesw")).toBe(true)
+        expect(surface.classList.contains("cur-nwse")).toBe(false)
+        // east edge midpoint image (600,400) == client (300,200) → horizontal resize
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
+        await flushFrame()
+        expect(surface.classList.contains("cur-ew")).toBe(true)
+        // north edge midpoint image (400,200) == client (200,100) → vertical resize
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 200, clientY: 100, bubbles: true }))
+        await flushFrame()
+        expect(surface.classList.contains("cur-ns")).toBe(true)
+        // south edge midpoint image (400,600) == client (200,300) → also vertical resize (the
+        // "n" || "s" check's other operand)
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 200, clientY: 300, bubbles: true }))
+        await flushFrame()
+        expect(surface.classList.contains("cur-ns")).toBe(true)
+        // west edge midpoint image (200,400) == client (100,200) → horizontal resize
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 100, clientY: 200, bubbles: true }))
+        await flushFrame()
+        expect(surface.classList.contains("cur-ew")).toBe(true)
+        // interior (move) image (400,400) == client (200,200)
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 200, clientY: 200, bubbles: true }))
+        await flushFrame()
+        expect(surface.classList.contains("cur-move")).toBe(true)
+        surface.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }))
+        expect(surface.classList.contains("cur-move")).toBe(false)
     })
 
     it("resize flips past the anchor and clamps to the viewport", async () => {
@@ -389,6 +516,22 @@ describe("pointer capture, cancel, and coalesced drag release", () => {
         expect(surface.hasPointerCapture(0)).toBe(false)
     })
 
+    it("pointerup after a drag clears the hover cursor and threshold-hover chrome, not just pointer capture", () => {
+        const { host, script } = setup()
+        mount(script, thresholdManifest())
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const line = shadow.querySelector(".holo-threshold-line") as SVGLineElement
+        // establish the hover chrome the drag will inherit — onDown alone never sets it
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(surface.classList.contains("cur-ns")).toBe(true)
+        expect(line.classList.contains("hovered")).toBe(true)
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 300, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 300, clientY: 300, bubbles: true }))
+        expect(surface.classList.contains("cur-ns")).toBe(false)
+        expect(line.classList.contains("hovered")).toBe(false)
+    })
+
     it("a throwing setPointerCapture (real Chromium: InvalidPointerId for a non-active pointerId) does not abort onDown", () => {
         // Live-verify finding: Chromium's setPointerCapture throws InvalidPointerId for a
         // pointerId the UA doesn't consider active (happy-dom's is a bare Set.add and never
@@ -419,15 +562,23 @@ describe("pointer capture, cancel, and coalesced drag release", () => {
     it("pointercancel mid-drag ends the drag cleanly: no commit, capture released, cursor unstuck", () => {
         const { host, script } = setup()
         mount(script, thresholdManifest())
-        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const line = shadow.querySelector(".holo-threshold-line") as SVGLineElement
         let fired = false
         host.addEventListener("input", () => { fired = true })
+        // establish the hover chrome the drag will inherit — onDown alone never sets it
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(surface.classList.contains("cur-ns")).toBe(true)
+        expect(line.classList.contains("hovered")).toBe(true)
         surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 300, clientY: 200, bubbles: true }))
         expect(surface.classList.contains("grabbing")).toBe(true)
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 300, bubbles: true }))
         surface.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true }))
         expect(fired).toBe(false)                                  // cancel discards, it does not commit
         expect(surface.classList.contains("grabbing")).toBe(false) // cursor is not left stuck
+        expect(surface.classList.contains("cur-ns")).toBe(false)   // nor the drag-target resize cursor
+        expect(line.classList.contains("hovered")).toBe(false)     // nor the threshold hover-thicken
         expect(surface.hasPointerCapture(0)).toBe(false)
         // a stray pointerup arriving after cancel must not resurrect the drag or commit late
         surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 300, clientY: 300, bubbles: true }))
@@ -437,11 +588,18 @@ describe("pointer capture, cancel, and coalesced drag release", () => {
     it("lostpointercapture mid-drag resets state as a safety net (capture taken away some other way)", () => {
         const { host, script } = setup()
         mount(script, thresholdManifest())
-        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const line = shadow.querySelector(".holo-threshold-line") as SVGLineElement
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(surface.classList.contains("cur-ns")).toBe(true)
+        expect(line.classList.contains("hovered")).toBe(true)
         surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 300, clientY: 200, bubbles: true }))
         expect(surface.classList.contains("grabbing")).toBe(true)
         surface.dispatchEvent(new PointerEvent("lostpointercapture", { bubbles: true }))
         expect(surface.classList.contains("grabbing")).toBe(false)
+        expect(surface.classList.contains("cur-ns")).toBe(false)
+        expect(line.classList.contains("hovered")).toBe(false)
         // the drag is gone — a plain pointerup now must not commit
         let fired = false
         host.addEventListener("input", () => { fired = true })
@@ -583,6 +741,27 @@ describe("tooltips (mount/showTip)", () => {
         (shadow.querySelector(".surface") as HTMLElement)
             .dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
 
+    it("a second hide before the first's flip-class cleanup fires replaces the pending timer, not stacks it", async () => {
+        // hideTip schedules a delayed removal of flip-x/flip-y (so a fast re-show doesn't visibly
+        // flash the caret back to its default side). Leaving twice in quick succession — e.g. the
+        // pointer re-enters and leaves again before the first timer fires — must clear the stale
+        // timer rather than let it fire later and race the second hide's own cleanup.
+        const { host, script } = setup()
+        mount(script, tipManifest({ template: ["<b>", { f: "name" }, "</b>"] }))
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        hoverMarker(shadow)
+        expect(tip.classList.contains("show")).toBe(true)
+        surface.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }))
+        expect(tip.classList.contains("show")).toBe(false)
+        // second leave before MOTION_MS elapses — must replace, not duplicate, the pending timer
+        surface.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 150))
+        expect(tip.classList.contains("flip-x")).toBe(false)
+        expect(tip.classList.contains("flip-y")).toBe(false)
+    })
+
     it("applies tipStyle custom properties to the shadow host", () => {
         const { host, script } = setup()
         mount(script, tipManifest({}, { "--holo-tip-bg": "rgb(1,2,3)" }))
@@ -637,6 +816,34 @@ describe("tooltips (mount/showTip)", () => {
         expect(tip.classList.contains("show")).toBe(true)
         expect(tip.innerHTML).toBe("5.000")
         expect(tip.innerHTML).not.toContain("undefined")
+    })
+
+    it("cursor-following tooltip offset uses the surface's real rect, not the raw event offset, when one is available", () => {
+        // tipOffset falls back to e.offsetX/e.offsetY only when the surface's own
+        // getBoundingClientRect is degenerate (width/height 0, as happy-dom defaults to) — with
+        // a real rect it must use clientX/Y - rect.left/top instead. offsetX/Y are 0 in happy-dom
+        // regardless, so a surface rect at a non-zero origin is the only way to tell the two
+        // branches apart. Hit-testing itself goes through the BASE element's rect (unmocked here,
+        // setup()'s default), not the surface's — client (110,150) is the same point the existing
+        // "colorbar axis hover" test above uses, so it's a known hit; the surface rect below is
+        // independent, only exercising the offset math.
+        const { host, script } = setup()
+        const cbManifest: Manifest = {
+            width: 1200, height: 800, scaling: 2,
+            transforms: { cb1: { xlims: [0, 1], ylims: [0, 10], xscale: "identity", yscale: "identity",
+                viewport: [200, 100, 24, 400], xreversed: false, yreversed: false, valueaxis: "y" } },
+            layers: [{ id: "colorbar", kind: "axis", geometry: [200, 100, 24, 400], payloads: [], axis: "cb1", events: ["hover"] }],
+        }
+        mount(script, cbManifest)
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        surface.getBoundingClientRect = () =>
+            ({ left: 30, top: 20, width: 600, height: 400, right: 630, bottom: 420, x: 30, y: 20, toJSON() {} }) as DOMRect
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 110, clientY: 150, bubbles: true }))
+        expect(tip.classList.contains("show")).toBe(true)
+        expect(tip.style.left).toBe(`${110 - 30 + 10}px`) // TIP_OFFSET = 10
+        expect(tip.style.top).toBe(`${150 - 20 + 10}px`)
     })
 
     it("plain axis hover shows x=… y=… tooltip (no valueaxis)", () => {
@@ -1183,8 +1390,10 @@ describe("overlay visual polish", () => {
         await flushFrame()
         expect(writes).toBe(0)
         expect(tip.innerHTML).toBe(html)
-        expect(tip.style.left).not.toBe(left0)
-        expect(tip.style.top).not.toBe(top0)
+        // Mark-anchored, not cursor-following: a circle's anchor is its own centre/top edge, so
+        // moving the cursor within the same circle must NOT move the tooltip.
+        expect(tip.style.left).toBe(left0)
+        expect(tip.style.top).toBe(top0)
     })
 
     it("does not remeasure the tip on same-hit mousemove", async () => {
@@ -1203,11 +1412,13 @@ describe("overlay visual polish", () => {
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 301, clientY: 201, bubbles: true }))
         await flushFrame()
         expect(sizeReads).toBe(afterFirst)
-        expect(tip.style.left).not.toBe(left0)
-        expect(tip.style.top).not.toBe(top0)
+        // Mark-anchored: the tooltip position is derived from the circle's own geometry, not the
+        // cursor, so it stays put while the cursor moves within the same circle.
+        expect(tip.style.left).toBe(left0)
+        expect(tip.style.top).toBe(top0)
     })
 
-    it("remeasures the tip after a zero first layout", async () => {
+    it("remeasures the tip after a zero first layout and shifts it inside the surface via the caret, not flip-x", async () => {
         const { host, script } = setup()
         // same-hit HTML: a circle near the 600×400 surface corner (image 1160,760 → client 580,380)
         mount(script, {
@@ -1220,15 +1431,55 @@ describe("overlay visual polish", () => {
         const surface = shadow.querySelector(".surface") as HTMLElement
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 580, clientY: 380, bubbles: true }))
         expect(tip.classList.contains("show")).toBe(true)
-        expect(tip.classList.contains("flip-x")).toBe(false)
+        expect(tip.classList.contains("flip-x")).toBe(false) // never used by the anchored path
         Object.defineProperty(tip, "offsetWidth", { configurable: true, value: 220 })
         Object.defineProperty(tip, "offsetHeight", { configurable: true, value: 80 })
         Object.defineProperty(surface, "clientWidth", { configurable: true, value: 600 })
         Object.defineProperty(surface, "clientHeight", { configurable: true, value: 400 })
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 581, clientY: 381, bubbles: true }))
         await flushFrame()
-        expect(tip.classList.contains("flip-x")).toBe(true)
+        // anchor css (580,380), top css 370: box fits above (280 >= EDGE_GAP) so it stays above
+        // the mark (flip-y set — its "caret points down" meaning, not the cursor-following sense)
+        // but the 220px-wide box centred on x=580 would clip the 600px-wide surface's right edge,
+        // so it's shifted left and the caret moves to stay over the anchor instead of flip-x.
+        expect(tip.classList.contains("flip-x")).toBe(false)
         expect(tip.classList.contains("flip-y")).toBe(true)
+        expect(tip.style.left).toBe("372px")
+        expect(tip.style.top).toBe("280px")
+        expect(tip.style.getPropertyValue("--holo-caret-x")).toBe("208px")
+    })
+
+    it("a segment tooltip slides along the line as the pointer moves within the same hit", async () => {
+        const { host, script } = setup()
+        mount(script, {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [{ id: "seg", kind: "segments", geometry: [0, 0, 1000, 0], payloads: [{ v: 1 }], axis: "ax1", events: ["hover"] }],
+        })
+        const shadow = shadowOf(host)
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        // image (100,0) == client (50,0); still the same segment, hit-tol away from the line
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 50, clientY: 0, bubbles: true }))
+        expect(tip.style.left).toBe("50px") // anchor.x = 100 image px -> 50 css px
+        // image (400,0) == client (200,0): same hit, different point on the line
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 200, clientY: 0, bubbles: true }))
+        await flushFrame()
+        expect(tip.style.left).toBe("200px")
+    })
+
+    it("a rect (bar) tooltip anchors at its top-centre, not its centre", () => {
+        const { host, script } = setup()
+        mount(script, {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [{ id: "bars", kind: "rects", geometry: [600, 400, 100, 200], payloads: [{ v: 1 }], axis: "ax1", events: ["hover"] }],
+        })
+        const shadow = shadowOf(host)
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
+        // cy(400) - h/2(100) = 300 image px -> 150 css px; degenerate branch: left=x, top=top-10
+        expect(tip.style.left).toBe("300px")
+        expect(tip.style.top).toBe("140px")
     })
 
     it("coalesces extra same-frame mousemove to the last event", async () => {
@@ -1329,7 +1580,7 @@ describe("coverage gaps: grid-value tooltip, drag-target hover cursor, rects/pol
         expect(tip.innerHTML).toBe("(1,0)")
     })
 
-    it("hovering a drag-only target (no button pressed) shows the grab cursor and suppresses hover/tooltip", () => {
+    it("hovering a drag-only target (no button pressed) shows a directional resize cursor and suppresses hover/tooltip", () => {
         const m: Manifest = {
             width: 1200, height: 800, scaling: 2,
             transforms: { ax1: { xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
@@ -1342,11 +1593,35 @@ describe("coverage gaps: grid-value tooltip, drag-target hover cursor, rects/pol
         const shadow = shadowOf(host)
         const surface = shadow.querySelector(".surface") as HTMLElement
         const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const line = shadow.querySelector("line") as SVGLineElement
         // client (300,200) = image (600,400), exactly on the threshold line — a drag hit with no pointerdown
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
-        expect(surface.classList.contains("grab")).toBe(true)
+        // A horizontal threshold resizes vertically → ns-resize, not the generic grab cursor.
+        expect(surface.classList.contains("cur-ns")).toBe(true)
+        expect(surface.classList.contains("grab")).toBe(false)
         expect(surface.classList.contains("hot")).toBe(false)
         expect(tip.classList.contains("show")).toBe(false)
+        expect(line.classList.contains("hovered")).toBe(true) // thicker-stroke hover chrome
+        surface.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }))
+        expect(surface.classList.contains("cur-ns")).toBe(false)
+        expect(line.classList.contains("hovered")).toBe(false)
+    })
+
+    it("a vertical threshold shows ew-resize on hover, not ns-resize", () => {
+        const m: Manifest = {
+            width: 1200, height: 800, scaling: 2,
+            transforms: { ax1: { xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
+                viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false } },
+            layers: [{ id: "thr", kind: "threshold", axis: "ax1", events: ["drag"], payloads: [],
+                geometry: { orientation: "v", pos: 600, span: [0, 800] } }],
+        }
+        const { host, script } = setup()
+        mount(script, m)
+        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        // client (300,200) = image (600,400), on the vertical threshold line
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(surface.classList.contains("cur-ew")).toBe(true)
+        expect(surface.classList.contains("cur-ns")).toBe(false)
     })
 
     it("selected= on a rects layer pre-highlights the right rect (hitLayerByIndex rects branch)", () => {

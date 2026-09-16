@@ -15,6 +15,13 @@ const STYLE = `
 .surface.hot { cursor: pointer; }
 .surface.grab { cursor: grab; }
 .surface.grabbing { cursor: grabbing; }
+.surface.cur-nwse { cursor: nwse-resize; }
+.surface.cur-nesw { cursor: nesw-resize; }
+.surface.cur-ns { cursor: ns-resize; }
+.surface.cur-ew { cursor: ew-resize; }
+.surface.cur-move { cursor: move; }
+.holo-threshold-line { stroke-width: var(--holo-line-w, 2); }
+.holo-threshold-line.hovered { stroke-width: calc(var(--holo-line-w, 2) * 1.75); }
 /* Default :focus-visible outline stays until a focus ring is actually drawn (kbd-ring, set by
    keyboard.ts's focusTo) — so tabbing in still shows *something* before the first arrow press,
    but the browser outline doesn't double up with our own ring once one exists. */
@@ -35,7 +42,15 @@ svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: n
        max-width: var(--holo-tip-maxwidth, 320px); white-space: normal;
        transition: opacity ${MOTION_MS}ms ease-out; }
 .holo-tip.show { opacity: 1; }
-.holo-tip::before { content: ""; position: absolute; top: -5px; left: 8px;
+/* left's containing block is .holo-tip's PADDING box (absolute-position offsets are measured
+   from the padding edge, CSS 2.1 §10.1), 1px inside its own 1px border — and the 5px transparent
+   left/right borders below put the visible apex at the horizontal CENTRE of this element's own
+   box, 5px right of its left edge. --holo-caret-x (geometry.ts's caretX) is "px from the anchored
+   tooltip's OUTER left edge to the anchor" — landing the apex exactly there needs both offsets
+   backed out: -1 (border) -5 (this element's own half-width) = -6. The 14px fallback (used only
+   when --holo-caret-x is unset, i.e. every cursor-following, non-anchored placement) preserves
+   the pre-existing default apex position (14-6=8, the literal this replaced). */
+.holo-tip::before { content: ""; position: absolute; top: -5px; left: calc(var(--holo-caret-x, 14px) - 6px);
        border: 5px solid transparent; border-top: none; border-bottom-color: var(--holo-tip-bg, #ffffff);
        display: var(--holo-tip-caret, block); }
 .holo-tip.flip-y::before { top: auto; bottom: -5px; border-bottom: none;

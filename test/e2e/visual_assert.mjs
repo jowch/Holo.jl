@@ -58,6 +58,16 @@ export function assertLeaveFade(info, where) {
   if (!info.leaving) throw new Error(`${where}: leave did not apply holo-leave`);
 }
 
+// The caret's visible apex — not the box `left`/`top` coordinates an e2e driver already reads
+// elsewhere in this file — is the thing the "caret on the anchor" contract is actually about, and
+// no jsdom/happy-dom unit test can check it (calc()/border-box geometry needs a real layout
+// engine). apexX/anchorX are both real page-space px, measured in a live browser.
+export function assertCaretAtAnchor(apexX, anchorX, where, tol = 1) {
+  if (Math.abs(apexX - anchorX) > tol) {
+    throw new Error(`${where}: caret apex at ${apexX.toFixed(1)}px, anchor at ${anchorX.toFixed(1)}px (want within ${tol}px)`);
+  }
+}
+
 export function assertTipScheme(cs, scheme, where) {
   const exp = scheme === "dark" ? TIP_DARK : TIP_LIGHT;
   if (normRgb(cs.bg) !== normRgb(exp.bg) || normRgb(cs.color) !== normRgb(exp.color)) {

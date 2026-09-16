@@ -7,6 +7,18 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- Tooltip placement is now anchored to the hovered mark instead of the cursor, for
+  `circles`/`rects`/`segments`/`polyline`/`polygons`/`grid`: the box is centred above the
+  mark's top edge with a 10px gap and the caret points at the anchor (mark centre for
+  circles, top-centre for rects/bars, nearest point on the line for segments — the tooltip
+  slides along it as the pointer moves — centroid for polygons when it's inside the shape,
+  cell centre for grid). It flips below the mark when it would clip the surface's top edge,
+  and shifts inside the surface (moving the caret via `--holo-caret-x`) when it would clip a
+  side. Keyboard focus uses the same placement. `axis`/`threshold`/`roi`/`view` (no discrete
+  mark) keep the previous cursor-relative placement. ROI boxes gained 4 edge-midpoint resize
+  handles alongside the existing 4 (square) corner handles — an edge handle resizes only that
+  one edge — with directional resize cursors (`nwse-resize`/`nesw-resize`/`ns-resize`/
+  `ew-resize`/`move`) on hover, and hovering a threshold line thickens its stroke.
 - Keyboard navigation for the overlay: arrow keys/Home/End move between hittable elements
   (Page Up/Down jump between layers), Enter/Space dispatches the same `@bind` value a click
   would, Escape clears focus. Screen readers get a live-region announcement per element
