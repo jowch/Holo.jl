@@ -67,7 +67,28 @@ export function setTipVisible(ctx: OverlayCtx, visible: boolean): void {
     ctx.tip_.setAttribute("aria-hidden", visible ? "false" : "true")
 }
 
+// hit.layer.colors is per-LAYER (a single string, or a layer-wide palette + one index per
+// element) — never resolved per the specific hit here beyond that one palette lookup, so an
+// out-of-range index (a payload/colors length mismatch) degrades to no accent rather than
+// throwing.
+function markColorFor(hit: Hit): string | null {
+    const c = hit.layer.colors
+    if (!c) return null
+    if (typeof c === "string") return c
+    return c.palette[c.index[hit.index]] ?? null
+}
+
+// Drives .holo-tip's border-left accent (mount.ts's STYLE). Called from applyTipHtml (set, from
+// the hit whose content is being shown) and hideTip (clear) — every path that shows or hides the
+// tooltip goes through one of those two, so a stale accent can't survive a hover/focus change.
+function setMarkAccent(ctx: OverlayCtx, hit: Hit | null): void {
+    const color = hit && markColorFor(hit)
+    if (color) ctx.tip_.style.setProperty("--holo-mark-border", `3px solid ${color}`)
+    else ctx.tip_.style.removeProperty("--holo-mark-border")
+}
+
 export function hideTip(ctx: OverlayCtx, state: OverlayState): void {
+    setMarkAccent(ctx, null)
     setTipVisible(ctx, false)
     if (state.tipFlipTimer_ != null) clearTimeout(state.tipFlipTimer_)
     const delay = prefersReducedMotion() ? 0 : MOTION_MS
@@ -159,7 +180,8 @@ export function tipHtmlForHit(ctx: OverlayCtx, hit: Hit, x: number, y: number): 
     return renderAutoTable(hit.layer.payloads[hit.index])
 }
 
-export function applyTipHtml(ctx: OverlayCtx, state: OverlayState, html: string): void {
+export function applyTipHtml(ctx: OverlayCtx, state: OverlayState, html: string, hit: Hit | null): void {
+    setMarkAccent(ctx, hit)
     if (html !== state.tipHtml_) {
         ctx.tip_.innerHTML = html
         state.tipHtml_ = html
@@ -171,7 +193,7 @@ export function applyTipHtml(ctx: OverlayCtx, state: OverlayState, html: string)
 export function showTip(ctx: OverlayCtx, state: OverlayState, hit: Hit, x: number, y: number, e: MouseEvent): void {
     const html = tipHtmlForHit(ctx, hit, x, y)
     if (html === null) { hideTip(ctx, state); return }
-    applyTipHtml(ctx, state, html)
+    applyTipHtml(ctx, state, html, hit)
     if (CURSOR_FOLLOWING_KINDS.has(hit.layer.kind)) {
         const p = tipOffset(ctx, e)
         placeTip(ctx, state, p.x, p.y)
@@ -186,7 +208,7 @@ export function showTip(ctx: OverlayCtx, state: OverlayState, hit: Hit, x: numbe
 export function showTipAt(ctx: OverlayCtx, state: OverlayState, hit: Hit, x: number, y: number, css: Anchor): string | null {
     const html = tipHtmlForHit(ctx, hit, x, y)
     if (html === null) { hideTip(ctx, state); return null }
-    applyTipHtml(ctx, state, html)
+    applyTipHtml(ctx, state, html, hit)
     placeAnchored(ctx, state, css)
     return html
 }
@@ -199,7 +221,7 @@ export function restoreFocus(ctx: OverlayCtx, state: OverlayState): boolean {
     if (!state.focusHit_) return false
     drawHi(state, ctx.hiGroup_, state.focusHit_)
     if (state.focusTipHtml_ !== null && state.focusTipCss_) {
-        applyTipHtml(ctx, state, state.focusTipHtml_)
+        applyTipHtml(ctx, state, state.focusTipHtml_, state.focusHit_)
         placeAnchored(ctx, state, state.focusTipCss_)
     } else {
         hideTip(ctx, state)

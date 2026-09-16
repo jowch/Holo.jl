@@ -783,6 +783,55 @@ describe("tooltips (mount/showTip)", () => {
         expect((host.lastElementChild as HTMLElement).style.getPropertyValue("--holo-tip-bg")).toBe("rgb(1,2,3)")
     })
 
+    it("applies the manifest's background as --holo-fig-bg on the shadow host", () => {
+        const { host, script } = setup()
+        mount(script, { ...tipManifest({}), background: "rgb(30,30,30)" })
+        expect((host.lastElementChild as HTMLElement).style.getPropertyValue("--holo-fig-bg")).toBe("rgb(30,30,30)")
+    })
+
+    it("sets --holo-mark-border from the hovered element's colors, and clears it on an uncolored one", async () => {
+        const { host, script } = setup()
+        // two circles, side by side: "colored" carries a uniform accent colour, "plain" doesn't
+        const twoLayerManifest: Manifest = {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [
+                { id: "colored", kind: "circles", geometry: [600, 400, 20], payloads: [{ name: "a" }], axis: "ax1", events: ["hover"], colors: "rgb(9,9,9)" },
+                { id: "plain", kind: "circles", geometry: [900, 400, 20], payloads: [{ name: "b" }], axis: "ax1", events: ["hover"] },
+            ],
+        }
+        mount(script, twoLayerManifest)
+        const shadow = shadowOf(host)
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(tip.style.getPropertyValue("--holo-mark-border")).toBe("3px solid rgb(9,9,9)")
+        await flushFrame() // onMove rAF-coalesces; the pending move above must land before the next one
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 450, clientY: 200, bubbles: true }))
+        expect(tip.style.getPropertyValue("--holo-mark-border")).toBe("")
+    })
+
+    it("resolves a palette+index colors field per element", async () => {
+        const { host, script } = setup()
+        const palettedManifest: Manifest = {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [{
+                id: "pts", kind: "circles", axis: "ax1", events: ["hover"],
+                geometry: [600, 400, 20, 900, 400, 20],
+                payloads: [{ name: "a" }, { name: "b" }],
+                colors: { palette: ["rgb(1,1,1)", "rgb(2,2,2)"], index: [1, 0] },
+            }],
+        }
+        mount(script, palettedManifest)
+        const shadow = shadowOf(host)
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(tip.style.getPropertyValue("--holo-mark-border")).toBe("3px solid rgb(2,2,2)")
+        await flushFrame()
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 450, clientY: 200, bubbles: true }))
+        expect(tip.style.getPropertyValue("--holo-mark-border")).toBe("3px solid rgb(1,1,1)")
+    })
+
     it("renders a template tooltip as HTML on hover (markup live, data escaped)", () => {
         const { host, script } = setup()
         mount(script, tipManifest({ template: ["<b>", { f: "name" }, "</b>"], payloads: [{ name: "<x>" }] }))

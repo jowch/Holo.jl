@@ -504,12 +504,27 @@ try {
     console.error(`OK  ${key} — ${after.slice(0, 110)}`);
   }
 
-  const schemeSpec = meta.find((s) => s.key === "scatter") || meta.find((s) => s.mode === "element");
-  if (!schemeSpec) throw new Error("no scatter/element spec for prefers-color-scheme");
+  const lightSpec = meta.find((s) => s.key === "scatter");
+  const darkSpec = meta.find((s) => s.key === "scatter_dark");
+  if (!lightSpec || !darkSpec) throw new Error("no scatter/scatter_dark spec for tooltip theme");
   {
-    const slayers = await layersOf(schemeSpec.key);
-    const slayer = findLayer(slayers, schemeSpec);
-    const spt = hitPoint(slayer, schemeSpec.selectedIndex);
+    const cssKey = lightSpec.key;
+    const computedFor = async (which) => {
+      const spec = which === "dark" ? darkSpec : lightSpec;
+      const layers = await layersOf(spec.key);
+      const layer = findLayer(layers, spec);
+      const pt = hitPoint(layer, spec.selectedIndex);
+      await dispatchAt(spec.key, pt.x, pt.y, "pointermove");
+      return page.evaluate((k) => {
+        const span = document.querySelector(`#coords_${k}`);
+        const hosts = [...document.querySelectorAll(".ip-host")];
+        const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
+        let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
+        const t = sr.querySelector(".holo-tip");
+        const cs = getComputedStyle(t);
+        return { bg: cs.backgroundColor, color: cs.color, show: t?.classList.contains("show") };
+      }, spec.key);
+    };
     await assertTooltipColorScheme(page, {
       css: () => page.evaluate((k) => {
         const span = document.querySelector(`#coords_${k}`);
@@ -517,21 +532,10 @@ try {
         const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
         let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
         return sr.querySelector("style")?.textContent || "";
-      }, schemeSpec.key),
-      computed: async () => {
-        await dispatchAt(schemeSpec.key, spt.x, spt.y, "pointermove");
-        return page.evaluate((k) => {
-          const span = document.querySelector(`#coords_${k}`);
-          const hosts = [...document.querySelectorAll(".ip-host")];
-          const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
-          let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
-          const t = sr.querySelector(".holo-tip");
-          const cs = getComputedStyle(t);
-          return { bg: cs.backgroundColor, color: cs.color, show: t?.classList.contains("show") };
-        }, schemeSpec.key);
-      },
+      }, cssKey),
+      computedFor,
     });
-    passed.push("prefers-color-scheme");
+    passed.push("tooltip-theme-follows-figure-bg");
   }
 
   if (unexpected.length) throw new Error(`page errors: ${unexpected.join(" | ")}`);

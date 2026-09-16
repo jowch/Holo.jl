@@ -6,11 +6,25 @@ export const INK = "#3A6F7C";
 export const WASH = "rgba(58, 111, 124, 0.12)";
 export const ALERT_RED = "#ff3b30";
 
-export const TIP_LIGHT = { bg: "rgb(255, 255, 255)", color: "rgb(26, 26, 26)" };
-export const TIP_DARK = { bg: "rgb(30, 30, 30)", color: "rgb(232, 232, 232)" };
-
-function normRgb(s) {
-  return String(s || "").toLowerCase().replace(/\s+/g, "");
+// getComputedStyle serializes an achromatic lch()-derived colour back out as lch(), not rgb()
+// (observed in Chromium) — so brightness has to be read off whichever functional notation the
+// browser chose, not assumed to be rgb(). Returns 0-100 (rgb rescaled; lab/lch already 0-100;
+// oklab/oklch rescaled from their 0-1 lightness), or null if unparseable.
+function colorLightness(s) {
+  const str = String(s || "").trim();
+  let m = str.match(/^rgba?\(([^)]+)\)$/i);
+  if (m) {
+    const ch = m[1].split(",").slice(0, 3).map((x) => Number(x.trim()));
+    if (ch.some(Number.isNaN)) return null;
+    return (ch.reduce((a, b) => a + b, 0) / 3 / 255) * 100;
+  }
+  m = str.match(/^(ok)?(?:lab|lch)\(([^)]+)\)$/i);
+  if (m) {
+    const L = Number(m[2].trim().split(/\s+/)[0]);
+    if (Number.isNaN(L)) return null;
+    return m[1] ? L * 100 : L;
+  }
+  return null;
 }
 
 export function assertNoAlertRed(blob, where) {
@@ -68,29 +82,46 @@ export function assertCaretAtAnchor(apexX, anchorX, where, tol = 1) {
   }
 }
 
-export function assertTipScheme(cs, scheme, where) {
-  const exp = scheme === "dark" ? TIP_DARK : TIP_LIGHT;
-  if (normRgb(cs.bg) !== normRgb(exp.bg) || normRgb(cs.color) !== normRgb(exp.color)) {
-    throw new Error(`${where}: ${scheme} tip ${JSON.stringify(cs)} want ${JSON.stringify(exp)}`);
+// Tooltip theme is derived from the FIGURE's own background (CSS relative-colour syntax,
+// mount.ts), not just OS prefers-color-scheme — so this checks brightness *relationships*
+// (bg/fg contrast in the expected direction), not hardcoded rgb literals: the exact sRGB a
+// browser's lch(from …) resolves to isn't something to hand-compute and pin down here.
+export function assertTipBrightness(cs, wantDark, where) {
+  const bgL = colorLightness(cs.bg), fgL = colorLightness(cs.color);
+  if (bgL === null || fgL === null) throw new Error(`${where}: could not parse tip colors ${JSON.stringify(cs)}`);
+  const bgOk = wantDark ? bgL < 40 : bgL > 60;
+  const fgOk = wantDark ? fgL > 60 : fgL < 40;
+  if (!bgOk || !fgOk) {
+    throw new Error(
+      `${where}: tip ${JSON.stringify(cs)} not ${wantDark ? "dark" : "light"}-themed (bgL=${bgL.toFixed(1)} fgL=${fgL.toFixed(1)})`,
+    );
   }
 }
 
+// The `@supports not (…)` block in mount.ts's STYLE is the fallback for browsers without CSS
+// relative-colour syntax — it reproduces the old static-light / OS-dark behaviour verbatim, so
+// its literals (#1e1e1e/#e8e8e8) still have to be present; their absence here means the legacy
+// fallback path itself is missing, not that a modern browser is failing to go dark.
 export function assertSchemeCss(css, where) {
   if (!/prefers-color-scheme:\s*dark/.test(css)) {
-    throw new Error(`${where}: overlay CSS missing prefers-color-scheme: dark (Pluto's only theme signal)`);
+    throw new Error(`${where}: overlay CSS missing prefers-color-scheme: dark (relative-colour fallback path)`);
   }
   if (!/#1e1e1e/.test(css) || !/#e8e8e8/.test(css)) {
-    throw new Error(`${where}: dark tooltip tokens missing`);
+    throw new Error(`${where}: legacy no-relative-colour dark tooltip fallback tokens missing`);
   }
   assertNoAlertRed(css, where);
 }
 
-export async function assertTooltipColorScheme(page, sampleTip) {
-  assertSchemeCss(await sampleTip.css(), "overlay-css");
-  for (const scheme of ["light", "dark"]) {
-    await page.emulateMedia({ colorScheme: scheme });
-    const cs = await sampleTip.computed();
-    assertTipScheme(cs, scheme, `tooltip/${scheme}`);
-  }
+// sample.css() reads the injected stylesheet once. sample.computedFor("light"|"dark") hovers
+// the corresponding figure (default-background vs. explicitly dark-background) and returns its
+// tooltip's { bg, color }. Confirms both a light and a dark FIGURE get the right tooltip theme,
+// and — the actual new contract — that OS colour-scheme alone does *not* flip a light figure's
+// tooltip once the figure itself carries a background.
+export async function assertTooltipColorScheme(page, sample) {
+  assertSchemeCss(await sample.css(), "overlay-css");
+  assertTipBrightness(await sample.computedFor("light"), false, "tooltip/light-figure");
+  assertTipBrightness(await sample.computedFor("dark"), true, "tooltip/dark-figure");
+  await page.emulateMedia({ colorScheme: "dark" });
+  assertTipBrightness(await sample.computedFor("light"), false, "tooltip/light-figure-under-os-dark");
   await page.emulateMedia({ colorScheme: "light" });
 }

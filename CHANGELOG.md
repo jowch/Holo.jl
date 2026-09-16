@@ -19,6 +19,13 @@ All notable changes to this project are documented here. The format is based on
   handles alongside the existing 4 (square) corner handles — an edge handle resizes only that
   one edge — with directional resize cursors (`nwse-resize`/`nesw-resize`/`ns-resize`/
   `ew-resize`/`move`) on hover, and hovering a threshold line thickens its stroke.
+- The tooltip's light/dark theme now follows the figure's own background colour (CSS
+  relative-colour syntax), not just the OS/browser `prefers-color-scheme` — a dark figure on
+  a light Pluto page gets a dark tooltip, and vice versa. Browsers without relative-colour
+  support fall back to the previous behaviour (static light, OS-driven dark) automatically.
+  Element colour also now drives a 3px tooltip accent border (the tooltip text itself stays
+  neutral) when Holo can resolve it — currently a `scatter!` plot's `color=`, uniform or
+  colormapped/categorical; omitted (a plain 1px border) when it can't.
 - Keyboard navigation for the overlay: arrow keys/Home/End move between hittable elements
   (Page Up/Down jump between layers), Enter/Space dispatches the same `@bind` value a click
   would, Escape clears focus. Screen readers get a live-region announcement per element

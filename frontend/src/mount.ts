@@ -33,10 +33,44 @@ svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: n
 .holo-leave { animation: holo-out ${MOTION_MS}ms ease-in forwards; }
 @keyframes holo-in { from { opacity: 0 } to { opacity: 1 } }
 @keyframes holo-out { from { opacity: 1 } to { opacity: 0 } }
+/* --holo-fig-bg (set by mount.ts from the manifest's "background" field) is the figure's own
+   background colour — the tooltip theme follows IT, not just the OS prefers-color-scheme, so a
+   dark Makie figure in a light Pluto page still gets a dark tooltip. Registering the property
+   makes it interpolable/animatable and, more importantly, gives lch(from …) below a typed
+   <color> to read "l" off — an unregistered custom property is a plain token stream, which
+   relative-color syntax cannot decompose. 49.44 is the lch lightness of middle grey (#808080);
+   calc(infinity) collapses the clamp() to its 12 (dark) or 100 (light) endpoint on either side
+   of it, so the derived surface is always a flat near-white or near-black grey (chroma/hue 0),
+   never a tint of the figure's own hue — the mark accent (added by tooltip_* / colors, not
+   here) is the only place the figure's actual colour is allowed to show through. */
+@property --holo-fig-bg { syntax: "<color>"; inherits: true; initial-value: #ffffff; }
+:host {
+  --holo-tip-bg-resolved: var(--holo-tip-bg, lch(from var(--holo-fig-bg) clamp(12, calc((l - 49.44) * infinity), 100) 0 0));
+  --holo-tip-color-resolved: var(--holo-tip-color, lch(from var(--holo-fig-bg) clamp(12, calc((49.44 - l) * infinity), 100) 0 0));
+  --holo-tip-border-resolved: var(--holo-tip-border, color-mix(in lch, var(--holo-tip-bg-resolved), var(--holo-tip-color-resolved) 20%));
+}
+/* Browsers without CSS relative colour syntax (no lch(from …)/calc(infinity)) fall back to
+   exactly today's behaviour: a static light theme, OS prefers-color-scheme for dark — the
+   figure's own background plays no part. */
+@supports not (color: lch(from red calc(l * infinity) 0 0)) {
+  :host {
+    --holo-tip-bg-resolved: var(--holo-tip-bg, #ffffff);
+    --holo-tip-color-resolved: var(--holo-tip-color, #1a1a1a);
+    --holo-tip-border-resolved: var(--holo-tip-border, rgba(0,0,0,0.1));
+  }
+  @media (prefers-color-scheme: dark) {
+    :host {
+      --holo-tip-bg-resolved: var(--holo-tip-bg, #1e1e1e);
+      --holo-tip-color-resolved: var(--holo-tip-color, #e8e8e8);
+      --holo-tip-border-resolved: var(--holo-tip-border, rgba(255,255,255,0.15));
+    }
+  }
+}
 .holo-tip { position: absolute; opacity: 0; pointer-events: none; z-index: 10;
        padding: var(--holo-tip-padding, 8px 12px); border-radius: var(--holo-tip-radius, 4px);
-       background: var(--holo-tip-bg, #ffffff); color: var(--holo-tip-color, #1a1a1a);
-       border: 1px solid var(--holo-tip-border, rgba(0,0,0,0.1));
+       background: var(--holo-tip-bg-resolved); color: var(--holo-tip-color-resolved);
+       border: 1px solid var(--holo-tip-border-resolved);
+       border-left: var(--holo-mark-border, 1px solid var(--holo-tip-border-resolved));
        box-shadow: var(--holo-tip-shadow, 0 2px 4px rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.08));
        font: var(--holo-tip-font-size, 11px)/1.4 var(--holo-tip-font, system-ui, -apple-system, sans-serif);
        max-width: var(--holo-tip-maxwidth, 320px); white-space: normal;
@@ -51,20 +85,16 @@ svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: n
    when --holo-caret-x is unset, i.e. every cursor-following, non-anchored placement) preserves
    the pre-existing default apex position (14-6=8, the literal this replaced). */
 .holo-tip::before { content: ""; position: absolute; top: -5px; left: calc(var(--holo-caret-x, 14px) - 6px);
-       border: 5px solid transparent; border-top: none; border-bottom-color: var(--holo-tip-bg, #ffffff);
+       border: 5px solid transparent; border-top: none; border-bottom-color: var(--holo-tip-bg-resolved);
        display: var(--holo-tip-caret, block); }
 .holo-tip.flip-y::before { top: auto; bottom: -5px; border-bottom: none;
-       border-top: 5px solid var(--holo-tip-bg, #ffffff); }
+       border-top: 5px solid var(--holo-tip-bg-resolved); }
 .holo-tip.flip-x::before { left: auto; right: 8px; }
 .holo-tip-row { display: flex; gap: 8px; justify-content: space-between; }
 .holo-tip-key { color: var(--holo-tip-accent, #6b7280); }
 .holo-tip-val { font-variant-numeric: tabular-nums; }
 @media (prefers-color-scheme: dark) {
-  .holo-tip { background: var(--holo-tip-bg, #1e1e1e); color: var(--holo-tip-color, #e8e8e8);
-       border-color: var(--holo-tip-border, rgba(255,255,255,0.15));
-       box-shadow: var(--holo-tip-shadow, 0 2px 4px rgba(0,0,0,0.4), 0 8px 16px rgba(0,0,0,0.3)); }
-  .holo-tip::before { border-bottom-color: var(--holo-tip-bg, #1e1e1e); }
-  .holo-tip.flip-y::before { border-top-color: var(--holo-tip-bg, #1e1e1e); }
+  .holo-tip { box-shadow: var(--holo-tip-shadow, 0 2px 4px rgba(0,0,0,0.4), 0 8px 16px rgba(0,0,0,0.3)); }
 }
 @media (prefers-reduced-motion: reduce) {
   .holo-enter, .holo-leave { animation: none; }
@@ -147,6 +177,11 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
 
     shadow.append(style, svg, surface, tip, kbdHint, liveRegion)
     host.appendChild(shadowHost)
+    // --holo-fig-bg drives the CSS-only tooltip theme (mount.ts's STYLE, lch(from …)); set
+    // before tipStyle below so an explicit tooltip_bg/tooltip_color kwarg (--holo-tip-bg/
+    // --holo-tip-color) still wins outright — they're independent custom properties consumed
+    // together via nested var() fallbacks, not a write-order race.
+    if (manifest.background) shadowHost.style.setProperty("--holo-fig-bg", manifest.background)
     if (manifest.tipStyle) for (const [k, v] of Object.entries(manifest.tipStyle)) shadowHost.style.setProperty(k, v)
 
     const thresholdLines = thresholdDrag.buildThresholdLines(manifest, svg)

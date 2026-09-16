@@ -99,4 +99,25 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
         # `tooltip = true` is meaningless (only `false` suppresses) → fail loud
         @test_throws ArgumentError build_manifest([PointInteractable(tax, pts2; tooltip = true)], tctx)
     end
+
+    @testset "manifest background wiring" begin
+        tfig = Figure(size = (600, 400)); tax = Axis(tfig[1, 1])
+        _, _, tctx = ctx_for(tfig)
+        pts2 = [(1.0, 1.0), (2.0, 4.0), (3.0, 9.0)]
+        pi = PointInteractable(tax, pts2)
+
+        @test !haskey(build_manifest([pi], tctx), "background")   # omitted by default
+
+        man = build_manifest([pi], tctx; background = Makie.RGBAf(0.1, 0.1, 0.1, 1))
+        @test man["background"] == "rgb(26,26,26)"
+
+        # holo() itself ships the FIGURE's own background — not just whatever's passed through
+        w = holo(tfig, pi)
+        @test w.manifest["background"] == "rgb(255,255,255)"   # Figure's default background
+
+        dfig = Figure(size = (200, 150); backgroundcolor = :gray12)
+        dax = Axis(dfig[1, 1])
+        dw = holo(dfig, PointInteractable(dax, pts2))
+        @test dw.manifest["background"] == Holo._css_color(:gray12)
+    end
 end
