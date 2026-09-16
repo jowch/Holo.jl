@@ -23,6 +23,16 @@ end
 const _COLOR_PALETTE_SIZE = 32
 function _resolve_scatter_colors(p)
     c = p.color[]
+    # A bare Real (not a Vector) is still colormap-driven in Makie — `color = 2` maps the single
+    # value 2 through `colormap` the same as any element of a numeric vector would — not a
+    # colorant; `_css_color(2.0f0)` would misread it as a raw grayscale channel value (`Makie.
+    # to_color` clamps it to white, since 2 > 1) instead of resolving it through the colormap.
+    # Every point gets the identical resolved colour here, so collapse to a uniform string
+    # rather than the palette+index shape (whose `index` must have one entry per point).
+    if c isa Real
+        r = _colormap_palette_index(p, [c])
+        return r === nothing ? nothing : r.palette[only(r.index) + 1]
+    end
     c isa AbstractVector || return _css_color(c)
     if eltype(c) <: Real
         return _colormap_palette_index(p, c)
@@ -64,8 +74,13 @@ function _colormap_palette_index(p, values)
     scaled = _scaled_color(p)
     length(scaled) == length(values) || return nothing
     isfinite(lo) && isfinite(hi) || return nothing   # e.g. every value NaN — nothing to derive
-    step = max(1, length(cmap) ÷ _COLOR_PALETTE_SIZE)
-    palette = [_css_color(c) for c in cmap[1:step:length(cmap)]]
+    # Evenly spaced indices spanning [1, length(cmap)] inclusive — a fixed stride (e.g.
+    # `1:8:256`) drops the ramp's last stop whenever length(cmap) isn't an exact multiple of
+    # _COLOR_PALETTE_SIZE, so the colorrange max's accent would visibly differ from the
+    # colour the marker is actually drawn in.
+    n_stops = min(_COLOR_PALETTE_SIZE, length(cmap))
+    stop_idx = n_stops == 1 ? [1] : round.(Int, range(1, length(cmap); length = n_stops))
+    palette = [_css_color(cmap[i]) for i in stop_idx]
     n = length(palette)
     span = hi - lo
     # A non-finite element (NaN/Inf — Makie renders it via `nan_color`) can't map into the

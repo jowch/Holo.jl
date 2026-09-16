@@ -42,11 +42,15 @@ svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: n
    calc(infinity) collapses the clamp() to its 12 (dark) or 100 (light) endpoint on either side
    of it, so the derived surface is always a flat near-white or near-black grey (chroma/hue 0),
    never a tint of the figure's own hue — the mark accent (added by tooltip_* / colors, not
-   here) is the only place the figure's actual colour is allowed to show through. */
+   here) is the only place the figure's actual colour is allowed to show through. The trailing
+   the trailing / 1 forces full opacity: omitting the alpha component of lch(from …) inherits
+   the ORIGIN colour's own alpha, and holo() always forces the figure's background opaque
+   before building the manifest, but a caller building the manifest directly (build_manifest's
+   background kwarg, not through holo()) isn't guaranteed to. */
 @property --holo-fig-bg { syntax: "<color>"; inherits: true; initial-value: #ffffff; }
 :host {
-  --holo-tip-bg-resolved: var(--holo-tip-bg, lch(from var(--holo-fig-bg) clamp(12, calc((l - 49.44) * infinity), 100) 0 0));
-  --holo-tip-color-resolved: var(--holo-tip-color, lch(from var(--holo-fig-bg) clamp(12, calc((49.44 - l) * infinity), 100) 0 0));
+  --holo-tip-bg-resolved: var(--holo-tip-bg, lch(from var(--holo-fig-bg) clamp(12, calc((l - 49.44) * infinity), 100) 0 0 / 1));
+  --holo-tip-color-resolved: var(--holo-tip-color, lch(from var(--holo-fig-bg) clamp(12, calc((49.44 - l) * infinity), 100) 0 0 / 1));
   --holo-tip-border-resolved: var(--holo-tip-border, color-mix(in lch, var(--holo-tip-bg-resolved), var(--holo-tip-color-resolved) 20%));
 }
 /* Browsers without CSS relative colour syntax (no lch(from …)/calc(infinity)) fall back to

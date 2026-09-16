@@ -648,7 +648,8 @@ measured comparison).
 The top-level manifest field `tipStyle` (`Record<string,string>`, optional) is a CSS-var dict
 of set `tooltip_*` kwargs, applied once to the shadow host at mount.
 
-The top-level `background` field (CSS colour string, always present) is the figure's own
+The top-level `background` field (CSS colour string; optional on `build_manifest` directly, but
+`holo()` always sets it) is the figure's own
 background colour (`fig.scene.backgroundcolor[]`) — the tooltip's light/dark theme is derived
 from it client-side via CSS relative-colour syntax (`lch(from var(--holo-fig-bg) …)`, with a
 static-light/OS-dark `@supports not (…)` fallback for browsers without it), not just OS

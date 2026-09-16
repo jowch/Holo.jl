@@ -1,6 +1,6 @@
 import { hitTest, resolvePayload } from "./geometry"
 import { drawHi } from "./highlight"
-import { onMove, hideTip, setTipText, setTipVisible, tipOffset, placeTip, setDragHoverChrome } from "./hover"
+import { onMove, hideTip, setTipText, setTipVisible, tipOffset, placeTip, setDragHoverChrome, setMarkAccent } from "./hover"
 import { imgPx, cancelPendingMove, cancelPendingDrag } from "./state"
 import type { Drag, OverlayCtx, OverlayState } from "./state"
 import * as thresholdDrag from "./drag/threshold"
@@ -34,6 +34,7 @@ function applyDrag(ctx: OverlayCtx, state: OverlayState, d: Drag, e: PointerEven
     } else {
         text = roiDrag.move(d, state, ctx.selGroup_, ctx.manifest_, p)
     }
+    setMarkAccent(ctx, null) // a drag readout is never a coloured element's tooltip
     setTipText(ctx, state, text)
     setTipVisible(ctx, true)
     const tp = tipOffset(ctx, e)

@@ -68,6 +68,44 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
         @test colors.index[1] < colors.index[3]
     end
 
+    @testset "Scatter: a scalar numeric colour resolves through the colormap, not as a raw colorant" begin
+        f = Figure(size = (300, 300)); a = Axis(f[1, 1])
+        p = scatter!(a, [1.0, 2.0], [1.0, 2.0]; color = 2, colormap = :viridis)
+        _, _, c = ctx_for(f)
+        colors = only(hitlayers(PointInteractable(a, p), c)).colors
+        @test colors isa AbstractString
+        @test !occursin("510", colors)             # not _css_color(2.0f0)'s out-of-range misread
+        @test startswith(colors, "rgb(")
+        # every point gets the identical resolved colour — ships as one uniform string, not
+        # palette+index (whose index needs one entry per point)
+        d = only(build_manifest([PointInteractable(a, p)], c)["layers"])["colors"]
+        @test d == colors
+    end
+
+    @testset "Scatter: the colormap palette includes both ramp endpoints" begin
+        f = Figure(size = (300, 300)); a = Axis(f[1, 1])
+        p = scatter!(a, [1.0, 2.0], [1.0, 2.0]; color = [0.0, 1.0], colormap = :viridis)
+        _, _, c = ctx_for(f)
+        colors = only(hitlayers(PointInteractable(a, p), c)).colors
+        cmap = Makie.to_colormap(:viridis)
+        @test colors.palette[1] == Holo._css_color(cmap[1])
+        @test colors.palette[end] == Holo._css_color(cmap[end])
+    end
+
+    @testset "colors= rejects malformed shapes on the bare-points constructor" begin
+        @test_throws ArgumentError PointInteractable(ax, pts; colors = :red)               # not a String
+        @test_throws ArgumentError PointInteractable(ax, pts; colors = (["c"], [0, 0, 0])) # plain Tuple, not (; palette, index)
+        # index too short for 3 points
+        @test_throws ArgumentError PointInteractable(ax, pts; colors = (; palette = ["rgb(1,2,3)"], index = [0]))
+        # index value out of range for a 1-entry palette
+        @test_throws ArgumentError PointInteractable(
+            ax, pts; colors = (; palette = ["rgb(1,2,3)"], index = [0, 0, 5])
+        )
+        # valid shape still works
+        ok = PointInteractable(ax, pts; colors = (; palette = ["rgb(1,2,3)", "rgb(4,5,6)"], index = [0, 1, 0]))
+        @test ok isa PointInteractable
+    end
+
     @testset "Scatter: NaN/Inf in a numeric colour vector doesn't crash" begin
         f = Figure(size = (300, 300)); a = Axis(f[1, 1])
         p = scatter!(a, [1.0, 2.0, 3.0], [1.0, 1.0, 1.0]; color = [1.0, NaN, 3.0], colormap = :viridis)

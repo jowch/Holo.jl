@@ -79,9 +79,10 @@ function markColorFor(hit: Hit): string | null {
 }
 
 // Drives .holo-tip's border-left accent (mount.ts's STYLE). Called from applyTipHtml (set, from
-// the hit whose content is being shown) and hideTip (clear) — every path that shows or hides the
-// tooltip goes through one of those two, so a stale accent can't survive a hover/focus change.
-function setMarkAccent(ctx: OverlayCtx, hit: Hit | null): void {
+// the hit whose content is being shown), hideTip (clear), and bond.ts's applyDrag (clear — a
+// drag readout's text is set directly via setTipText, not applyTipHtml, so it doesn't go through
+// the set path above and would otherwise keep wearing whatever element was last hovered).
+export function setMarkAccent(ctx: OverlayCtx, hit: Hit | null): void {
     const color = hit && markColorFor(hit)
     if (color) ctx.tip_.style.setProperty("--holo-mark-border", `3px solid ${color}`)
     else ctx.tip_.style.removeProperty("--holo-mark-border")

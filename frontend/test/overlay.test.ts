@@ -1121,6 +1121,39 @@ describe("tooltips (mount/showTip)", () => {
         expect(clicked).toMatchObject({ layer: "pts", index: 0 })
     })
 
+    it("a view-pan drag readout doesn't inherit the previously-hovered point's accent colour", async () => {
+        // Regression: applyDrag sets the drag-readout text via setTipText/setTipVisible
+        // directly, not applyTipHtml (the only place that calls setMarkAccent) — so a
+        // --holo-mark-border left over from hovering a coloured point survived into the
+        // readout tooltip for the whole drag, since applyMove keeps element hover alive
+        // over a full-viewport :view hit (see the test above).
+        const m: Manifest = {
+            width: 1200, height: 800, scaling: 2,
+            transforms: { ax1: { xlims: [0, 10], ylims: [0, 100], xscale: "identity", yscale: "identity",
+                viewport: [0, 0, 1200, 800], xreversed: false, yreversed: false } },
+            layers: [
+                { id: "pts", kind: "circles", geometry: [600, 400, 20], payloads: [{ i: 0 }],
+                    axis: "ax1", events: ["click", "hover"], colors: "rgb(9,9,9)" },
+                { id: "view", kind: "view", axis: "ax1", events: ["drag"], payloads: [],
+                    geometry: { x: 0, y: 0, w: 1200, h: 800, mode: "pan" } },
+            ],
+        }
+        const { host, script } = setup()
+        mount(script, m)
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
+        expect(tip.style.getPropertyValue("--holo-mark-border")).toBe("3px solid rgb(9,9,9)")
+        // press-and-drag from that same spot starts a :view pan (a coloured point never
+        // suppresses a :view drag hit) and shows the drag readout tooltip
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 300, clientY: 200, bubbles: true }))
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 320, clientY: 200, bubbles: true }))
+        expect(tip.classList.contains("show")).toBe(true)
+        expect(tip.style.getPropertyValue("--holo-mark-border")).toBe("")
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 320, clientY: 200, bubbles: true }))
+    })
+
     it("does not re-show hover after view-pan release when the surface moved during drag", async () => {
         const m: Manifest = {
             width: 1200, height: 800, scaling: 2,

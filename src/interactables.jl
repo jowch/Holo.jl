@@ -158,6 +158,35 @@ _check_tooltip(tooltip) =
     ),
 )
 
+# `colors` is user-settable on the bare-points PointInteractable constructor (not just derived
+# internally by the plot-object one, which always builds a shape this accepts) — checked here so
+# a bad shape fails at construction with a clear message, not as a bare FieldError/BoundsError
+# deep in `_layer_dict` at manifest-build time, or worse, a silently-wrong accent the client's
+# `?? null` swallows (an out-of-range or short `index` just resolves to "no accent" there).
+function _check_colors(colors, npoints)
+    (colors === nothing || colors isa AbstractString) && return colors
+    if colors isa NamedTuple && haskey(colors, :palette) && haskey(colors, :index)
+        palette, index = colors.palette, colors.index
+        palette isa AbstractVector{<:AbstractString} ||
+            throw(ArgumentError("colors: palette must be a Vector{<:AbstractString}, got $(typeof(palette))"))
+        index isa AbstractVector{<:Integer} ||
+            throw(ArgumentError("colors: index must be a Vector{<:Integer}, got $(typeof(index))"))
+        length(index) == npoints ||
+            throw(ArgumentError("colors: index must have one entry per point (got $(length(index)) for $npoints points)"))
+        isempty(palette) && !isempty(index) &&
+            throw(ArgumentError("colors: index is non-empty but palette is empty"))
+        all(0 <= i < length(palette) for i in index) ||
+            throw(ArgumentError("colors: every index must be in 0:$(length(palette) - 1) (palette has $(length(palette)) entries)"))
+        return colors
+    end
+    throw(
+        ArgumentError(
+            "colors must be `nothing`, a CSS colour String, or `(; palette::Vector{<:AbstractString}, " *
+                "index::Vector{<:Integer})`, got $(typeof(colors))",
+        ),
+    )
+end
+
 # Shared by every SegmentInteractable entry point (the keyword constructor and
 # _segment_with_resolve, used by the HLines/VLines plot-object constructors) so a bad `tol`
 # fails here, not as a raw InexactError from round(Int, ...) at manifest build.
@@ -200,9 +229,12 @@ Scatter-style points, hit-tested as circles. Produces one `:circles` [`HitLayer`
 `PointInteractable(ax, p::Makie.Scatter)` reads points from `p`'s converted data and derives
 `radius` from `markersize / 2` — this requires `markerspace = :pixel` (the default); pass
 `radius=` explicitly for any other markerspace, or it errors. It also resolves `colors` from
-`p.color[]`: a single colour ships as one CSS string; a numeric (colormap-driven) or explicit
-per-point colour vector ships as a shared palette + one index per point; anything else (e.g. no
-colour, or unresolvable) omits `colors` — no accent, not an error. `PointInteractable(ax,
+`p.color[]`: a single colour (including a bare numeric value mapped through `colormap`) ships
+as one CSS string; a numeric (colormap-driven) or explicit per-point colour vector ships as a
+shared palette + one index per point; anything else (e.g. no colour, or unresolvable) omits
+`colors` — no accent, not an error. A value outside `colorrange` is clamped to the nearest
+palette end rather than resolved through `lowclip`/`highclip`, so such a point's accent can
+differ slightly from its marker's actual (clipped) colour. `PointInteractable(ax,
 p::Makie.MeshScatter)` derives `radius3d` from `p`'s data-space `markersize` (a `Vec3f`, a
 `Real`, or a per-element vector of either); pass `radius=`/`radius3d=` explicitly if it can't
 be derived.
@@ -242,6 +274,7 @@ function PointInteractable(
     r3 = radius3d === nothing ? nothing : Vector{Makie.Vec3f}(radius3d)
     r3 === nothing || length(r3) == length(pts) ||
         throw(ArgumentError("radius3d must have one entry per point (got $(length(r3)) for $(length(pts)))"))
+    colors = _check_colors(colors, length(pts))
     return PointInteractable(ax, pts, id, collect(Any, payloads), Float64(radius), r3, tooltip, label === nothing ? nothing : String(label), colors)
 end
 tooltip_spec(i::PointInteractable) = i.tooltip
