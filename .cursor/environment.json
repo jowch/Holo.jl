@@ -1,5 +1,5 @@
 {
-  "name": "Holo.jl",
+  "name": "Masque.jl",
   "install": "bash .cursor/cloud-agent-install.sh",
   "start": "bash .cursor/cloud-agent-start.sh"
 }

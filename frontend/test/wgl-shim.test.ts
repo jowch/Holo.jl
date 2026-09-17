@@ -6,7 +6,7 @@ import { dirname, join } from "node:path"
 import { rewrap, obs, makeBonitoShim, mountWebGL } from "../src/wgl-shim"
 
 // rewrap is the JS half of the 4-rule scene contract — it must decode exactly what `_plain`
-// in ext/HoloWGLMakieExt.jl emits. These lock that cross-language contract (previously
+// in ext/MasqueWGLMakieExt.jl emits. These lock that cross-language contract (previously
 // untested; the version-coupling guard covers the WGLMakie seam, not this).
 describe("rewrap — the _plain 4-rule decode", () => {
     it("scalars and strings pass through", () => {
@@ -98,14 +98,14 @@ describe("makeBonitoShim — the no-server Bonito stand-in", () => {
         const B = makeBonitoShim()
         const err = new Error("boom")
         B.Connection.send_error("context msg", err)
-        expect(spy).toHaveBeenCalledWith("[holo-wgl]", "context msg", err.stack)
+        expect(spy).toHaveBeenCalledWith("[masque-wgl]", "context msg", err.stack)
         spy.mockRestore()
     })
     it("Connection.send_error falls back to the raw value when it has no stack", () => {
         const spy = vi.spyOn(console, "error").mockImplementation(() => {})
         const B = makeBonitoShim()
         B.Connection.send_error("context msg", "plain string error")
-        expect(spy).toHaveBeenCalledWith("[holo-wgl]", "context msg", "plain string error")
+        expect(spy).toHaveBeenCalledWith("[masque-wgl]", "context msg", "plain string error")
         spy.mockRestore()
     })
     it("Connection.send_warning exists, is callable, and logs at warn level without throwing", () => {
@@ -114,7 +114,7 @@ describe("makeBonitoShim — the no-server Bonito stand-in", () => {
         expect(typeof B.Connection.send_warning).toBe("function")
         // real call shape from WGLMakie's on_shader_error: a single formatted string, no error object
         expect(() => B.Connection.send_warning("THREE.WebGLProgram: Shader Error")).not.toThrow()
-        expect(spy).toHaveBeenCalledWith("[holo-wgl]", "THREE.WebGLProgram: Shader Error")
+        expect(spy).toHaveBeenCalledWith("[masque-wgl]", "THREE.WebGLProgram: Shader Error")
         spy.mockRestore()
     })
 })

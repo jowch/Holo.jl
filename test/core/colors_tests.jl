@@ -1,4 +1,4 @@
-using Test, Holo, CairoMakie, Makie
+using Test, Masque, CairoMakie, Makie
 include(joinpath(@__DIR__, "..", "testutils.jl"))
 
 # `colors` round-trip through HitLayer/manifest, and PointInteractable(ax, p::Scatter)'s
@@ -88,8 +88,8 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
         _, _, c = ctx_for(f)
         colors = only(hitlayers(PointInteractable(a, p), c)).colors
         cmap = Makie.to_colormap(:viridis)
-        @test colors.palette[1] == Holo._css_color(cmap[1])
-        @test colors.palette[end] == Holo._css_color(cmap[end])
+        @test colors.palette[1] == Masque._css_color(cmap[1])
+        @test colors.palette[end] == Masque._css_color(cmap[end])
     end
 
     @testset "colors= rejects malformed shapes on the bare-points constructor" begin

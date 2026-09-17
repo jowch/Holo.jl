@@ -524,13 +524,13 @@ _scatterlines_parts(ax, p, base) = AbstractInteractable[
 # but specifically, not via the generic "unsupported plot type" path.
 function _text_interactables(ax, p::Makie.Text, id)
     if p.space[] !== :data
-        @warn "holo: skipping non-data-space text (space=$(p.space[]))" maxlog = 16
+        @warn "masque: skipping non-data-space text (space=$(p.space[]))" maxlog = 16
         return AbstractInteractable[]
     end
     return AbstractInteractable[TextInteractable(ax, p; id)]
 end
 
-# the layer-id base for a plot, or nothing if Holo can't introspect it
+# the layer-id base for a plot, or nothing if Masque can't introspect it
 function _plotbase(p)
     p isa Makie.Scatter && return :scatter
     p isa Makie.MeshScatter && return :meshscatter
@@ -602,7 +602,7 @@ build the interactable its explicit constructor would. On `Axis3`, only `Scatter
 `LineSegments`/`MeshScatter`/`Wireframe`/`Arrows3D` are supported; on `PolarAxis`, only
 `Scatter`/`Lines`/`LineSegments`/`ScatterLines`. Other kinds are skipped with a warning.
 Layer ids are the plot kind (`:scatter`, `:lines`, …), suffixed `_2`, `_3`, … when a kind
-repeats. Returns the same concrete vector you could pass to [`holo`](@ref) yourself — edit or
+repeats. Returns the same concrete vector you could pass to [`masque`](@ref) yourself — edit or
 extend it freely.
 
 Each interactable inherits its constructor's default per-element payloads, so the zero-config
@@ -617,7 +617,7 @@ function auto_interactables(fig)
         for p in _child_plots(ax.scene)
             base = _plotbase(p)
             if base === nothing
-                @warn "holo: skipping unsupported plot type $(typeof(p).name.name) (no introspection recipe)" maxlog = 16
+                @warn "masque: skipping unsupported plot type $(typeof(p).name.name) (no introspection recipe)" maxlog = 16
                 continue
             end
             # Other 2D recipes extract pixel-separable geometry that a 3D perspective
@@ -628,7 +628,7 @@ function auto_interactables(fig)
                         Makie.MeshScatter, Makie.Wireframe, Makie.Arrows3D,
                     }
                 )
-                @warn "holo: skipping $(typeof(p).name.name) on Axis3 — only Scatter/Lines/" *
+                @warn "masque: skipping $(typeof(p).name.name) on Axis3 — only Scatter/Lines/" *
                     "LineSegments/MeshScatter/Wireframe/Arrows3D have 3D-valid extraction today; " *
                     "other kinds are roadmap scope (docs/dev/roadmap.md M3 per-type extraction)" maxlog = 16
                 continue
@@ -637,7 +637,7 @@ function auto_interactables(fig)
             # polar maps those into arcs and wedges, so an AABB/grid hit layer would be
             # silently wrong. Point/segment recipes project per-vertex and are fine.
             if ax isa Makie.PolarAxis && !(p isa Union{Makie.Scatter, Makie.Lines, Makie.LineSegments, Makie.ScatterLines})
-                @warn "holo: skipping $(typeof(p).name.name) on PolarAxis — only Scatter/Lines/" *
+                @warn "masque: skipping $(typeof(p).name.name) on PolarAxis — only Scatter/Lines/" *
                     "LineSegments/ScatterLines have polar-valid extraction today; continuous " *
                     "θ/r readout and grid/rect recipes are roadmap scope (docs/dev/roadmap.md M3)" maxlog = 16
                 continue

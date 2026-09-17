@@ -57,7 +57,7 @@ Project a data-space point `p` (a 2- or 3-element point/tuple) on axis `ax` to i
 coordinates (top-left origin, y-down), applying `ax`'s transform and camera the same way
 Makie renders it. The one coordinate primitive every [`AbstractInteractable`](@ref)'s
 `hitlayers` method calls — never re-derive projection by hand. `ax` must be a `Makie.Axis`,
-`Makie.Axis3`, or `Makie.PolarAxis` that is part of the figure `holo` rendered (this function
+`Makie.Axis3`, or `Makie.PolarAxis` that is part of the figure `masque` rendered (this function
 does not itself validate that — a mismatched `ax` silently projects against the wrong scene;
 use `axis_id(ctx, ax)` if you need the fail-loud registration check).
 
@@ -73,7 +73,7 @@ axis_id(ctx::InteractionContext, ax) =
     get(ctx.ids, ax) do
     throw(
         ArgumentError(
-            "Holo: $(typeof(ax)) is not registered in this backend's InteractionContext — " *
+            "Masque: $(typeof(ax)) is not registered in this backend's InteractionContext — " *
                 "no axis/colorbar transform was built for it. Interactables must be keyed to a " *
                 "Makie.Axis or Colorbar that is part of the rendered figure. (If it IS part of " *
                 "the figure, this is a backend context() bug — please report it.)"

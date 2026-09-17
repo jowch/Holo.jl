@@ -18,7 +18,7 @@ end
 
 # ╔═╡ c0000000-0000-0000-0000-000000000001
 # Self-contained env: dev the local package via a checkout-relative path, add WGLMakie — same
-# dance as examples/webgl_demo.jl. WGLMakie is a weak dep of Holo (the :webgl extension only
+# dance as examples/webgl_demo.jl. WGLMakie is a weak dep of Masque (the :webgl extension only
 # loads once WGLMakie is `using`'d), so a plain activate of the package root alone can't
 # `using WGLMakie`. Pkg.develop/activate disables Pluto's own pkg management.
 begin
@@ -27,7 +27,7 @@ begin
     Pkg.develop(path = normpath(joinpath(@__DIR__, "..", "..")))   # test/e2e -> package root
     Pkg.add("WGLMakie")
     Pkg.instantiate()
-    using Holo
+    using Masque
     using WGLMakie
 end
 
@@ -42,7 +42,7 @@ end
 # ╔═╡ c0000000-0000-0000-0000-000000000011
 # The @bind under test: clicking a scatter marker in the :webgl widget round-trips an
 # InteractionEvent back to `ev` THROUGH the live Pluto kernel (bond transport + reactive re-run).
-@bind ev holo(fig)
+@bind ev masque(fig)
 
 # ╔═╡ c0000000-0000-0000-0000-000000000012
 # Stable output element the browser asserts on (a distinct id, so it can't match the cell SOURCE

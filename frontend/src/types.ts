@@ -74,7 +74,7 @@ export interface HitLayer {
     events: string[] // "click" | "hover" | "drag"
     style?: LayerStyle
     tol?: number // :segments/:polyline hit-test slack, image px; absent → geometry.ts's SEG_TOL fallback
-    template?: TemplateSegment[] // holo"..." parsed once per layer; $() fields fill from payloads[]
+    template?: TemplateSegment[] // masque"..." parsed once per layer; $() fields fill from payloads[]
     tooltip?: false              // explicit suppress; absent + no template → auto name/value table
     selected?: number[] // element indices to draw pre-highlighted on mount
     selects?: string   // id of the target layer this ROI selects; absent → bounds-ROI (no multi-select)
@@ -93,7 +93,7 @@ export interface Manifest {
     scaling: number
     layers: HitLayer[]
     transforms: Record<string, AxisTransform>
-    tipStyle?: Record<string, string> // figure-level --holo-tip-* custom properties
+    tipStyle?: Record<string, string> // figure-level --masque-tip-* custom properties
     background?: string // the figure's background colour (CSS string) — drives the tooltip's light/dark theme
 }
 

@@ -17,7 +17,7 @@ Worked example — three arbitrary shapes with a label each, hoverable and click
 
 ```julia
 begin
-    using Holo, CairoMakie
+    using Masque, CairoMakie
 
     fig = Figure()
     ax = Axis(fig[1, 1])
@@ -33,11 +33,11 @@ end
 ```
 
 ```julia
-@bind ev holo(fig, RegionInteractable(ax; regions, payloads, id = :cells))
+@bind ev masque(fig, RegionInteractable(ax; regions, payloads, id = :cells))
 ```
 
 `payloads` must match `regions` 1:1. `tooltip` takes the same three forms as any other
-interactable (`nothing` / `holo"..."` / `false`) — see [Tooltips](@ref). Because
+interactable (`nothing` / `masque"..."` / `false`) — see [Tooltips](@ref). Because
 `RegionInteractable` groups by kind, its manifest layers are `:cells_c` (circles), `:cells_r`
 (rects), `:cells_p` (polygons) — key `selected=` on those, not on `:cells` itself.
 
@@ -52,7 +52,7 @@ Worked example — a triangular hit region (not one of the built-in kinds), reus
 
 ```julia
 begin
-    using Holo, CairoMakie
+    using Masque, CairoMakie
 
     fig = Figure()
     ax = Axis(fig[1, 1])
@@ -67,18 +67,18 @@ begin
         end
         HitLayer[
             HitLayer(:triangle, :polygons, [ring], [(; label = "the triangle")],
-                Holo.axis_id(ctx, ax), (:click, :hover)),
+                Masque.axis_id(ctx, ax), (:click, :hover)),
         ]
     end
 end
 ```
 
 ```julia
-@bind ev holo(fig, FunctionInteractable(triangle_layer))
+@bind ev masque(fig, FunctionInteractable(triangle_layer))
 ```
 
 `f` receives the [`InteractionContext`](@ref) for the whole figure (the same one built-in
-interactables use), so it can key geometry to any `Axis` in `fig` via `Holo.axis_id(ctx, ax)`
+interactables use), so it can key geometry to any `Axis` in `fig` via `Masque.axis_id(ctx, ax)`
 (not exported — qualify it). Use this tier when the shape genuinely isn't a
 circle/rect/polygon/polyline — for anything expressible as one of those,
 [`RegionInteractable`](@ref) is less code.

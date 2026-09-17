@@ -7,7 +7,7 @@
 #
 #   julia test/e2e/verify_capture.jl <artifact-dir>
 #
-# WGLMakie is a weak dep of Holo, so a bare `--project=.` can't `using WGLMakie` — same
+# WGLMakie is a weak dep of Masque, so a bare `--project=.` can't `using WGLMakie` — same
 # temp-env dance as make_page.jl / examples/webgl_demo.jl.
 import Pkg
 Pkg.activate(; temp = true)
@@ -15,7 +15,7 @@ Pkg.develop(path = normpath(joinpath(@__DIR__, "..", "..")))   # test/e2e -> pac
 Pkg.add(["WGLMakie", "JSON3", "AbstractPlutoDingetjes"])
 Pkg.instantiate()
 
-using Holo
+using Masque
 using WGLMakie
 import JSON3
 import AbstractPlutoDingetjes as APD
@@ -27,11 +27,11 @@ captured = JSON3.read(read(joinpath(dir, "captured.json"), String), Dict{String,
 
 # transform_value dispatches on the widget type (it reads only `captured`); build any instance.
 fig = Figure(; size = (400, 300)); ax = Axis(fig[1, 1]); scatter!(ax, 1:5, (1:5) .^ 2)
-w = holo(fig)
+w = masque(fig)
 
 ev = APD.Bonds.transform_value(w, captured)   # the REAL browser emission -> InteractionEvent
 
-ev isa Holo.InteractionEvent || error("transform_value did not return an InteractionEvent: $(typeof(ev))")
+ev isa Masque.InteractionEvent || error("transform_value did not return an InteractionEvent: $(typeof(ev))")
 ev.layer === :scatter || error("layer mismatch: $(ev.layer)")
 ev.index == 0 || error("index mismatch: $(ev.index)")
 ev.payload === nothing && error("payload dropped (browser emitted one)")
@@ -41,7 +41,7 @@ println("seam OK — browser host.value -> ", ev)
 # Axis3 case (WS-3D): same seam, and the payload must carry the z the 3D scatter shipped.
 captured3 = JSON3.read(read(joinpath(dir, "captured3d.json"), String), Dict{String, Any})
 ev3 = APD.Bonds.transform_value(w, captured3)
-ev3 isa Holo.InteractionEvent || error("transform_value (3D) did not return an InteractionEvent: $(typeof(ev3))")
+ev3 isa Masque.InteractionEvent || error("transform_value (3D) did not return an InteractionEvent: $(typeof(ev3))")
 ev3.layer === :scatter || error("3D layer mismatch: $(ev3.layer)")
 ev3.index == 0 || error("3D index mismatch: $(ev3.index)")
 (ev3.payload isa AbstractDict && haskey(ev3.payload, "z")) ||
@@ -52,7 +52,7 @@ println("seam OK (Axis3) — browser host.value -> ", ev3)
 # PolarAxis case: same seam; payload is 2-D {index,x,y} (θ,r as x,y) — no continuous inversion.
 capturedp = JSON3.read(read(joinpath(dir, "capturedpolar.json"), String), Dict{String, Any})
 evp = APD.Bonds.transform_value(w, capturedp)
-evp isa Holo.InteractionEvent || error("transform_value (polar) did not return an InteractionEvent: $(typeof(evp))")
+evp isa Masque.InteractionEvent || error("transform_value (polar) did not return an InteractionEvent: $(typeof(evp))")
 evp.layer === :scatter || error("polar layer mismatch: $(evp.layer)")
 evp.index == 0 || error("polar index mismatch: $(evp.index)")
 println("seam OK (PolarAxis) — browser host.value -> ", evp)

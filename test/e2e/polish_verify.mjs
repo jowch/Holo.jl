@@ -143,7 +143,7 @@ try {
       clientX: b.left + ix * s, clientY: b.top + iy * s,
       pointerId: 1, pointerType: "mouse", isPrimary: true,
     }));
-    const t = sr.querySelector(".holo-tip");
+    const t = sr.querySelector(".masque-tip");
     const hi = sr.querySelector("g.hi")?.firstElementChild;
     const cs = t ? getComputedStyle(t) : null;
     return {
@@ -152,7 +152,7 @@ try {
       hi: hi ? {
         fill: hi.getAttribute("fill"), stroke: hi.getAttribute("stroke"),
         width: hi.getAttribute("stroke-width"), opacity: hi.getAttribute("stroke-opacity"),
-        r: hi.getAttribute("r"), enter: hi.classList.contains("holo-enter"),
+        r: hi.getAttribute("r"), enter: hi.classList.contains("masque-enter"),
       } : null,
       sel: sr.querySelector("g.sel")?.children.length ?? 0,
     };
@@ -214,7 +214,7 @@ try {
 
   // Caret apex vs. anchor: a real-layout check (calc()/border-box math no jsdom/happy-dom unit
   // test can do) that the "caret on the anchor" contract actually holds on screen, not just that
-  // --holo-caret-x was assigned some value. hx/hy is element 1's circle centre, i.e. exactly its
+  // --masque-caret-x was assigned some value. hx/hy is element 1's circle centre, i.e. exactly its
   // anchor (anchorFor's circle case) — so the anchor's page-space x is the same b.left+hx*s the
   // hover itself was dispatched at.
   const caret = await page.evaluate(([ix]) => {
@@ -225,7 +225,7 @@ try {
     const b = host.querySelector("img, canvas").getBoundingClientRect();
     const outW = sr.querySelector("svg").viewBox.baseVal.width;
     const s = b.width / outW;
-    const t = sr.querySelector(".holo-tip");
+    const t = sr.querySelector(".masque-tip");
     const tipRect = t.getBoundingClientRect();
     const tipBorderLeft = parseFloat(getComputedStyle(t).borderLeftWidth);
     const before = getComputedStyle(t, "::before");
@@ -260,7 +260,7 @@ try {
     return {
       ok: first === second,
       reason: first === second ? "" : "hover remounted",
-      firstEnter: first.classList.contains("holo-enter"),
+      firstEnter: first.classList.contains("masque-enter"),
     };
   }, [hx, hy]);
   assertRemountStable(hiStable, "scatter");
@@ -275,7 +275,7 @@ try {
     const hi = sr.querySelector("g.hi")?.firstElementChild;
     return {
       hi: sr.querySelector("g.hi")?.children.length ?? 0,
-      leaving: !!(hi && hi.classList.contains("holo-leave")),
+      leaving: !!(hi && hi.classList.contains("masque-leave")),
       sel: sr.querySelector("g.sel")?.children.length ?? 0,
     };
   });

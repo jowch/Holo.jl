@@ -5,7 +5,7 @@
 // reach (real overlay JS, real shadow-DOM hit-test, real click on the :webgl <canvas> base); the
 // Julia half (runtests.jl "@bind round-trip contract") asserts transform_value rebuilds the
 // InteractionEvent. It deliberately stops at bond emission — the click→kernel→re-render mile is
-// generic Pluto machinery, not Holo code.
+// generic Pluto machinery, not Masque code.
 //
 // Two cases share the flow: the 2D scatter page, the Axis3 page (WS-3D), and the PolarAxis
 // page — the latter asserts polar-projected hit geometry + {index,x,y} survive the wire.
@@ -56,7 +56,7 @@ async function runCase(browser, c) {
     while (Date.now() < deadline && !mounted) {
       mounted = await page.evaluate(() => {
         const host = document.querySelector(".ip-host");
-        const canvas = host?.querySelector("canvas.holo-webgl-base");
+        const canvas = host?.querySelector("canvas.masque-webgl-base");
         if (!canvas) return false;
         let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
         return !!(sr && sr.querySelector(".surface"));

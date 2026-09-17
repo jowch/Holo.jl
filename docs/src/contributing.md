@@ -10,13 +10,13 @@ npm run build                                    # → ../assets/overlay.js
 ```
 
 The `:webgl` shim is a second, separate TypeScript project, bundled to a committed
-`assets/holo-webgl.js`:
+`assets/masque-webgl.js`:
 
 ```bash
 cd frontend-webgl
 npm ci
 npm run lint && npm run typecheck && npm test   # gate
-npm run build                                    # → ../assets/holo-webgl.js
+npm run build                                    # → ../assets/masque-webgl.js
 ```
 
 CI is the source of truth for both bundles (it rebuilds and commits on `main`), so committing
@@ -56,4 +56,4 @@ or sees — including a Julia-only change to the manifest shape, hit-test geomet
 text — needs to be checked live in a real Pluto + browser, on every supported backend, for
 every interactable kind it touches. This isn't optional polish; it's the actual gate before
 a user-facing change is done. The full playbook is
-[`docs/dev/live-interaction-checklist.md`](https://github.com/jowch/Holo.jl/blob/main/docs/dev/live-interaction-checklist.md).
+[`docs/dev/live-interaction-checklist.md`](https://github.com/jowch/Masque.jl/blob/main/docs/dev/live-interaction-checklist.md).

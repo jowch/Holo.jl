@@ -23,7 +23,7 @@ begin
     Pkg.develop(path = joinpath(@__DIR__, "..", ".."))
     Pkg.add(["CairoMakie", "JSON3"])
     Pkg.instantiate()
-    using Holo
+    using Masque
     using CairoMakie
     import JSON3
 end
@@ -36,7 +36,7 @@ begin
     adirs = Makie.Vec3f[(1, 0, 0), (0, 1, 0.5), (-0.5, 0, 1)]
     arrows3d!(ax, apts, adirs; color = :red)
     ints = auto_interactables(fig)
-    arrow_widget = holo(fig, ints)
+    arrow_widget = masque(fig, ints)
     L = only(arrow_widget.manifest["layers"])
     g = L["geometry"]
     mids = [[(g[4k + 1] + g[4k + 3]) / 2, (g[4k + 2] + g[4k + 4]) / 2] for k in 0:2]

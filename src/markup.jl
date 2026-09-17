@@ -6,13 +6,13 @@ end
 """
     Markup
 
-A parsed `holo"..."` tooltip template: ordered `segments` (each a literal `String`, emitted
+A parsed `masque"..."` tooltip template: ordered `segments` (each a literal `String`, emitted
 verbatim as HTML, or a `Field` placeholder) plus the unique `fields` referenced. Built by
-[`@holo_str`](@ref) — see that macro for template syntax; construct a `Markup` yourself only
+[`@masque_str`](@ref) — see that macro for template syntax; construct a `Markup` yourself only
 if you need `parse_template`/`check_fields` directly.
 
 Pass a `Markup` as an interactable's `tooltip=` keyword to render it client-side, from the
-hovered element's `payloads[]` entry, with no round-trip to Julia. At `holo()`/`build_manifest`
+hovered element's `payloads[]` entry, with no round-trip to Julia. At `masque()`/`build_manifest`
 time every field the template references is checked against the layer's actual payload keys
 (when payloads are `NamedTuple`s); a missing field raises `ArgumentError` with a "did you
 mean?" suggestion, before any figure is rendered.
@@ -43,7 +43,7 @@ _markup_error(msg, s, pos) = throw(TemplateValidationError(msg, String(s), pos))
 """
     parse_template(s) -> Markup
 
-Parse a `holo"..."` template literal, validating structure (balanced `\$()`, identifier fields,
+Parse a `masque"..."` template literal, validating structure (balanced `\$()`, identifier fields,
 well-formed d3 specs). Throws `TemplateValidationError` on malformed input.
 """
 function parse_template(s::AbstractString)
@@ -101,11 +101,11 @@ function parse_template(s::AbstractString)
 end
 
 """
-    holo"..."
+    masque"..."
 
 Build a [`Markup`](@ref) tooltip template for an interactable's `tooltip=` keyword. Placeholders
 are resolved **in the browser**, from the hovered element's `payloads[]` entry — `\$(field)` is
-not Julia string interpolation, and there is no runtime `holo(string)` form.
+not Julia string interpolation, and there is no runtime `masque(string)` form.
 
 # Syntax
 - Everything outside `\$(...)` is literal HTML, inserted as-is (author-trusted, not
@@ -118,13 +118,13 @@ not Julia string interpolation, and there is no runtime `holo(string)` form.
   the browser's `format()` to interpret.
 - `\\\$` — a literal dollar sign.
 
-A template with no `\$(...)` at all is a fixed label, e.g. `holo"<em>static</em>"`.
+A template with no `\$(...)` at all is a fixed label, e.g. `masque"<em>static</em>"`.
 
 # Errors
 Malformed syntax (a bare `\$`, unbalanced/empty `\$()`, a non-identifier field name, or a
 structurally invalid d3-format spec) raises `TemplateValidationError` at macro-expansion —
-before `holo()` is ever called, with a caret pointing at the offending span. A field that
-parses fine but is absent from the payload at `holo()`/`build_manifest` time raises
+before `masque()` is ever called, with a caret pointing at the offending span. A field that
+parses fine but is absent from the payload at `masque()`/`build_manifest` time raises
 `ArgumentError` instead (see [`Markup`](@ref)).
 
 See the Tooltips page of the documentation for the full template/tooltip system (styling,
@@ -132,11 +132,11 @@ security model, wire format).
 
 # Examples
 ```julia
-tooltip = holo"<b>\$(name)</b> — \$(population:,) people"
+tooltip = masque"<b>\$(name)</b> — \$(population:,) people"
 PointInteractable(ax, pts; payloads = [(; name = "a", population = 1200)], tooltip)
 ```
 """
-macro holo_str(s)
+macro masque_str(s)
     parse_template(s)
     return :($(parse_template)($s))
 end
@@ -180,7 +180,7 @@ function check_fields(m::Markup, payload_keys)
     end
     throw(
         ArgumentError(
-            "holo tooltip template references fields missing from the payload:\n" *
+            "masque tooltip template references fields missing from the payload:\n" *
                 join(lines, "\n") *
                 "\n  available: " * join(sort(string.(collect(keyset))), ", "),
         ),

@@ -97,9 +97,9 @@ try {
     const live = sr.querySelector('[aria-live="polite"]');
     return {
       focused: sr.activeElement === sr.querySelector(".surface"),
-      ring: hi ? { tag: hi.tagName.toLowerCase(), leaving: hi.classList.contains("holo-leave") } : null,
+      ring: hi ? { tag: hi.tagName.toLowerCase(), leaving: hi.classList.contains("masque-leave") } : null,
       liveText: live?.textContent ?? "",
-      tipShown: sr.querySelector(".holo-tip")?.classList.contains("show") ?? false,
+      tipShown: sr.querySelector(".masque-tip")?.classList.contains("show") ?? false,
     };
   }, key);
 

@@ -1,7 +1,7 @@
 """
     InteractionEvent(layer, index, payload)
 
-The typed value a `holo` bond returns on a deliberate click (`nothing` until the first one).
+The typed value a `masque` bond returns on a deliberate click (`nothing` until the first one).
 
 # Fields
 - `layer::Symbol` — the hit `HitLayer`'s (i.e. the interactable's) `id`.
@@ -38,13 +38,13 @@ function tip_style_dict(;
         tooltip_caret = true,
     )
     d = Dict{String, String}()
-    tooltip_bg === nothing || (d["--holo-tip-bg"] = _css_color(tooltip_bg))
-    tooltip_color === nothing || (d["--holo-tip-color"] = _css_color(tooltip_color))
-    tooltip_accent === nothing || (d["--holo-tip-accent"] = _css_color(tooltip_accent))
-    tooltip_font === nothing || (d["--holo-tip-font"] = String(tooltip_font))
-    tooltip_font_size === nothing || (d["--holo-tip-font-size"] = "$(tooltip_font_size)px")
-    tooltip_radius === nothing || (d["--holo-tip-radius"] = "$(tooltip_radius)px")
-    tooltip_caret === false && (d["--holo-tip-caret"] = "none")
+    tooltip_bg === nothing || (d["--masque-tip-bg"] = _css_color(tooltip_bg))
+    tooltip_color === nothing || (d["--masque-tip-color"] = _css_color(tooltip_color))
+    tooltip_accent === nothing || (d["--masque-tip-accent"] = _css_color(tooltip_accent))
+    tooltip_font === nothing || (d["--masque-tip-font"] = String(tooltip_font))
+    tooltip_font_size === nothing || (d["--masque-tip-font-size"] = "$(tooltip_font_size)px")
+    tooltip_radius === nothing || (d["--masque-tip-radius"] = "$(tooltip_radius)px")
+    tooltip_caret === false && (d["--masque-tip-caret"] = "none")
     return d
 end
 
@@ -76,7 +76,7 @@ function _layer_dict(i, L::HitLayer, ctx::InteractionContext)
         d["colors"] = L.colors isa AbstractString ? L.colors : Dict("palette" => L.colors.palette, "index" => L.colors.index)
     end
     spec = tooltip_spec(i)
-    spec === true && throw(ArgumentError("tooltip = true is not meaningful — omit `tooltip` for the auto name/value table (the default), pass holo\"…\" for a template, or `false` to suppress."))
+    spec === true && throw(ArgumentError("tooltip = true is not meaningful — omit `tooltip` for the auto name/value table (the default), pass masque\"…\" for a template, or `false` to suppress."))
     if spec isa Markup
         ks = _payload_keys(L.payloads)
         isempty(ks) || check_fields(spec, ks)      # build-time field check (skip if no NamedTuple payloads)
@@ -147,7 +147,7 @@ function _validate_selectors(interactables, layers)
             hint = sug === nothing ? "" : " Did you mean `:$sug`?"
             throw(
                 ArgumentError(
-                    "$prefix: `selects = :$s` names a layer not present in this holo() call.$hint" *
+                    "$prefix: `selects = :$s` names a layer not present in this masque() call.$hint" *
                         " (available: $(join(sort(string.(collect(layer_ids))), ", ")))",
                 ),
             )
@@ -213,7 +213,7 @@ function build_manifest(interactables, ctx::InteractionContext; selected = nothi
     return m
 end
 
-struct HoloWidget
+struct MasqueWidget
     b64::String
     manifest::Dict{String, Any}
     display_css::Int
@@ -222,27 +222,27 @@ end
 # Backend choice follows which package extension is loaded, never sniffed from Makie's global
 # `current_backend()` state. `explicit` is the caller's `backend=` override.
 function _resolve_backend(explicit; max_width)
-    cairo_ext = Base.get_extension(@__MODULE__, :HoloCairoMakieExt)
-    wgl_ext = Base.get_extension(@__MODULE__, :HoloWGLMakieExt)
+    cairo_ext = Base.get_extension(@__MODULE__, :MasqueCairoMakieExt)
+    wgl_ext = Base.get_extension(@__MODULE__, :MasqueWGLMakieExt)
     explicit !== nothing && return explicit
     # Both loaded: prefer Cairo so a preloaded WGLMakie doesn't block the default static path.
     cairo_ext !== nothing && return cairo_ext.CairoBackend(; max_width)
     wgl_ext !== nothing && return wgl_ext.WebGLBackend(; max_width)
     throw(
         ArgumentError(
-            "holo(fig) needs a rendering backend loaded: `using CairoMakie` for a static base, or " *
+            "masque(fig) needs a rendering backend loaded: `using CairoMakie` for a static base, or " *
                 "`using WGLMakie` for animation/large or frequently re-rendered data — then call " *
-                "`holo` again. (Both expose the same interactions, `Axis3` included; the choice " *
+                "`masque` again. (Both expose the same interactions, `Axis3` included; the choice " *
                 "is a cost profile.)",
         ),
     )
 end
 
 """
-    holo(fig, interactables; backend=nothing, max_width=700, selected=nothing,
+    masque(fig, interactables; backend=nothing, max_width=700, selected=nothing,
          tooltip_bg=nothing, tooltip_color=nothing, tooltip_accent=nothing, tooltip_font=nothing,
-         tooltip_font_size=nothing, tooltip_radius=nothing, tooltip_caret=true) -> HoloWidget
-    holo(fig, interactable; kwargs...)   # single-interactable convenience
+         tooltip_font_size=nothing, tooltip_radius=nothing, tooltip_caret=true) -> MasqueWidget
+    masque(fig, interactable; kwargs...)   # single-interactable convenience
 
 Render `fig` and overlay JS hit-testing for the declared `interactables`. Use as a Pluto
 `@bind` source; the bond value is `nothing` until a click, then an [`InteractionEvent`](@ref)
@@ -267,25 +267,25 @@ Render `fig` and overlay JS hit-testing for the declared `interactables`. Use as
   `tooltip_radius` — a `Real`, rendered as `"<value>px"`. `tooltip_caret` — `Bool`, whether to
   draw the pointer caret (default `true`). Each defaults to `nothing` (the built-in style);
   see the Tooltips page of the documentation for the full styling system (including the
-  `--holo-tip-*` CSS escape hatch).
+  `--masque-tip-*` CSS escape hatch).
 
 `Axis3` is supported on both backends; continuous pixel→data readout
 (`AxisInteractable`/`ThresholdInteractable`/`ROIInteractable`) fails loud (`ArgumentError`) on
 a 3D axis, since a screen pixel there is a ray, not a data point.
 
-Restores the figure's background color on return; the only mutation `holo` makes to `fig` is
+Restores the figure's background color on return; the only mutation `masque` makes to `fig` is
 forcing it opaque during render (Makie `Figure`s can't be `deepcopy`'d to snapshot/restore).
 
 # Examples
 ```julia
-using Holo, CairoMakie
+using Masque, CairoMakie
 fig = Figure(); ax = Axis(fig[1, 1])
 pts = [(1.0, 1.0), (2.0, 4.0), (3.0, 9.0)]
 scatter!(ax, first.(pts), last.(pts))
-@bind sel holo(fig, [PointInteractable(ax, pts; payloads = ["a", "b", "c"])])
+@bind sel masque(fig, [PointInteractable(ax, pts; payloads = ["a", "b", "c"])])
 ```
 """
-function holo(
+function masque(
         fig, interactables::AbstractVector; backend::Union{Nothing, AbstractBackend} = nothing,
         max_width = 700, selected = nothing,
         tooltip_bg = nothing, tooltip_color = nothing, tooltip_accent = nothing,
@@ -309,26 +309,26 @@ function holo(
         fig.scene.backgroundcolor[] = bg0
     end
 end
-holo(fig, i::AbstractInteractable; kwargs...) = holo(fig, [i]; kwargs...)
+masque(fig, i::AbstractInteractable; kwargs...) = masque(fig, [i]; kwargs...)
 
 """
-    holo(fig; selected=nothing)
+    masque(fig; selected=nothing)
 
 Auto-extract interactables from `fig` (see [`auto_interactables`](@ref)) and overlay them —
-the zero-config path. Equivalent to `holo(fig, auto_interactables(fig))`; unsupported plot
+the zero-config path. Equivalent to `masque(fig, auto_interactables(fig))`; unsupported plot
 types are skipped with a warning. For control over ids/payloads, build the vector yourself.
 """
-function holo(fig; kwargs...)
+function masque(fig; kwargs...)
     # Finalize layout before auto-extraction: introspection reads post-layout axis state
-    # (e.g. `ax.finallimits[]`), which `holo(fig, ints)` only finalizes afterward.
+    # (e.g. `ax.finallimits[]`), which `masque(fig, ints)` only finalizes afterward.
     _finalize!(fig)
     ints = auto_interactables(fig)
-    isempty(ints) && @warn "holo(fig): no introspectable plots found — overlaying nothing (static image only)"
-    return holo(fig, ints; kwargs...)
+    isempty(ints) && @warn "masque(fig): no introspectable plots found — overlaying nothing (static image only)"
+    return masque(fig, ints; kwargs...)
 end
 
-function Base.show(io::IO, m::MIME"text/html", w::HoloWidget)
-    # Inject unconditionally: wrapping the esbuild IIFE in `if (!window.Holo) {…}` makes it
+function Base.show(io::IO, m::MIME"text/html", w::MasqueWidget)
+    # Inject unconditionally: wrapping the esbuild IIFE in `if (!window.Masque) {…}` makes it
     # install `{}` instead of `{mount}` (a JS block-scope/strict-mode quirk).
     boot = HypertextLiteral.JavaScript(_OVERLAY_JS[])
     html = @htl(
@@ -338,7 +338,7 @@ function Base.show(io::IO, m::MIME"text/html", w::HoloWidget)
           <script>
             $(boot)
             const manifest = $(APD.Display.published_to_js(w.manifest));
-            window.Holo.mount(currentScript, manifest, invalidation);
+            window.Masque.mount(currentScript, manifest, invalidation);
           </script>
         </div>
         """
@@ -346,8 +346,8 @@ function Base.show(io::IO, m::MIME"text/html", w::HoloWidget)
     return show(io, m, html)
 end
 
-APD.Bonds.initial_value(::HoloWidget) = nothing
-function APD.Bonds.transform_value(::HoloWidget, js)
+APD.Bonds.initial_value(::MasqueWidget) = nothing
+function APD.Bonds.transform_value(::MasqueWidget, js)
     js === nothing && return nothing
     if haskey(js, "items")   # a selector's declared multi output — always a vector
         return InteractionEvent[

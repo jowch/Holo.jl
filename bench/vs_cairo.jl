@@ -1,4 +1,4 @@
-# Cross-backend head-to-head: :webgl vs :cairo (both now backends of the same Holo package) on
+# Cross-backend head-to-head: :webgl vs :cairo (both now backends of the same Masque package) on
 # the SAME seeded figures — the artifact behind docs/dev/backend-comparison.md. Reports, per figure:
 #   - WIRE: Cairo PNG+manifest (per render) vs WebGL scene (per render) + the once-per-notebook bundle
 #   - SERVER COST per update: Cairo render+encode+PNG ms vs WebGL serialize ms. WebGL's number
@@ -7,7 +7,7 @@
 #   - CROSSOVER N: renders after which cumulative WebGL (bundle + N·scene) < cumulative Cairo
 #     (N·PNG+manifest, re-shipped every render). Cairo has no bundle but re-rasterizes each time.
 #
-# Implicit holo() defaults to Cairo if both backends are loaded; this bench still runs the
+# Implicit masque() defaults to Cairo if both backends are loaded; this bench still runs the
 # Cairo half in a subprocess so each process has a single `using` line. See src/render.jl.
 # PREREQ: the root env has both CairoMakie and WGLMakie available (both are
 # weak deps + `[extras]`/test deps in Project.toml — `Pkg.test()`'s test env resolves them, or
@@ -21,13 +21,13 @@
 # are architectural, not benched — they live in backend-comparison.md's matrix. This bench covers
 # the measurable payload/latency terms only.
 
-using Holo, WGLMakie, Printf, Random
+using Masque, WGLMakie, Printf, Random
 Random.seed!(0)   # mirror the Cairo subprocess seed so both sides build the SAME figures reproducibly
 # (matters at small N: an unseeded rand() shifts tick-label glyph content → the scene size drifts).
 
-# scene_payload/_wgl_bundle_path live in the :webgl extension (WGLMakie is a weak dep of Holo),
+# scene_payload/_wgl_bundle_path live in the :webgl extension (WGLMakie is a weak dep of Masque),
 # so reach them via Base.get_extension — same pattern test/runtests.jl uses for the Cairo extension.
-const _WGLExt = Base.get_extension(Holo, :HoloWGLMakieExt)
+const _WGLExt = Base.get_extension(Masque, :MasqueWGLMakieExt)
 
 # Comparison figure set as data so both envs build identical figures. kind ∈ line|scatter|heat|helix.
 const CASES = [
@@ -87,7 +87,7 @@ function cairo_measure_all()
     driver = tempname() * ".jl"
     write(
         driver, """
-            using Holo, CairoMakie, Random
+            using Masque, CairoMakie, Random
             Random.seed!(0)
             _str(n)=(n<32 ? 1 : n<256 ? 2 : n<65536 ? 3 : 5)+n
             _int(n)=(-32<=n<128 ? 1 : abs(n)<128 ? 2 : abs(n)<32768 ? 3 : abs(n)<2^31 ? 5 : 9)
@@ -111,8 +111,8 @@ function cairo_measure_all()
             for (label,kind,n) in cases
                 try
                     mk()=buildfig(Symbol(kind),n)
-                    w=holo(mk()); holo(mk())
-                    ms=minimum(@elapsed(holo(mk())) for _ in 1:3)*1000
+                    w=masque(mk()); masque(mk())
+                    ms=minimum(@elapsed(masque(mk())) for _ in 1:3)*1000
                     println("CAIRO\\t",label,"\\t",b64(w),"\\t",mp(w.manifest),"\\t",round(Int,ms))
                 catch e
                     println("CAIRO\\t",label,"\\tUNSUPPORTED\\t0\\t0")

@@ -1,6 +1,6 @@
-module HoloCairoMakieExt
+module MasqueCairoMakieExt
 
-using Holo: Holo, AbstractBackend, RenderResult, InteractionContext, AxisTransform
+using Masque: Masque, AbstractBackend, RenderResult, InteractionContext, AxisTransform
 using CairoMakie
 using FileIO
 import Makie
@@ -9,10 +9,10 @@ import Makie: Point2f
 """
     CairoBackend(; max_width=700)
 
-Static-image `Holo` backend (loaded when `CairoMakie` is `using`d): renders `fig` once to a
+Static-image `Masque` backend (loaded when `CairoMakie` is `using`d): renders `fig` once to a
 PNG, with a transparent JS overlay doing hit-testing over it — no server, no WebGL, and the
 inspection layer keeps working in an exported, offline static HTML. This is the default
-backend `holo` picks when no `WGLMakie` extension is loaded.
+backend `masque` picks when no `WGLMakie` extension is loaded.
 
 # Arguments
 - `max_width` — the display width to target, in px (Pluto's column is 700). Render resolution
@@ -22,8 +22,8 @@ backend `holo` picks when no `WGLMakie` extension is loaded.
 
 # Examples
 ```julia
-using Holo, CairoMakie
-holo(fig; backend = CairoBackend(; max_width = 900))
+using Masque, CairoMakie
+masque(fig; backend = CairoBackend(; max_width = 900))
 ```
 """
 struct CairoBackend <: AbstractBackend
@@ -31,12 +31,12 @@ struct CairoBackend <: AbstractBackend
 end
 CairoBackend(; max_width = 700) = CairoBackend(max_width)
 
-function Holo._ppu(b::CairoBackend, fig)
+function Masque._ppu(b::CairoBackend, fig)
     sw = size(fig.scene)[1]
     return 2 * min(sw, b.max_width) / sw
 end
 
-function Holo.render(::CairoBackend, fig, ppu)
+function Masque.render(::CairoBackend, fig, ppu)
     # backend=CairoMakie pinned explicitly as defense in depth: current_backend() is a bare
     # global Ref any loaded backend's __init__ can flip unconditionally on load.
     img = Makie.colorbuffer(fig; px_per_unit = ppu, backend = CairoMakie)
@@ -44,16 +44,16 @@ function Holo.render(::CairoBackend, fig, ppu)
     return RenderResult("image/png", take!(io), size(img, 2), size(img, 1), Float64(ppu))
 end
 
-function Holo.context(b::CairoBackend, fig, ppu)
+function Masque.context(b::CairoBackend, fig, ppu)
     w, h = size(fig.scene)
     scaling = Float64(ppu)
     out_w, out_h = round(Int, w * scaling), round(Int, h * scaling)
     # Lets grid hitlayers reason in true on-screen px instead of hardcoding the 2× DPI factor.
     display_scale = min(w, b.max_width) / out_w
 
-    project = Holo._project_closure(scaling, out_h)
+    project = Masque._project_closure(scaling, out_h)
 
-    # An axis-like block Holo builds no transform for (LScene today) would otherwise be
+    # An axis-like block Masque builds no transform for (LScene today) would otherwise be
     # silently dropped, and interactables would project against the wrong axis.
     unsupported = unique(
         typeof.(
@@ -63,11 +63,11 @@ function Holo.context(b::CairoBackend, fig, ppu)
     )
     isempty(unsupported) || throw(
         ArgumentError(
-            "Holo's CairoMakie backend supports `Makie.Axis`, `Makie.Axis3`, and `Makie.PolarAxis`; found " *
-                "unsupported $(join(unsupported, ", ")). This is Holo's own scoping guard, not a " *
+            "Masque's CairoMakie backend supports `Makie.Axis`, `Makie.Axis3`, and `Makie.PolarAxis`; found " *
+                "unsupported $(join(unsupported, ", ")). This is Masque's own scoping guard, not a " *
                 "CairoMakie limit — `LScene` support is still deferred (docs/dev/roadmap.md M3). " *
                 "Today: restart this session with `using WGLMakie` (instead of `using CairoMakie`) " *
-                "to render `LScene` live (Holo builds no overlays for it on either backend).",
+                "to render `LScene` live (Masque builds no overlays for it on either backend).",
         ),
     )
 
@@ -77,22 +77,22 @@ function Holo.context(b::CairoBackend, fig, ppu)
     for (k, ax) in enumerate(axes)
         id = Symbol("ax", k); ids[ax] = id
         transforms[id] = if ax isa Makie.Axis3
-            Holo._axis3_transform(id, ax, scaling, out_h)
+            Masque._axis3_transform(id, ax, scaling, out_h)
         elseif ax isa Makie.PolarAxis
-            Holo._polar_transform(id, ax, scaling, out_h)
+            Masque._polar_transform(id, ax, scaling, out_h)
         else
-            Holo._axis_transform(id, ax, scaling, out_h)
+            Masque._axis_transform(id, ax, scaling, out_h)
         end
     end
     cbs = [c for c in fig.content if c isa Makie.Colorbar]
     for (k, cb) in enumerate(cbs)
         id = Symbol("cb", k); ids[cb] = id
-        transforms[id] = Holo._colorbar_transform(id, cb, scaling, out_h)
+        transforms[id] = Masque._colorbar_transform(id, cb, scaling, out_h)
     end
     return InteractionContext(project, transforms, ids, out_w, out_h, scaling, display_scale)
 end
 
-Holo.make_widget(::CairoBackend, result::RenderResult, manifest, display_css) =
-    Holo.HoloWidget(Holo.base64encode(result.payload), manifest, display_css)
+Masque.make_widget(::CairoBackend, result::RenderResult, manifest, display_css) =
+    Masque.MasqueWidget(Masque.base64encode(result.payload), manifest, display_css)
 
-end # module HoloCairoMakieExt
+end # module MasqueCairoMakieExt

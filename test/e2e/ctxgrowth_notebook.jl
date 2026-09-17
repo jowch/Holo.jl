@@ -23,13 +23,13 @@ begin
     Pkg.develop(path = normpath(joinpath(@__DIR__, "..", "..")))   # test/e2e -> package root
     Pkg.add(["WGLMakie", "PlutoUI"])
     Pkg.instantiate()
-    using Holo
+    using Masque
     using WGLMakie
     using PlutoUI
 end
 
 # ╔═╡ c0000000-0000-0000-0000-000000000009
-# The view param: a plain @bind slider. Each change re-runs the holo cell below — the
+# The view param: a plain @bind slider. Each change re-runs the masque cell below — the
 # server-authoritative re-render path whose :webgl cost this spike measures.
 @bind az PlutoUI.Slider(0.2:0.2:1.4; default = 0.4)
 
@@ -42,7 +42,7 @@ fig = let
 end
 
 # ╔═╡ c0000000-0000-0000-0000-000000000011
-@bind ev holo(fig)
+@bind ev masque(fig)
 
 # ╔═╡ c0000000-0000-0000-0000-000000000012
 HTML("<span id=\"bondout\">BOND=$(repr(ev)) az=$(az)</span>")

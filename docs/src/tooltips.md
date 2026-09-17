@@ -11,7 +11,7 @@ breakdown. Its type governs what the browser renders:
 | Value | Type | Browser behaviour |
 |---|---|---|
 | *(omitted / `nothing`)* | `Nothing` | Auto name/value table built from the payload |
-| `holo"..."` | `Markup` | Template interpolated against the hovered element's payload |
+| `masque"..."` | `Markup` | Template interpolated against the hovered element's payload |
 | `false` | `Bool` | Tooltip suppressed entirely — the hover highlight still applies |
 
 ## The default: an auto-table
@@ -28,13 +28,13 @@ PointInteractable(ax, pts; payloads = [(; city = "Lyon", pop = 513_000)])
 PointInteractable(ax, pts; payloads = [...], tooltip = false)
 ```
 
-## `holo"..."` templates
+## `masque"..."` templates
 
-`holo"..."` is a string macro (exported; the underlying macro is `@holo_str`) that
+`masque"..."` is a string macro (exported; the underlying macro is `@masque_str`) that
 produces a `Markup` value:
 
 ```julia
-tooltip = holo"<b>$(name)</b> — $(population:,) people"
+tooltip = masque"<b>$(name)</b> — $(population:,) people"
 ```
 
 `$(field)` is a placeholder resolved in the browser from the hovered element's payload entry
@@ -48,17 +48,17 @@ interpolation in templates.
 | `` \$ `` | Literal dollar sign |
 
 A fixed label with no placeholders is a template with no `$()` at all:
-`holo"<em>static label</em>"`. The literal (non-`$()`) portions of the template are raw
+`masque"<em>static label</em>"`. The literal (non-`$()`) portions of the template are raw
 HTML — you're responsible for escaping `<` and `&` in literal text, same as `@htl`;
 `$(field)` interpolation and the auto-table are always HTML-escaped for you.
 
-Because `holo"..."` requires a string literal, a runtime-computed string has to travel as a
+Because `masque"..."` requires a string literal, a runtime-computed string has to travel as a
 field inside the payload instead:
 
 ```julia
 begin
     payloads = [(; city, pop, label = "$(city): $(pop) residents") for (city, pop) in data]
-    tooltip  = holo"$(label)"   # label is pre-rendered per element in the payload
+    tooltip  = masque"$(label)"   # label is pre-rendered per element in the payload
 end
 ```
 
@@ -66,8 +66,8 @@ end
 
 Two checks catch typos at different times. A malformed template (`$(pop+1)`, an unclosed
 `$(`, an unknown d3-format type character) is a `TemplateValidationError` the instant the
-cell containing `holo"..."` parses — before `holo()` ever runs. A syntactically valid field
-that isn't actually a key in your payload is caught later, when `holo()` builds the
+cell containing `masque"..."` parses — before `masque()` ever runs. A syntactically valid field
+that isn't actually a key in your payload is caught later, when `masque()` builds the
 manifest: an `ArgumentError` with a "did you mean?" suggestion for a close misspelling. This
 check runs whenever *any* payload in the layer is a `NamedTuple` — checked against the union
 of their field names — and is skipped only when none are (e.g. every payload is a `Dict`), in
@@ -90,7 +90,7 @@ This uses CSS relative-colour syntax (`lch(from …)`); browsers without it (old
 
 ### Accent colour
 
-When Holo can resolve the hovered element's own colour (currently: a `scatter!` plot's
+When Masque can resolve the hovered element's own colour (currently: a `scatter!` plot's
 `color=`, uniform or colormapped), the tooltip gets a 3px accent border in that colour — the
 tooltip text itself stays neutral. Nothing to opt into; it's omitted (a plain 1px border, same
 as the other three sides) whenever the colour can't be resolved.
@@ -101,7 +101,7 @@ Pin any of these to lock the tooltip's look (this also opts that property out of
 inversion — the author's deliberate choice):
 
 ```julia
-holo(fig, interactables...;
+masque(fig, interactables...;
     tooltip_bg        = nothing,   # background  — CSS string or Makie color (:dodgerblue, RGBf(...))
     tooltip_color     = nothing,   # text color  — CSS string or Makie color
     tooltip_accent    = nothing,   # accent (emphasis / links)
@@ -117,17 +117,17 @@ default"; only the kwargs you actually set change anything.
 
 ### CSS escape hatch
 
-The underlying `--holo-tip-*` custom properties inherit like any CSS custom property, so
+The underlying `--masque-tip-*` custom properties inherit like any CSS custom property, so
 setting one on any ancestor of the cell overrides it without any Julia API:
 
 ```html
 <style>
-main { --holo-tip-bg: #1a1a2e; --holo-tip-color: #e0e0e0; }
+main { --masque-tip-bg: #1a1a2e; --masque-tip-color: #e0e0e0; }
 </style>
 ```
 
 A few properties are CSS-only — no Julia kwarg sets them, so this is the only way to change
-them. `--holo-tip-bg`/`--holo-tip-color`/`--holo-tip-border` no longer have one fixed
+them. `--masque-tip-bg`/`--masque-tip-color`/`--masque-tip-border` no longer have one fixed
 light/dark pair of defaults — they're derived from the figure's background (see above) unless
 set explicitly here or via a `tooltip_*` kwarg; the "Legacy fallback" column is what a browser
 without CSS relative-colour syntax uses instead (static light, dark only via OS
@@ -135,18 +135,18 @@ without CSS relative-colour syntax uses instead (static light, dark only via OS
 
 | Custom property | Legacy fallback (light / dark) | Julia kwarg |
 |---|---|---|
-| `--holo-tip-bg` | `#ffffff` / `#1e1e1e` | `tooltip_bg` |
-| `--holo-tip-color` | `#1a1a1a` / `#e8e8e8` | `tooltip_color` |
-| `--holo-tip-border` | `rgba(0,0,0,0.1)` / `rgba(255,255,255,0.15)` | — (CSS only) |
-| `--holo-tip-accent` | `#6b7280` | `tooltip_accent` |
-| `--holo-tip-font` | `system-ui, -apple-system, sans-serif` | `tooltip_font` |
-| `--holo-tip-font-size` | `11px` | `tooltip_font_size` |
-| `--holo-tip-radius` | `4px` | `tooltip_radius` |
-| `--holo-tip-caret` | `block` (the caret's `display`) | `tooltip_caret` (`false` → `none`) |
-| `--holo-tip-padding` | `8px 12px` | — (CSS only) |
-| `--holo-tip-shadow` | `0 2px 4px rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.08)` / `0 2px 4px rgba(0,0,0,0.4), 0 8px 16px rgba(0,0,0,0.3)` | — (CSS only) |
-| `--holo-tip-maxwidth` | `320px` | — (CSS only) |
-| `--holo-mark-border` | *(unset — plain 1px border)* | — (set automatically from the hovered element's `colors`, see "Accent colour" above) |
+| `--masque-tip-bg` | `#ffffff` / `#1e1e1e` | `tooltip_bg` |
+| `--masque-tip-color` | `#1a1a1a` / `#e8e8e8` | `tooltip_color` |
+| `--masque-tip-border` | `rgba(0,0,0,0.1)` / `rgba(255,255,255,0.15)` | — (CSS only) |
+| `--masque-tip-accent` | `#6b7280` | `tooltip_accent` |
+| `--masque-tip-font` | `system-ui, -apple-system, sans-serif` | `tooltip_font` |
+| `--masque-tip-font-size` | `11px` | `tooltip_font_size` |
+| `--masque-tip-radius` | `4px` | `tooltip_radius` |
+| `--masque-tip-caret` | `block` (the caret's `display`) | `tooltip_caret` (`false` → `none`) |
+| `--masque-tip-padding` | `8px 12px` | — (CSS only) |
+| `--masque-tip-shadow` | `0 2px 4px rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.08)` / `0 2px 4px rgba(0,0,0,0.4), 0 8px 16px rgba(0,0,0,0.3)` | — (CSS only) |
+| `--masque-tip-maxwidth` | `320px` | — (CSS only) |
+| `--masque-mark-border` | *(unset — plain 1px border)* | — (set automatically from the hovered element's `colors`, see "Accent colour" above) |
 
 ### Placement
 
@@ -174,5 +174,5 @@ the anchor described above. For the mark-anchored kinds the caret sits at the bo
 centre (or top centre, when flipped below); for the cursor-following kinds (axis/threshold/
 ROI/view) it keeps the previous cursor-relative offset and edge-clamping behavior.
 
-See [`architecture.md` §10](https://github.com/jowch/Holo.jl/blob/main/docs/dev/architecture.md)
+See [`architecture.md` §10](https://github.com/jowch/Masque.jl/blob/main/docs/dev/architecture.md)
 for the wire format behind all of this.

@@ -1,4 +1,4 @@
-name = "Holo"
+name = "Masque"
 uuid = "82b01fb5-7eeb-4559-83ea-8d75f85d4328"
 version = "0.1.0"
 authors = ["Jonathan Chen <jwhc@ucla.edu>"]
@@ -15,8 +15,8 @@ CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
 
 [extensions]
-HoloCairoMakieExt = "CairoMakie"
-HoloWGLMakieExt = "WGLMakie"
+MasqueCairoMakieExt = "CairoMakie"
+MasqueWGLMakieExt = "WGLMakie"
 
 [compat]
 AbstractPlutoDingetjes = "1"

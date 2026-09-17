@@ -1,11 +1,11 @@
 # Getting started
 
 This walks through the same three steps as the [Home](index.md) quick start, slower, and covers
-the two ways to tell Holo what's clickable.
+the two ways to tell Masque what's clickable.
 
 ## 1. A figure, like any other
 
-Nothing Holo-specific yet:
+Nothing Masque-specific yet:
 
 ```julia
 begin
@@ -19,18 +19,18 @@ begin
 end
 ```
 
-## 2. `holo(fig)` — zero-config
+## 2. `masque(fig)` — zero-config
 
-Load `Holo` and call `holo(fig)` instead of just showing `fig`. Holo walks the figure, finds
+Load `Masque` and call `masque(fig)` instead of just showing `fig`. Masque walks the figure, finds
 every plot it knows how to introspect (`scatter!`, `lines!`, `heatmap!`, `barplot!`, …), and
 overlays hit-testing for all of them automatically — no interactable to write:
 
 ```julia
-using Holo
+using Masque
 ```
 
 ```julia
-@bind ev holo(fig)
+@bind ev masque(fig)
 ```
 
 This is the fastest way to get *something* clickable. `ev` is the bond value: `nothing`
@@ -41,7 +41,7 @@ skipped with a `@warn`, not an error.
 
 Zero-config is sugar over an explicit vector of interactables. Building it yourself gets you
 custom `payloads`, a chosen `id`, and non-default styling — on the *same* `fig`/`ax` from
-step 1, without plotting `pts` a second time. **Replace** the `@bind ev holo(fig)` cell
+step 1, without plotting `pts` a second time. **Replace** the `@bind ev masque(fig)` cell
 above with this — Pluto rejects two cells that both bind `ev`:
 
 ```julia
@@ -49,13 +49,13 @@ labels = ["a", "b", "c"]
 ```
 
 ```julia
-@bind ev holo(fig, [PointInteractable(ax, pts; id = :points, payloads = labels)])
+@bind ev masque(fig, [PointInteractable(ax, pts; id = :points, payloads = labels)])
 ```
 
 Every built-in kind, its constructor, and its default payload are on the
 [Interactables](@ref) page. You can also start from `auto_interactables(fig)` (the same
-vector `holo(fig)` builds internally), tweak it, and pass it back — see
-[Zero-config: `holo(fig)`](@ref).
+vector `masque(fig)` builds internally), tweak it, and pass it back — see
+[Zero-config: `masque(fig)`](@ref).
 
 ## 4. A cell that reacts
 
@@ -84,17 +84,17 @@ payload you built as `(; label = "a")` arrives as `Dict("label" => "a")` — ind
 
 ## 5. Choosing the backend
 
-Holo doesn't have a `backend` package to install separately — it picks its backend from
+Masque doesn't have a `backend` package to install separately — it picks its backend from
 whichever Makie package you `using`:
 
 ```julia
-using Holo, CairoMakie   # :cairo — static PNG + overlay (the default)
+using Masque, CairoMakie   # :cairo — static PNG + overlay (the default)
 ```
 
 ```julia
-using Holo, WGLMakie      # :webgl — live browser-GPU canvas
+using Masque, WGLMakie      # :webgl — live browser-GPU canvas
 ```
 
-Everything above (`holo`, `@bind`, `InteractionEvent`, every interactable) is identical on
+Everything above (`masque`, `@bind`, `InteractionEvent`, every interactable) is identical on
 both — see [Backends](@ref) for when to reach for which, and what happens if you load
 neither or both.

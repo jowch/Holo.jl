@@ -111,7 +111,7 @@ function _parity_corpus()
                 fig, [
                     PolygonInteractable(
                         ax, [[(1.0, 1.0), (3.0, 1.0), (2.0, 3.0)]];
-                        tooltip = holo"tri $(index)"
+                        tooltip = masque"tri $(index)"
                     ),
                     PointInteractable(axc, scc),
                 ],

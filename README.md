@@ -1,18 +1,18 @@
-# Holo.jl
+# Masque.jl
 
-[![CI](https://github.com/jowch/Holo.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/jowch/Holo.jl/actions/workflows/CI.yml)
-[![codecov](https://codecov.io/gh/jowch/Holo.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/jowch/Holo.jl)
-[![Docs stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://jowch.github.io/Holo.jl/stable)
-[![Docs dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://jowch.github.io/Holo.jl/dev)
+[![CI](https://github.com/jowch/Masque.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/jowch/Masque.jl/actions/workflows/CI.yml)
+[![codecov](https://codecov.io/gh/jowch/Masque.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/jowch/Masque.jl)
+[![Docs stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://jowch.github.io/Masque.jl/stable)
+[![Docs dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://jowch.github.io/Masque.jl/dev)
 
 **Light, server-free interactivity for Makie plots in Pluto — the same interactions on either
 backend: CairoMakie (static base) by default, or WGLMakie (live base) for animation / large
-data / live 3D.** Holo lays a thin JS overlay over a Makie figure — hover for tooltips, click
+data / live 3D.** Masque lays a thin JS overlay over a Makie figure — hover for tooltips, click
 to select — and round-trips deliberate clicks to Julia through `@bind`.
 
 ## When to use it
 
-| | CairoMakie alone | WGLMakie alone | **Holo** |
+| | CairoMakie alone | WGLMakie alone | **Masque** |
 |---|---|---|---|
 | Output | static, publication-quality | live, GPU-rendered | static + thin overlay (`:cairo`) or live (`:webgl`) |
 | Interactivity | none | rich | light: hover tooltips, click-to-select, drag gestures |
@@ -22,7 +22,7 @@ to select — and round-trips deliberate clicks to Julia through `@bind`.
 ## Install
 
 ```julia
-julia> ] add Holo
+julia> ] add Masque
 ```
 
 You'll also want `Pluto`, plus a Makie backend: `CairoMakie` for the default static path, or
@@ -34,7 +34,7 @@ In a Pluto notebook:
 
 ```julia
 begin
-    using Holo, CairoMakie
+    using Masque, CairoMakie
 
     # your figure, as usual
     fig = Figure()
@@ -46,7 +46,7 @@ end
 
 ```julia
 # declare what's interactable, bind the result
-@bind sel holo(fig, [PointInteractable(ax, pts; payloads = ["a", "b", "c"])])
+@bind sel masque(fig, [PointInteractable(ax, pts; payloads = ["a", "b", "c"])])
 ```
 
 ```julia
@@ -61,7 +61,7 @@ cell, so multi-statement setup goes in `begin ... end`.)
 
 The full site — getting started, every interactable, tooltips, custom interactions,
 backends, troubleshooting, and the API reference — is at
-**[jowch.github.io/Holo.jl](https://jowch.github.io/Holo.jl)**.
+**[jowch.github.io/Masque.jl](https://jowch.github.io/Masque.jl)**.
 
 See [`examples/`](examples/) for runnable Pluto notebooks covering the same ground.
 

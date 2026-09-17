@@ -28,15 +28,15 @@ are 2D-only: they raise an `ArgumentError` on `Axis3` or `PolarAxis`, and need a
 works on `Axis3` and `PolarAxis` too — see [3D axes and `PolarAxis`](@ref) at the end of this
 page.
 
-[`examples/demo.jl`](https://github.com/jowch/Holo.jl/blob/main/examples/demo.jl) is a
+[`examples/demo.jl`](https://github.com/jowch/Masque.jl/blob/main/examples/demo.jl) is a
 runnable gallery of every kind below plus the selection round-trip.
 
 **Pan, zoom, and 3D rotation** re-render through the same `@bind` loop as everything else:
-change `limits` (2D) or `azimuth`/`elevation` (`Axis3`) and rebuild the widget — `holo`
+change `limits` (2D) or `azimuth`/`elevation` (`Axis3`) and rebuild the widget — `masque`
 re-projects the overlay, so hit regions stay correct. Drive those params yourself with
 PlutoUI sliders, or drag them with [`ViewInteractable`](@ref) (commit-on-release;
 Shift+drag wins over a `ROIInteractable`/`ThresholdInteractable` on the same axis).
-[`examples/view_manip.jl`](https://github.com/jowch/Holo.jl/blob/main/examples/view_manip.jl)
+[`examples/view_manip.jl`](https://github.com/jowch/Masque.jl/blob/main/examples/view_manip.jl)
 demonstrates both.
 
 ## Constructors
@@ -47,7 +47,7 @@ a `Makie.Colorbar`) and geometry in **data space**, and all of them accept `id` 
 [`SegmentInteractable`](@ref), [`RectInteractable`](@ref), [`PolygonInteractable`](@ref), and
 (documented on their own pages) [`TextInteractable`](@ref) and [`RegionInteractable`](@ref)
 — also accept `payloads` (one entry per element, auto-generated with a 0-based `index` if
-omitted) and `tooltip` (`nothing` / `holo"..."` / `false`, see [Tooltips](@ref)). The
+omitted) and `tooltip` (`nothing` / `masque"..."` / `false`, see [Tooltips](@ref)). The
 whole-axis and drag kinds — [`AxisInteractable`](@ref), [`ColorbarInteractable`](@ref),
 [`ThresholdInteractable`](@ref), [`ROIInteractable`](@ref), [`ViewInteractable`](@ref) —
 report one client-computed value per event rather than a discrete element, so they take only
@@ -84,10 +84,10 @@ end
 ```
 
 ```julia
-@bind sel holo(fig, pt)
+@bind sel masque(fig, pt)
 ```
 
-Holo introspects far more plot kinds than the handful shown as explicit constructors above.
+Masque introspects far more plot kinds than the handful shown as explicit constructors above.
 Every one below produces one of the same four interactables — same payloads/`selected`/
 tooltip contract, plot-specific default payload and `id`:
 
@@ -97,14 +97,14 @@ tooltip contract, plot-specific default payload and `id`:
 | [`SegmentInteractable`](@ref) | `Lines`, `Stairs` (`:polyline`); `LineSegments`, `Errorbars`, `Rangebars` (`:pairs`); `Wireframe` (rendered edges); `Arrows3D` (shaft start→end); `HLines`/`VLines` (the rendered span) |
 | [`RectInteractable`](@ref) | `Heatmap`/`Image` (compact grid); `BarPlot` (dodge/stack/auto-width honored); `Hist`, `Waterfall`, `CrossBar`, `Spy`, `HSpan`, `VSpan` |
 | [`PolygonInteractable`](@ref) | `Poly` (one ring or many); `Band`, `Density` (filled curve); `Contourf` (filled levels); `Violin`; `Voronoiplot` (cell polygons) |
-| [`TextInteractable`](@ref) | `Text` directly; `Annotation` via its inner `Text` (its only constructor takes a `Makie.Text`, so `annotation!` labels are only reachable through this path or `holo(fig)`, never a hand-written `TextInteractable`) |
+| [`TextInteractable`](@ref) | `Text` directly; `Annotation` via its inner `Text` (its only constructor takes a `Makie.Text`, so `annotation!` labels are only reachable through this path or `masque(fig)`, never a hand-written `TextInteractable`) |
 | Point **+** Segment (two layers) | `Stem` (`id` = points, `id_stems` = the stems); `ScatterLines` (`id` = points, `id_line` = the line) |
 | Rect **or** Polygon (box body only) | `BoxPlot` — a rect unless the box is notched, then a polygon; whiskers/outliers are decorative, not hit-tested |
 
 `id` on all of these, and `payloads` on most, take the same keywords as the explicit
 constructors; defaults are the plot's own name in lowercase (`:scatter`, `:lines`, `:hist`,
 `:crossbar`, …) — **except** `Heatmap`/`Image` (`:cells`), `BarPlot` (`:bars`), and
-`LineSegments` (`:segments`). `holo(fig)`/`auto_interactables` use these same ids, so an
+`LineSegments` (`:segments`). `masque(fig)`/`auto_interactables` use these same ids, so an
 `ev.layer` check against `:heatmap` or `:barplot` will never match — use `:cells`/`:bars`,
 and for `selected=`, `:bars`. The `Heatmap`/`Image` method is also the one exception that
 takes no `payloads` keyword at all, since grid cells resolve `{i, j, value}` client-side,
@@ -113,9 +113,9 @@ elements can't be pre-highlighted via `selected=` at all (see [Selection](@ref))
 type not listed here — or here and in the [Constructors](@ref) table above — needs a custom
 interaction; see [Custom interactions](@ref).
 
-## Zero-config: `holo(fig)`
+## Zero-config: `masque(fig)`
 
-Skip the constructors entirely — `holo(fig)` walks every `Axis`, `Axis3`, `PolarAxis`, and
+Skip the constructors entirely — `masque(fig)` walks every `Axis`, `Axis3`, `PolarAxis`, and
 `Colorbar` block, introspects each supported plot, and overlays the lot:
 
 ```julia
@@ -128,7 +128,7 @@ end
 ```
 
 ```julia
-@bind ev holo(fig)   # both plots interactive; ev.layer tells you which was clicked
+@bind ev masque(fig)   # both plots interactive; ev.layer tells you which was clicked
 ```
 
 Layer ids are the plot kind (`:scatter`, `:hist`, `:band`, …, from the table above — note the
@@ -136,7 +136,7 @@ Layer ids are the plot kind (`:scatter`, `:hist`, `:band`, …, from the table a
 `:colorbar` for any `Colorbar` block, suffixed `_2`, `_3`, … when a kind repeats within one
 figure. Unsupported plot types are skipped with a `@warn`, not an error.
 
-[`auto_interactables`](@ref) returns the same `Vector{AbstractInteractable}` `holo(fig)`
+[`auto_interactables`](@ref) returns the same `Vector{AbstractInteractable}` `masque(fig)`
 builds, so you can grab it, tweak ids/payloads or append custom interactables, then pass it
 back:
 
@@ -149,7 +149,7 @@ end
 ```
 
 ```julia
-@bind ev holo(fig, ints)
+@bind ev masque(fig, ints)
 ```
 
 ## 3D axes and `PolarAxis`

@@ -25,13 +25,13 @@ begin
     Pkg.develop(path = joinpath(@__DIR__, ".."))   # examples/ -> package root (portable)
     Pkg.add("CairoMakie")
     Pkg.instantiate()
-    using Holo
+    using Masque
     using CairoMakie
 end
 
 # ╔═╡ 40000000-0000-0000-0000-000000000000
 md"""
-# Holo.jl — interactive plot gallery
+# Masque.jl — interactive plot gallery
 
 One self-contained notebook exercising every built-in interactable kind end-to-end:
 **Point · Segment · Rect (grid + list) · Polygon · Axis readout**, plus **rich tooltips**
@@ -39,7 +39,7 @@ and the **selection round-trip** (click → re-highlight, flicker-free across re
 
 Each plot is a static CairoMakie render with a thin JS hit-testing overlay. Click a
 plot; the bond below it reports the typed `InteractionEvent`. **Hover** for a tooltip —
-see the *Rich tooltips* section for `holo"…"` templates, the auto-table default, and theming.
+see the *Rich tooltips* section for `masque"…"` templates, the auto-table default, and theming.
 """
 
 # ╔═╡ 40000000-0000-0000-0000-000000000010
@@ -59,7 +59,7 @@ begin
 end
 
 # ╔═╡ 40000000-0000-0000-0000-000000000012
-@bind pt_sel holo(pt_fig, pt_int)
+@bind pt_sel masque(pt_fig, pt_int)
 
 # ╔═╡ 40000000-0000-0000-0000-000000000013
 pt_sel === nothing ? "point: click a marker" :
@@ -78,7 +78,7 @@ begin
 end
 
 # ╔═╡ 40000000-0000-0000-0000-000000000022
-@bind sg_sel holo(sg_fig, sg_int)
+@bind sg_sel masque(sg_fig, sg_int)
 
 # ╔═╡ 40000000-0000-0000-0000-000000000023
 sg_sel === nothing ? "segment: click a line segment" :
@@ -97,7 +97,7 @@ begin
 end
 
 # ╔═╡ 40000000-0000-0000-0000-000000000032
-@bind hm_sel holo(hm_fig, hm_int)
+@bind hm_sel masque(hm_fig, hm_int)
 
 # ╔═╡ 40000000-0000-0000-0000-000000000033
 hm_sel === nothing ? "grid: click a cell" :
@@ -122,7 +122,7 @@ begin
 end
 
 # ╔═╡ 40000000-0000-0000-0000-000000000042
-@bind rl_sel holo(rl_fig, rl_int)
+@bind rl_sel masque(rl_fig, rl_int)
 
 # ╔═╡ 40000000-0000-0000-0000-000000000043
 rl_sel === nothing ? "list: click a box" :
@@ -149,7 +149,7 @@ begin
 end
 
 # ╔═╡ 40000000-0000-0000-0000-000000000052
-@bind pg_sel holo(pg_fig, pg_int)
+@bind pg_sel masque(pg_fig, pg_int)
 
 # ╔═╡ 40000000-0000-0000-0000-000000000053
 pg_sel === nothing ? "polygon: click a filled region" :
@@ -167,7 +167,7 @@ begin
 end
 
 # ╔═╡ 40000000-0000-0000-0000-000000000062
-@bind ar_sel holo(ar_fig, ar_int)
+@bind ar_sel masque(ar_fig, ar_int)
 
 # ╔═╡ 40000000-0000-0000-0000-000000000063
 ar_sel === nothing ? "axis: click in the plot area" :
@@ -175,9 +175,9 @@ ar_sel === nothing ? "axis: click in the plot area" :
 
 # ╔═╡ 40000000-0000-0000-0000-000000000080
 md"""
-## Rich tooltips (M2.3) — `holo"…"` templates, auto-table, theming
+## Rich tooltips (M2.3) — `masque"…"` templates, auto-table, theming
 
-**Hover** (don't click) over the markers to see tooltips. Author content with the `holo"…"`
+**Hover** (don't click) over the markers to see tooltips. Author content with the `masque"…"`
 macro: `$(city)` pulls a field from the payload (filled in the browser), and `$(pop:,)`
 applies a [d3-format](https://d3js.org/d3-format) number spec — `37000000` → `37,000,000`.
 A dataset value that contains HTML is escaped automatically; only the template's own markup
@@ -195,12 +195,12 @@ begin
     tt_int = PointInteractable(
         tt_ax, tt_xy; id = :cities,
         payloads = [(; city = tt_city[k], pop = tt_pop[k]) for k in eachindex(tt_city)],
-        tooltip = holo"<b>$(city)</b><br>pop $(pop:,)",
+        tooltip = masque"<b>$(city)</b><br>pop $(pop:,)",
     )
 end
 
 # ╔═╡ 40000000-0000-0000-0000-000000000082
-@bind tt_sel holo(tt_fig, tt_int)
+@bind tt_sel masque(tt_fig, tt_int)
 
 # ╔═╡ 40000000-0000-0000-0000-000000000083
 tt_sel === nothing ? "tooltip: hover a marker; click to read the payload" :
@@ -211,7 +211,7 @@ md"""
 ### Auto-table default + figure theming
 
 With **no** `tooltip=`, the overlay renders a name/value table straight from the payload.
-The `tooltip_*` keyword args on `holo(…)` theme the whole figure (Makie colors work) — here
+The `tooltip_*` keyword args on `masque(…)` theme the whole figure (Makie colors work) — here
 a dark card with no caret.
 """
 
@@ -228,7 +228,7 @@ begin
 end
 
 # ╔═╡ 40000000-0000-0000-0000-000000000086
-@bind at_sel holo(at_fig, at_int; tooltip_bg = :midnightblue, tooltip_color = :white, tooltip_caret = false, tooltip_radius = 8)
+@bind at_sel masque(at_fig, at_int; tooltip_bg = :midnightblue, tooltip_color = :white, tooltip_caret = false, tooltip_radius = 8)
 
 # ╔═╡ 40000000-0000-0000-0000-000000000070
 md"""
@@ -253,7 +253,7 @@ begin
 end
 
 # ╔═╡ 40000000-0000-0000-0000-000000000073
-@bind rt_sel holo(rt_fig_l, rt_int_l)
+@bind rt_sel masque(rt_fig_l, rt_int_l)
 
 # ╔═╡ 40000000-0000-0000-0000-000000000074
 # accumulate the clicked index (acyclic: depends on rt_sel + the once-init Ref)
@@ -274,13 +274,13 @@ begin
 end
 
 # ╔═╡ 40000000-0000-0000-0000-000000000077
-@bind _rt_ignore holo(rt_fig_r, rt_int_r; selected = Dict(:scatter => picked))
+@bind _rt_ignore masque(rt_fig_r, rt_int_r; selected = Dict(:scatter => picked))
 
 # ╔═╡ 40000000-0000-0000-0000-000000000090
 md"""
 ## Bars / areas / spans (Phase 2a) — auto-extraction
 
-`holo(fig)` auto-detects histogram bins (`hist!`), waterfall bars (`waterfall!`),
+`masque(fig)` auto-detects histogram bins (`hist!`), waterfall bars (`waterfall!`),
 crossbar ranges (`crossbar!`), bar plots (`barplot!`), and horizontal/vertical
 spans (`hspan!`/`vspan!`) across every `Axis` — no manual `Interactable` wiring
 needed. Hover over the bars, bands, or ranges below.
@@ -293,14 +293,14 @@ bars_widget = let
     a2 = Axis(bf[1, 2], title = "waterfall"); waterfall!(a2, 1:4, [3.0, -1.0, 2.0, -0.5])
     a3 = Axis(bf[2, 1], title = "crossbar"); crossbar!(a3, [1, 2, 3], [5.0, 6.0, 4.0], [3.0, 4.0, 2.0], [7.0, 8.0, 6.0])
     a4 = Axis(bf[2, 2], title = "bars + spans"); barplot!(a4, 1:3, [2.0, 3.0, 1.0]); hspan!(a4, [0.4], [0.8]; color = (:orange, 0.2)); vspan!(a4, [1.6], [2.0]; color = (:green, 0.2))
-    holo(bf)   # auto-detects Hist + Waterfall + CrossBar + BarPlot + HSpan + VSpan
+    masque(bf)   # auto-detects Hist + Waterfall + CrossBar + BarPlot + HSpan + VSpan
 end
 
 # ╔═╡ 40000000-0000-0000-0000-0000000000a0
 md"""
 ## Polygon surfaces (Phase 2b) — auto-extraction
 
-`holo(fig)` auto-detects filled-area curves (`band!`, `density!`), contour fills
+`masque(fig)` auto-detects filled-area curves (`band!`, `density!`), contour fills
 (`contourf!`), violin plots (`violin!`), Voronoi diagrams (`voronoiplot!`), and box
 plots (`boxplot!`) across every `Axis` — no manual `Interactable` wiring needed.
 Hover over the plots below to inspect payloads.
@@ -321,14 +321,14 @@ poly_widget = let
     violin!(Axis(pf[2, 1]; title = "violin"), repeat([1, 2, 3], inner = 100), randn(300))
     voronoiplot!(Axis(pf[2, 2]; title = "voronoi"), rand(15), rand(15))
     boxplot!(Axis(pf[2, 3]; title = "boxplot"), repeat([1, 2], inner = 120), randn(240))
-    holo(pf)   # auto-detects Band + Density + Contourf + Violin + Voronoiplot + BoxPlot
+    masque(pf)   # auto-detects Band + Density + Contourf + Violin + Voronoiplot + BoxPlot
 end
 
 # ╔═╡ 40000000-0000-0000-0000-0000000000b0
 md"""
 ## Colorbar readout (M3) — `ColorbarInteractable`
 
-`holo(fig)` auto-detects any `Colorbar` block and adds a colorbar readout — **hover** the bar
+`masque(fig)` auto-detects any `Colorbar` block and adds a colorbar readout — **hover** the bar
 to see the data value at the cursor position; **click** to round-trip `(; value)` via `@bind`.
 No manual wiring needed: `ColorbarInteractable` is emitted automatically from the figure-block
 walk (`fig.content`).
@@ -341,14 +341,14 @@ cbf = let
     ax = Axis(f[1, 1]; title = "hover / click the colorbar")
     hm = heatmap!(ax, -3:0.1:3, -3:0.1:3, [exp(-(x^2 + y^2)) for x in -3:0.1:3, y in -3:0.1:3])
     Colorbar(f[1, 2], hm)
-    holo(f)
+    masque(f)
 end
 
 # ╔═╡ 40000000-0000-0000-0000-0000000000c0
 md"""
 ## Text labels — `TextInteractable` (click-to-pick buttons)
 
-`holo(fig)` auto-detects data-space `text!`/`annotation!` labels as clickable boxes — geometry
+`masque(fig)` auto-detects data-space `text!`/`annotation!` labels as clickable boxes — geometry
 comes straight from Makie's own `Makie.string_boundingboxes` (no font-metric math needed), so
 each label rides the same `:rects` primitive as a bar or a heatmap cell. A **rotated** label
 still yields one box (a looser, axis-aligned one). **Click a label** to pick it — the bond
@@ -367,10 +367,10 @@ begin
 end
 
 # ╔═╡ 40000000-0000-0000-0000-0000000000c2
-@bind tx_sel holo(tx_fig)
+@bind tx_sel masque(tx_fig)
 
 # ╔═╡ 40000000-0000-0000-0000-0000000000c3
-# holo(fig) also auto-detects the scatter!, so a marker click round-trips a (; index, x, y)
+# masque(fig) also auto-detects the scatter!, so a marker click round-trips a (; index, x, y)
 # payload with no "text" key — guard the readout rather than assume every click hit a label.
 if tx_sel === nothing
     "text: click a label (try the tilted one, or the annotation)"

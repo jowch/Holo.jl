@@ -25,18 +25,18 @@ begin
     Pkg.develop(path = joinpath(@__DIR__, ".."))   # examples/ -> package root (portable)
     Pkg.add(["CairoMakie", "PlutoUI"])
     Pkg.instantiate()
-    using Holo
+    using Masque
     using CairoMakie
     using PlutoUI
 end
 
 # ╔═╡ 50000000-0000-0000-0000-000000000000
 md"""
-# Holo.jl — view manipulation via `@bind` re-render
+# Masque.jl — view manipulation via `@bind` re-render
 
 Pan, zoom, and 3D rotation use the same server-authoritative `@bind` re-render model:
-change `limits` (2D) or `azimuth`/`elevation` (`Axis3`) and rebuild — `holo` re-projects
-the overlay so hit regions never drift. Drive those params with PlutoUI sliders (no Holo
+change `limits` (2D) or `azimuth`/`elevation` (`Axis3`) and rebuild — `masque` re-projects
+the overlay so hit regions never drift. Drive those params with PlutoUI sliders (no Masque
 API) or with **`ViewInteractable`** drag-to-pan / drag-to-rotate (commit-on-release).
 The same notebook runs on `:webgl` (`examples/view_manip_webgl.jl`).
 """
@@ -64,7 +64,7 @@ begin
 end
 
 # ╔═╡ 50000000-0000-0000-0000-000000000014
-@bind zoom_sel holo(zoom_fig, zoom_int)
+@bind zoom_sel masque(zoom_fig, zoom_int)
 
 # ╔═╡ 50000000-0000-0000-0000-000000000015
 HTML("<span id=\"zoomout\">ZOOM=$(repr(zoom_sel)) xmax=$(xmax)</span>")
@@ -93,7 +93,7 @@ begin
 end
 
 # ╔═╡ 50000000-0000-0000-0000-000000000023
-@bind vm_sel holo(vm_fig_l, vm_int_l)
+@bind vm_sel masque(vm_fig_l, vm_int_l)
 
 # ╔═╡ 50000000-0000-0000-0000-000000000024
 # accumulate clicked indices (acyclic: depends on vm_sel + the once-init Ref)
@@ -114,7 +114,7 @@ begin
 end
 
 # ╔═╡ 50000000-0000-0000-0000-000000000027
-@bind _vm_ignore holo(vm_fig_r, vm_int_r; selected = Dict(:scatter => vm_picked))
+@bind _vm_ignore masque(vm_fig_r, vm_int_r; selected = Dict(:scatter => vm_picked))
 
 # ╔═╡ 50000000-0000-0000-0000-000000000028
 HTML("<span id=\"pickout\">PICKED=$(vm_picked)</span>")
@@ -143,7 +143,7 @@ begin
 end
 
 # ╔═╡ 50000000-0000-0000-0000-000000000034
-@bind rot_sel holo(rot_fig)
+@bind rot_sel masque(rot_fig)
 
 # ╔═╡ 50000000-0000-0000-0000-000000000035
 HTML("<span id=\"rotout\">ROT=$(repr(rot_sel)) az=$(rot_az) el=$(rot_el)</span>")
@@ -171,7 +171,7 @@ begin
 end
 
 # ╔═╡ 50000000-0000-0000-0000-000000000043
-@bind pan_ev holo(pan_fig, [pan_pts, pan_view])
+@bind pan_ev masque(pan_fig, [pan_pts, pan_view])
 
 # ╔═╡ 50000000-0000-0000-0000-000000000044
 pan_committed = begin
@@ -191,7 +191,7 @@ begin
     pan_fig2 = Figure(size = (500, 320))
     pan_ax2 = Axis(pan_fig2[1, 1]; limits = pan_committed, title = "committed pan view")
     scatter!(pan_ax2, first.(zoom_data), last.(zoom_data); color = :dodgerblue, markersize = 18)
-    holo(pan_fig2, PointInteractable(pan_ax2, zoom_data; id = :scatter))
+    masque(pan_fig2, PointInteractable(pan_ax2, zoom_data; id = :scatter))
 end
 
 # ╔═╡ 50000000-0000-0000-0000-000000000050
@@ -214,7 +214,7 @@ begin
 end
 
 # ╔═╡ 50000000-0000-0000-0000-000000000053
-@bind orb_ev holo(orb_fig, orb_view)
+@bind orb_ev masque(orb_fig, orb_view)
 
 # ╔═╡ 50000000-0000-0000-0000-000000000054
 orbit_committed = begin
@@ -234,7 +234,7 @@ begin
     orb_fig2 = Figure(size = (500, 380))
     orb_ax2 = Axis3(orb_fig2[1, 1]; azimuth = orbit_committed[1], elevation = orbit_committed[2], title = "committed orbit view")
     scatter!(orb_ax2, Makie.Point3f[(1, 2, 3), (4, 5, 6), (7, 8, 2)]; color = :crimson, markersize = 16)
-    holo(orb_fig2)
+    masque(orb_fig2)
 end
 
 # ╔═╡ Cell order:

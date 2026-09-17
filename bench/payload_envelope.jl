@@ -9,7 +9,7 @@
 #   - manifest    → shipped via published_to_js (MsgPack on the wire) each render.
 # The click return value (JS→Julia) is tiny (layer/index/payload) and not swept here.
 
-using Holo, CairoMakie, Printf, Random
+using Masque, CairoMakie, Printf, Random
 Random.seed!(0)   # deterministic geometry/PNG so the committed numbers are exactly reproducible
 # (render-ms still varies run-to-run — it's wall-clock timing, not a size).
 
@@ -54,17 +54,17 @@ end
 println("\n=== A. base64 PNG vs plot density (default width, px_per_unit) ===")
 let
     f = Figure(size = (600, 400)); ax = Axis(f[1, 1]); lines!(ax, 1:10, rand(10))
-    row("line, 10 pts", holo(f))
+    row("line, 10 pts", masque(f))
 end
 for n in (100, 1_000, 10_000)
     f = Figure(size = (600, 400)); ax = Axis(f[1, 1])
     scatter!(ax, rand(n), rand(n); markersize = 6)
-    row("scatter, $n pts", holo(f))
+    row("scatter, $n pts", masque(f))
 end
 for d in (50, 200)
     f = Figure(size = (600, 400)); ax = Axis(f[1, 1])
     heatmap!(ax, 1:d, 1:d, rand(d, d))
-    row("heatmap, $(d)×$(d)", holo(f))
+    row("heatmap, $(d)×$(d)", masque(f))
 end
 
 println("\n=== B. manifest vs payload richness (scatter, N=1000) — bounds M2.3 tooltips ===")
@@ -73,7 +73,7 @@ let
     f = Figure(size = (600, 400)); ax = Axis(f[1, 1]); scatter!(ax, pts)
     for len in (0, 50, 200)
         pl = [Dict("html" => "x"^len) for _ in 1:1000]
-        w = holo(f, PointInteractable(ax, pts; id = :s, payloads = pl))
+        w = masque(f, PointInteractable(ax, pts; id = :s, payloads = pl))
         row("payload html len=$len/elem", w)
     end
 end
@@ -82,13 +82,13 @@ println("\n=== C. px_per_unit (display width) sweep — scatter 1000 ===")
 for maxw in (300, 700)
     f = Figure(size = (600, 400)); ax = Axis(f[1, 1])
     scatter!(ax, rand(1000), rand(1000); markersize = 6)
-    row("max_width=$maxw", holo(f; max_width = maxw))
+    row("max_width=$maxw", masque(f; max_width = maxw))
 end
 
 println("\n=== D. projected animation cost (Tier-1) = frames × per-frame PNG ===")
 let
     f = Figure(size = (600, 400)); ax = Axis(f[1, 1]); scatter!(ax, rand(1000), rand(1000); markersize = 6)
-    per = b64bytes(holo(f))   # same config as section A's scatter-1000 → comparable per-frame size
+    per = b64bytes(masque(f))   # same config as section A's scatter-1000 → comparable per-frame size
     for nf in (30, 120)
         @printf(
             "  %-34s  total≈%8s KB  (%d frames × %s KB)\n",
@@ -107,8 +107,8 @@ let
         ("heatmap 200×200", () -> (f = Figure(size = (600, 400)); ax = Axis(f[1, 1]); heatmap!(ax, 1:200, 1:200, rand(200, 200)); f)),
     )
     for (label, mk) in cases
-        f = mk(); holo(f)                                  # warm up render path for this fig shape
-        t = minimum(@elapsed(holo(mk())) for _ in 1:3)     # fresh fig each run; take the best of 3
+        f = mk(); masque(f)                                  # warm up render path for this fig shape
+        t = minimum(@elapsed(masque(mk())) for _ in 1:3)     # fresh fig each run; take the best of 3
         @printf("  %-34s  render+encode ≈ %6.0f ms\n", label, t * 1000)
     end
 end
@@ -145,14 +145,14 @@ let
     # Band: one ring (lower curve + reversed upper), ~2×N boundary vertices.
     f = Figure(size = (600, 400)); ax = Axis(f[1, 1])
     band!(ax, 1:100, cumsum(randn(100)), cumsum(randn(100)) .+ 2)
-    poly_row("band, 100 x-pts (1 ring)", holo(f))
+    poly_row("band, 100 x-pts (1 ring)", masque(f))
 end
 let
     # Violin: one closed KDE ring per group — the densest per-element case.
     # Makie's default npoints=200 → each ring is ~400 boundary vertices.
     f = Figure(size = (600, 400)); ax = Axis(f[1, 1])
     violin!(ax, repeat(1:3, 200), randn(600))
-    poly_row("violin, 3 groups (~400 verts/ring)", holo(f))
+    poly_row("violin, 3 groups (~400 verts/ring)", masque(f))
 end
 let
     # Contourf: many exterior rings (one per filled polygon piece), O(levels × ring-length).
@@ -161,12 +161,12 @@ let
     ys = LinRange(-2, 2, 50)
     f = Figure(size = (600, 400)); ax = Axis(f[1, 1])
     contourf!(ax, xs, ys, [sin(x) * cos(y) for x in xs, y in ys])
-    poly_row("contourf, 50×50, default levels", holo(f))
+    poly_row("contourf, 50×50, default levels", masque(f))
 end
 
 println("\n=== G. text labels — :rects box (4 ints) + (; text, index, x, y) payload ===")
 # Text labels reuse v1's :rects primitive (no new geometry kind); the only new wire term is the
-# payload's string `text` field. holo(fig) auto-detects text! as id=:text (src/introspect.jl).
+# payload's string `text` field. masque(fig) auto-detects text! as id=:text (src/introspect.jl).
 function text_row(label, w)
     textlayers = filter(l -> l["id"] == "text", w.manifest["layers"])
     isempty(textlayers) && (println("  $label — no text layer"); return)
@@ -187,7 +187,7 @@ let
     xs, ys = rand(n) .* 10, rand(n) .* 10
     scatter!(ax, xs, ys)
     text!(ax, xs, ys; text = ["Label $(k)" for k in 1:n], fontsize = 16)
-    text_row("scatter+labels, $n labels", holo(f))
+    text_row("scatter+labels, $n labels", masque(f))
 end
 let
     # A denser label grid — still low-N vs. scatter (labels are inherently sparse: legible text
@@ -196,6 +196,6 @@ let
     f = Figure(size = (900, 700)); ax = Axis(f[1, 1])
     xs, ys = rand(n) .* 10, rand(n) .* 10
     text!(ax, xs, ys; text = ["L$(k)" for k in 1:n], fontsize = 10)
-    text_row("text-only, $n labels", holo(f))
+    text_row("text-only, $n labels", masque(f))
 end
 println()

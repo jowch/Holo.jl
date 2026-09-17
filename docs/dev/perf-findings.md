@@ -1,4 +1,4 @@
-# Holo.jl — Perf findings (Phase 0 spike)
+# Masque.jl — Perf findings (Phase 0 spike)
 
 > Resolves the payload/latency envelope left as an open unknown by the original design spike
 > (superseded notes, kept in git history).
@@ -35,7 +35,7 @@
 > revenue"` costs 30 B. Doesn't scale with element count — negligible at any N.
 > and re-run for the figure-background tooltip theme + per-element `colors` accent (this PR,
 > 2026-09-15): two manifest-shape changes — an optional top-level `"background"` string
-> (always present; `holo()` ships the figure's own background colour) and an optional
+> (always present; `masque()` ships the figure's own background colour) and an optional
 > per-layer `"colors"` field (a uniform CSS string, or a shared palette + one index per
 > element for colormap/categorical data), present only on a `PointInteractable(ax,
 > p::Makie.Scatter)`-derived `:circles` layer whose colour resolves. Envelope unchanged at the
@@ -44,7 +44,7 @@
 > 5.6 MB (PNG-only, untouched by a manifest-only change). Measured the exact delta directly:
 > `background` costs 28 B (key + `"rgb(255,255,255)"` value), once per manifest, not per
 > layer or element; a uniform `colors` costs ~22 B (key + one CSS colour string), once per
-> Scatter layer. `holo(f)`'s default un-coloured scatter already carries a uniform `colors`
+> Scatter layer. `masque(f)`'s default un-coloured scatter already carries a uniform `colors`
 > (Makie's own default marker colour) — 50 B total added to the scatter-1000 row above.
 > A colormapped/categorical `colors` instead ships a shared palette (`_COLOR_PALETTE_SIZE =
 > 32` stops) + one small int per element — bounded by the fixed palette size regardless of N,
@@ -83,7 +83,7 @@ object — object properties survive esbuild's identifier minification, so that 
 keyboard/a11y work. Enabling esbuild's `mangleProps: /_$/` (every frontend-internal
 `OverlayState`/`OverlayCtx`/`ROIBox`/`Drag`/`FocusRef`/`Hit` field renamed to a trailing-`_`
 convention — see `frontend-delivery.md`'s Bundle row) recovered most of that: **35 133 → 33 048
-bytes** (−2 085 B, ~5.9%). `assets/holo-webgl.js` is unaffected (**1 173 bytes**, unchanged) —
+bytes** (−2 085 B, ~5.9%). `assets/masque-webgl.js` is unaffected (**1 173 bytes**, unchanged) —
 `wgl-shim.ts` has no `OverlayState`-shaped internal properties to mangle, and its two wire-tag
 properties (`__obs__`/`__t__`) are read via bracket notation specifically so `mangleProps` can
 never touch them. Both bundles remain byte-identical across repeated `npm run build` runs.
@@ -122,7 +122,7 @@ here. It becomes a real risk only at the extremes below.
   → 187 KB @700px, manifest ~38 KB both.
 
 ### Render latency (Julia half of the click→re-render round-trip)
-`@elapsed holo(fig)`, warmed, best-of-3. The click message is tiny and Pluto auto-throttles stale
+`@elapsed masque(fig)`, warmed, best-of-3. The click message is tiny and Pluto auto-throttles stale
 events, so the felt latency is dominated by Julia re-rendering + re-encoding. Browser paint +
 websocket transfer ride on top (needs live Pluto to measure — see Not measured).
 
@@ -175,7 +175,7 @@ Pushing past the normal envelope (live round-trips + a pure-Julia sweep to 10× 
 > valid datapoint for *what a 4.78 MB manifest costs* — it just no longer occurs by default.
 
 (PNG sizes here are the live browser-measured transferred bytes; manifest sizes are from the bench.
-The render floor is bench `holo(fig)` — it excludes the `published_to_js` msgpack serialization
+The render floor is bench `masque(fig)` — it excludes the `published_to_js` msgpack serialization
 of the manifest, which happens at `show` time and is part of the non-render overhead.)
 
 Below ~1 MB total, the round-trip is **render-bound** and browser/transfer overhead is a near-constant
@@ -419,8 +419,8 @@ confirms render time, not the browser, is the latency bottleneck.
 > Everything above this section is the `:cairo` backend's envelope (static CairoMakie PNG +
 > manifest) and is **unchanged** by the `:webgl` backend below — the two ship genuinely different
 > wire formats, so `:webgl` gets its own self-contained envelope here rather than folding into the
-> tables above. This section was merged in from the formerly-separate `HoloWGL` package's own
-> `docs/perf-findings.md` when that package folded into `Holo` as a package extension rather than
+> tables above. This section was merged in from the formerly-separate `MasqueWGL` package's own
+> `docs/perf-findings.md` when that package folded into `Masque` as a package extension rather than
 > staying a separate registered package; it remains the single source of every `:webgl` size
 > number, same as the rest of this file is for `:cairo`.
 >
@@ -429,7 +429,7 @@ confirms render time, not the browser, is the latency bottleneck.
 > **`f763c6d`** (the M2 envelope correction, pre-fold-in PR #20), **WGLMakie 0.13.12, Julia 1.12**.
 > Re-run for WS-3D Axis3 core on **2026-07-02** (PR #35): all three wire figures unchanged —
 > bundle 1.09 MB, 2D lines-200 0.07 MB, 2D scatter+text-40 0.1 MB, 3D helix-300 0.14 MB (the
-> scene payload never carried Holo's manifest, and the manifest's `is3d`/z additions are noise).
+> scene payload never carried Masque's manifest, and the manifest's `is3d`/z additions are noise).
 > Re-run and reconcile this section on any wire-format change (a new geometry layout, a new scene
 > field, an encoding change, an animation/frames slot) — and note the new commit here.
 
@@ -442,7 +442,7 @@ the click *return* value (`{layer,index,payload}`) is tiny and not a factor:
 |------|-----------|-------------|---------|
 | **WGLMakie bundle** | `published_to_js` → blob URL → `import()` | fixed (vendored bundle + three.js + atlas) | **once per notebook** (M2) |
 | **scene** | `published_to_js` (MsgPack binary) | #plots × geometry + glyph atlas | every render (per cell / per frame) |
-| **manifest + overlay** | reuses Holo core verbatim | #hit-elements | every render (tiny — see the `:cairo` envelope above) |
+| **manifest + overlay** | reuses Masque core verbatim | #hit-elements | every render (tiny — see the `:cairo` envelope above) |
 
 The **bundle dominated** and is now shared once per notebook (M2 / PR #18), so the per-cell cost is
 just the **scene**.
@@ -504,7 +504,7 @@ content-based), so the one `Ref`-cached bundle string has a **stable id** that c
 exactly once: across cells, Pluto's notebook merge keeps one copy on load; across re-runs of a cell,
 Pluto nulls already-known ids before sending (`known_published_objects` + `format_output.jl`), so a
 re-run re-ships only its new-id scene, never the stable-id bundle. The browser then caches the
-bundle/shim blob URLs once on `window.__HoloWGL` so the WGLMakie module imports once, not per cell.
+bundle/shim blob URLs once on `window.__MasqueWGL` so the WGLMakie module imports once, not per cell.
 
 ### Deferred compression levers (measured, not yet built)
 
@@ -554,7 +554,7 @@ y-flip on an `Axis3` canvas) is exactly what this measures. Bond-level coverage 
 > **WGLMakie 0.13.12** (vendored bundle), Julia 1.12, headless Chromium (Playwright).
 
 **Result: `:webgl` cell re-renders do NOT leak GL contexts.** Method: a live Pluto kernel
-(headless Chromium), a `@bind` PlutoUI slider driving `azimuth` into `holo(fig)` (each step =
+(headless Chromium), a `@bind` PlutoUI slider driving `azimuth` into `masque(fig)` (each step =
 a full kernel re-render of the widget), `HTMLCanvasElement.getContext` instrumented before any
 page script to count context creations and `webglcontextlost` events. Five-step sweep:
 

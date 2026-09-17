@@ -34,7 +34,7 @@ export function renderAutoTable(payload: unknown): string {
     if (payload == null) return ""
     if (typeof payload !== "object") return esc(payload)
     return Object.entries(payload as Record<string, unknown>)
-        .map(([k, v]) => `<div class="holo-tip-row"><span class="holo-tip-key">${esc(k)}</span><span class="holo-tip-val">${esc(v)}</span></div>`)
+        .map(([k, v]) => `<div class="masque-tip-row"><span class="masque-tip-key">${esc(k)}</span><span class="masque-tip-val">${esc(v)}</span></div>`)
         .join("")
 }
 

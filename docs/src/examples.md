@@ -1,10 +1,10 @@
 # Examples
 
-Clone the repo, start Pluto, and open [`examples/demo.jl`](https://github.com/jowch/Holo.jl/blob/main/examples/demo.jl)
+Clone the repo, start Pluto, and open [`examples/demo.jl`](https://github.com/jowch/Masque.jl/blob/main/examples/demo.jl)
 from its landing page:
 
 ```bash
-git clone https://github.com/jowch/Holo.jl
+git clone https://github.com/jowch/Masque.jl
 julia -e 'using Pluto; Pluto.run()'
 ```
 
@@ -18,22 +18,22 @@ installed (it still fetches Pluto's frontend from a CDN, so it needs network) �
 tooltips, highlights and (for `:webgl` notebooks) the live canvas all work; only clicks that `@bind` back to Julia need the notebook running, for which see the
 clone-and-run instructions above.
 
-## [`examples/demo.jl`](https://github.com/jowch/Holo.jl/blob/main/examples/demo.jl)
+## [`examples/demo.jl`](https://github.com/jowch/Masque.jl/blob/main/examples/demo.jl)
 
-The main feature tour on `:cairo` — every built-in interactable kind, `holo"..."` tooltip
-templates and theming, the selection round-trip, and `holo(fig)` auto-extraction over bars,
+The main feature tour on `:cairo` — every built-in interactable kind, `masque"..."` tooltip
+templates and theming, the selection round-trip, and `masque(fig)` auto-extraction over bars,
 areas, polygons, a colorbar, and text labels.
 
 [Open the static export](notebooks/demo.html)
 
-## [`examples/webgl_demo.jl`](https://github.com/jowch/Holo.jl/blob/main/examples/webgl_demo.jl)
+## [`examples/webgl_demo.jl`](https://github.com/jowch/Masque.jl/blob/main/examples/webgl_demo.jl)
 
 The same kind of kitchen-sink tour, on `:webgl` — every overlay path running live on a
 WebGL canvas instead of a static PNG.
 
 [Open the static export](notebooks/webgl_demo.html)
 
-## [`examples/view_manip.jl`](https://github.com/jowch/Holo.jl/blob/main/examples/view_manip.jl)
+## [`examples/view_manip.jl`](https://github.com/jowch/Masque.jl/blob/main/examples/view_manip.jl)
 
 Pan, zoom, and 3D rotation via the `@bind` re-render model: a `limits` slider, `azimuth`/
 `elevation` sliders for `Axis3`, selection surviving a view re-render, and
@@ -41,20 +41,20 @@ Pan, zoom, and 3D rotation via the `@bind` re-render model: a `limits` slider, `
 
 [Open the static export](notebooks/view_manip.html)
 
-## [`examples/view_manip_webgl.jl`](https://github.com/jowch/Holo.jl/blob/main/examples/view_manip_webgl.jl)
+## [`examples/view_manip_webgl.jl`](https://github.com/jowch/Masque.jl/blob/main/examples/view_manip_webgl.jl)
 
 The drag-to-pan / drag-to-rotate half of `view_manip.jl`, live-verified on `:webgl`.
 
 [Open the static export](notebooks/view_manip_webgl.html)
 
-## [`examples/polaraxis_webgl.jl`](https://github.com/jowch/Holo.jl/blob/main/examples/polaraxis_webgl.jl)
+## [`examples/polaraxis_webgl.jl`](https://github.com/jowch/Masque.jl/blob/main/examples/polaraxis_webgl.jl)
 
 Discrete point hits on a `PolarAxis`, on `:webgl` — hover for a tooltip, click for an
 `@bind` event.
 
 [Open the static export](notebooks/polaraxis_webgl.html)
 
-## [`gallery/gallery.jl`](https://github.com/jowch/Holo.jl/blob/main/gallery/gallery.jl)
+## [`gallery/gallery.jl`](https://github.com/jowch/Masque.jl/blob/main/gallery/gallery.jl)
 
 Recipes closer to real applications than the feature tour, built from the same
 interactables as `demo.jl`: a box-select scatter plot (drag a [`ROIInteractable`](@ref) to

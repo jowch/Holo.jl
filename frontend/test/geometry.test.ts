@@ -45,7 +45,7 @@ describe("primitives", () => {
         expect(findBin([5], 5)).toBe(-1)
     })
     it("findBin: duplicate edges (sub-pixel grid, edges collapse under Int quantization)", () => {
-        // Holo quantizes edges to Int pixels; a grid with more columns than screen px produces
+        // Masque quantizes edges to Int pixels; a grid with more columns than screen px produces
         // duplicate adjacent edges on the wire. Equivalence with the old linear scan holds here
         // (verified against the linear oracle below), including the zero-width bin[1]=[5,5].
         expect(findBin([0, 5, 5, 10], 3)).toBe(0)

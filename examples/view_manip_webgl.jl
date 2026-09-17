@@ -22,7 +22,7 @@ begin
     Pkg.develop(path = joinpath(@__DIR__, ".."))
     Pkg.add(["WGLMakie", "JSON3"])
     Pkg.instantiate()
-    using Holo
+    using Masque
     using WGLMakie
 end
 
@@ -47,7 +47,7 @@ begin
 end
 
 # ╔═╡ 60000000-0000-0000-0000-000000000022
-@bind pan_ev holo(pan_fig, [pan_pts, pan_view])
+@bind pan_ev masque(pan_fig, [pan_pts, pan_view])
 
 # ╔═╡ 60000000-0000-0000-0000-000000000023
 pan_committed = begin
@@ -67,7 +67,7 @@ begin
     pan_fig2 = Figure(size = (500, 320))
     pan_ax2 = Axis(pan_fig2[1, 1]; limits = pan_committed, title = "committed pan (webgl)")
     scatter!(pan_ax2, first.(zoom_data), last.(zoom_data); color = :dodgerblue, markersize = 18)
-    holo(pan_fig2, PointInteractable(pan_ax2, zoom_data; id = :scatter))
+    masque(pan_fig2, PointInteractable(pan_ax2, zoom_data; id = :scatter))
 end
 
 # ╔═╡ 60000000-0000-0000-0000-000000000030
@@ -82,7 +82,7 @@ begin
 end
 
 # ╔═╡ 60000000-0000-0000-0000-000000000032
-@bind orb_ev holo(orb_fig, orb_view)
+@bind orb_ev masque(orb_fig, orb_view)
 
 # ╔═╡ 60000000-0000-0000-0000-000000000033
 orbit_committed = begin
@@ -102,7 +102,7 @@ begin
     orb_fig2 = Figure(size = (500, 380))
     orb_ax2 = Axis3(orb_fig2[1, 1]; azimuth = orbit_committed[1], elevation = orbit_committed[2], title = "committed orbit (webgl)")
     scatter!(orb_ax2, Makie.Point3f[(1, 2, 3), (4, 5, 6), (7, 8, 2)]; color = :crimson, markersize = 16)
-    holo(orb_fig2)
+    masque(orb_fig2)
 end
 
 # ╔═╡ Cell order:

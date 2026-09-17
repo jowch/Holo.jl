@@ -19,7 +19,7 @@ end
 # ╔═╡ d1000000-0000-0000-0000-000000000001
 begin
     import Pkg
-    dev = get(ENV, "HOLO_DEV_ENV", "")
+    dev = get(ENV, "MASQUE_DEV_ENV", "")
     if !isempty(dev)
         Pkg.activate(dev)
     else
@@ -28,7 +28,7 @@ begin
         Pkg.add(["WGLMakie", "JSON3"])
         Pkg.instantiate()
     end
-    using Holo
+    using Masque
     using WGLMakie
     import JSON3
 end

@@ -83,7 +83,7 @@ function build_kind_sweep()
         fig = Figure(size = (480, 260))
         ax = Axis(fig[1, 1]; title = "scatter")
         scatter!(ax, first.(pts), last.(pts); color = :gray, markersize = 22)
-        holo(
+        masque(
             fig,
             PointInteractable(
                 ax, pts; id = :scatter,
@@ -98,7 +98,7 @@ function build_kind_sweep()
         fig = Figure(size = (480, 260))
         ax = Axis(fig[1, 1]; title = "lines")
         lines!(ax, first.(verts), last.(verts); color = :gray, linewidth = 4)
-        holo(
+        masque(
             fig,
             SegmentInteractable(
                 ax, verts; id = :lines, mode = :polyline,
@@ -112,7 +112,7 @@ function build_kind_sweep()
         fig = Figure(size = (480, 260))
         ax = Axis(fig[1, 1]; title = "linesegments", limits = (0, 5, 0, 4))
         linesegments!(ax, [1.0, 2.0, 3.0, 4.0], [1.0, 3.0, 2.0, 0.6]; color = :gray, linewidth = 4)
-        holo(
+        masque(
             fig,
             SegmentInteractable(
                 ax, [(1.0, 1.0), (2.0, 3.0), (3.0, 2.0), (4.0, 0.6)];
@@ -128,7 +128,7 @@ function build_kind_sweep()
         fig = Figure(size = (480, 260))
         ax = Axis(fig[1, 1]; title = "heatmap")
         heatmap!(ax, 1:4, 1:3, z)
-        holo(fig)
+        masque(fig)
     end
 
     image = let
@@ -136,14 +136,14 @@ function build_kind_sweep()
         fig = Figure(size = (480, 260))
         ax = Axis(fig[1, 1]; title = "image")
         image!(ax, (0.5, 4.5), (0.5, 3.5), z)
-        holo(fig)
+        masque(fig)
     end
 
     barplot = let
         fig = Figure(size = (480, 260))
         ax = Axis(fig[1, 1]; title = "barplot")
         barplot!(ax, 1:3, [2.0, 3.5, 1.5]; color = :gray)
-        holo(fig; selected = Dict(:bars => [1]))
+        masque(fig; selected = Dict(:bars => [1]))
     end
 
     poly = let
@@ -155,7 +155,7 @@ function build_kind_sweep()
         ax = Axis(fig[1, 1]; title = "poly", limits = (0, 4.8, 0, 3.0))
         poly!(ax, Point2f.(rings[1]); color = (:orchid, 0.55), strokewidth = 2)
         poly!(ax, Point2f.(rings[2]); color = (:goldenrod, 0.55), strokewidth = 2)
-        holo(
+        masque(
             fig,
             PolygonInteractable(
                 ax, rings; id = :poly,
@@ -170,7 +170,7 @@ function build_kind_sweep()
         fig = Figure(size = (480, 320))
         ax = PolarAxis(fig[1, 1])
         scatter!(ax, pts; color = :gray, markersize = 22)
-        holo(
+        masque(
             fig,
             PointInteractable(
                 ax, pts; id = :polar,
@@ -192,7 +192,7 @@ function build_kind_sweep()
             titlecolor = :gray90,
         )
         scatter!(ax, first.(pts), last.(pts); color = :gray, markersize = 22)
-        holo(
+        masque(
             fig,
             PointInteractable(
                 ax, pts; id = :scatter_dark,
@@ -208,7 +208,7 @@ function build_kind_sweep()
         apts = Makie.Point3f[(1, 1, 1), (3, 2, 1), (2, 4, 3)]
         adirs = Makie.Vec3f[(1, 0, 0), (0, 1, 0.5), (-0.5, 0, 1)]
         arrows3d!(ax, apts, adirs; color = :gray)
-        holo(fig; selected = Dict(:arrows3d => [0]))
+        masque(fig; selected = Dict(:arrows3d => [0]))
     end
 
     hlines = let
@@ -217,14 +217,14 @@ function build_kind_sweep()
         scatter!(ax, [1.0, 4.0], [1.0, 4.0]; markersize = 8, color = :gray)
         hlines!(ax, [1.5, 3.5]; color = :gray, linewidth = 3)
         vlines!(ax, [2.5]; color = :gray, linewidth = 3)
-        holo(fig; selected = Dict(:hlines => [0]))
+        masque(fig; selected = Dict(:hlines => [0]))
     end
 
     threshold = let
         fig = Figure(size = (480, 260))
         ax = Axis(fig[1, 1]; title = "threshold", limits = (0, 10, 0, 10))
         scatter!(ax, [2.0, 8.0], [2.0, 8.0]; markersize = 10, color = :gray)
-        holo(fig, ThresholdInteractable(ax; orientation = :horizontal, value = 4.0, id = :threshold))
+        masque(fig, ThresholdInteractable(ax; orientation = :horizontal, value = 4.0, id = :threshold))
     end
 
     roi = let
@@ -232,7 +232,7 @@ function build_kind_sweep()
         fig = Figure(size = (480, 260))
         ax = Axis(fig[1, 1]; title = "roi", limits = (0, 10, 0, 10))
         scatter!(ax, first.(pts), last.(pts); markersize = 14, color = :gray)
-        holo(
+        masque(
             fig,
             [
                 PointInteractable(ax, pts; id = :pts),
@@ -246,7 +246,7 @@ function build_kind_sweep()
         fig = Figure(size = (480, 260))
         ax = Axis(fig[1, 1]; title = "view-pan", limits = (0, 8, 0, 8))
         scatter!(ax, first.(pts), last.(pts); markersize = 14, color = :gray)
-        holo(fig, [PointInteractable(ax, pts; id = :pts), ViewInteractable(ax; id = :view)])
+        masque(fig, [PointInteractable(ax, pts; id = :pts), ViewInteractable(ax; id = :view)])
     end
 
     return (;

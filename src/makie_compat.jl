@@ -16,7 +16,7 @@ else
 end
 
 _makie_compat_error(name, expected) = error(
-    "Holo: Makie internal `$(name)` changed shape under Makie v$(pkgversion(Makie)) — " *
+    "Masque: Makie internal `$(name)` changed shape under Makie v$(pkgversion(Makie)) — " *
         "expected $(expected); please open an issue"
 )
 
@@ -153,7 +153,7 @@ end
 
 # Wraps `p.scaled_color[]`, ComputePipeline's colour value(s) after `colorscale` is applied but
 # before the colormap lookup — same domain as `_scaled_colorrange`. Only called for a plot whose
-# `color[]` is already known numeric (Holo.jl's own check), so a KeyError here means Scatter
+# `color[]` is already known numeric (Masque.jl's own check), so a KeyError here means Scatter
 # stopped exposing this node, a real compat break; no public accessor exists.
 function _scaled_color(p)
     v = try

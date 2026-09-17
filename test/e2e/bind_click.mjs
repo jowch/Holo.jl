@@ -3,7 +3,7 @@
 // THROUGH Pluto — the kernel re-runs the readout cell so #bondout flips from "BOND=nothing" to
 // the InteractionEvent. This is the mile the static E2E (click.mjs) skips: Pluto/APD bond
 // transport + reactive re-render, not just the overlay's emit. Verified locally against a real
-// kernel (06-30): click -> BOND=Holo.InteractionEvent(:scatter, 0, …).
+// kernel (06-30): click -> BOND=Masque.InteractionEvent(:scatter, 0, …).
 //
 // Readiness is split on purpose (de-flake):
 //   1. layout — host/base have non-zero width (MARKER0 scale isn't 0)
@@ -39,7 +39,7 @@ if (!base || !notebook) { console.error("usage: node bind_click.mjs <base-url> <
 if (artifactDir) mkdirSync(artifactDir, { recursive: true });
 
 // Marker image-px positions for the notebook's fixed scatter(1:5, (1:5).^2), Figure(size=(400,300)).
-// Verified against a live `holo(fig)` manifest for the same figure (index -> [x,y,r] geometry
+// Verified against a live `masque(fig)` manifest for the same figure (index -> [x,y,r] geometry
 // triplet); MARKER0 matches the value this file has pinned since #31.
 const MARKERS = [
   { x: 113, y: 500 }, // index 0
@@ -89,7 +89,7 @@ try {
   // with no button at all), and finish as soon as the widget + readout are present. Manual loop
   // throughout: waitForFunction's explicit timeout is unreliable in this env (silently caps at
   // its 30s default), and a hard "button must appear" gate is exactly what broke CI.
-  const mountDeadline = Date.now() + 1500000;   // cold: env cell devs Holo + adds WGLMakie + precompiles Makie/WGLMakie (first CI run ~10min+), under the 40-min job cap
+  const mountDeadline = Date.now() + 1500000;   // cold: env cell devs Masque + adds WGLMakie + precompiles Makie/WGLMakie (first CI run ~10min+), under the 40-min job cap
   let ready = false, ranClicked = false, tick = 0;
   while (Date.now() < mountDeadline) {
     const st = await page.evaluate(() => {

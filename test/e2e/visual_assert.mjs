@@ -64,12 +64,12 @@ export function assertHoverRecipe(hi, where) {
 
 export function assertRemountStable(info, where) {
   if (!info?.ok) throw new Error(`${where}: hover remounted (${info?.reason || "pulse"})`);
-  if (!info.firstEnter) throw new Error(`${where}: first hover missing holo-enter fade`);
+  if (!info.firstEnter) throw new Error(`${where}: first hover missing masque-enter fade`);
 }
 
 export function assertLeaveFade(info, where) {
   if (info.hi === 0) throw new Error(`${where}: hover cleared instantly (no remount fade)`);
-  if (!info.leaving) throw new Error(`${where}: leave did not apply holo-leave`);
+  if (!info.leaving) throw new Error(`${where}: leave did not apply masque-leave`);
 }
 
 // The caret's visible apex — not the box `left`/`top` coordinates an e2e driver already reads

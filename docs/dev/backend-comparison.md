@@ -1,6 +1,6 @@
 # `:webgl` vs `:cairo` — a backend comparison (wire **and** UX)
 
-> **What this answers.** Holo has two backends: `:cairo` (a static CairoMakie PNG + a thin JS
+> **What this answers.** Masque has two backends: `:cairo` (a static CairoMakie PNG + a thin JS
 > hit-test overlay) and `:webgl` (the figure rendered live in a WGLMakie `<canvas>` on the client
 > GPU, same overlay on top). The open question was whether `:webgl` is just a *heavier* `:cairo`
 > (pay 1.09 MB, get the same thing) or a **co-equal entry point** a user would pick on its own. The
@@ -12,7 +12,7 @@
 > only the client-side GPU camera is out of scope (see §1†).
 >
 > **Numbers reproduce** via `julia --project=. bench/vs_cairo.jl` (WebGL measured live in this
-> process, both sides `Random.seed!(0)`; Cairo measured in a subprocess, since Holo supports only
+> process, both sides `Random.seed!(0)`; Cairo measured in a subprocess, since Masque supports only
 > one backend extension per session — one command, nothing hand-stamped). The **size** figures are
 > byte-reproducible and reconcile with `bench/payload_envelope.jl` (`markersize=6`, same as here) for
 > the shared cases — scatter-1k 187/38 KB, scatter-10k 724/379 KB. The **scatter-100k** row is this
@@ -46,14 +46,14 @@ The rows that **match** are the current story: both backends do hover/click/`@bi
 backends** as server-authoritative `@bind` re-render (sliders + `ViewInteractable` drag) (†).
 
 > **(†) View manipulation: shipped as backend-symmetric `@bind` re-render; the client-side GPU
-> camera stays out (a Holo-wide non-goal, alongside GPU-pick occlusion).** What is true today, verified from source: the widget
+> camera stays out (a Masque-wide non-goal, alongside GPU-pick occlusion).** What is true today, verified from source: the widget
 > deliberately gates the client camera off — the shim sets `can_send_to_julia:()=>true` (needed for
 > the client-side camera/uniform *observable* animation path), so WGLMakie's
 > `use_orbit_cam = ()=>!(Bonito.can_send_to_julia && Bonito.can_send_to_julia())` **disables 3D
 > OrbitControls**, and 2D `Axis` zoom/pan is Julia-side in WGLMakie and dead under the server-free
 > (`NoConnection`) model. That gating is *intentional and stays*: a client-driven camera moves the
 > plot without Julia knowing, so the Julia-projected overlay desyncs — and it is structurally
-> `:webgl`-only, which the parity doctrine forbids. It is the **Holo-wide non-goal** (with GPU-pick
+> `:webgl`-only, which the parity doctrine forbids. It is the **Masque-wide non-goal** (with GPU-pick
 > occlusion), not a deferred feature.
 >
 > The **in-scope path** treats view parameters as ordinary `@bind` state: 2D `limits` or 3D
@@ -150,9 +150,9 @@ the user's GPU anyway). Three facts, GL-independent:
   *observable* animation path fire; `update_cam` early-returns when it's false. Note this is **not**
   roadmap tier-2 animation, which patches GL buffers via `find_plots` with no observable.)
 - **If enabled, the wire/latency would be free but the overlay would drift.** Because the scene ships
-  through `Bonito.Session(Bonito.NoConnection())` (`src/HoloWGL.jl:84`) with no transport back to the
+  through `Bonito.Session(Bonito.NoConnection())` (`src/MasqueWGL.jl:84`) with no transport back to the
   kernel, a client-side camera move would cost **zero round-trip by construction**. But the overlay's
-  hit-regions are a static `Makie.project` snapshot (`src/HoloWGL.jl:113-125`; its comment at the
+  hit-regions are a static `Makie.project` snapshot (`src/MasqueWGL.jl:113-125`; its comment at the
   time: "STATIC camera overlay… Axis3 / live-camera need client-side projection — TODO" — the
   Axis3 half has since shipped server-side, WS-3D), so they would **not** track
   the moving plot. Both facts are latent until the camera is turned on.
@@ -170,5 +170,5 @@ re-render gives pan/zoom/rotate on **both** backends with the overlay recomputed
 the backend-asymmetry objection dissolves; what remains is only a per-step **cost** difference
 (the once-suspected `:webgl` GL-context-reuse prerequisite dissolved when measured — see (†)
 and `perf-findings.md` §"WGL context lifecycle"). Both scheduled in `roadmap.md` M3 (Axis3 parity + view
-manipulation via `@bind` re-render); the client-side GPU camera remains a Holo-wide non-goal
+manipulation via `@bind` re-render); the client-side GPU camera remains a Masque-wide non-goal
 (alongside GPU-pick occlusion).
