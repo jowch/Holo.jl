@@ -5,9 +5,9 @@
 [![Docs stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://jowch.github.io/Masque.jl/stable)
 [![Docs dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://jowch.github.io/Masque.jl/dev)
 
-**Light, server-free interactivity for Makie plots in Pluto — the same interactions on either
-backend: CairoMakie (static base) by default, or WGLMakie (live base) for animation / large
-data / live 3D.** Masque lays a thin JS overlay over a Makie figure — hover for tooltips, click
+**Light, server-free interactivity for Makie plots in Pluto.**
+
+Masque lays a thin JS overlay over a Makie figure — hover for tooltips, click
 to select — and round-trips deliberate clicks to Julia through `@bind`.
 
 ## When to use it
@@ -57,14 +57,4 @@ sel === nothing ? "click a point" : "you picked $(sel.payload)"
 (Each fenced block above is its own Pluto cell — Pluto allows one top-level expression per
 cell, so multi-statement setup goes in `begin ... end`.)
 
-## Read the docs
-
-The full site — getting started, every interactable, tooltips, custom interactions,
-backends, troubleshooting, and the API reference — is at
-**[jowch.github.io/Masque.jl](https://jowch.github.io/Masque.jl)**.
-
-See [`examples/`](examples/) for runnable Pluto notebooks covering the same ground.
-
-## License
-
-See [LICENSE](LICENSE).
+For more information, refer to our [documentation](https://jowch.github.io/Masque.jl). See [`examples/`](examples/) for several runnable Pluto notebooks.
