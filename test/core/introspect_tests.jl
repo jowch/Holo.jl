@@ -1,4 +1,4 @@
-using Test, Holo, CairoMakie, Makie
+using Test, Masque, CairoMakie, Makie
 include(joinpath(@__DIR__, "..", "testutils.jl"))
 
 @testset "Introspection" begin
@@ -69,7 +69,7 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
         end
 
         @testset "BarPlot shared bar payloads" begin
-            using Holo: RectInteractable
+            using Masque: RectInteractable
             fig = Figure(); ax = Axis(fig[1, 1])
             barplot!(ax, [1, 2, 3], [3.0, 1.0, 2.0])
             Makie.update_state_before_display!(fig)
@@ -102,16 +102,16 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
             @test length(only(hitlayers(PolygonInteractable(a, multi), c)).payloads) == 2
         end
 
-        @testset "introspected interactable flows through holo unchanged" begin
+        @testset "introspected interactable flows through masque unchanged" begin
             f = Figure(size = (500, 350)); a = Axis(f[1, 1])
             p = scatter!(a, [1.0, 2.0], [1.0, 2.0]; markersize = 18)
-            w = holo(f, PointInteractable(a, p))
+            w = masque(f, PointInteractable(a, p))
             @test w.manifest["layers"][1]["kind"] == "circles"
             @test w.manifest["layers"][1]["id"] == "scatter"
         end
     end
 
-    @testset "M2.2 holo(fig) auto-extraction" begin
+    @testset "M2.2 masque(fig) auto-extraction" begin
         @testset "walks every axis, maps each known plot, unique ids" begin
             f = Figure(size = (700, 350))
             a1 = Axis(f[1, 1])
@@ -142,11 +142,11 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
             @test only(ints) isa PointInteractable
         end
 
-        @testset "holo(fig) overlays the auto-extracted set" begin
+        @testset "masque(fig) overlays the auto-extracted set" begin
             f = Figure(size = (500, 350)); a = Axis(f[1, 1])
             scatter!(a, [1.0, 2.0], [1.0, 2.0]; markersize = 18)
             heatmap!(a, 1:3, 1:3, rand(3, 3))
-            w = holo(f)
+            w = masque(f)
             @test [L["id"] for L in w.manifest["layers"]] == ["scatter", "cells"]
             @test [L["kind"] for L in w.manifest["layers"]] == ["circles", "grid"]
         end
@@ -154,19 +154,19 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
         @testset "no introspectable plots -> warn, render image only" begin
             f = Figure(size = (400, 300)); a = Axis(f[1, 1])
             contour!(a, 1:5, 1:5, rand(5, 5))
-            w = @test_logs (:warn,) match_mode = :any holo(f)
+            w = @test_logs (:warn,) match_mode = :any masque(f)
             @test isempty(w.manifest["layers"])
             @test !isempty(w.b64)                  # static image still produced
         end
 
-        @testset "holo auto-detects text!" begin
+        @testset "masque auto-detects text!" begin
             f = Figure(); ax = Axis(f[1, 1]); scatter!(ax, 1:3, 1:3)
             text!(ax, [1.5], [2.0]; text = ["Hi"])
             Makie.update_state_before_display!(f)
             ints = auto_interactables(f)
             @test count(i -> i isa TextInteractable, ints) == 1
         end
-        @testset "holo auto-detects annotation!" begin
+        @testset "masque auto-detects annotation!" begin
             f = Figure(); ax = Axis(f[1, 1]); scatter!(ax, 1:3, 1:3)
             annotation!(ax, [1.5], [2.0]; text = ["note"])
             Makie.update_state_before_display!(f)
@@ -176,7 +176,7 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
             # x,y come from the Text descendant's positions[] — the DATA-space anchor
             @test ti.payloads[1].x == 1.5 && ti.payloads[1].y == 2.0
         end
-        @testset "holo skips non-data-space text" begin
+        @testset "masque skips non-data-space text" begin
             f = Figure(); ax = Axis(f[1, 1]); scatter!(ax, 1:3, 1:3)
             text!(ax, [10.0], [10.0]; text = ["px"], space = :pixel)
             Makie.update_state_before_display!(f)
@@ -265,8 +265,8 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
         end
 
         @testset "hlines/vlines: interactable built before finalize resolves against finalized limits" begin
-            # Regression: holo(fig, interactables) only finalizes AFTER the caller already built
-            # `interactables` (unlike holo(fig), which finalizes first). A SegmentInteractable built
+            # Regression: masque(fig, interactables) only finalizes AFTER the caller already built
+            # `interactables` (unlike masque(fig), which finalizes first). A SegmentInteractable built
             # from an HLines/VLines plot object before any finalize call must still span the
             # FINALIZED viewport at hitlayers time, not whatever finallimits happened to hold at
             # construction.
@@ -274,8 +274,8 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
             ph = hlines!(a, [1.0, 3.0])
             seg = SegmentInteractable(a, ph)   # constructed BEFORE any finalize call
             xlims!(a, -20, 20)                 # widen limits after construction
-            w = holo(f, [seg])                 # finalizes internally, after seg was already built
-            ref = holo(f)                      # holo(fig): finalizes first, then auto-extracts (ground truth)
+            w = masque(f, [seg])                 # finalizes internally, after seg was already built
+            ref = masque(f)                      # masque(fig): finalizes first, then auto-extracts (ground truth)
             seg_layer = only(filter(l -> l["id"] == "hlines", w.manifest["layers"]))
             ref_layer = only(filter(l -> l["id"] == "hlines", ref.manifest["layers"]))
             @test seg_layer["geometry"] == ref_layer["geometry"]
@@ -288,8 +288,8 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
             pv = vlines!(av, [1.0, 3.0])
             segv = SegmentInteractable(av, pv)   # constructed BEFORE any finalize call
             ylims!(av, -20, 20)                  # widen limits after construction
-            wv = holo(fv, [segv])
-            refv = holo(fv)
+            wv = masque(fv, [segv])
+            refv = masque(fv)
             segv_layer = only(filter(l -> l["id"] == "vlines", wv.manifest["layers"]))
             refv_layer = only(filter(l -> l["id"] == "vlines", refv.manifest["layers"]))
             @test segv_layer["geometry"] == refv_layer["geometry"]
@@ -301,7 +301,7 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
         @testset "hspan/vspan: interactable built before finalize resolves against finalized limits" begin
             # Same finalize-order regression as hlines/vlines, but for RectInteractable's `resolve`
             # path (`_rect_with_resolve`, wired at the HSpan/VSpan constructors in introspect.jl).
-            # Every existing HSpan/VSpan test goes through holo(fig), which finalizes first, so
+            # Every existing HSpan/VSpan test goes through masque(fig), which finalizes first, so
             # none of them would catch hitlayers falling back to stale `data`.
 
             # HSpan fills the full X-range (`_span_rects(ax, p, :x)`), so widen xlims.
@@ -309,8 +309,8 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
             ph = hspan!(a, [1.0], [3.0])
             rect = RectInteractable(a, ph)       # constructed BEFORE any finalize call
             xlims!(a, -20, 20)                   # widen limits after construction
-            w = holo(f, [rect])
-            ref = holo(f)
+            w = masque(f, [rect])
+            ref = masque(f)
             rect_layer = only(filter(l -> l["id"] == "hspan", w.manifest["layers"]))
             ref_layer = only(filter(l -> l["id"] == "hspan", ref.manifest["layers"]))
             @test rect_layer["geometry"] == ref_layer["geometry"]
@@ -323,8 +323,8 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
             pv = vspan!(av, [1.0], [3.0])
             rectv = RectInteractable(av, pv)     # constructed BEFORE any finalize call
             ylims!(av, -20, 20)                  # widen limits after construction
-            wv = holo(fv, [rectv])
-            refv = holo(fv)
+            wv = masque(fv, [rectv])
+            refv = masque(fv)
             rectv_layer = only(filter(l -> l["id"] == "vspan", wv.manifest["layers"]))
             refv_layer = only(filter(l -> l["id"] == "vspan", refv.manifest["layers"]))
             @test rectv_layer["geometry"] == refv_layer["geometry"]
@@ -337,7 +337,7 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
             # Build the empty Errorbars from a typed Vec4f[] (the post-conversion type Makie
             # expects). Empty *untyped* vectors (Float64[], Float64[], Float64[]) fail Makie's
             # convert_arguments before Julia 1.12 — the empty broadcast infers Vector{Any},
-            # which the converter rejects (upstream, not a Holo bug). The pre-typed form passes
+            # which the converter rejects (upstream, not a Masque bug). The pre-typed form passes
             # straight through on all supported versions. Verified on Julia 1.10 and 1.12.
             f = Figure(size = (500, 350)); a = Axis(f[1, 1])
             p = errorbars!(a, Vec4f[]); _, _, c = ctx_for(f)
@@ -376,18 +376,18 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
             @test [only(hitlayers(i, c)).id for i in ints] == [:scatterlines, :scatterlines_line]
         end
 
-        @testset "holo(fig) auto-extracts the cheap-win surfaces" begin
+        @testset "masque(fig) auto-extracts the cheap-win surfaces" begin
             f = Figure(size = (500, 350)); a = Axis(f[1, 1])
             stairs!(a, [0.0, 1.0, 2.0], [0.0, 1.0, 0.5])
             hlines!(a, [2.0])
-            w = holo(f)
+            w = masque(f)
             @test [L["id"] for L in w.manifest["layers"]] == ["stairs", "hlines"]
             @test [L["kind"] for L in w.manifest["layers"]] == ["polyline", "segments"]
         end
     end
 
     @testset "Hist + Waterfall extraction" begin
-        using Holo: RectInteractable, auto_interactables
+        using Masque: RectInteractable, auto_interactables
         # Hist: counts + bin edges
         fig = Figure(); ax = Axis(fig[1, 1])
         data = [0.5, 0.6, 1.5, 1.6, 1.7, 2.5]
@@ -419,7 +419,7 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
     end
 
     @testset "CrossBar extraction" begin
-        using Holo: RectInteractable, auto_interactables
+        using Masque: RectInteractable, auto_interactables
         fig = Figure(); ax = Axis(fig[1, 1])
         crossbar!(ax, [1, 2], [5.0, 6.0], [3.0, 4.0], [7.0, 8.0])
         Makie.update_state_before_display!(fig)
@@ -437,7 +437,7 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
     end
 
     @testset "Band extraction" begin
-        using Holo: PolygonInteractable, auto_interactables
+        using Masque: PolygonInteractable, auto_interactables
         fig = Figure(); ax = Axis(fig[1, 1])
         band!(ax, 1:5, [0.0, 0.1, 0.2, 0.1, 0.0], [1.0, 1.2, 1.4, 1.2, 1.0])
         Makie.update_state_before_display!(fig)
@@ -455,7 +455,7 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
     end
 
     @testset "Density extraction" begin
-        using Holo: PolygonInteractable, auto_interactables
+        using Masque: PolygonInteractable, auto_interactables
         fig = Figure(); ax = Axis(fig[1, 1])
         density!(ax, randn(300))
         Makie.update_state_before_display!(fig)
@@ -469,7 +469,7 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
     end
 
     @testset "Violin extraction" begin
-        using Holo: PolygonInteractable, auto_interactables
+        using Masque: PolygonInteractable, auto_interactables
         fig = Figure(); ax = Axis(fig[1, 1])
         violin!(ax, repeat([1, 2, 3], inner = 80), randn(240))
         Makie.update_state_before_display!(fig)
@@ -485,7 +485,7 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
     end
 
     @testset "Voronoiplot extraction" begin
-        using Holo: PolygonInteractable, auto_interactables
+        using Masque: PolygonInteractable, auto_interactables
         fig = Figure(); ax = Axis(fig[1, 1])
         voronoiplot!(ax, [0.1, 0.4, 0.7, 0.3, 0.9, 0.5, 0.2, 0.8], [0.2, 0.6, 0.1, 0.9, 0.4, 0.5, 0.8, 0.3])
         Makie.update_state_before_display!(fig)
@@ -498,7 +498,7 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
     end
 
     @testset "Contourf extraction" begin
-        using Holo: PolygonInteractable, auto_interactables
+        using Masque: PolygonInteractable, auto_interactables
         fig = Figure(); ax = Axis(fig[1, 1])
         z = [sin(i / 3) * cos(j / 3) for i in 1:20, j in 1:20]
         contourf!(ax, 1:20, 1:20, z; levels = 6)
@@ -533,7 +533,7 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
     end
 
     @testset "BoxPlot extraction" begin
-        using Holo: RectInteractable, PolygonInteractable, auto_interactables
+        using Masque: RectInteractable, PolygonInteractable, auto_interactables
         import Statistics
         cats = repeat([1, 2], inner = 120)
         vals = [randn(120) .- 1; randn(120) .+ 2]
@@ -541,7 +541,7 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
         # notch off → RectInteractable; stats payload matches Statistics.quantile exactly
         fig = Figure(); ax = Axis(fig[1, 1])
         boxplot!(ax, cats, vals); Makie.update_state_before_display!(fig)
-        bi = Holo._boxplot_interactable(ax, ax.scene.plots[1]; id = :boxplot)
+        bi = Masque._boxplot_interactable(ax, ax.scene.plots[1]; id = :boxplot)
         @test bi isa RectInteractable
         @test length(bi.payloads) == 2
         @test all(pl.q1 isa Float64 && pl.median isa Float64 && pl.q3 isa Float64 for pl in bi.payloads)
@@ -558,17 +558,17 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
         # notch on → PolygonInteractable; same stats payload
         fig2 = Figure(); ax2 = Axis(fig2[1, 1])
         boxplot!(ax2, cats, vals; show_notch = true); Makie.update_state_before_display!(fig2)
-        bi2 = Holo._boxplot_interactable(ax2, ax2.scene.plots[1]; id = :boxplot)
+        bi2 = Masque._boxplot_interactable(ax2, ax2.scene.plots[1]; id = :boxplot)
         @test bi2 isa PolygonInteractable
         @test length(bi2.payloads) == 2
         @test all(haskey(pairs(pl), :median) for pl in bi2.payloads)
 
         # fail-loud when the stats node is absent (pass a leaf child that has a 1-tuple converted, not the 4-tuple stats node)
-        @test_throws ErrorException Holo._boxplot_stats_node(ax.scene.plots[1].plots[1])
+        @test_throws ErrorException Masque._boxplot_stats_node(ax.scene.plots[1].plots[1])
     end
 
-    @testset "holo(fig) auto-extracts spans bounded to viewport" begin
-        # End-to-end guard: calling holo(fig) (the AUTO path, no manual update_state_before_display!)
+    @testset "masque(fig) auto-extracts spans bounded to viewport" begin
+        # End-to-end guard: calling masque(fig) (the AUTO path, no manual update_state_before_display!)
         # on a 2-axis figure with a vspan must succeed and produce a layer whose pixel rect is
         # bounded within the owning axis's viewport.
         # Note: the viewport clamp masks finallimits-staleness, so this test guards the full
@@ -578,8 +578,8 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
         ax1 = Axis(fig[1, 1]); scatter!(ax1, [1.0, 2.0, 3.0], [1.0, 2.0, 3.0])
         ax2 = Axis(fig[1, 2])
         vspan!(ax2, [1.0], [2.0])
-        # AUTO path: holo(fig) calls update_state_before_display! internally
-        w = holo(fig)
+        # AUTO path: masque(fig) calls update_state_before_display! internally
+        w = masque(fig)
         vspan_layer = only(filter(L -> L["id"] == "vspan", w.manifest["layers"]))
         ax_id = vspan_layer["axis"]                          # e.g. "ax2"
         vp = w.manifest["transforms"][ax_id]["viewport"]    # [vp_x, vp_y, vp_w, vp_h] in image-px

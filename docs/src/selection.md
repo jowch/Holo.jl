@@ -2,12 +2,12 @@
 
 ## Reacting to a click
 
-Every `holo(...)` bond value is `nothing` until a click, then an [`InteractionEvent`](@ref)
+Every `masque(...)` bond value is `nothing` until a click, then an [`InteractionEvent`](@ref)
 with `layer` (the clicked interactable's `id`), `index` (0-based, within that layer), and
 `payload`. A cell that reads the bond re-runs on every click:
 
 ```julia
-@bind ev holo(fig, PointInteractable(ax, pts; id = :scatter))
+@bind ev masque(fig, PointInteractable(ax, pts; id = :scatter))
 ```
 
 ```julia
@@ -18,7 +18,7 @@ ev === nothing ? "nothing selected" : "clicked #$(ev.index) in :$(ev.layer)"
 
 Because `layer`/`index`/`payload` are plain data, one click can drive any number of
 downstream cells — filter a table, highlight a second plot, recompute a fit. Give the
-`payloads` on two interactables the same shape and key on it to link them without any Holo
+`payloads` on two interactables the same shape and key on it to link them without any Masque
 API:
 
 ```julia
@@ -27,11 +27,11 @@ rows = ev === nothing ? data : filter(r -> r.id == ev.payload["id"], data)
 
 ## `selected=` — pre-highlighting on mount
 
-Pass `selected` to any `holo(...)` call to highlight elements the moment the widget mounts,
+Pass `selected` to any `masque(...)` call to highlight elements the moment the widget mounts,
 before any click:
 
 ```julia
-holo(fig, PointInteractable(ax, pts; id = :scatter); selected = Dict(:scatter => [0, 2]))
+masque(fig, PointInteractable(ax, pts; id = :scatter); selected = Dict(:scatter => [0, 2]))
 ```
 
 `selected` is a `layer_id => indices` map. Indices are 0-based and match
@@ -49,8 +49,8 @@ Pluto reactive cycle. Pluto detects it and reports **"Cyclic references"** inste
 running the cell:
 
 ```julia
-# DOESN'T WORK — ev and holo(...; selected=...) are in the same cell, feeding each other
-@bind ev holo(fig, PointInteractable(ax, pts; id = :scatter); selected = Dict(:scatter => [ev.index]))
+# DOESN'T WORK — ev and masque(...; selected=...) are in the same cell, feeding each other
+@bind ev masque(fig, PointInteractable(ax, pts; id = :scatter); selected = Dict(:scatter => [ev.index]))
 ```
 
 Break the cycle across cells, with a persistent accumulator in between. A `Ref` initialized
@@ -63,7 +63,7 @@ picks = Ref(Int[])
 
 ```julia
 # the click source
-@bind ev holo(fig, PointInteractable(ax, pts; id = :scatter))
+@bind ev masque(fig, PointInteractable(ax, pts; id = :scatter))
 ```
 
 ```julia
@@ -85,12 +85,12 @@ end
 
 ```julia
 # the display: pre-highlights `selected` on mount; this widget's own bond goes unused
-@bind _rt_ignore holo(fig2, PointInteractable(ax2, pts; id = :scatter); selected = selected)
+@bind _rt_ignore masque(fig2, PointInteractable(ax2, pts; id = :scatter); selected = selected)
 ```
 
 The overlay re-derives highlights from `selected` on every render, so the highlighted
 elements survive a re-render without flicker. This is exactly the pattern in
-[`examples/demo.jl`](https://github.com/jowch/Holo.jl/blob/main/examples/demo.jl) (cells
+[`examples/demo.jl`](https://github.com/jowch/Masque.jl/blob/main/examples/demo.jl) (cells
 under "Selection round-trip"), which CI runs headlessly on every change.
 
 ## Multi-element selectors
@@ -112,7 +112,7 @@ end
 ```
 
 ```julia
-@bind picked holo(fig, [PointInteractable(ax, pts; id = :scatter), roi])
+@bind picked masque(fig, [PointInteractable(ax, pts; id = :scatter), roi])
 # picked isa Vector{InteractionEvent} once you release a drag over some points
 ```
 

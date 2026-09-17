@@ -1,4 +1,4 @@
-# Holo.jl — Architecture
+# Masque.jl — Architecture
 
 > The coherent design. The original decisions, spike validation, and supporting research
 > are superseded by this document (kept in git history, not in the tree).
@@ -22,7 +22,7 @@
    └─────────────┬──────────────┘
                  │ layers + axis transforms + image
    ┌─────────────▼──────────────┐
-   │ holo           │  assembles ONE manifest, emits the @bind widget
+   │ masque           │  assembles ONE manifest, emits the @bind widget
    └─────────────┬──────────────┘
                  │ HTML (image + transparent overlay + JS)
    ┌─────────────▼──────────────┐
@@ -55,7 +55,7 @@ end
 ```
 
 **`CairoBackend` was the only v1 implementation.** (Update: a second, co-equal implementation,
-`WebGLBackend` — the `:webgl` backend, in `ext/HoloWGLMakieExt.jl` — was added later; see the
+`WebGLBackend` — the `:webgl` backend, in `ext/MasqueWGLMakieExt.jl` — was added later; see the
 note at the end of this section.) `CairoBackend` renders PNG only — no vector/SVG output path
 exists (a `CairoBackend(vector=true)` groundwork field was removed pre-registration as dead code;
 see `roadmap.md`'s SVG output path item for what an actual implementation would need). `render` =
@@ -74,7 +74,7 @@ WGLMakie rendering model server-centric and reload-fragile, at odds with the sta
 output this project set out to provide, and framed it as a different product rather than a
 deferred target. **Update:** the seam turned out to admit a live implementation cleanly after
 all — `WebGLBackend` implements the same `AbstractBackend` contract (`render`/`context`)
-against a browser-GPU `<canvas>` instead of a PNG, shipped as the `HoloWGLMakieExt` weak-dep
+against a browser-GPU `<canvas>` instead of a PNG, shipped as the `MasqueWGLMakieExt` weak-dep
 extension. The two backends are now co-equal peers (`_resolve_backend` in `src/render.jl`
 picks the loaded one, honors `backend=`, and defaults to Cairo if both are present); see
 `backend-comparison.md` for the cost/regime tradeoff (the interaction
@@ -247,7 +247,7 @@ are already pixel-space, not data-space, so there is nothing to project). A rota
 yields exactly one `:rects` box, expanded to stay axis-aligned (a looser hit target, not a new
 geometry kind). The payload's `text`/`index` are the string and its 0-based per-label index;
 `x`/`y` are the DATA-space anchor (`positions`), not the pixel box — consistent with `PointInteractable`'s
-`(; index, x, y)` shape. `holo(fig)` auto-detects `text!` directly and `annotation!` by reaching
+`(; index, x, y)` shape. `masque(fig)` auto-detects `text!` directly and `annotation!` by reaching
 through to its child `Makie.Text` plot (`_descendant`); only **data-space** text is auto-detected
 (`space === :data`) — pixel/relative-space text (decorative overlays) is skipped with a warning, not
 silently dropped. `TextLabel` (a `Makie.Block`, not a plot) is **not** covered — it needs the
@@ -296,7 +296,7 @@ mark" analog.
 RegionInteractable(ax;
     regions  = [(:circle, Point2f(x,y), r), (:rect, p, w, h), (:polygon, ring)],
     payloads = [pl1, pl2, pl3],          # parallel; one per region (the linkage key)
-    tooltip  = holo"$(label)",           # Markup template; nothing → auto-table, false → suppress
+    tooltip  = masque"$(label)",           # Markup template; nothing → auto-table, false → suppress
     events   = (:click, :hover))
 ```
 
@@ -309,22 +309,22 @@ FunctionInteractable(ax, f; id, events=(:click,:hover))   # f(ctx)::Vector{HitLa
 
 **Tier C — full struct.** Implement `hitlayers` (+ optional `validate`/`hoverstyle`). A user
 struct is *indistinguishable* from a built-in — same manifest path, same overlay, same `@bind`. Tooltip
-content comes from the per-layer `Holo.tooltip_spec(interactable)` seam (built-in interactables expose it
-as a `tooltip=` constructor kwarg; a custom struct overrides `Holo.tooltip_spec`). The `tooltip_*` kwargs
-on `holo()` are styling only. See §10 Tooltips, below. Example:
+content comes from the per-layer `Masque.tooltip_spec(interactable)` seam (built-in interactables expose it
+as a `tooltip=` constructor kwarg; a custom struct overrides `Masque.tooltip_spec`). The `tooltip_*` kwargs
+on `masque()` are styling only. See §10 Tooltips, below. Example:
 
 ```julia
 struct CityInteractable <: AbstractInteractable
     positions::Vector{Point2f}; names::Vector{String}; radius::Float32
 end
-function Holo.hitlayers(c::CityInteractable, ctx)
+function Masque.hitlayers(c::CityInteractable, ctx)
     coords = Float32[]; for p in c.positions
         q = data_to_image_px(ctx, c.ax, p); append!(coords, (q[1], q[2], c.radius*ctx.scaling))
     end
     [HitLayer(:cities, :circles, coords, [(; name=n) for n in c.names], :main, (:click,:hover))]
 end
 # tooltip content: add a `tooltip` field to CityInteractable and override
-# `Holo.tooltip_spec(c::CityInteractable) = c.tooltip` — see §10 Tooltips, below
+# `Masque.tooltip_spec(c::CityInteractable) = c.tooltip` — see §10 Tooltips, below
 ```
 
 **Linkage = shared payloads through Pluto reactivity.** Two interactables writing the same payload field
@@ -334,7 +334,7 @@ no-server architecture.
 
 ## 5. The bond value
 
-`@bind sel holo(fig, interactables)`:
+`@bind sel masque(fig, interactables)`:
 - `sel === nothing` until the first deliberate click (clicks outside all layers are a no-op — by design).
 - On click: `sel = (; layer, index, payload)` (a `Dict` Julia-side). For `AxisInteractable`,
   `index = -1` and `payload = (; x, y)` inverted from the axis transform in JS.
@@ -431,10 +431,10 @@ profile shows JS hit-test *specifically* is the bottleneck.
 
 **Phase 2b (shipped):** Band, Density, Contourf, Violin, Voronoiplot — extracted as `:polygons`; surface-specific payloads (Band/Density/Voronoiplot `(; index)`, Contourf `(; low, high)`, Violin `(; x)`). BoxPlot box-body auto-extracted as `:rects` (un-notched) / `:polygons` (notched) with `(; q1, median, q3)`. Tricontourf deferred; BoxPlot whiskers/outliers decorative (box-body-only).
 
-**M3 Colorbar (shipped):** `ColorbarInteractable` — hover/click value readout for any `Colorbar` block, auto-extracted by `holo(fig)` via a figure-block walk over `fig.content`. Rides the `:axis` channel with a bounded bbox geometry; `AxisTransform.valueaxis` tags the value axis so JS inverts the cursor pixel to a scalar `(; value)`. Legend remains deferred (a linking capability, its own arc).
+**M3 Colorbar (shipped):** `ColorbarInteractable` — hover/click value readout for any `Colorbar` block, auto-extracted by `masque(fig)` via a figure-block walk over `fig.content`. Rides the `:axis` channel with a bounded bbox geometry; `AxisTransform.valueaxis` tags the value axis so JS inverts the cursor pixel to a scalar `(; value)`. Legend remains deferred (a linking capability, its own arc).
 
 **Phase 2 text labels (shipped):** `TextInteractable` — `text!` and `annotation!` labels as
-click-to-pick buttons, auto-extracted by `holo(fig)` for data-space text. Rides `:rects`; geometry
+click-to-pick buttons, auto-extracted by `masque(fig)` for data-space text. Rides `:rects`; geometry
 from `Makie.string_boundingboxes` (no font-metric measurement needed — the originally-speculated
 `bbox` primitive was never built). `TextLabel` (a `Block`, needs the figure-block walk rather than
 the plot-scene walk) remains deferred.
@@ -454,8 +454,8 @@ degenerate lims and `Axis`/`Threshold`/`ROI` interactables fail loud. **`PolarAx
 overlays ship on both backends** (shared projection applies `Makie.Polar` via `transform_func`;
 `ispolar` transforms + the same continuous-consumer gates; Scatter/Lines/LineSegments/
 ScatterLines auto-extract). WGL scene JSON scrubs non-finite floats in GPU buffers for
-transport only — Holo hit geometry stays Julia-projected. Continuous θ/r readout still needs
-the polar transform serialized to JS — deferred. `LScene` remains guarded (own camera/scoping look). The **Holo-wide** non-goals (every backend, by design) are the
+transport only — Masque hit geometry stays Julia-projected. Continuous θ/r readout still needs
+the polar transform serialized to JS — deferred. `LScene` remains guarded (own camera/scoping look). The **Masque-wide** non-goals (every backend, by design) are the
 **client-side GPU camera** — a JS-driven camera the kernel never hears about, which would desync
 the Julia-projected overlay and can only ever exist on one backend — and **GPU-pick occlusion**.
 **Occlusion policy (document-and-accept, backend-symmetric):** every projected vertex is
@@ -492,7 +492,7 @@ this: tooltip content ships as two O(1)-per-layer fields — `template` (pre-par
 See §10 Tooltips, below, for the wire shape and authoring API.
 
 **Robustness to large inputs (assume a user *will* do this) — implemented.** We ship a tool to
-Pluto/Makie users, so assume someone overlays `holo` on a 2000²–4000² `heatmap!`/`image!` *because they
+Pluto/Makie users, so assume someone overlays `masque` on a 2000²–4000² `heatmap!`/`image!` *because they
 can*. The PNG is safe (display-bounded), but the `:grid` `values[]` matrix is **source-bounded**, so that
 routine input ships tens of MB of redundant numbers on top of the PNG that already shows them — and the
 user's matrix already lives in their Julia session. `values[]` exists only to power the no-round-trip
@@ -551,20 +551,20 @@ a quadtree (§7).
 
 ## 10. Tooltips
 
-The `holo"..."` / `Markup` template system. Tooltips are its first consumer; the mechanism
+The `masque"..."` / `Markup` template system. Tooltips are its first consumer; the mechanism
 generalises to any surface that overlays structured content on hover (labels, annotations,
-panels). User-facing usage (defaults, `holo"..."` examples, styling kwargs) is on the site's
-[Tooltips page](https://jowch.github.io/Holo.jl/dev/tooltips/); this section is the mechanism
+panels). User-facing usage (defaults, `masque"..."` examples, styling kwargs) is on the site's
+[Tooltips page](https://jowch.github.io/Masque.jl/dev/tooltips/); this section is the mechanism
 and wire contract behind it.
 
 ### 10.1 Mental model
 
-Every Holo interactable carries a `payloads` array — one JSON-serialisable value per element,
+Every Masque interactable carries a `payloads` array — one JSON-serialisable value per element,
 built at render time in Julia. **The payload is data; the template is layout.** When the user
 hovers over an element, the browser reads that element's payload entry and interpolates it
 into the template to produce the tooltip HTML — no round-trip to Julia, no live callback.
 
-This is forced by the no-server constraint: a statically-exported Holo widget has no Julia
+This is forced by the no-server constraint: a statically-exported Masque widget has no Julia
 kernel to call. Any content the tooltip shows must already be in the manifest at render time,
 either as a template (O(1) per layer) or as data in the payload (O(N) per element, the same
 O(N) the interactable already ships for hit-testing). A per-element callback
@@ -573,11 +573,11 @@ element at build time — the former is unavailable offline, the latter collapse
 per-element string array and is O(N × string-bytes) on the wire. The template approach avoids
 both.
 
-### 10.2 The `holo"..."` macro and `Markup` type
+### 10.2 The `masque"..."` macro and `Markup` type
 
-`holo"..."` is a string macro (exported; underlying function `@holo_str`) that produces a
-`Holo.Markup` value. It is the only way to author a template; there is no
-`holo(runtime_string)` form.
+`masque"..."` is a string macro (exported; underlying function `@masque_str`) that produces a
+`Masque.Markup` value. It is the only way to author a template; there is no
+`masque(runtime_string)` form.
 
 `Markup` stores the parsed template as an ordered list of segments: each segment is either a
 literal `String` (emitted verbatim as HTML into the tooltip) or a
@@ -589,8 +589,8 @@ lookup resolved at hover time. `$(field:spec)` formats the value with a
 [d3-format](https://d3js.org/d3-format) spec before escaping. There is no Julia-object
 interpolation in templates.
 
-The literal portions of `holo"..."` are treated as raw HTML; the author is responsible for
-escaping `<` and `&` in literal text (same contract as `@htl`). Because `holo"..."` requires a
+The literal portions of `masque"..."` are treated as raw HTML; the author is responsible for
+escaping `<` and `&` in literal text (same contract as `@htl`). Because `masque"..."` requires a
 string literal, a runtime-computed string must travel as a field inside the payload:
 pre-render it into `payloads` and reference it with `$(that_field)`.
 
@@ -603,10 +603,10 @@ is: *Julia validates structure; the browser validates meaning.*
 at compile time and catches unbalanced/empty/unclosed `$(...)` delimiters, non-identifier field
 names, and structurally-invalid d3-format specs. Errors surface as `TemplateValidationError`
 with a caret underline pointing at the offending span, attached to the source file and line of
-the `holo"..."` call — the user sees them the instant the cell parses, before `holo()` is ever
+the `masque"..."` call — the user sees them the instant the cell parses, before `masque()` is ever
 called.
 
-**Phase 2 — build-time field check (payload-aware).** When `holo()` / `build_manifest` is
+**Phase 2 — build-time field check (payload-aware).** When `masque()` / `build_manifest` is
 called with a `Markup` tooltip, each template's field names are resolved against the actual
 payload keys. A field present in the template but absent from the payload is a build-time
 `ArgumentError`, with a "did you mean?" suggestion (Levenshtein edit distance ≤ 2). This check
@@ -649,9 +649,9 @@ The top-level manifest field `tipStyle` (`Record<string,string>`, optional) is a
 of set `tooltip_*` kwargs, applied once to the shadow host at mount.
 
 The top-level `background` field (CSS colour string; optional on `build_manifest` directly, but
-`holo()` always sets it) is the figure's own
+`masque()` always sets it) is the figure's own
 background colour (`fig.scene.backgroundcolor[]`) — the tooltip's light/dark theme is derived
-from it client-side via CSS relative-colour syntax (`lch(from var(--holo-fig-bg) …)`, with a
+from it client-side via CSS relative-colour syntax (`lch(from var(--masque-fig-bg) …)`, with a
 static-light/OS-dark `@supports not (…)` fallback for browsers without it), not just OS
 `prefers-color-scheme`, so a dark figure on a light Pluto page still gets a dark tooltip. A
 per-layer `colors` field (optional; a single CSS string, or a shared palette + one index per
@@ -666,7 +666,7 @@ string`. See `frontend/src/types.ts`.
 
 ### 10.5 Security model
 
-**Template markup is author-trusted.** The literal HTML in `holo"..."` is inserted as
+**Template markup is author-trusted.** The literal HTML in `masque"..."` is inserted as
 `innerHTML` without sanitisation. The author who writes a Pluto notebook already has arbitrary
 Julia code execution, so sanitising their own template structure is theater (and a
 sanitisation library such as DOMPurify adds ~8–15 KB gzip for no real benefit in this context).
@@ -690,7 +690,7 @@ scheme survives escaping and can execute — author responsibility if a template
 | `$(field:raw)` — unescaped field interpolation | Deferred | Explicit opt-in marker (Bokeh `{safe}`-style); pre-render HTML into a payload field, inject unescaped |
 | Per-layer `tooltip_*` style override | Deferred | Non-breaking kwarg on the per-layer interactable constructor |
 | Compile-time field validation (`@generated`) | Deferred | No-op on heterogeneous payloads; build-time Phase 2 runs for `NamedTuple` payloads |
-| Mark-anchored tooltip placement (circles/rects/segments/polyline/polygons/grid) | **Shipped** (tooltip-anchor-chrome PR) | Box centred above the mark's top edge, gap 10px; flips below on top-clip, shifts + moves the caret (`--holo-caret-x`) on side-clip. `frontend/src/geometry.ts`'s `anchorFor`/`computeAnchoredPlacement` |
+| Mark-anchored tooltip placement (circles/rects/segments/polyline/polygons/grid) | **Shipped** (tooltip-anchor-chrome PR) | Box centred above the mark's top edge, gap 10px; flips below on top-clip, shifts + moves the caret (`--masque-caret-x`) on side-clip. `frontend/src/geometry.ts`'s `anchorFor`/`computeAnchoredPlacement` |
 | Caret edge-flipping / viewport-collision clamping (axis/threshold/ROI/view — cursor-following) | **Shipped** (first overlay polish PR) | Card stays inside the overlay; caret flips via `.flip-x` / `.flip-y` |
 | Inline date formatting | Deferred (would add `d3-time-format`) | Format dates in Julia into a payload string field |
 | Following a Pluto notebook theme toggle | **N/A** — official Pluto has none | OS `prefers-color-scheme` *is* Pluto's theme (Settings is help text; no class / `data-theme` / JS event). Revisit only if Pluto ships a real override with a stable signal. |

@@ -1,4 +1,4 @@
-using Test, Holo, CairoMakie, Makie
+using Test, Masque, CairoMakie, Makie
 include(joinpath(@__DIR__, "..", "testutils.jl"))
 
 @testset "Backend" begin
@@ -144,7 +144,7 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
 
     @testset "non-finite projection degrades, never crashes" begin
         # element layers are un-gated on scale (docs/dev/architecture.md §3); a log out-of-domain point projects to
-        # NaN/±Inf. `_q` must pass it through (round(Int, NaN) throws) so holo degrades, not crashes.
+        # NaN/±Inf. `_q` must pass it through (round(Int, NaN) throws) so masque degrades, not crashes.
         (; ax, ctx) = default_fixture()
         finite_int(g) = all(x -> !isfinite(x) || x isa Integer, g)
         flog = Figure(); axlog = Axis(flog[1, 1]; xscale = log10)
@@ -176,13 +176,13 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
         err = (@test_throws ArgumentError ctx_for(fu)).value
         @test occursin("supports `Makie.Axis`, `Makie.Axis3`, and `Makie.PolarAxis`", err.msg)
         @test occursin("WGLMakie", err.msg)       # steers to the backend that renders LScene today
-        @test occursin("scoping guard", err.msg)  # framing: Holo scoping, not a CairoMakie capability limit
+        @test occursin("scoping guard", err.msg)  # framing: Masque scoping, not a CairoMakie capability limit
         @test occursin("LScene", err.msg)
     end
 end
 
 @testset "AxisTransform valueaxis field + serialization" begin
-    using Holo: AxisTransform, _transform_dict
+    using Masque: AxisTransform, _transform_dict
     # a normal axis transform defaults valueaxis = nothing → serializes to nothing
     t = AxisTransform(
         :ax1, (0.0, 1.0), (0.0, 2.0), :identity, :identity,
@@ -203,7 +203,7 @@ end
 end
 
 @testset "Colorbar transform in context" begin
-    using Holo: axis_id, build_manifest
+    using Masque: axis_id, build_manifest
     fig = Figure()
     ax = Axis(fig[1, 1])
     hm = heatmap!(ax, rand(10, 10))
@@ -240,7 +240,7 @@ end
 end
 
 @testset "ColorbarInteractable" begin
-    using Holo: ColorbarInteractable, hitlayers, validate
+    using Masque: ColorbarInteractable, hitlayers, validate
     fig = Figure(); ax = Axis(fig[1, 1]); hm = heatmap!(ax, rand(10, 10))
     cb = Colorbar(fig[1, 2], hm)
     Makie.update_state_before_display!(fig)
@@ -253,7 +253,7 @@ end
     @test L.kind === :axis
     @test L.id === :colorbar
     @test L.geometry isa AbstractVector && length(L.geometry) == 4   # bbox rect [x,y,w,h] (bounded)
-    @test L.axis == Holo.axis_id(ctx, cb)                   # references the colorbar transform
+    @test L.axis == Masque.axis_id(ctx, cb)                   # references the colorbar transform
     @test isempty(L.payloads)                               # value computed client-side
 
     # non-invertible scale fails loud (colorscale on the heatmap propagates to cb.scale[])
@@ -266,8 +266,8 @@ end
     @test validate(ci2, ctx2) isa String                    # rejected with a message
 end
 
-@testset "holo(fig) auto-detects Colorbar" begin
-    using Holo: auto_interactables, ColorbarInteractable
+@testset "masque(fig) auto-detects Colorbar" begin
+    using Masque: auto_interactables, ColorbarInteractable
     fig = Figure(); ax = Axis(fig[1, 1]); hm = heatmap!(ax, rand(10, 10))
     Colorbar(fig[1, 2], hm)
     Makie.update_state_before_display!(fig)

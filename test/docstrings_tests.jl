@@ -2,12 +2,12 @@
 # fallback — this is what would let a Documenter site build `@docs` blocks for the API
 # reference. `Docs.hasdoc` only exists from Julia 1.11 on (CI's floor is 1.10), so render the
 # doc to a String and check it isn't the fallback text — one code path, every supported version.
-# Scope: `names(Holo)` only — the extension structs `CairoBackend` (unexported) and
-# `WebGLBackend` (exported from HoloWGLMakieExt, not from Holo) are out of reach here and are
+# Scope: `names(Masque)` only — the extension structs `CairoBackend` (unexported) and
+# `WebGLBackend` (exported from MasqueWGLMakieExt, not from Masque) are out of reach here and are
 # NOT exercised by this testset; their docstrings are reviewed by hand.
 @testset "every exported name has a docstring" begin
-    for n in names(Holo)
-        doc_str = sprint(show, MIME"text/plain"(), Base.Docs.doc(Base.Docs.Binding(Holo, n)))
+    for n in names(Masque)
+        doc_str = sprint(show, MIME"text/plain"(), Base.Docs.doc(Base.Docs.Binding(Masque, n)))
         @test !occursin("No documentation found", doc_str)
         @test length(doc_str) > 40
     end

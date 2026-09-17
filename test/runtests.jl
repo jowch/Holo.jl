@@ -1,9 +1,9 @@
 using Test
 
-# Holo has two backend extensions (CairoMakie, WGLMakie). Each suite below needs a
+# Masque has two backend extensions (CairoMakie, WGLMakie). Each suite below needs a
 # specific, non-overlapping set of packages loaded, so they run as separate GROUPs
 # rather than one file — see the plan/spec for why. Default GROUP is "Core".
-# Implicit holo() still prefers a single loaded backend; if both are present (e.g. a
+# Implicit masque() still prefers a single loaded backend; if both are present (e.g. a
 # fat sysimage) it honors backend= or defaults to Cairo instead of throwing.
 const GROUP = get(ENV, "GROUP", "Core")
 

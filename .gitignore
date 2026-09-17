@@ -9,7 +9,7 @@
 /docs/src/notebooks/
 
 # Node / TypeScript (`frontend/`). The built bundles assets/overlay.js and
-# assets/holo-webgl.js ARE committed.
+# assets/masque-webgl.js ARE committed.
 frontend/node_modules/
 frontend/dist/
 frontend/coverage/

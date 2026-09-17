@@ -19,7 +19,7 @@ end
 # ╔═╡ c1000000-0000-0000-0000-000000000001
 begin
     import Pkg
-    dev = get(ENV, "HOLO_DEV_ENV", "")
+    dev = get(ENV, "MASQUE_DEV_ENV", "")
     if !isempty(dev)
         Pkg.activate(dev)
     else
@@ -28,7 +28,7 @@ begin
         Pkg.add(["CairoMakie", "JSON3"])
         Pkg.instantiate()
     end
-    using Holo
+    using Masque
     using CairoMakie
     import JSON3
 end

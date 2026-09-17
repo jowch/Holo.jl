@@ -35,12 +35,12 @@ let failed = null;
 try {
   const page = await browser.newPage({ viewport: { width: 900, height: 700 } });
   await page.goto(url);
-  await page.waitForSelector("canvas.holo-webgl-base", { timeout: 20000 });
+  await page.waitForSelector("canvas.masque-webgl-base", { timeout: 20000 });
   await page.waitForTimeout(6000); // let the WGL scene actually draw (SwiftShader is slow)
 
   const meta = await page.evaluate(() => {
     const host = document.querySelector(".ip-host");
-    const canvas = host.querySelector("canvas.holo-webgl-base");
+    const canvas = host.querySelector("canvas.masque-webgl-base");
     let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
     const svg = sr?.querySelector("svg");
     return {
@@ -51,7 +51,7 @@ try {
   });
   if (!meta.imgW) throw new Error("overlay svg not found — cannot derive image-px scale");
 
-  const canvas = page.locator("canvas.holo-webgl-base");
+  const canvas = page.locator("canvas.masque-webgl-base");
   const shot = PNG.sync.read(await canvas.screenshot());
   const rx = shot.width / meta.imgW, ry = shot.height / meta.imgH;
 

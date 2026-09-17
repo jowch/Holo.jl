@@ -1,4 +1,4 @@
-using Test, Holo, CairoMakie, Makie
+using Test, Masque, CairoMakie, Makie
 include(joinpath(@__DIR__, "..", "testutils.jl"))
 
 # ---- cross-backend parity harness: within-backend golden drift (:cairo half) ----

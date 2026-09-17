@@ -591,17 +591,17 @@ git-tree-sha1 = "9d9531a9cb63a9edc33836414e82a07e81710de2"
 uuid = "2e76f6c2-a576-52d4-95c1-20adfe4de566"
 version = "100.14004.0+0"
 
-[[deps.Holo]]
+[[deps.Masque]]
 deps = ["AbstractPlutoDingetjes", "Base64", "FileIO", "HypertextLiteral", "Makie"]
 path = ".."
 uuid = "82b01fb5-7eeb-4559-83ea-8d75f85d4328"
 version = "0.1.0"
 
-    [deps.Holo.extensions]
-    HoloCairoMakieExt = "CairoMakie"
-    HoloWGLMakieExt = "WGLMakie"
+    [deps.Masque.extensions]
+    MasqueCairoMakieExt = "CairoMakie"
+    MasqueWGLMakieExt = "WGLMakie"
 
-    [deps.Holo.weakdeps]
+    [deps.Masque.weakdeps]
     CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
     WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
 

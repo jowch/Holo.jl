@@ -1,4 +1,4 @@
-using Test, Holo, CairoMakie, Makie
+using Test, Masque, CairoMakie, Makie
 include(joinpath(@__DIR__, "..", "testutils.jl"))
 
 @testset "Interactables" begin
@@ -70,9 +70,9 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
         @test !haskey(d_pt, "tol")
         d_rect = only(build_manifest([RectInteractable(axt; rects = [(1.0, 1.0, 1.0, 1.0)])], ctxt)["layers"])
         @test !haskey(d_rect, "tol")
-        # Holo.hit_tol interface: nothing by default, i.tol for SegmentInteractable
-        @test Holo.hit_tol(PointInteractable(axt, [(1.0, 1.0)])) === nothing
-        @test Holo.hit_tol(SegmentInteractable(axt, [(1.0, 1.0), (2.0, 2.0)]; tol = 12)) == 12
+        # Masque.hit_tol interface: nothing by default, i.tol for SegmentInteractable
+        @test Masque.hit_tol(PointInteractable(axt, [(1.0, 1.0)])) === nothing
+        @test Masque.hit_tol(SegmentInteractable(axt, [(1.0, 1.0), (2.0, 2.0)]; tol = 12)) == 12
     end
 
     @testset "Polygon geometry projects per ring" begin
@@ -144,10 +144,10 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
         @test only(hitlayers(AxisInteractable(ax), ctx)).geometry === nothing
         ri = RegionInteractable(
             ax; regions = [(:circle, (1.0, 1.0), 10), (:rect, (2.0, 4.0), 1.0, 2.0)],
-            payloads = ["a", "b"], tooltip = holo"region"
+            payloads = ["a", "b"], tooltip = masque"region"
         )
         @test Set(L.kind for L in hitlayers(ri, ctx)) == Set([:circles, :rects])
-        @test IP.tooltip_spec(ri) isa Holo.Markup
+        @test IP.tooltip_spec(ri) isa Masque.Markup
         fi = FunctionInteractable(c -> [HitLayer(:f, :circles, Float32[10, 10, 5], Any[(; v = 1)], :ax1, (:click,))])
         @test only(hitlayers(fi, ctx)).id === :f
     end
@@ -166,8 +166,8 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
         @test haskey(m["transforms"], "ax1")
 
         # inspector ink (first polish PR): hoverstyle default + shipped layer.style
-        @test Holo.hoverstyle(PointInteractable(bax, pts; id = :scatter)).stroke == "#3A6F7C"
-        @test Holo.hoverstyle(PointInteractable(bax, pts; id = :scatter)).width == 2
+        @test Masque.hoverstyle(PointInteractable(bax, pts; id = :scatter)).stroke == "#3A6F7C"
+        @test Masque.hoverstyle(PointInteractable(bax, pts; id = :scatter)).width == 2
         @test m["layers"][1]["style"]["stroke"] == "#3A6F7C"
 
         # selection round-trip: pre-highlight indices ride the manifest keyed by layer id
@@ -180,7 +180,7 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
                 selected = Dict(:scatter => Int[])
             )["layers"][1], "selected"
         )   # empty omitted
-        @test holo(bfig, PointInteractable(bax, pts; id = :scatter); selected = Dict(:scatter => [1])).manifest["layers"][1]["selected"] == [1]
+        @test masque(bfig, PointInteractable(bax, pts; id = :scatter); selected = Dict(:scatter => [1])).manifest["layers"][1]["selected"] == [1]
 
         # selected= fail-loud (issue #39): still-unsupported kinds (grid/axis/…) and OOB
         # indices throw at build_manifest. Open kinds (segments/polyline) now accept
@@ -233,8 +233,8 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
             @test ml["layers"][1]["kind"] == "polyline"
         end
 
-        w = holo(bfig, PointInteractable(bax, pts; id = :scatter))
-        @test w isa HoloWidget
+        w = masque(bfig, PointInteractable(bax, pts; id = :scatter))
+        @test w isa MasqueWidget
         @test w.manifest["layers"][1]["kind"] == "circles"
         @test !isempty(w.b64)
         @test w.display_css == 600
@@ -265,9 +265,9 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
     end
 
     @testset "transform_value multi-select envelope" begin
-        using Holo: InteractionEvent
-        tv = Holo.APD.Bonds.transform_value
-        w = Holo.HoloWidget("", Dict{String, Any}(), 100)   # transform_value ignores the widget fields
+        using Masque: InteractionEvent
+        tv = Masque.APD.Bonds.transform_value
+        w = Masque.MasqueWidget("", Dict{String, Any}(), 100)   # transform_value ignores the widget fields
         @test tv(w, nothing) === nothing
         # single (click / bounds) — unchanged
         single = tv(w, Dict("layer" => "pts", "index" => 3, "payload" => Dict("city" => "NYC")))
@@ -289,7 +289,7 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
     end
 
     @testset "payload-length validation (Segment/Rect/Polygon)" begin
-        using Holo: SegmentInteractable, RectInteractable, PolygonInteractable
+        using Masque: SegmentInteractable, RectInteractable, PolygonInteractable
         fig = Figure(); ax = Axis(fig[1, 1])
         # RectInteractable list: 2 rects, wrong + right payload counts
         rects = [(0.0, 0.0, 1.0, 1.0), (2.0, 2.0, 1.0, 1.0)]
@@ -308,7 +308,7 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
     end
 
     @testset "construction-time validation: mode / grid shape / tooltip=true" begin
-        using Holo: SegmentInteractable, RectInteractable, PointInteractable
+        using Masque: SegmentInteractable, RectInteractable, PointInteractable
         fig = Figure(); ax = Axis(fig[1, 1])
         pts = [Point2f(0, 0), Point2f(1, 1)]
         @test_throws ArgumentError SegmentInteractable(ax, pts; mode = :segments)
@@ -366,7 +366,7 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
         # A RectInteractable with clamp_to_viewport=true whose projected rect is non-finite
         # must NOT throw — it must fall back to the _q path instead of passing NaN/Inf to
         # ceil/floor (which throw). Deterministic repro: a rect whose center is NaN.
-        using Holo: RectInteractable
+        using Masque: RectInteractable
         fig = Figure(size = (500, 350)); ax = Axis(fig[1, 1])
         scatter!(ax, [1.0], [1.0])   # force a layout so viewport is non-empty
         _, _, ctx = ctx_for(fig)

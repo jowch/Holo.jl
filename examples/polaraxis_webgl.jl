@@ -17,14 +17,14 @@ macro bind(def, element)
 end
 
 # ╔═╡ a1000000-0000-0000-0000-000000000001
-# Self-contained env: develop local Holo + WGLMakie (selects :webgl backend).
+# Self-contained env: develop local Masque + WGLMakie (selects :webgl backend).
 begin
     import Pkg
     Pkg.activate(; temp = true)
     Pkg.develop(path = joinpath(@__DIR__, ".."))
     Pkg.add(["WGLMakie", "JSON3"])
     Pkg.instantiate()
-    using Holo
+    using Masque
     using WGLMakie
     import JSON3
 end
@@ -33,7 +33,7 @@ end
 md"""
 # PolarAxis discrete hits — `:webgl` live-verify
 
-Scatter on `PolarAxis` with Holo overlay. Hover for tooltip; click for `@bind` event.
+Scatter on `PolarAxis` with Masque overlay. Hover for tooltip; click for `@bind` event.
 Continuous θ/r readout is deferred (`ispolar`); this notebook checks **discrete** hits only.
 """
 
@@ -43,7 +43,7 @@ begin
     ax = PolarAxis(fig[1, 1])
     pts = Point2f[(0.0, 1.0), (π / 2, 2.0), (π, 1.5), (3π / 2, 2.5)]
     scatter!(ax, pts; color = :dodgerblue, markersize = 22)
-    w = holo(fig)
+    w = masque(fig)
 end
 
 # ╔═╡ a1000000-0000-0000-0000-000000000021

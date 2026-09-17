@@ -1,36 +1,36 @@
-# Holo.jl — agent notes
+# Masque.jl — agent notes
 
-Julia package (`Holo`, entry fn `holo`) that overlays JS interactivity on static CairoMakie
+Julia package (`Masque`, entry fn `masque`) that overlays JS interactivity on static CairoMakie
 plots in Pluto. Browser layer is TypeScript in `frontend/`, bundled by esbuild to a **committed**
 `assets/overlay.js`, read by Julia at `__init__`. Manifest shipped to JS via `published_to_js`.
 
 ## Commands
 - Julia tests: `julia --project=. test/runtests.jl`
-- Frontend gate: `cd frontend && npm run lint && npm run typecheck && npm test && npm run build` (build → `../assets/overlay.js` IIFE + `../assets/holo-webgl.js` ESM)
+- Frontend gate: `cd frontend && npm run lint && npm run typecheck && npm test && npm run build` (build → `../assets/overlay.js` IIFE + `../assets/masque-webgl.js` ESM)
 - Format (Runic, CI-enforced): `julia -e 'using Runic; exit(Runic.main(["--inplace","src","test","bench","gallery","examples","docs"]))'` — pass every dir with `.jl`, since CI formats the whole repo (PR #11 slipped because `gallery/` was omitted here). **CI's `runic-action` has no `paths:` filter → it checks the WHOLE repo** (incl. `bench/`, `gallery/`, `examples/`, `docs/make.jl`), and tracks the latest Runic (1.7+); a locally-old Runic can pass a file CI rejects. Format every `.jl` you add, with current Runic.
 - Registry name-clash check (manual, not `Pkg.test`): packed General (typical
   depot / CI) is a 129-byte `~/.julia/registries/General.toml` pointer +
-  `General.tar.gz`. Package rows are inline tables (`uuid = { name = "Holo",
-  path = "H/Holo" }`). `grep '^name = "X"$'` only hits `name = "General"` and
+  `General.tar.gz`. Package rows are inline tables (`uuid = { name = "Masque",
+  path = "M/Masque" }`). `grep '^name = "X"$'` only hits `name = "General"` and
   **false-passes** if the index is missing or packed. Use
-  `tar -xOf ~/.julia/registries/General.tar.gz Registry.toml | rg '{ name = "Holo"'`
+  `tar -xOf ~/.julia/registries/General.tar.gz Registry.toml | rg '{ name = "Masque"'`
   (or the unpacked `General/Registry.toml` if present). Do not assert
   unregistered in CI — that fails once General indexes the package and needs
   network.
 - **Always verify CI is green before merging.** A merged PR can leave `main` red (PR #11 merged with Runic failing). After a PR's checks finish, `gh run list` / `gh pr checks <n>` must show all green — don't merge on a stale or pending run.
 
 ## Gotchas (verified this session)
-- Bundle injection: inject the esbuild IIFE **unconditionally** — wrapping it in `if(!window.Holo){…}` installs `{}` not `{mount}` (block-scope heisenbug).
+- Bundle injection: inject the esbuild IIFE **unconditionally** — wrapping it in `if(!window.Masque){…}` installs `{}` not `{mount}` (block-scope heisenbug).
 - Makie `Figure`s **can't `deepcopy`** (module refs) — save/restore `fig.scene.backgroundcolor[]` instead.
 - `save(Stream{format"PNG"}, fig)` is broken — use `Makie.colorbuffer(fig; px_per_unit)` then `save(Stream, img_matrix)`.
-- Entry fn is lowercase `holo`: a function named `Holo` clashes with `module Holo`.
+- Entry fn is lowercase `masque`: a function named `Masque` clashes with `module Masque`.
 - `published_to_js` needs a live Pluto — tests call `build_manifest`/`widget.manifest` directly, never `show`.
 - `frontend/src/types.ts` mirrors the Julia `HitLayer`/`AxisTransform`/`Manifest` structs — keep in sync.
 
 ## Conventions
 - Coords: image px, top-left origin = `Makie.project(ax.scene, pt)` + axis `viewport.origin`, ×`px_per_unit`, y-flipped. Tests assert projected coords land on rendered markers.
 - DPI is derived, not fixed: `px_per_unit = 2·min(scene_width, max_width=700)` (Pluto's column).
-- CI is the **sole author** of `assets/overlay.js` and `assets/holo-webgl.js` (rebuilds + commits on `main`); committing your local bundle is optional, but a stale committed bundle fails PR CI.
+- CI is the **sole author** of `assets/overlay.js` and `assets/masque-webgl.js` (rebuilds + commits on `main`); committing your local bundle is optional, but a stale committed bundle fails PR CI.
 
 ## Live verification (standing practice — not optional)
 Unit/frontend tests assert the manifest and the JS in isolation; they don't prove the rendered
@@ -59,13 +59,13 @@ text and the bond payload → it gets a live check on every backend × the kinds
   without the kind sweep is unfinished. Overlay recipes (locked — cite, do not reopen):
   inspector ink `#3A6F7C` (not `#ff3b30`), hover = stroke only, selected closed = wash,
   selected open = ring, circle halo `r + 2`, 80–120 ms fade, tooltip theme derived from the
-  FIGURE's own background (CSS relative-colour syntax, `--holo-fig-bg`) — not just OS
+  FIGURE's own background (CSS relative-colour syntax, `--masque-fig-bg`) — not just OS
   `prefers-color-scheme` (official Pluto has no notebook toggle), which is now only the
   fallback for browsers without relative-colour support — tooltip anchored ABOVE the hovered
   mark (not the cursor) with a 10px gap and the caret on the anchor — flips below on a
-  top-clip, shifts + moves the caret (`--holo-caret-x`) on a side-clip; a resolvable
+  top-clip, shifts + moves the caret (`--masque-caret-x`) on a side-clip; a resolvable
   per-element `colors` (currently: `scatter!`'s `color=`) adds a 3px tooltip accent border in
-  that colour (`--holo-mark-border`), text stays neutral; ROI has 8 square handles (4 corners +
+  that colour (`--masque-mark-border`), text stays neutral; ROI has 8 square handles (4 corners +
   4 edge midpoints, corners resize two axes, edges resize one) with directional resize cursors;
   a `selects`-ROI's grid cell-block union rect is fill-only (no stroke, `"rectfill"` geom tag)
   — the ROI box itself is the outline, so the rect doesn't double it into two parallel edges
@@ -108,4 +108,4 @@ Profiling exists to inform the design, not to sit in a file. The loop is anchore
   the single source of those numbers; frontend-delivery.md = build/delivery decisions).
   `spike/` is gitignored scratch; `bench/` holds the committed, re-runnable benchmarks.
 - Process docs (brainstorming specs, implementation plans) go in `.superpowers/` — gitignored, local-only, not part of the package.
-- Repo folder is `InteractivePlots.jl/` but the package is `Holo` (cosmetic mismatch; remote is `Holo.jl`).
+- The package was renamed from `Holo` to `Masque` on 2026-09-17 (same UUID). The local checkout folder and the GitHub remote may still be called `Holo.jl` until renamed; the package, module, and all in-repo references are `Masque`.

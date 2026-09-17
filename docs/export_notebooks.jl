@@ -43,8 +43,8 @@ function export_notebook(path, outdir)
 end
 
 function export_notebooks(outdir)
-    if get(ENV, "HOLO_SKIP_NOTEBOOK_EXPORT", "") == "true"
-        @info "HOLO_SKIP_NOTEBOOK_EXPORT set — reusing exports already in $outdir"
+    if get(ENV, "MASQUE_SKIP_NOTEBOOK_EXPORT", "") == "true"
+        @info "MASQUE_SKIP_NOTEBOOK_EXPORT set — reusing exports already in $outdir"
         return
     end
     mkpath(outdir)

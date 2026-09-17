@@ -1,14 +1,14 @@
-using Holo
+using Masque
 using Makie   # bare Makie: Figure/Axis/scatter! don't need a rendering backend to construct
 using Test
 
-@testset "holo(fig) with no backend extension loaded" begin
+@testset "masque(fig) with no backend extension loaded" begin
     fig = Figure(; size = (300, 200))
     ax = Axis(fig[1, 1])
     scatter!(ax, 1:5, rand(5))
 
     err = try
-        holo(fig)
+        masque(fig)
         nothing
     catch e
         e

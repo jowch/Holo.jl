@@ -1,23 +1,23 @@
 # Shared fixtures for test/core/*.jl. Included (not a module) so every file that pulls
 # it in gets these names at its own top level — each core/*.jl file does
-# `using Test, Holo, CairoMakie, Makie` then `include(joinpath(@__DIR__, "..", "testutils.jl"))`
+# `using Test, Masque, CairoMakie, Makie` then `include(joinpath(@__DIR__, "..", "testutils.jl"))`
 # so it can also run standalone via `julia --project=. test/core/<file>.jl`.
 #
 # core_tests.jl chains all of test/core/*.jl's includes of this file into one process for
 # the Core group, so the whole body is guarded to run once per session — plain redefinition
 # would otherwise be harmless but noisy (a `WARNING: Method definition ... overwritten`
 # per file).
-if !@isdefined(HOLO_TESTUTILS_LOADED)
-    const HOLO_TESTUTILS_LOADED = true
+if !@isdefined(MASQUE_TESTUTILS_LOADED)
+    const MASQUE_TESTUTILS_LOADED = true
 
-    using Holo: hitlayers, validate, events, HitLayer, build_manifest, HoloWidget
-    import Holo as IP
+    using Masque: hitlayers, validate, events, HitLayer, build_manifest, MasqueWidget
+    import Masque as IP
 
     # CairoBackend now lives in the extension (weak CairoMakie dep) — reach it via
     # Base.get_extension rather than a bare name, same pattern the extension itself uses.
-    const _CairoExt = Base.get_extension(Holo, :HoloCairoMakieExt)
+    const _CairoExt = Base.get_extension(Masque, :MasqueCairoMakieExt)
 
-    # finalize + context the way holo does internally
+    # finalize + context the way masque does internally
     function ctx_for(fig; max_width = 700)
         bk = _CairoExt.CairoBackend(; max_width)
         Makie.update_state_before_display!(fig)
@@ -38,7 +38,7 @@ if !@isdefined(HOLO_TESTUTILS_LOADED)
     end
 
     # The canonical fixture the original core_tests.jl built once, inside the outer
-    # `@testset "Holo" begin ... end` (pts/fig/ax/bk/ppu/ctx), and many nested testsets read
+    # `@testset "Masque" begin ... end` (pts/fig/ax/bk/ppu/ctx), and many nested testsets read
     # by bare name. `@testset` wraps its body in a `let`, so those names were locals of the
     # OUTER testset's `let` — a nested `@testset`'s own `let` assigning `fig = Figure(...)`
     # reassigns that already-existing enclosing local rather than shadowing it (Julia's `let`

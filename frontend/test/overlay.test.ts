@@ -536,7 +536,7 @@ describe("pointer capture, cancel, and coalesced drag release", () => {
         mount(script, thresholdManifest())
         const shadow = shadowOf(host)
         const surface = shadow.querySelector(".surface") as HTMLElement
-        const line = shadow.querySelector(".holo-threshold-line") as SVGLineElement
+        const line = shadow.querySelector(".masque-threshold-line") as SVGLineElement
         // establish the hover chrome the drag will inherit — onDown alone never sets it
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
         expect(surface.classList.contains("cur-ns")).toBe(true)
@@ -579,7 +579,7 @@ describe("pointer capture, cancel, and coalesced drag release", () => {
         mount(script, thresholdManifest())
         const shadow = shadowOf(host)
         const surface = shadow.querySelector(".surface") as HTMLElement
-        const line = shadow.querySelector(".holo-threshold-line") as SVGLineElement
+        const line = shadow.querySelector(".masque-threshold-line") as SVGLineElement
         let fired = false
         host.addEventListener("input", () => { fired = true })
         // establish the hover chrome the drag will inherit — onDown alone never sets it
@@ -605,7 +605,7 @@ describe("pointer capture, cancel, and coalesced drag release", () => {
         mount(script, thresholdManifest())
         const shadow = shadowOf(host)
         const surface = shadow.querySelector(".surface") as HTMLElement
-        const line = shadow.querySelector(".holo-threshold-line") as SVGLineElement
+        const line = shadow.querySelector(".masque-threshold-line") as SVGLineElement
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
         expect(surface.classList.contains("cur-ns")).toBe(true)
         expect(line.classList.contains("hovered")).toBe(true)
@@ -732,7 +732,7 @@ describe("pointer capture, cancel, and coalesced drag release", () => {
         const { host, script } = setup()
         mount(script, manifest)
         const shadow = shadowOf(host)
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         expect(tip.getAttribute("role")).toBe("tooltip")
         expect(tip.getAttribute("aria-hidden")).toBe("true")
         const surface = shadow.querySelector(".surface") as HTMLElement
@@ -765,7 +765,7 @@ describe("tooltips (mount/showTip)", () => {
         mount(script, tipManifest({ template: ["<b>", { f: "name" }, "</b>"] }))
         const shadow = shadowOf(host)
         const surface = shadow.querySelector(".surface") as HTMLElement
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         hoverMarker(shadow)
         expect(tip.classList.contains("show")).toBe(true)
         surface.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }))
@@ -779,17 +779,17 @@ describe("tooltips (mount/showTip)", () => {
 
     it("applies tipStyle custom properties to the shadow host", () => {
         const { host, script } = setup()
-        mount(script, tipManifest({}, { "--holo-tip-bg": "rgb(1,2,3)" }))
-        expect((host.lastElementChild as HTMLElement).style.getPropertyValue("--holo-tip-bg")).toBe("rgb(1,2,3)")
+        mount(script, tipManifest({}, { "--masque-tip-bg": "rgb(1,2,3)" }))
+        expect((host.lastElementChild as HTMLElement).style.getPropertyValue("--masque-tip-bg")).toBe("rgb(1,2,3)")
     })
 
-    it("applies the manifest's background as --holo-fig-bg on the shadow host", () => {
+    it("applies the manifest's background as --masque-fig-bg on the shadow host", () => {
         const { host, script } = setup()
         mount(script, { ...tipManifest({}), background: "rgb(30,30,30)" })
-        expect((host.lastElementChild as HTMLElement).style.getPropertyValue("--holo-fig-bg")).toBe("rgb(30,30,30)")
+        expect((host.lastElementChild as HTMLElement).style.getPropertyValue("--masque-fig-bg")).toBe("rgb(30,30,30)")
     })
 
-    it("sets --holo-mark-border from the hovered element's colors, and clears it on an uncolored one", async () => {
+    it("sets --masque-mark-border from the hovered element's colors, and clears it on an uncolored one", async () => {
         const { host, script } = setup()
         // two circles, side by side: "colored" carries a uniform accent colour, "plain" doesn't
         const twoLayerManifest: Manifest = {
@@ -801,13 +801,13 @@ describe("tooltips (mount/showTip)", () => {
         }
         mount(script, twoLayerManifest)
         const shadow = shadowOf(host)
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         const surface = shadow.querySelector(".surface") as HTMLElement
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
-        expect(tip.style.getPropertyValue("--holo-mark-border")).toBe("3px solid rgb(9,9,9)")
+        expect(tip.style.getPropertyValue("--masque-mark-border")).toBe("3px solid rgb(9,9,9)")
         await flushFrame() // onMove rAF-coalesces; the pending move above must land before the next one
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 450, clientY: 200, bubbles: true }))
-        expect(tip.style.getPropertyValue("--holo-mark-border")).toBe("")
+        expect(tip.style.getPropertyValue("--masque-mark-border")).toBe("")
     })
 
     it("resolves a palette+index colors field per element", async () => {
@@ -823,20 +823,20 @@ describe("tooltips (mount/showTip)", () => {
         }
         mount(script, palettedManifest)
         const shadow = shadowOf(host)
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         const surface = shadow.querySelector(".surface") as HTMLElement
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
-        expect(tip.style.getPropertyValue("--holo-mark-border")).toBe("3px solid rgb(2,2,2)")
+        expect(tip.style.getPropertyValue("--masque-mark-border")).toBe("3px solid rgb(2,2,2)")
         await flushFrame()
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 450, clientY: 200, bubbles: true }))
-        expect(tip.style.getPropertyValue("--holo-mark-border")).toBe("3px solid rgb(1,1,1)")
+        expect(tip.style.getPropertyValue("--masque-mark-border")).toBe("3px solid rgb(1,1,1)")
     })
 
     it("renders a template tooltip as HTML on hover (markup live, data escaped)", () => {
         const { host, script } = setup()
         mount(script, tipManifest({ template: ["<b>", { f: "name" }, "</b>"], payloads: [{ name: "<x>" }] }))
         const shadow = shadowOf(host)
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         hoverMarker(shadow)
         expect(tip.classList.contains("show")).toBe(true)
         expect(tip.innerHTML).toBe("<b>&lt;x&gt;</b>")   // the <b> stays live; the payload value is escaped
@@ -846,10 +846,10 @@ describe("tooltips (mount/showTip)", () => {
         const { host, script } = setup()
         mount(script, tipManifest({}))
         const shadow = shadowOf(host)
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         hoverMarker(shadow)
         expect(tip.classList.contains("show")).toBe(true)
-        expect(tip.innerHTML).toContain("holo-tip-row")
+        expect(tip.innerHTML).toContain("masque-tip-row")
         expect(tip.innerHTML).toContain("Tokyo")
     })
 
@@ -857,7 +857,7 @@ describe("tooltips (mount/showTip)", () => {
         const { host, script } = setup()
         mount(script, tipManifest({ tooltip: false }))
         const shadow = shadowOf(host)
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         hoverMarker(shadow)
         expect(tip.classList.contains("show")).toBe(false)
     })
@@ -873,7 +873,7 @@ describe("tooltips (mount/showTip)", () => {
         }
         mount(script, cbManifest)
         const shadow = shadowOf(host)
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         // client (110,150) → image px (220,300); inside bbox; fy=0.5 → value=5.0; fmt(5)="5.000"
         ;(shadow.querySelector(".surface") as HTMLElement)
             .dispatchEvent(new PointerEvent("pointermove", { clientX: 110, clientY: 150, bubbles: true }))
@@ -901,7 +901,7 @@ describe("tooltips (mount/showTip)", () => {
         mount(script, cbManifest)
         const shadow = shadowOf(host)
         const surface = shadow.querySelector(".surface") as HTMLElement
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         surface.getBoundingClientRect = () =>
             ({ left: 30, top: 20, width: 600, height: 400, right: 630, bottom: 420, x: 30, y: 20, toJSON() {} }) as DOMRect
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 110, clientY: 150, bubbles: true }))
@@ -921,7 +921,7 @@ describe("tooltips (mount/showTip)", () => {
         }
         mount(script, plainManifest)
         const shadow = shadowOf(host)
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         ;(shadow.querySelector(".surface") as HTMLElement)
             .dispatchEvent(new PointerEvent("pointermove", { clientX: 200, clientY: 200, bubbles: true }))
         expect(tip.classList.contains("show")).toBe(true)
@@ -953,7 +953,7 @@ describe("tooltips (mount/showTip)", () => {
         await new Promise<void>((r) => requestAnimationFrame(() => r()))
         expect(sel.children.length).toBe(2)                 // pre-selection survived the hovers
         const leaving = (shadow.querySelector("g.hi") as SVGGElement).firstElementChild
-        expect(leaving === null || leaving.classList.contains("holo-leave")).toBe(true)
+        expect(leaving === null || leaving.classList.contains("masque-leave")).toBe(true)
         expect(sel.querySelector("circle")!.getAttribute("fill")).toBe("rgba(58, 111, 124, 0.12)")
     })
 
@@ -1100,7 +1100,7 @@ describe("tooltips (mount/showTip)", () => {
         mount(script, m)
         const shadow = shadowOf(host)
         const surface = shadow.querySelector(".surface") as HTMLElement
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         // hover over the point (client 300,200 → image 600,400)
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
         expect(tip.classList.contains("show")).toBe(true)
@@ -1124,7 +1124,7 @@ describe("tooltips (mount/showTip)", () => {
     it("a view-pan drag readout doesn't inherit the previously-hovered point's accent colour", async () => {
         // Regression: applyDrag sets the drag-readout text via setTipText/setTipVisible
         // directly, not applyTipHtml (the only place that calls setMarkAccent) — so a
-        // --holo-mark-border left over from hovering a coloured point survived into the
+        // --masque-mark-border left over from hovering a coloured point survived into the
         // readout tooltip for the whole drag, since applyMove keeps element hover alive
         // over a full-viewport :view hit (see the test above).
         const m: Manifest = {
@@ -1142,15 +1142,15 @@ describe("tooltips (mount/showTip)", () => {
         mount(script, m)
         const shadow = shadowOf(host)
         const surface = shadow.querySelector(".surface") as HTMLElement
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
-        expect(tip.style.getPropertyValue("--holo-mark-border")).toBe("3px solid rgb(9,9,9)")
+        expect(tip.style.getPropertyValue("--masque-mark-border")).toBe("3px solid rgb(9,9,9)")
         // press-and-drag from that same spot starts a :view pan (a coloured point never
         // suppresses a :view drag hit) and shows the drag readout tooltip
         surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 300, clientY: 200, bubbles: true }))
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 320, clientY: 200, bubbles: true }))
         expect(tip.classList.contains("show")).toBe(true)
-        expect(tip.style.getPropertyValue("--holo-mark-border")).toBe("")
+        expect(tip.style.getPropertyValue("--masque-mark-border")).toBe("")
         surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 320, clientY: 200, bubbles: true }))
     })
 
@@ -1170,7 +1170,7 @@ describe("tooltips (mount/showTip)", () => {
         mount(script, m)
         const shadow = shadowOf(host)
         const surface = shadow.querySelector(".surface") as HTMLElement
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 50, clientY: 50, bubbles: true }))
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 200, clientY: 120, bubbles: true }))
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
@@ -1235,7 +1235,7 @@ describe("overlay visual polish", () => {
         const surface = shadow.querySelector(".surface") as HTMLElement
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
         const a = shadow.querySelector("g.hi")!.firstElementChild as SVGElement
-        expect(a.classList.contains("holo-enter")).toBe(true)
+        expect(a.classList.contains("masque-enter")).toBe(true)
         // still inside r=20 at image (600,400); scale 2 → client (301,201) = image (602,402)
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 301, clientY: 201, bubbles: true }))
         await flushFrame()
@@ -1261,13 +1261,13 @@ describe("overlay visual polish", () => {
         surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 125, clientY: 125, bubbles: true }))
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 130, clientY: 125, bubbles: true }))
         const a = shadow.querySelector("g.sel")!.firstElementChild as SVGElement
-        expect(a.classList.contains("holo-enter")).toBe(true)
+        expect(a.classList.contains("masque-enter")).toBe(true)
         // rAF-coalesced: this second move lands on the trailing frame from the first, not synchronously.
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 135, clientY: 125, bubbles: true }))
         await flushFrame()
         const b = shadow.querySelector("g.sel")!.firstElementChild as SVGElement
         expect(b).not.toBe(a)
-        expect(b.classList.contains("holo-enter")).toBe(false)
+        expect(b.classList.contains("masque-enter")).toBe(false)
         surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 135, clientY: 125, bubbles: true }))
     })
 
@@ -1294,7 +1294,7 @@ describe("overlay visual polish", () => {
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
         surface.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }))
         const leaving = shadow.querySelector("g.hi")!.firstElementChild as SVGElement
-        expect(leaving.classList.contains("holo-leave")).toBe(true)
+        expect(leaving.classList.contains("masque-leave")).toBe(true)
         await new Promise((r) => setTimeout(r, 120))
         expect(shadow.querySelector("g.hi")!.children.length).toBe(0)
     })
@@ -1438,7 +1438,7 @@ describe("overlay visual polish", () => {
         const { host, script } = setup()
         mount(script, manifest)
         const shadow = shadowOf(host)
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         const surface = shadow.querySelector(".surface") as HTMLElement
         expect(tip.classList.contains("show")).toBe(false)
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
@@ -1470,7 +1470,7 @@ describe("overlay visual polish", () => {
         const { host, script } = setup()
         mount(script, manifest)
         const shadow = shadowOf(host)
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         const surface = shadow.querySelector(".surface") as HTMLElement
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
         expect(tip.classList.contains("show")).toBe(true)
@@ -1497,7 +1497,7 @@ describe("overlay visual polish", () => {
         const { host, script } = setup()
         mount(script, manifest)
         const shadow = shadowOf(host)
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         const surface = shadow.querySelector(".surface") as HTMLElement
         let sizeReads = 0
         Object.defineProperty(tip, "offsetWidth", { configurable: true, get() { sizeReads++; return 120 } })
@@ -1524,7 +1524,7 @@ describe("overlay visual polish", () => {
                 axis: "ax1", events: ["click", "hover"] }],
         })
         const shadow = shadowOf(host)
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         const surface = shadow.querySelector(".surface") as HTMLElement
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 580, clientY: 380, bubbles: true }))
         expect(tip.classList.contains("show")).toBe(true)
@@ -1543,7 +1543,7 @@ describe("overlay visual polish", () => {
         expect(tip.classList.contains("flip-y")).toBe(true)
         expect(tip.style.left).toBe("372px")
         expect(tip.style.top).toBe("280px")
-        expect(tip.style.getPropertyValue("--holo-caret-x")).toBe("208px")
+        expect(tip.style.getPropertyValue("--masque-caret-x")).toBe("208px")
     })
 
     it("a segment tooltip slides along the line as the pointer moves within the same hit", async () => {
@@ -1553,7 +1553,7 @@ describe("overlay visual polish", () => {
             layers: [{ id: "seg", kind: "segments", geometry: [0, 0, 1000, 0], payloads: [{ v: 1 }], axis: "ax1", events: ["hover"] }],
         })
         const shadow = shadowOf(host)
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         const surface = shadow.querySelector(".surface") as HTMLElement
         // image (100,0) == client (50,0); still the same segment, hit-tol away from the line
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 50, clientY: 0, bubbles: true }))
@@ -1571,7 +1571,7 @@ describe("overlay visual polish", () => {
             layers: [{ id: "bars", kind: "rects", geometry: [600, 400, 100, 200], payloads: [{ v: 1 }], axis: "ax1", events: ["hover"] }],
         })
         const shadow = shadowOf(host)
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         const surface = shadow.querySelector(".surface") as HTMLElement
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
         // cy(400) - h/2(100) = 300 image px -> 150 css px; degenerate branch: left=x, top=top-10
@@ -1588,7 +1588,7 @@ describe("overlay visual polish", () => {
             layers: [{ id: "axis", kind: "axis", geometry: null, payloads: [], axis: "ax1", events: ["hover"] }],
         })
         const shadow = shadowOf(host)
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         const surface = shadow.querySelector(".surface") as HTMLElement
         let writes = 0
         const desc = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML")!
@@ -1616,7 +1616,7 @@ describe("overlay visual polish", () => {
             layers: [{ id: "axis", kind: "axis", geometry: null, payloads: [], axis: "ax1", events: ["hover"] }],
         })
         const shadow = shadowOf(host)
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         const surface = shadow.querySelector(".surface") as HTMLElement
         Object.defineProperty(tip, "offsetWidth", { configurable: true, value: 220 })
         Object.defineProperty(tip, "offsetHeight", { configurable: true, value: 80 })
@@ -1653,7 +1653,7 @@ describe("coverage gaps: grid-value tooltip, drag-target hover cursor, rects/pol
         const { host, script } = setup()
         mount(script, m)
         const shadow = shadowOf(host)
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         // scale = 1200/600 = 2 → client (7.5, 2.5) = image (15, 5), cell i=1,j=0 → values[0*2+1]=12
         ;(shadow.querySelector(".surface") as HTMLElement)
             .dispatchEvent(new PointerEvent("pointermove", { clientX: 7.5, clientY: 2.5, bubbles: true }))
@@ -1670,7 +1670,7 @@ describe("coverage gaps: grid-value tooltip, drag-target hover cursor, rects/pol
         const { host, script } = setup()
         mount(script, m)
         const shadow = shadowOf(host)
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         ;(shadow.querySelector(".surface") as HTMLElement)
             .dispatchEvent(new PointerEvent("pointermove", { clientX: 7.5, clientY: 2.5, bubbles: true }))
         expect(tip.classList.contains("show")).toBe(true)
@@ -1689,7 +1689,7 @@ describe("coverage gaps: grid-value tooltip, drag-target hover cursor, rects/pol
         mount(script, m)
         const shadow = shadowOf(host)
         const surface = shadow.querySelector(".surface") as HTMLElement
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         const line = shadow.querySelector("line") as SVGLineElement
         // client (300,200) = image (600,400), exactly on the threshold line — a drag hit with no pointerdown
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
@@ -1762,7 +1762,7 @@ describe("coverage gaps: grid-value tooltip, drag-target hover cursor, rects/pol
         const { host, script } = setup()
         mount(script, m)
         const shadow = shadowOf(host)
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         // client (0,200) → image (0,400): leftmost x fraction → category "a"
         ;(shadow.querySelector(".surface") as HTMLElement)
             .dispatchEvent(new PointerEvent("pointermove", { clientX: 0, clientY: 200, bubbles: true }))

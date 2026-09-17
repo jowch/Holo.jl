@@ -26,8 +26,8 @@ Exactly one Makie backend per notebook process. Do not attach to an existing Try
 session — start a separate one.
 
 ```text
-# Fast loop when holo-dev already has Holo + both Makies:
-HOLO_DEV_ENV=$HOME/.julia/environments/holo-dev julia test/e2e/serve.jl 1237 &
+# Fast loop when masque-dev already has Masque + both Makies:
+MASQUE_DEV_ENV=$HOME/.julia/environments/masque-dev julia test/e2e/serve.jl 1237 &
 # poll curl http://127.0.0.1:1237 → 200 (not the log)
 
 cd test/e2e
@@ -39,13 +39,13 @@ node polish_verify.mjs http://127.0.0.1:1237 "$PWD/kind_sweep_cairo.jl" cairo
 node keyboard_a11y.mjs http://127.0.0.1:1237 "$PWD/kind_sweep_cairo.jl" cairo
 
 # second Pluto process — WGLMakie cannot share a session with Cairo
-HOLO_DEV_ENV=$HOME/.julia/environments/holo-dev JULIA_NOSYSIMAGE=1 julia test/e2e/serve.jl 1238 &
+MASQUE_DEV_ENV=$HOME/.julia/environments/masque-dev JULIA_NOSYSIMAGE=1 julia test/e2e/serve.jl 1238 &
 node kind_sweep.mjs http://127.0.0.1:1238 "$PWD/kind_sweep_webgl.jl" webgl
 node polish_verify.mjs http://127.0.0.1:1238 "$PWD/kind_sweep_webgl.jl" webgl
 node keyboard_a11y.mjs http://127.0.0.1:1238 "$PWD/kind_sweep_webgl.jl" webgl
 ```
 
-Portable notebooks (`Pkg.develop` via `@__DIR__`) work without `HOLO_DEV_ENV`; first open
+Portable notebooks (`Pkg.develop` via `@__DIR__`) work without `MASQUE_DEV_ENV`; first open
 re-resolves the Makie stack (~6 min). All three drivers also run in CI on the `kind-sweep` job
 (matrixed `cairo`/`webgl`), but only **advisorily** (`continue-on-error: true`) — agents still
 run this playbook locally before calling a user-facing change done, until the job is promoted
@@ -95,11 +95,11 @@ bake it; hover/click or drag only.
 - Circles: halo **just outside** the marker (`r + 2`)
 - Hover is stroke-only (`fill: none`, 2px, opacity 0.85) — no wash
 - Hover node is the same DOM element across two moves on the same marker (no pulse)
-- First insert has `.holo-enter`; a same-hit remount must **not** restart `holo-in`
+- First insert has `.masque-enter`; a same-hit remount must **not** restart `masque-in`
 
 ### Unhover + selected persist (supported kinds)
 
-- Leave applies `.holo-leave` (fade), then `g.hi` empties — not an instant remove
+- Leave applies `.masque-leave` (fade), then `g.hi` empties — not an instant remove
 - Tooltip gone after the fade window
 - `g.sel` still painted (wash or ring)
 - Wash ≠ hover; open geometry is the ring recipe
@@ -127,7 +127,7 @@ These are required visual-fidelity checks, not optional nice-to-haves. Drivers m
 | Item | What “pass” looks like | Driver |
 | --- | --- | --- |
 | Wash / ring / halo (`r+2`) / overlay-pin | Steel-teal recipes on the mark; SVG box matches `<img>` / `<canvas>` at DPR 2 | `kind_sweep.mjs` per kind + `polish_verify.mjs` |
-| Remount fade / no pulse | `.holo-enter` on first insert; same hover node on mousemove; `.holo-leave` on clear | both |
+| Remount fade / no pulse | `.masque-enter` on first insert; same hover node on mousemove; `.masque-leave` on clear | both |
 | Pluto dark / `prefers-color-scheme` | Tooltip light `#ffffff`/`#1a1a1a` and dark `#1e1e1e`/`#e8e8e8` via `emulateMedia`. Official Pluto has no notebook toggle — both follow the OS media query. Dark **Makie** figure (`scatter_dark`) still uses inspector ink (highlights do not follow OS). | `polish_verify.mjs` + `kind_sweep.mjs` (`prefers-color-scheme` + `scatter_dark`) |
 | Steel-teal `#3A6F7C`, not `#ff3b30` | No alert red in overlay CSS, hover stroke, wash, or ring | both |
 

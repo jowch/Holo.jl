@@ -1,4 +1,4 @@
-using Test, Holo, CairoMakie, Makie
+using Test, Masque, CairoMakie, Makie
 include(joinpath(@__DIR__, "..", "testutils.jl"))
 
 # `label` keyword round-trip. One constructor is enough per the design doc — PointInteractable

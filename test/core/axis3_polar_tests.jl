@@ -1,4 +1,4 @@
-using Test, Holo, CairoMakie, Makie
+using Test, Masque, CairoMakie, Makie
 include(joinpath(@__DIR__, "..", "testutils.jl"))
 
 @testset "Axis3 / PolarAxis" begin
@@ -68,7 +68,7 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
 
         fpg = Figure(; size = (600, 450))
         axpg = PolarAxis(fpg[1, 1])
-        # heatmap on PolarAxis is a supported Makie recipe but not a polar-valid Holo extraction
+        # heatmap on PolarAxis is a supported Makie recipe but not a polar-valid Masque extraction
         heatmap!(axpg, 0:0.5:π, 1:3, rand(7, 3))
         scatter!(axpg, [0.0], [1.0]; markersize = 10)
         Makie.update_state_before_display!(fpg)
@@ -266,7 +266,7 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
         # Makie autoscales into a normalized child MeshScatter space; startpoints/endpoints are
         # the post-align/lengthscale ends that the shaft+tip children span. Child quaternion ×
         # markersize.z reconstructs the same span in that child space — we read the data-space
-        # ends so Holo's project closure (which applies float32convert) lands on drawn pixels.
+        # ends so Masque's project closure (which applies float32convert) lands on drawn pixels.
         fa = Figure(; size = (600, 450))
         axa = Axis3(fa[1, 1]; azimuth = 0.4, elevation = 0.5)
         apts = Makie.Point3f[(1, 1, 1), (3, 2, 1), (2, 4, 3)]

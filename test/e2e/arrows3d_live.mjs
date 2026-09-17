@@ -124,7 +124,7 @@ try {
     for (let a = 0; a < 8; a++) {
       surface.dispatchEvent(new PointerEvent("pointermove", o));
       await new Promise((r) => setTimeout(r, 200));
-      const tip = sr.querySelector(".holo-tip");
+      const tip = sr.querySelector(".masque-tip");
       tipText = tip ? (tip.innerText || tip.textContent || "").replace(/\s+/g, " ").trim() : "";
       tipVisible = !!(tip && tipText.length > 0 && getComputedStyle(tip).display !== "none");
       if (tipVisible) break;

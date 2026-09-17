@@ -1,10 +1,10 @@
-# Releasing Holo to General
+# Releasing Masque to General
 
 Prep for **v0.1.0**. Jonathan comments `@JuliaRegistrator register` **after**
 this prep merges — never on the prep PR, and never before `main` CI is green.
 
 Julia ships the registered git *tree*, not GitHub release assets. CI is the sole
-author of `assets/overlay.js` (and `assets/holo-webgl.js`) on `main`. Register
+author of `assets/overlay.js` (and `assets/masque-webgl.js`) on `main`. Register
 and tag a **CI-green `main` commit**, never a branch head that CI has not rebuilt.
 
 Do **not** run Registrator, create a git tag, or open a GitHub Release from the
@@ -19,13 +19,12 @@ prep PR. Those are Jonathan's post-merge steps.
   and the overlay visual / live-verify playbook (#50, #52, #53).
 - TagBot workflow (`.github/workflows/TagBot.yml`) — official v1.25.11 pin plus
   `ssh: ${{ secrets.DOCUMENTER_KEY }}`.
-- Name `Holo` and UUID `82b01fb5-7eeb-4559-83ea-8d75f85d4328` are free in
-  General (checked against the *unpacked package index* in `General.tar.gz`, not
-  the 129-byte `General.toml` pointer). Nearby `HoloProcessing` /
-  `DigitalHolography` / `ParticleHolography` are not a clash. The name is **4
-  letters**, so AutoMerge will not merge the new-package PR unaided — a registry
-  moderator has to approve the short name (guideline is ≥5 characters). Do not
-  rename.
+- Name `Masque` and UUID `82b01fb5-7eeb-4559-83ea-8d75f85d4328` are free in
+  General (checked 2026-09-17 against the *unpacked package index* in
+  `General.tar.gz`, not the 129-byte `General.toml` pointer). No `Masq*` package
+  exists, so there is no near-clash. The name is 6 letters, which clears
+  AutoMerge's ≥5-character guideline (the package was renamed from the 4-letter
+  `Holo` before first registration; the UUID was kept). Do not rename again.
 
 ## What must be true before v0.1.0
 
@@ -33,7 +32,7 @@ All of these, then Jonathan registers:
 
 1. This prep PR is merged (TagBot + freeze + docs).
 2. CI on `main` is green for that tree (the frontend job may commit
-   `assets/overlay.js` / `assets/holo-webgl.js` back).
+   `assets/overlay.js` / `assets/masque-webgl.js` back).
 3. The SHA he registers is that CI-green commit **and** does not modify
    `.github/workflows/*.yml`, unless `DOCUMENTER_KEY` is set (see
    [First tag](#first-tag-this-prep-adds-tagbotyml)).
@@ -43,7 +42,7 @@ All of these, then Jonathan registers:
    write**. Do **not** add a workflow-level `permissions:` block to
    `TagBot.yml` (official TagBot tip).
 6. The [JuliaRegistrator](https://github.com/apps/julia-registrator) GitHub App
-   is installed on `jowch/Holo.jl`, or he uses the
+   is installed on `jowch/Masque.jl`, or he uses the
    [web UI](https://juliahub.com/ui/Registrator).
 7. He comments on **that commit's GitHub page**, not on an issue or pull request.
 
@@ -65,17 +64,17 @@ All of these, then Jonathan registers:
 
    Release notes:
 
-   First General release of Holo.jl — light, server-free interactivity for
+   First General release of Masque.jl — light, server-free interactivity for
    Makie plots in Pluto. Same hover / click / @bind contract on CairoMakie
    (static PNG) and WGLMakie (live canvas).
 
-   Highlights: holo(fig) auto-extract + explicit interactables; tooltips and
+   Highlights: masque(fig) auto-extract + explicit interactables; tooltips and
    selection; ROI / thresholds; Axis3 and PolarAxis discrete overlays;
    Arrows3D start→end segments; drag-to-pan / drag-to-rotate
    (ViewInteractable, commit-on-release); overlay chrome #3A6F7C wash / ring /
    halo.
 
-   Install: ] add Holo
+   Install: ] add Masque
    0.1.x stays additive; breaking changes go to 0.2.
    ```
 
@@ -120,6 +119,6 @@ commit's GitHub page**. TagBot tags. CompatHelper is not part of this path
 
 - Does not register from a feature branch or from this prep PR.
 - User docs are Documenter (`docs/src/`) deployed to GitHub Pages
-  (`https://jowch.github.io/Holo.jl`). Design notes in this folder stay in-repo
+  (`https://jowch.github.io/Masque.jl`). Design notes in this folder stay in-repo
   and are not in the Documenter sidebar. README is the short install surface.
 - Does not un-park animation / live drag preview / `LScene`.

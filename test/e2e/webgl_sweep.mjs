@@ -71,7 +71,7 @@ try {
       let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
       const o = { bubbles: true, composed: true, cancelable: true, clientX: cx2, clientY: cy2, pointerId: 1, pointerType: "mouse", isPrimary: true };
       sr.querySelector(".surface").dispatchEvent(new PointerEvent("pointermove", o));
-      const tip = sr.querySelector(".holo-tip");
+      const tip = sr.querySelector(".masque-tip");
       return tip ? { display: tip.style.display, text: tip.innerText } : null;
     }, [i, cx, cy]);
   };

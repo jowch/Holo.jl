@@ -7,7 +7,7 @@
 #
 # Run: julia --project=. bench/stress.jl
 
-using Holo, CairoMakie, Printf, Random
+using Masque, CairoMakie, Printf, Random
 Random.seed!(0)
 
 # msgpack size sizer — identical rules to bench/payload_envelope.jl (geometry is Float32 → 5 B).
@@ -33,8 +33,8 @@ nhits(L) = (g = L["geometry"]; g isa AbstractDict ? get(g, "ncols", 0) * get(g, 
 function stress(label, mkfig, mkint = fig -> nothing)
     fig = mkfig()
     ints = mkint(fig)
-    w = ints === nothing ? holo(fig) : holo(fig, ints)
-    t = @elapsed(ints === nothing ? holo(mkfig()) : holo(mkfig(), mkint(mkfig())))   # warmed by `w`
+    w = ints === nothing ? masque(fig) : masque(fig, ints)
+    t = @elapsed(ints === nothing ? masque(mkfig()) : masque(mkfig(), mkint(mkfig())))   # warmed by `w`
     nelem = sum(nhits, w.manifest["layers"]; init = 0)
     @printf(
         "  %-32s  png=%s  manifest=%s  render=%6.0f ms  elems/cells=%8d\n",
@@ -74,7 +74,7 @@ end
 
 println("\n=== STRESS E. animation projection at stress scale = frames × per-frame PNG ===")
 let
-    w = holo((f = Figure(size = (1200, 800)); a = Axis(f[1, 1]); scatter!(a, rand(5000), rand(5000); markersize = 6); f))
+    w = masque((f = Figure(size = (1200, 800)); a = Axis(f[1, 1]); scatter!(a, rand(5000), rand(5000); markersize = 6); f))
     per = b64bytes(w)
     @printf("  per-frame (1200×800, 5k scatter) = %s\n", sz(per))
     for nf in (60, 300, 1000)

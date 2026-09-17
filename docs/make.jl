@@ -1,16 +1,16 @@
 using Documenter
-using Holo
+using Masque
 
 include("export_notebooks.jl")
 export_notebooks(joinpath(@__DIR__, "src", "notebooks"))
 
 makedocs(;
-    modules = [Holo],
+    modules = [Masque],
     authors = "Jonathan Chen <jwhc@ucla.edu>",
-    sitename = "Holo.jl",
+    sitename = "Masque.jl",
     format = Documenter.HTML(;
         prettyurls = get(ENV, "CI", "false") == "true",
-        canonical = "https://jowch.github.io/Holo.jl",
+        canonical = "https://jowch.github.io/Masque.jl",
         edit_link = "main",
         assets = String[],
     ),
@@ -34,7 +34,7 @@ makedocs(;
 )
 
 deploydocs(;
-    repo = "github.com/jowch/Holo.jl",
+    repo = "github.com/jowch/Masque.jl",
     devbranch = "main",
     push_preview = false,
 )

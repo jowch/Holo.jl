@@ -1,4 +1,4 @@
-using Test, Holo, CairoMakie, Makie
+using Test, Masque, CairoMakie, Makie
 include(joinpath(@__DIR__, "..", "testutils.jl"))
 
 @testset "Drag" begin
@@ -68,8 +68,8 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
         @test L3.geometry["azimuth"] ≈ 0.4
         @test L3.geometry["elevation"] ≈ 0.5
         # bond payload round-trip (pan + orbit shapes)
-        tv = Holo.APD.Bonds.transform_value
-        w = Holo.HoloWidget("", Dict{String, Any}(), 100)
+        tv = Masque.APD.Bonds.transform_value
+        w = Masque.MasqueWidget("", Dict{String, Any}(), 100)
         evp = tv(w, Dict("layer" => "view", "index" => 0, "payload" => Dict("xmin" => 1.0, "xmax" => 5.0, "ymin" => 0.0, "ymax" => 10.0)))
         @test evp isa InteractionEvent && evp.layer === :view
         @test evp.payload["xmin"] == 1.0 && evp.payload["ymax"] == 10.0

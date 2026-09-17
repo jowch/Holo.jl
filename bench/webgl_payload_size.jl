@@ -1,5 +1,5 @@
 # Re-runnable size bench for the :webgl wire format. The `:webgl` payload is a NEW format
-# (scene_payload + the vendored WGLMakie bundle), separate from Holo core's PNG+manifest envelope in
+# (scene_payload + the vendored WGLMakie bundle), separate from Masque core's PNG+manifest envelope in
 # docs/dev/perf-findings.md — so per the profiling standing practice it gets its own committed bench
 # here. This prints the live numbers; the recorded envelope (+ reconcile note) lives in
 # docs/dev/perf-findings.md's "## :webgl backend (WGLMakie)" section — re-run this and update that
@@ -19,13 +19,13 @@
 # gzip-of-JSON is the cheap browser path (DecompressionStream → JSON.parse) — only a fraction off the
 # current wire since it starts from float-text. Both deferred — see docs/dev/perf-findings.md.
 
-using Holo, WGLMakie
+using Masque, WGLMakie
 import JSON3
 
 # scene_payload/_wgl_bundle_path live in the :webgl extension (WGLMakie is a weak dep of
-# Holo), so reach them via Base.get_extension — same pattern test/runtests.jl uses for the Cairo
+# Masque), so reach them via Base.get_extension — same pattern test/runtests.jl uses for the Cairo
 # extension.
-const _WGLExt = Base.get_extension(Holo, :HoloWGLMakieExt)
+const _WGLExt = Base.get_extension(Masque, :MasqueWGLMakieExt)
 
 println(
     "WGLMakie bundle (shipped once per notebook, M2): ",

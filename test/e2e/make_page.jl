@@ -7,7 +7,7 @@
 # The browser half asserts host.value == {layer, index}; the Julia half (runtests.jl
 # "@bind round-trip contract") asserts transform_value rebuilds the InteractionEvent.
 #
-# WGLMakie is a weak dep of Holo (the extension only loads when WGLMakie is `using`'d), so a
+# WGLMakie is a weak dep of Masque (the extension only loads when WGLMakie is `using`'d), so a
 # bare `--project=.` can't `using WGLMakie` directly — same temp-env dance as examples/webgl_demo.jl.
 import Pkg
 Pkg.activate(; temp = true)
@@ -15,14 +15,14 @@ Pkg.develop(path = normpath(joinpath(@__DIR__, "..", "..")))   # test/e2e -> pac
 Pkg.add(["WGLMakie", "JSON3", "HypertextLiteral"])
 Pkg.instantiate()
 
-using Holo
+using Masque
 using WGLMakie
 import JSON3
 using HypertextLiteral: JavaScript
 
 # _widget_html/_bundle_text/_shim_text live in the :webgl extension module — reach them via
 # Base.get_extension, same pattern test/webgl_ext_tests.jl uses.
-const _WGLExt = Base.get_extension(Holo, :HoloWGLMakieExt)
+const _WGLExt = Base.get_extension(Masque, :MasqueWGLMakieExt)
 
 outdir = abspath(get(ARGS, 1, mktempdir()))
 mkpath(outdir)
@@ -30,7 +30,7 @@ mkpath(outdir)
 fig = Figure(; size = (400, 300))
 ax = Axis(fig[1, 1])
 scatter!(ax, 1:5, (1:5) .^ 2)
-w = holo(fig)                              # auto-extract -> one :scatter circles layer
+w = masque(fig)                              # auto-extract -> one :scatter circles layer
 
 # Real widget HTML with everything inlined (the self-contained path the unit test exercises,
 # but with the ACTUAL bundle + shim text so the overlay really mounts in a browser).
@@ -66,7 +66,7 @@ write(joinpath(outdir, "expected.json"), JSON3.write(expected))
 fig3 = Figure(; size = (400, 300))
 ax3 = Axis3(fig3[1, 1]; azimuth = 0.4, elevation = 0.5)
 scatter!(ax3, Point3f[(1, 2, 3), (4, 5, 6), (7, 8, 2)]; markersize = 16, color = :red)
-w3 = holo(fig3)
+w3 = masque(fig3)
 
 inner3 = sprint(
     show, MIME"text/html"(),
@@ -105,7 +105,7 @@ scatter!(
     Point2f[(0.0, 1.0), (π / 2, 2.0), (π, 1.5), (3π / 2, 2.5)];
     markersize = 16, color = :red,
 )
-wp = holo(figp)
+wp = masque(figp)
 
 innerp = sprint(
     show, MIME"text/html"(),

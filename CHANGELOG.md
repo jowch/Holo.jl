@@ -13,7 +13,7 @@ All notable changes to this project are documented here. The format is based on
   circles, top-centre for rects/bars, nearest point on the line for segments — the tooltip
   slides along it as the pointer moves — centroid for polygons when it's inside the shape,
   cell centre for grid). It flips below the mark when it would clip the surface's top edge,
-  and shifts inside the surface (moving the caret via `--holo-caret-x`) when it would clip a
+  and shifts inside the surface (moving the caret via `--masque-caret-x`) when it would clip a
   side. Keyboard focus uses the same placement. `axis`/`threshold`/`roi`/`view` (no discrete
   mark) keep the previous cursor-relative placement. ROI boxes gained 4 edge-midpoint resize
   handles alongside the existing 4 (square) corner handles — an edge handle resizes only that
@@ -24,7 +24,7 @@ All notable changes to this project are documented here. The format is based on
   a light Pluto page gets a dark tooltip, and vice versa. Browsers without relative-colour
   support fall back to the previous behaviour (static light, OS-driven dark) automatically.
   Element colour also now drives a 3px tooltip accent border (the tooltip text itself stays
-  neutral) when Holo can resolve it — currently a `scatter!` plot's `color=`, uniform or
+  neutral) when Masque can resolve it — currently a `scatter!` plot's `color=`, uniform or
   colormapped/categorical; omitted (a plain 1px border) when it can't.
 - Keyboard navigation for the overlay: arrow keys/Home/End move between hittable elements
   (Page Up/Down jump between layers), Enter/Space dispatches the same `@bind` value a click
@@ -33,12 +33,12 @@ All notable changes to this project are documented here. The format is based on
   `aria-live` overlay structure. New optional `label` keyword on `PointInteractable`/
   `SegmentInteractable`/`RectInteractable`/`PolygonInteractable` sets the per-layer
   announcement prefix. New docs page:
-  [Keyboard and screen readers](https://jowch.github.io/Holo.jl/dev/accessibility/).
+  [Keyboard and screen readers](https://jowch.github.io/Masque.jl/dev/accessibility/).
 - Vitest coverage for `frontend/src` uploads to Codecov (`flags: frontend`).
   Committed `assets/` bundles are ignored. One blended `codecov/project`
   number (Julia + `frontend/src`); `target: auto`, `threshold: 1%`.
 - A [Documenter](https://documenter.juliadocs.org) user site at
-  [jowch.github.io/Holo.jl](https://jowch.github.io/Holo.jl), built from `docs/src/`:
+  [jowch.github.io/Masque.jl](https://jowch.github.io/Masque.jl), built from `docs/src/`:
   Home, Getting started, Interactables, Selection, Tooltips, Custom interactions, Backends,
   Troubleshooting, Examples, API Reference, and a Development page. Deployed by
   `.github/workflows/Documentation.yml`.
@@ -68,6 +68,12 @@ All notable changes to this project are documented here. The format is based on
   byte delta. No observable behavior change.
 
 ### Changed
+- **Renamed the package from `Holo` to `Masque`** (same UUID). Every public name moves with
+  it: the module `Masque`, the entry function `masque`, the `masque"…"` string macro, the
+  `MasqueCairoMakieExt` / `MasqueWGLMakieExt` extensions, the `window.Masque` browser global,
+  the `masque-enter` / `masque-leave` DOM events, the `masque-*` CSS classes and `--masque-*`
+  custom properties, the `MASQUE_*` environment variables, and the `assets/masque-webgl.js`
+  bundle. Replace `using Holo` with `using Masque` and `holo(` with `masque(`.
 - README slimmed from ~410 to ~65 lines (title, pitch, when-to-use-it table, install, quick
   start, a pointer to the new site) — everything else it used to cover now lives on the site.
 - Maintainer/design docs moved from `docs/` to `docs/dev/` (`architecture.md`,
@@ -79,7 +85,7 @@ All notable changes to this project are documented here. The format is based on
   signature implied styling that was never actually per-element.
 - Browser TypeScript lives in one `frontend/` package with two modules: the
   shared overlay IIFE (`assets/overlay.js`) and the `:webgl` ESM shim
-  (`assets/holo-webgl.js`, source `frontend/src/wgl-shim.ts`). The old
+  (`assets/masque-webgl.js`, source `frontend/src/wgl-shim.ts`). The old
   `frontend-webgl/` package and its CI job are gone.
 - `SegmentInteractable`'s `tol` keyword now controls the actual hit-test slack (see Fixed,
   below). The **effective default hit slack changes**: it was a fixed 8 image px (the
@@ -95,7 +101,7 @@ All notable changes to this project are documented here. The format is based on
   site's Tooltips page.
 - Dead `vector`/`mount` scaffolding: `CairoBackend(; vector=false)` and the
   `AbstractBackend` `mount` interface function (plus `WebGLBackend`'s `mount = :webgl`
-  method) had zero callers — `Holo.render` always rasterizes to PNG, and `Base.show`
+  method) had zero callers — `Masque.render` always rasterizes to PNG, and `Base.show`
   hardcodes a PNG `<img>`. SVG output remains a roadmap item to build from scratch
   (`docs/dev/roadmap.md`), not groundwork already in place.
 
@@ -131,8 +137,8 @@ All notable changes to this project are documented here. The format is based on
   fails loud at build time instead of relying on the client to treat it as out-of-range.
 - `tooltip = true` (never meaningful) now fails at interactable construction, with the
   same error message as before, instead of only failing later at manifest build.
-- `holo(fig, interactables)` finalizes the figure only after the caller has already built
-  `interactables` — unlike `holo(fig)`, which finalizes first. `SegmentInteractable`/
+- `masque(fig, interactables)` finalizes the figure only after the caller has already built
+  `interactables` — unlike `masque(fig)`, which finalizes first. `SegmentInteractable`/
   `RectInteractable` built from `HLines`/`VLines`/`HSpan`/`VSpan` plot objects could bake
   stale `ax.finallimits[]` into the span geometry if constructed before the figure was
   finalized. They now defer that axis-limits read to `hitlayers` time (resolved fresh
@@ -144,12 +150,12 @@ All notable changes to this project are documented here. The format is based on
   is not a function` on top of the shader error it was trying to report.
 
 ### Internal
-- Every non-public Makie/WGLMakie/Bonito internal Holo relies on (`converted`, child
+- Every non-public Makie/WGLMakie/Bonito internal Masque relies on (`converted`, child
   `plots`, `finallimits`, scene `viewport`, Contourf's `computed_levels`, a Colorbar's
   `computedbbox`, `string_boundingboxes`, `transform_func`/`apply_transform`/`project`,
   `update_state_before_display!`, and the WGL-only screen/serialization internals) now
   goes through one small fail-loud accessor in `src/makie_compat.jl` (WGL-only internals
-  route through an equivalent block in `ext/HoloWGLMakieExt.jl`). A future Makie/WGLMakie
+  route through an equivalent block in `ext/MasqueWGLMakieExt.jl`). A future Makie/WGLMakie
   bump that moves one of these surfaces now fails with one clear message at the accessor,
   not scattered wrong-pixel/`MethodError` symptoms across the codebase. Added a canary
   testset (`test/makie_compat_tests.jl`, first in the Core group) asserting each
@@ -174,14 +180,14 @@ All notable changes to this project are documented here. The format is based on
   latency, split into mixed (realistic hit-rate) and guaranteed-miss (worst case) queries at N up
   to 200 000 elements — see `docs/dev/perf-findings.md`'s "JS hit-test microbenchmark". Pure
   internal change — no manifest/payload/behavior change.
-- `test/core_tests.jl` (1,985 lines, one `@testset "Holo"` with ~53 nested testsets) split
+- `test/core_tests.jl` (1,985 lines, one `@testset "Masque"` with ~53 nested testsets) split
   by concern into `test/core/backend_tests.jl`, `axis3_polar_tests.jl`,
   `interactables_tests.jl`, `drag_tests.jl`, `introspect_tests.jl`, `markup_tests.jl`,
   `selection_tests.jl`, and `parity_tests.jl`; `test/core_tests.jl` is now a thin includer
   (canary → the eight files → parity → docstrings). Shared fixtures moved to
   `test/testutils.jl` (`ctx_for`, `drawn_near`, `default_fixture`); every testset that used
   to read the outer testset's bare `fig`/`ax`/`ctx` (each nested `@testset` wraps its body in
-  a `let`, and since those names already existed as locals of the *outer* `@testset "Holo"`'s
+  a `let`, and since those names already existed as locals of the *outer* `@testset "Masque"`'s
   own `let`, a nested `fig = Figure(...)` reassigned that enclosing local instead of shadowing
   it — so a testset that only read `fig`/`ax`/`ctx` silently got whatever a previous,
   unrelated testset last left behind) now builds its own fixture. Pure test refactor — no
@@ -216,7 +222,7 @@ merges. See [`docs/dev/releasing.md`](docs/dev/releasing.md).
   loud.
 
 ### Added
-- `holo(fig, interactables)` — a Pluto `@bind` widget that overlays interactivity on a
+- `masque(fig, interactables)` — a Pluto `@bind` widget that overlays interactivity on a
   static CairoMakie figure; returns an `InteractionEvent` on click (`nothing` until then).
 - `AbstractBackend` seam with `CairoBackend` (PNG; SVG groundwork). DPI derived from the
   display width (≈2× Pluto's 700px column), opaque-background guarantee.
@@ -233,12 +239,12 @@ merges. See [`docs/dev/releasing.md`](docs/dev/releasing.md).
   a browser WGLMakie `<canvas>` (client GPU) with the same overlay/`@bind` contract, making
   animation, large/live data, and live 3D cheap where `:cairo` would re-rasterize —
   a substrate/cost difference; the interaction contract is identical on both. `CairoMakie`/`WGLMakie` are both weak
-  dependencies gated behind package extensions; `holo(fig)` resolves whichever one is loaded
-  (errors if neither is). If both are loaded, `backend=` wins and implicit `holo` defaults to
+  dependencies gated behind package extensions; `masque(fig)` resolves whichever one is loaded
+  (errors if neither is). If both are loaded, `backend=` wins and implicit `masque` defaults to
   Cairo. See the site's Backends page and `docs/dev/backend-comparison.md`.
 - View manipulation via `@bind` re-render: 2D `limits` zoom/pan, 3D `azimuth`/`elevation`
   rotation, and selection persistence across view re-renders (`selected=` feedback).
-  Sliders need no Holo API; **drag-to-pan / drag-to-rotate** use `ViewInteractable`
+  Sliders need no Masque API; **drag-to-pan / drag-to-rotate** use `ViewInteractable`
   (commit-on-release; Shift+drag arbitrates vs box-select/ROI). Demonstrated in
   `examples/view_manip.jl` (CI-run); live-verified on `:cairo` and `:webgl`.
   Live drag *preview* (high-frequency redraw) remains deferred with animation.
@@ -248,7 +254,7 @@ merges. See [`docs/dev/releasing.md`](docs/dev/releasing.md).
   MeshScatter children live in float32convert space (premise from #36).
 
 ### Changed
-- Cloud sysimage bake is CairoMakie (+ Makie, Pluto, Holo workload) only — WGLMakie is
+- Cloud sysimage bake is CairoMakie (+ Makie, Pluto, Masque workload) only — WGLMakie is
   not preloaded. Default `julia` still uses `-J` that image; `JULIA_NOSYSIMAGE=1` is the
   stock/WGL live-verify escape hatch.
 - `_resolve_backend` no longer throws when both backends are loaded: honor `backend=` or
@@ -286,9 +292,9 @@ merges. See [`docs/dev/releasing.md`](docs/dev/releasing.md).
   both backends via the shared projection (`Makie.Polar` in `transform_func`); `ispolar`
   transforms ship degenerate lims so continuous θ/r consumers fail loud until the polar
   transform is serialized to JS. Separable-grid/rect recipes on polar warn-and-skip.
-- Current `:cairo` scoping: `LScene` is rejected at `holo()` time — a Holo guard, not a
+- Current `:cairo` scoping: `LScene` is rejected at `masque()` time — a Masque guard, not a
   CairoMakie limit (`LScene` disposition remains a roadmap decision item). High-frequency live
   redraw is a shared cost limit on both backends.
 
-[Unreleased]: https://github.com/jowch/Holo.jl/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/jowch/Holo.jl/releases/tag/v0.1.0
+[Unreleased]: https://github.com/jowch/Masque.jl/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/jowch/Masque.jl/releases/tag/v0.1.0

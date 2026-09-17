@@ -1,9 +1,9 @@
-using Test, Holo, CairoMakie, Makie
+using Test, Masque, CairoMakie, Makie
 include(joinpath(@__DIR__, "..", "testutils.jl"))
 
 @testset "Selection" begin
     @testset "AbstractSelector / ROIInteractable selects" begin
-        using Holo: selects, compatible_kinds, ROIInteractable, AbstractSelector
+        using Masque: selects, compatible_kinds, ROIInteractable, AbstractSelector
         fig = Figure(); ax = Axis(fig[1, 1]); lines!(ax, 1:10, 1:10)
         roi = ROIInteractable(ax; bounds = (2.0, 8.0, 2.0, 8.0))
         @test roi isa AbstractSelector
@@ -58,7 +58,7 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
     end
 
     @testset "HSpan + VSpan extraction" begin
-        using Holo: RectInteractable, auto_interactables
+        using Masque: RectInteractable, auto_interactables
         fig = Figure(); ax = Axis(fig[1, 1]); lines!(ax, 0 .. 10, sin)   # give the axis finite limits
         hspan!(ax, [1.0, 3.0], [2.0, 4.0])
         Makie.update_state_before_display!(fig)
@@ -83,7 +83,7 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
         # interactable. Regression coverage for the `_rect_with_resolve` refactor, which now calls
         # `_check_payloads` directly instead of delegating to the public keyword `RectInteractable`
         # constructor (which checked it transitively before).
-        using Holo: RectInteractable
+        using Masque: RectInteractable
         fig = Figure(); ax = Axis(fig[1, 1]); lines!(ax, 0 .. 10, sin)
         hspan!(ax, [1.0, 3.0], [2.0, 4.0])
         Makie.update_state_before_display!(fig)
@@ -102,7 +102,7 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
         # not rely on the child Poly's HyperRectangle (which can exceed axis limits in some
         # Makie versions / async Pluto scenarios, causing the rect to bleed into a neighboring
         # axis's viewport at the same pixel column/row).
-        using Holo: RectInteractable
+        using Masque: RectInteractable
         fv = Figure(); axv = Axis(fv[1, 1])
         xlims!(axv, 0, 10); ylims!(axv, 0, 5)
         vspan!(axv, [2.0], [3.0])
@@ -138,7 +138,7 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
         # but integer quantization (_q) can expand h by up to 0.5px beyond the viewport bounds.
         # Fix: viewport-clamp in pixel space before emitting geometry (ceil/floor inward).
         # This test uses the exact 2×2 repro that was live-verified to exhibit the bleed.
-        using Holo: RectInteractable, axis_id
+        using Masque: RectInteractable, axis_id
         f = Figure(size = (760, 520))
         a2 = Axis(f[1, 2]); waterfall!(a2, 1:4, [3.0, -1.0, 2.0, -0.5])
         a4 = Axis(f[2, 2])

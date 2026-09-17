@@ -192,14 +192,14 @@ try {
       const span = document.querySelector(`#coords_${k}`);
       const hosts = [...document.querySelectorAll(".ip-host")];
       const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
-      window.__holoTouchTapResult = { fired: false, value: null };
+      window.__masqueTouchTapResult = { fired: false, value: null };
       host.addEventListener("input", () => {
-        window.__holoTouchTapResult = { fired: true, value: host.value };
+        window.__masqueTouchTapResult = { fired: true, value: host.value };
       }, { once: true });
     }, "scatter");
     await page.touchscreen.tap(tx, ty);
-    await page.waitForFunction(() => window.__holoTouchTapResult?.fired === true, { timeout: 5000 }).catch(() => {});
-    const result = await page.evaluate(() => window.__holoTouchTapResult);
+    await page.waitForFunction(() => window.__masqueTouchTapResult?.fired === true, { timeout: 5000 }).catch(() => {});
+    const result = await page.evaluate(() => window.__masqueTouchTapResult);
     if (!result?.fired || !result.value || result.value.layer !== pts.id) {
       throw new Error(`scatter touch tap: no commit: ${JSON.stringify(result)}`);
     }

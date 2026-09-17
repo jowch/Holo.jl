@@ -78,14 +78,14 @@ function markColorFor(hit: Hit): string | null {
     return c.palette[c.index[hit.index]] ?? null
 }
 
-// Drives .holo-tip's border-left accent (mount.ts's STYLE). Called from applyTipHtml (set, from
+// Drives .masque-tip's border-left accent (mount.ts's STYLE). Called from applyTipHtml (set, from
 // the hit whose content is being shown), hideTip (clear), and bond.ts's applyDrag (clear — a
 // drag readout's text is set directly via setTipText, not applyTipHtml, so it doesn't go through
 // the set path above and would otherwise keep wearing whatever element was last hovered).
 export function setMarkAccent(ctx: OverlayCtx, hit: Hit | null): void {
     const color = hit && markColorFor(hit)
-    if (color) ctx.tip_.style.setProperty("--holo-mark-border", `3px solid ${color}`)
-    else ctx.tip_.style.removeProperty("--holo-mark-border")
+    if (color) ctx.tip_.style.setProperty("--masque-mark-border", `3px solid ${color}`)
+    else ctx.tip_.style.removeProperty("--masque-mark-border")
 }
 
 export function hideTip(ctx: OverlayCtx, state: OverlayState): void {
@@ -116,7 +116,7 @@ export function placeTip(ctx: OverlayCtx, state: OverlayState, ox: number, oy: n
     }
     const tw = state.tipW_, th = state.tipH_, hw = state.surfaceW_, hh = state.surfaceH_
     ctx.tip_.classList.remove("flip-x", "flip-y")
-    ctx.tip_.style.removeProperty("--holo-caret-x") // only the anchored path (placeAnchored) uses this
+    ctx.tip_.style.removeProperty("--masque-caret-x") // only the anchored path (placeAnchored) uses this
     if (tw <= 0 || th <= 0 || hw <= 0 || hh <= 0) {
         ctx.tip_.style.left = `${ox + TIP_OFFSET}px`
         ctx.tip_.style.top = `${oy + TIP_OFFSET}px`
@@ -149,14 +149,14 @@ export function placeAnchored(ctx: OverlayCtx, state: OverlayState, anchor: Anch
     if (tw <= 0 || th <= 0 || sw <= 0 || sh <= 0) {
         ctx.tip_.style.left = `${anchor.x}px`
         ctx.tip_.style.top = `${Math.max(0, anchor.top - ANCHOR_GAP)}px`
-        ctx.tip_.style.removeProperty("--holo-caret-x")
+        ctx.tip_.style.removeProperty("--masque-caret-x")
         ctx.tip_.classList.remove("flip-y")
         return
     }
     const p = computeAnchoredPlacement(anchor, tw, th, sw, sh)
     ctx.tip_.style.left = `${p.left}px`
     ctx.tip_.style.top = `${p.top}px`
-    ctx.tip_.style.setProperty("--holo-caret-x", `${p.caretX}px`)
+    ctx.tip_.style.setProperty("--masque-caret-x", `${p.caretX}px`)
     // Reuses flip-y's existing CSS meaning ("caret at the box's bottom, pointing down") — here
     // inverted from its cursor-following sense: the box defaults to ABOVE the mark (caret must
     // point down, i.e. flip-y set), and only clears it when the top-clip flip put the box below

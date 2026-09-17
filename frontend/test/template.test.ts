@@ -59,7 +59,7 @@ describe("renderAutoTable", () => {
         const html = renderAutoTable({ city: "Tokyo", n: "<b>" })
         expect(html).toContain("Tokyo")
         expect(html).toContain("&lt;b&gt;")
-        expect(html).toContain("holo-tip-row")
+        expect(html).toContain("masque-tip-row")
     })
 
     it("renders the text-button payload (; text, index, x, y)", () => {

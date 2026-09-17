@@ -25,14 +25,14 @@ begin
     Pkg.develop(path = joinpath(@__DIR__, ".."))   # gallery/ -> package root (portable)
     Pkg.add("CairoMakie")
     Pkg.instantiate()
-    using Holo
+    using Masque
     using CairoMakie
     using Statistics
 end
 
 # ╔═╡ b5f71b56-5c9b-4aa8-998d-8c8a905794f1
 md"""
-# Holo.jl — recipe gallery
+# Masque.jl — recipe gallery
 
 Recipes for **real applications**, beyond the feature tour in `examples/demo.jl`. Each section is a
 self-contained pattern: an interactive plot whose `@bind` value drives a downstream cell.
@@ -59,7 +59,7 @@ scatter_widget = let
     scatter!(sax, xs, ys; color = map(g -> g == "A" ? :steelblue : :darkorange, grp), markersize = 9)
     pts = Point2f.(xs, ys)
     payloads = [(; idx = i - 1, x = xs[i], y = ys[i], group = grp[i]) for i in eachindex(xs)]
-    holo(
+    masque(
         sf, [
             PointInteractable(sax, pts; id = :pts, payloads),
             ROIInteractable(sax; bounds = (3.0, 6.0, 2.0, 7.0), selects = :pts),
@@ -120,7 +120,7 @@ image_widget = let
     xe = collect(0.0:1.0:nx)            # cell edges in data space (one boundary per column/row)
     ye = collect(0.0:1.0:ny)
     lum = [0.299 * R[i, j] + 0.587 * G[i, j] + 0.114 * B[i, j] for i in 1:nx, j in 1:ny]
-    holo(
+    masque(
         imf, [
             RectInteractable(iax; grid = (xe, ye, lum), id = :img),
             ROIInteractable(iax; bounds = (10.0, 40.0, 10.0, 40.0), selects = :img),

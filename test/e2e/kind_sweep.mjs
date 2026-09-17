@@ -146,10 +146,10 @@ try {
   }
   if (!ready) throw new Error(`${backend} timed out waiting for kind-sweep widgets`);
   console.error(`phase: widgets mounted (${backend})`);
-  // Diagnostic only (not an assertion): reports whether HOLO_DEV_ENV propagated from serve.jl
+  // Diagnostic only (not an assertion): reports whether MASQUE_DEV_ENV propagated from serve.jl
   // into Pluto's notebook worker process, so a CI job log shows which Pkg path the run took.
   const usedDevEnv = await page.evaluate(() => document.querySelector("#kind_env")?.textContent?.trim());
-  console.error(`HOLO_DEV_ENV propagated to notebook worker: ${usedDevEnv === "true" ? "yes" : usedDevEnv === "false" ? "no (portable path taken)" : "unknown (#kind_env missing)"}`);
+  console.error(`MASQUE_DEV_ENV propagated to notebook worker: ${usedDevEnv === "true" ? "yes" : usedDevEnv === "false" ? "no (portable path taken)" : "unknown (#kind_env missing)"}`);
 
   const meta = await page.evaluate(() => JSON.parse(document.querySelector("#kind_meta").textContent));
   const pageBackend = await page.evaluate(() => document.querySelector("#kind_backend")?.textContent?.trim());
@@ -232,7 +232,7 @@ try {
       surface.dispatchEvent(new PointerEvent("pointerup", o));
       surface.dispatchEvent(new MouseEvent("click", o));
     }
-    const tip = sr.querySelector(".holo-tip");
+    const tip = sr.querySelector(".masque-tip");
     const hi = sr.querySelector("g.hi")?.firstElementChild;
     return {
       show: tip?.classList.contains("show"),
@@ -435,7 +435,7 @@ try {
       return {
         ok: first === second,
         reason: first === second ? "" : "hover remounted",
-        firstEnter: first.classList.contains("holo-enter"),
+        firstEnter: first.classList.contains("masque-enter"),
       };
     }, [key, hoverPt.x, hoverPt.y]);
     assertRemountStable(hiStable, key);
@@ -462,7 +462,7 @@ try {
       const hi = sr.querySelector("g.hi")?.firstElementChild;
       return {
         hi: sr.querySelector("g.hi")?.children.length ?? 0,
-        leaving: !!(hi && hi.classList.contains("holo-leave")),
+        leaving: !!(hi && hi.classList.contains("masque-leave")),
       };
     }, key);
     assertLeaveFade(fade, key);
@@ -520,7 +520,7 @@ try {
         const hosts = [...document.querySelectorAll(".ip-host")];
         const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
         let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
-        const t = sr.querySelector(".holo-tip");
+        const t = sr.querySelector(".masque-tip");
         const cs = getComputedStyle(t);
         return { bg: cs.backgroundColor, color: cs.color, show: t?.classList.contains("show") };
       }, spec.key);

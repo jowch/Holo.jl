@@ -1,7 +1,7 @@
 """
     HitLayer
 
-The unit `holo` serializes to the browser: one geometry `kind` for one interactable, plus the
+The unit `masque` serializes to the browser: one geometry `kind` for one interactable, plus the
 data needed to resolve a pointer hit to an element index and its payload. Built by
 [`hitlayers`](@ref); user-facing mainly when writing a [`FunctionInteractable`](@ref).
 
@@ -52,7 +52,7 @@ HitLayer(id, kind, geometry, payloads, axis, events, label) = HitLayer(id, kind,
 """
     AbstractInteractable
 
-Supertype for everything [`holo`](@ref) can turn into hit-testable JS layers. The built-in
+Supertype for everything [`masque`](@ref) can turn into hit-testable JS layers. The built-in
 kinds ([`PointInteractable`](@ref), [`SegmentInteractable`](@ref), [`RectInteractable`](@ref),
 [`PolygonInteractable`](@ref), [`AxisInteractable`](@ref), [`ColorbarInteractable`](@ref),
 [`ThresholdInteractable`](@ref), [`ROIInteractable`](@ref), [`TextInteractable`](@ref),
@@ -62,31 +62,31 @@ cover most needs; implement this interface for anything else.
 # Interface
 
 Only `hitlayers` is exported — every other method below is a non-exported function of the
-`Holo` module. Extend them as `Holo.validate(::MyType, ctx) = …`, etc.; a bare
-`validate(::MyType, ctx) = …` at top level defines an unrelated function that `holo` never
-calls, and `holo(fig, MyType())` will build without error while silently ignoring it.
+`Masque` module. Extend them as `Masque.validate(::MyType, ctx) = …`, etc.; a bare
+`validate(::MyType, ctx) = …` at top level defines an unrelated function that `masque` never
+calls, and `masque(fig, MyType())` will build without error while silently ignoring it.
 
 Required:
 - `hitlayers(i, ctx::InteractionContext) -> Vector{HitLayer}` — see [`hitlayers`](@ref)
   (exported).
 
-Optional (default shown; all non-exported — extend as `Holo.<name>`):
-- `Holo.validate(i, ctx::InteractionContext) -> Union{Nothing,String}` — return an error
-  message if `i` can't be built against `ctx` (`holo` raises it as `ArgumentError`), else
+Optional (default shown; all non-exported — extend as `Masque.<name>`):
+- `Masque.validate(i, ctx::InteractionContext) -> Union{Nothing,String}` — return an error
+  message if `i` can't be built against `ctx` (`masque` raises it as `ArgumentError`), else
   `nothing`. Default: always valid.
-- `Holo.events(i) -> Tuple` — the pointer events this interactable's layer(s) respond to
+- `Masque.events(i) -> Tuple` — the pointer events this interactable's layer(s) respond to
   (`:click`, `:hover`, `:drag`). Default: `(:click, :hover)`.
-- `Holo.tooltip_spec(i)` — `nothing` for the auto name/value table, a [`Markup`](@ref) (built
-  with `holo"..."`) template, or `false` to suppress. Default: `nothing`.
-- `Holo.hoverstyle(i) -> NamedTuple` — one `(; stroke, width)` hover outline style per *layer*
+- `Masque.tooltip_spec(i)` — `nothing` for the auto name/value table, a [`Markup`](@ref) (built
+  with `masque"..."`) template, or `false` to suppress. Default: `nothing`.
+- `Masque.hoverstyle(i) -> NamedTuple` — one `(; stroke, width)` hover outline style per *layer*
   (the manifest ships one style per layer, not per element). Default:
   `(; stroke = "#3A6F7C", width = 2)`.
-- `Holo.hit_tol(i) -> Union{Nothing,Real}` — logical-px hit-test slack for `:segments`/
+- `Masque.hit_tol(i) -> Union{Nothing,Real}` — logical-px hit-test slack for `:segments`/
   `:polyline` layers, shipped in the manifest as image px (`round(Int, hit_tol(i) *
   ctx.scaling)`). `nothing` (default) omits the field; the overlay then falls back to its
   own fixed slack. Only [`SegmentInteractable`](@ref) sets this.
 
-[`AbstractSelector`](@ref) subtypes additionally implement `Holo.selects`/`Holo.compatible_kinds`.
+[`AbstractSelector`](@ref) subtypes additionally implement `Masque.selects`/`Masque.compatible_kinds`.
 """
 abstract type AbstractInteractable end
 
@@ -114,10 +114,10 @@ hit_tol(::AbstractInteractable) = nothing
 
 Supertype for interactables that highlight elements on another layer — today just
 [`ROIInteractable`](@ref)'s `selects` mode, brushing a `:circles`/`:grid` layer. Subtypes
-additionally implement these non-exported functions (extend as `Holo.selects(::MyType) = …`):
-- `Holo.selects(i) -> Union{Nothing,Symbol}` — the target layer id, or `nothing`.
-- `Holo.compatible_kinds(i) -> Tuple` — the target `HitLayer.kind`s this selector accepts;
-  `holo` raises `ArgumentError` at build time if `selects` names a layer of an unlisted kind.
+additionally implement these non-exported functions (extend as `Masque.selects(::MyType) = …`):
+- `Masque.selects(i) -> Union{Nothing,Symbol}` — the target layer id, or `nothing`.
+- `Masque.compatible_kinds(i) -> Tuple` — the target `HitLayer.kind`s this selector accepts;
+  `masque` raises `ArgumentError` at build time if `selects` names a layer of an unlisted kind.
 """
 abstract type AbstractSelector <: AbstractInteractable end
 
@@ -154,7 +154,7 @@ _check_tooltip(tooltip) =
     tooltip === true && throw(
     ArgumentError(
         "tooltip = true is not meaningful — omit `tooltip` for the auto name/value table " *
-            "(the default), pass holo\"…\" for a template, or `false` to suppress.",
+            "(the default), pass masque\"…\" for a template, or `false` to suppress.",
     ),
 )
 
@@ -215,7 +215,7 @@ Scatter-style points, hit-tested as circles. Produces one `:circles` [`HitLayer`
   with an axis-aligned pixel-radius approximation projected per point — it can underestimate
   the true silhouette (worst case ~29%, at adversarial azimuth/elevation). Must have one entry
   per point (`ArgumentError` otherwise).
-- `tooltip` — `nothing` for the auto name/value table (default), `holo"..."` for a template, or
+- `tooltip` — `nothing` for the auto name/value table (default), `masque"..."` for a template, or
   `false` to suppress. `tooltip = true` is rejected (`ArgumentError`; not meaningful).
 - `label` — an optional screen-reader announcement prefix for this layer (e.g. `"Scatter"`),
   used by the overlay's keyboard navigation ("Scatter, element 3 of 10: …"). Default `nothing`
@@ -323,7 +323,7 @@ Lines / polylines (nearest-segment hit) or disjoint segment pairs. Produces one 
   otherwise). Shipped in the manifest as a per-layer `"tol"` field; the overlay's client-side
   default (`SEG_TOL` in `frontend/src/geometry.ts`, 8 image px) applies only when this field
   is absent.
-- `tooltip` — `nothing` for the auto name/value table (default), `holo"..."` for a template, or
+- `tooltip` — `nothing` for the auto name/value table (default), `masque"..."` for a template, or
   `false` to suppress. `tooltip = true` is rejected (`ArgumentError`).
 - `label` — an optional screen-reader announcement prefix for this layer (see
   [`PointInteractable`](@ref)). Default `nothing`.
@@ -407,7 +407,7 @@ construction. Produces one `:rects` or `:grid` [`HitLayer`](@ref).
 - `id` — the layer id; becomes `InteractionEvent.layer` on a hit. Default `:rects`.
 - `payloads` — one entry per rect; `ArgumentError` if the length doesn't match. Default:
   `(; index)`, 0-based.
-- `tooltip` — `nothing` for the auto name/value table (default), `holo"..."` for a template, or
+- `tooltip` — `nothing` for the auto name/value table (default), `masque"..."` for a template, or
   `false` to suppress. `tooltip = true` is rejected (`ArgumentError`).
 - `clamp_to_viewport` — clamp each rect's pixel bounds to the axis viewport (inward rounding,
   so integer quantization never expands past the edge) before shipping geometry. Used
@@ -549,7 +549,7 @@ function hitlayers(i::RectInteractable, ctx)
         if cell_px >= GRID_VALUES_MIN_SCREEN_PX
             geom["values"] = Float32[Float32(vals[c, r]) for r in 1:nrows for c in 1:ncols]  # row-major: r*ncols+c
         else
-            @warn "Holo: heatmap/image grid cells are ~$(round(cell_px; digits = 2)) px on screen " *
+            @warn "Masque: heatmap/image grid cells are ~$(round(cell_px; digits = 2)) px on screen " *
                 "(sub-pixel); dropping the values[] payload to bound manifest size. Hover shows (i,j) " *
                 "only; clicks still carry it (the kernel round-trip has your matrix)." maxlog = 1
         end
@@ -572,7 +572,7 @@ one. Produces one `:rects` [`HitLayer`](@ref), one box per string.
 - `payloads` — one entry per string; `ArgumentError` if the length doesn't match. Default:
   `(; text, index, x, y)` — `text` is the string, `index` 0-based, `(x, y)` its data-space
   anchor.
-- `tooltip` — `nothing` for the auto name/value table (default), `holo"..."` for a template, or
+- `tooltip` — `nothing` for the auto name/value table (default), `masque"..."` for a template, or
   `false` to suppress. `tooltip = true` is rejected (`ArgumentError`).
 
 Geometry is each string's axis-aligned bounding box (`Makie.string_boundingboxes`), not
@@ -639,7 +639,7 @@ Arbitrary filled polygons, hit-tested even-odd. Produces one `:polygons` [`HitLa
 - `id` — the layer id; becomes `InteractionEvent.layer` on a hit. Default `:polygons`.
 - `payloads` — one entry per ring; `ArgumentError` if the length doesn't match. Default:
   `(; index)`, 0-based.
-- `tooltip` — `nothing` for the auto name/value table (default), `holo"..."` for a template, or
+- `tooltip` — `nothing` for the auto name/value table (default), `masque"..."` for a template, or
   `false` to suppress. `tooltip = true` is rejected (`ArgumentError`).
 - `label` — an optional screen-reader announcement prefix for this layer (see
   [`PointInteractable`](@ref)). Default `nothing`.
@@ -702,7 +702,7 @@ with `geometry = nothing`.
 
 Payload on hit (client-side): `Dict("x" => …, "y" => …)`.
 
-`holo` raises `ArgumentError` at build time if `ax` is an `Axis3` (a screen pixel is a ray, not
+`masque` raises `ArgumentError` at build time if `ax` is an `Axis3` (a screen pixel is a ray, not
 a data point — continuous readout is undefined), a `PolarAxis` (continuous θ/r inversion isn't
 shipped to JS yet), or either scale isn't client-invertible (supported: `identity`, `log10`,
 `log`; categorical axes are fine).
@@ -747,7 +747,7 @@ like [`AxisInteractable`](@ref) but scoped to the colorbar and 1-D. Produces one
 
 Payload on hit (client-side): `(; value)`.
 
-`holo` raises `ArgumentError` at build time if the colorbar's value-axis scale isn't
+`masque` raises `ArgumentError` at build time if the colorbar's value-axis scale isn't
 client-invertible (supported: `identity`, `log10`, `log`).
 
 # Examples
@@ -794,7 +794,7 @@ Payload on commit (client-side): 2D — `Dict("xmin"=>…, "xmax"=>…, "ymin"=>
 new `limits`); 3D — `Dict("azimuth"=>…, "elevation"=>…)`. Drive the returned value back into
 `ax.limits[]` / `ax.azimuth[]`+`ax.elevation[]` and re-render to make the gesture stick.
 
-`holo` raises `ArgumentError` at build time if `ax` is a `PolarAxis` (continuous θ/r view
+`masque` raises `ArgumentError` at build time if `ax` is a `PolarAxis` (continuous θ/r view
 gestures aren't shipped), a `Colorbar`'s value axis (no pan/orbit view applies), a categorical
 2D axis (pan needs numeric limits to shift), or (2D only) either scale isn't client-invertible
 (supported: `identity`, `log10`, `log`). `Axis3` has no scale/categorical restriction — camera
@@ -863,7 +863,7 @@ position inverts to a data-space scalar via [`AxisTransform`](@ref) on mouse-up.
 
 Payload on commit (client-side): the scalar data coordinate.
 
-`holo` raises `ArgumentError` at build time if `ax` is an `Axis3` (a screen pixel is a ray, not
+`masque` raises `ArgumentError` at build time if `ax` is an `Axis3` (a screen pixel is a ray, not
 a data value — inversion is undefined), a `PolarAxis` (continuous inversion isn't shipped), or
 the dragged axis's scale isn't client-invertible (`:horizontal` needs the y-scale, `:vertical`
 the x-scale; supported: `identity`, `log10`, `log`).
@@ -923,14 +923,14 @@ compatible layer, reporting the contained elements. Produces one `:roi` [`HitLay
   `ymin < ymax` (`ArgumentError` otherwise); length must be 4 (`ArgumentError` otherwise).
 - `id` — the layer id; becomes `InteractionEvent.layer` on commit. Default `:roi`.
 - `selects` — the `id` of a `:circles` or `:grid` layer to brush: on mouse-up, elements whose
-  geometry falls inside the ROI are reported. `holo` raises `ArgumentError` at build time if
+  geometry falls inside the ROI are reported. `masque` raises `ArgumentError` at build time if
   `selects` names a layer absent from the same call, or one of an unsupported kind.
 
 Payload on commit (client-side, no `selects`): `Dict("xmin"=>…, "xmax"=>…, "ymin"=>…,
 "ymax"=>…)`. With `selects` set, the bond value instead becomes a `Vector{InteractionEvent}`
 (one per contained element, each layer'd to the target) — see [`InteractionEvent`](@ref).
 
-`holo` raises `ArgumentError` at build time if `ax` is an `Axis3` (a screen pixel is a ray, not
+`masque` raises `ArgumentError` at build time if `ax` is an `Axis3` (a screen pixel is a ray, not
 a data point), a `PolarAxis` (continuous inversion isn't shipped), a categorical axis (bounds
 need numeric limits), or either scale isn't client-invertible (supported: `identity`, `log10`,
 `log`).
@@ -1001,7 +1001,7 @@ present), so a single call can mix shapes freely.
   `Symbol(id, :_r)` (rects), `Symbol(id, :_p)` (polygons) — only the kinds actually present are
   emitted. `InteractionEvent.layer` and `selected=` keys use these suffixed ids, not `id`
   itself. Default `:region`.
-- `tooltip` — `nothing` for the auto name/value table (default), `holo"..."` for a template, or
+- `tooltip` — `nothing` for the auto name/value table (default), `masque"..."` for a template, or
   `false` to suppress; applies to every generated layer. `tooltip = true` is rejected
   (`ArgumentError`).
 - `events` — the pointer events all generated layers respond to. Default `(:click, :hover)`.
@@ -1064,15 +1064,15 @@ Vector{HitLayer}` is called at manifest-build time and its result is used verbat
 # Arguments
 - `f` — a function `(ctx::InteractionContext,) -> Vector{HitLayer}`. Project data-space points
   with `data_to_image_px(ctx, ax, point)`, and look up an axis's transform id with
-  `Holo.axis_id(ctx, ax)` (not exported) when constructing a `HitLayer`.
-- `events` — the pointer events reported by `Holo.events(::FunctionInteractable)`; `f` is free
+  `Masque.axis_id(ctx, ax)` (not exported) when constructing a `HitLayer`.
+- `events` — the pointer events reported by `Masque.events(::FunctionInteractable)`; `f` is free
   to give its `HitLayer`s different `events` per layer if it wants. Default `(:click, :hover)`.
 
 # Examples
 ```julia
 FunctionInteractable() do ctx
     q = data_to_image_px(ctx, ax, (1.0, 2.0))
-    [HitLayer(:custom, :circles, [q[1], q[2], 10], [(; label = "manual")], Holo.axis_id(ctx, ax), (:click, :hover))]
+    [HitLayer(:custom, :circles, [q[1], q[2], 10], [(; label = "manual")], Masque.axis_id(ctx, ax), (:click, :hover))]
 end
 ```
 """

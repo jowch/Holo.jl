@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Idempotent Cloud Agent install: Julia 1.10 + CairoMakie/Holo/Pluto sysimage.
-# WGLMakie is *not* baked (a dual-backend image used to make holo() throw).
+# Idempotent Cloud Agent install: Julia 1.10 + CairoMakie/Masque/Pluto sysimage.
+# WGLMakie is *not* baked (a dual-backend image used to make masque() throw).
 # Artifacts live under $HOME/.julia (and juliaup) — never the Agent Store.
 # WGL live-verify / stock Julia: JULIA_NOSYSIMAGE=1 julia …
 set -euo pipefail
@@ -8,9 +8,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-export HOLO_JULIA_SYSIMAGE="${HOLO_JULIA_SYSIMAGE:-$HOME/.julia/sysimages/holo-makie.so}"
-JULIA_CHANNEL="${HOLO_JULIA_CHANNEL:-1.10}"
-DEV_ENV="$HOME/.julia/environments/holo-dev"
+export MASQUE_JULIA_SYSIMAGE="${MASQUE_JULIA_SYSIMAGE:-$HOME/.julia/sysimages/masque-makie.so}"
+JULIA_CHANNEL="${MASQUE_JULIA_CHANNEL:-1.10}"
+DEV_ENV="$HOME/.julia/environments/masque-dev"
 
 ensure_path() {
   export PATH="$HOME/.juliaup/bin:$HOME/.local/bin:$PATH"
@@ -18,10 +18,10 @@ ensure_path() {
 
 install_juliaup() {
   if command -v juliaup >/dev/null 2>&1 && command -v julia >/dev/null 2>&1; then
-    echo "[holo-env] juliaup already present: $(command -v julia) ($(julia --version))"
+    echo "[masque-env] juliaup already present: $(command -v julia) ($(julia --version))"
     return 0
   fi
-  echo "[holo-env] installing juliaup + Julia ${JULIA_CHANNEL}"
+  echo "[masque-env] installing juliaup + Julia ${JULIA_CHANNEL}"
   curl -fsSL https://install.julialang.org | sh -s -- --yes
   ensure_path
   juliaup add "$JULIA_CHANNEL" || true
@@ -32,22 +32,22 @@ install_sys_deps() {
   # CairoMakie JLLs cover most libs; fonts help Makie text paths in headless renders.
   if command -v apt-get >/dev/null 2>&1; then
     if ! dpkg -s fonts-dejavu-core >/dev/null 2>&1; then
-      echo "[holo-env] installing fonts-dejavu-core (apt)"
+      echo "[masque-env] installing fonts-dejavu-core (apt)"
       sudo apt-get update -qq
       sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq fonts-dejavu-core
     fi
   fi
 }
 
-instantiate_holo() {
-  echo "[holo-env] instantiating Holo project at $ROOT"
+instantiate_masque() {
+  echo "[masque-env] instantiating Masque project at $ROOT"
   JULIA_NOSYSIMAGE=1 julia --project="$ROOT" -e 'using Pkg; Pkg.instantiate()'
 }
 
 setup_dev_env() {
-  # Separate env so we can develop Holo + load backends without editing package Project.toml.
+  # Separate env so we can develop Masque + load backends without editing package Project.toml.
   mkdir -p "$DEV_ENV"
-  echo "[holo-env] syncing @holo-dev (Holo + CairoMakie + WGLMakie + Pluto)"
+  echo "[masque-env] syncing @masque-dev (Masque + CairoMakie + WGLMakie + Pluto)"
   JULIA_NOSYSIMAGE=1 julia -e "
     using Pkg
     Pkg.activate(raw\"$DEV_ENV\")
@@ -65,7 +65,7 @@ setup_dev_env() {
 }
 
 build_sysimage() {
-  echo "[holo-env] ensuring PackageCompiler sysimage at $HOLO_JULIA_SYSIMAGE"
+  echo "[masque-env] ensuring PackageCompiler sysimage at $MASQUE_JULIA_SYSIMAGE"
   # Never compile the sysimage while already running under it.
   JULIA_NOSYSIMAGE=1 julia "$ROOT/.cursor/sysimage/build_sysimage.jl"
 }
@@ -79,17 +79,17 @@ install_wrappers() {
   if [[ -x "$HOME/.juliaup/bin/julia" ]]; then
     real_julia="$HOME/.juliaup/bin/julia"
   fi
-  printf '%s\n' "$real_julia" >"$HOME/.julia/sysimages/holo-julia-real.path"
+  printf '%s\n' "$real_julia" >"$HOME/.julia/sysimages/masque-julia-real.path"
 
-  cat >"$HOME/.local/bin/julia-holo" <<EOF
+  cat >"$HOME/.local/bin/julia-masque" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-REAL="\${HOLO_JULIA_REAL:-}"
-if [[ -z "\$REAL" && -f "\$HOME/.julia/sysimages/holo-julia-real.path" ]]; then
-  REAL="\$(cat "\$HOME/.julia/sysimages/holo-julia-real.path")"
+REAL="\${MASQUE_JULIA_REAL:-}"
+if [[ -z "\$REAL" && -f "\$HOME/.julia/sysimages/masque-julia-real.path" ]]; then
+  REAL="\$(cat "\$HOME/.julia/sysimages/masque-julia-real.path")"
 fi
 REAL="\${REAL:-\$HOME/.juliaup/bin/julia}"
-IMG="\${HOLO_JULIA_SYSIMAGE:-\$HOME/.julia/sysimages/holo-makie.so}"
+IMG="\${MASQUE_JULIA_SYSIMAGE:-\$HOME/.julia/sysimages/masque-makie.so}"
 if [[ -n "\${JULIA_NOSYSIMAGE:-}" ]]; then
   exec "\$REAL" "\$@"
 fi
@@ -98,33 +98,33 @@ if [[ -f "\$IMG" ]]; then
 fi
 exec "\$REAL" "\$@"
 EOF
-  chmod +x "$HOME/.local/bin/julia-holo"
+  chmod +x "$HOME/.local/bin/julia-masque"
 
-  # Optional default: make bare `julia` use the Cairo+Holo sysimage when present.
+  # Optional default: make bare `julia` use the Cairo+Masque sysimage when present.
   # Opt out with JULIA_NOSYSIMAGE=1 (install itself, WGL live-verify, stock Julia).
   cat >"$HOME/.local/bin/julia" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 export PATH="\$HOME/.juliaup/bin:\$PATH"
-exec "\$HOME/.local/bin/julia-holo" "\$@"
+exec "\$HOME/.local/bin/julia-masque" "\$@"
 EOF
   chmod +x "$HOME/.local/bin/julia"
 
   # Shell hints for interactive / agent terminals.
-  mkdir -p "$HOME/.config/holo"
-  cat >"$HOME/.config/holo/env.sh" <<EOF
+  mkdir -p "$HOME/.config/masque"
+  cat >"$HOME/.config/masque/env.sh" <<EOF
 export PATH="\$HOME/.local/bin:\$HOME/.juliaup/bin:\$PATH"
-export HOLO_JULIA_SYSIMAGE="\${HOLO_JULIA_SYSIMAGE:-\$HOME/.julia/sysimages/holo-makie.so}"
-# Optional cloud project (Holo developed + CairoMakie/WGLMakie/Pluto):
-#   julia --project=@holo-dev
-# Bare \`julia\` / \`julia-holo\` uses the Cairo+Holo sysimage when present (\`-J\`).
+export MASQUE_JULIA_SYSIMAGE="\${MASQUE_JULIA_SYSIMAGE:-\$HOME/.julia/sysimages/masque-makie.so}"
+# Optional cloud project (Masque developed + CairoMakie/WGLMakie/Pluto):
+#   julia --project=@masque-dev
+# Bare \`julia\` / \`julia-masque\` uses the Cairo+Masque sysimage when present (\`-J\`).
 # JULIA_NOSYSIMAGE=1 skips -J: required for WGLMakie live-verify and stock Julia.
-# Also use it to pick up Holo source edits that landed after this image was baked.
+# Also use it to pick up Masque source edits that landed after this image was baked.
 EOF
 
   # Ensure login shells pick this up once.
-  if ! grep -q 'config/holo/env.sh' "$HOME/.bashrc" 2>/dev/null; then
-    printf '\n# Holo cloud env\n[ -f "$HOME/.config/holo/env.sh" ] && . "$HOME/.config/holo/env.sh"\n' >>"$HOME/.bashrc"
+  if ! grep -q 'config/masque/env.sh' "$HOME/.bashrc" 2>/dev/null; then
+    printf '\n# Masque cloud env\n[ -f "$HOME/.config/masque/env.sh" ] && . "$HOME/.config/masque/env.sh"\n' >>"$HOME/.bashrc"
   fi
 }
 
@@ -132,13 +132,13 @@ ensure_path
 install_juliaup
 ensure_path
 install_sys_deps
-instantiate_holo
+instantiate_masque
 setup_dev_env
 build_sysimage
 install_wrappers
 ensure_path
 
-echo "[holo-env] install complete"
-echo "[holo-env] sysimage: $HOLO_JULIA_SYSIMAGE ($(du -h "$HOLO_JULIA_SYSIMAGE" 2>/dev/null | cut -f1 || echo missing))"
-echo "[holo-env] use: julia / julia-holo  (or julia -J \"\$HOLO_JULIA_SYSIMAGE\")"
-echo "[holo-env] JULIA_NOSYSIMAGE=1 for stock Julia / WGL live-verify (do not bake WGLMakie)"
+echo "[masque-env] install complete"
+echo "[masque-env] sysimage: $MASQUE_JULIA_SYSIMAGE ($(du -h "$MASQUE_JULIA_SYSIMAGE" 2>/dev/null | cut -f1 || echo missing))"
+echo "[masque-env] use: julia / julia-masque  (or julia -J \"\$MASQUE_JULIA_SYSIMAGE\")"
+echo "[masque-env] JULIA_NOSYSIMAGE=1 for stock Julia / WGL live-verify (do not bake WGLMakie)"

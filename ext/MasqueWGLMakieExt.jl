@@ -1,6 +1,6 @@
-module HoloWGLMakieExt
+module MasqueWGLMakieExt
 
-using Holo: Holo, AbstractBackend, InteractionContext, build_manifest, InteractionEvent, auto_interactables
+using Masque: Masque, AbstractBackend, InteractionContext, build_manifest, InteractionEvent, auto_interactables
 using WGLMakie
 import Makie
 import Makie: Observable, Point2f
@@ -8,7 +8,7 @@ import AbstractPlutoDingetjes as APD
 using HypertextLiteral: @htl, JavaScript
 
 # WGLMakie already depends on Bonito (bare `using Bonito`, binding it into WGLMakie's own
-# namespace); reached qualified here so Holo never declares its own Bonito dependency. This
+# namespace); reached qualified here so Masque never declares its own Bonito dependency. This
 # couples to that import style — test/webgl_ext_tests.jl's version-coupling guard checks it.
 const Bonito = WGLMakie.Bonito
 
@@ -17,11 +17,11 @@ export WebGLBackend
 """
     WebGLBackend(; px_per_unit=2.0, max_width=700)
 
-Live, browser-GPU `Holo` backend (loaded when `WGLMakie` is `using`d): serializes `fig`'s scene
-and renders it in a WebGL `<canvas>` on the client GPU, with Holo's usual JS overlay layered on
-top — same `holo`/`@bind`/`InteractionEvent` contract as [`CairoBackend`](@ref), for animation,
+Live, browser-GPU `Masque` backend (loaded when `WGLMakie` is `using`d): serializes `fig`'s scene
+and renders it in a WebGL `<canvas>` on the client GPU, with Masque's usual JS overlay layered on
+top — same `masque`/`@bind`/`InteractionEvent` contract as [`CairoBackend`](@ref), for animation,
 large/live data, and live 3D. Needs an explicit `backend=` if both `CairoMakie` and `WGLMakie`
-are loaded (`holo` otherwise defaults to Cairo).
+are loaded (`masque` otherwise defaults to Cairo).
 
 # Arguments
 - `px_per_unit` — the explicit device/surface scale (unlike `CairoBackend`, this is a fixed
@@ -31,8 +31,8 @@ are loaded (`holo` otherwise defaults to Cairo).
 
 # Examples
 ```julia
-using Holo, WGLMakie
-holo(fig; backend = WebGLBackend(; px_per_unit = 3.0))
+using Masque, WGLMakie
+masque(fig; backend = WebGLBackend(; px_per_unit = 3.0))
 ```
 """
 struct WebGLBackend <: AbstractBackend
@@ -41,7 +41,7 @@ struct WebGLBackend <: AbstractBackend
 end
 WebGLBackend(; px_per_unit = 2.0, max_width = 700) = WebGLBackend(px_per_unit, max_width)
 
-Holo._ppu(b::WebGLBackend, _fig) = b.px_per_unit
+Masque._ppu(b::WebGLBackend, _fig) = b.px_per_unit
 
 # Every non-public WGLMakie/Bonito surface goes through one of these three (this extension is
 # the only place WGLMakie/Bonito are in scope); see test/webgl_ext_tests.jl's version-coupling guard.
@@ -62,7 +62,7 @@ else
 end
 
 _wgl_compat_error(name, expected) = error(
-    "Holo: WGLMakie/Bonito internal `$(name)` changed shape under WGLMakie v$(pkgversion(WGLMakie)) — " *
+    "Masque: WGLMakie/Bonito internal `$(name)` changed shape under WGLMakie v$(pkgversion(WGLMakie)) — " *
         "expected $(expected); please open an issue"
 )
 
@@ -184,35 +184,35 @@ struct WebGLResult
     px_per_unit::Float64
 end
 
-function Holo.render(b::WebGLBackend, fig, ppu)
+function Masque.render(b::WebGLBackend, fig, ppu)
     w, h = size(fig.scene)
     return WebGLResult(scene_payload(fig), w, h, Float64(ppu))
 end
 
 # Uses the same shared projection closure as CairoBackend, landing within 1-2px of where
 # WGLMakie draws the data.
-function Holo.context(b::WebGLBackend, fig, ppu)
+function Masque.context(b::WebGLBackend, fig, ppu)
     w, h = size(fig.scene)
     scaling = Float64(ppu)
     out_w, out_h = round(Int, w * scaling), round(Int, h * scaling)
     display_scale = min(w, b.max_width) / out_w
 
-    project = Holo._project_closure(scaling, out_h)
+    project = Masque._project_closure(scaling, out_h)
 
     axes = [c for c in fig.content if c isa Union{Makie.Axis, Makie.Axis3, Makie.PolarAxis}]
     ids = IdDict{Any, Symbol}()
-    transforms = Dict{Symbol, Holo.AxisTransform}()
+    transforms = Dict{Symbol, Masque.AxisTransform}()
     for (k, ax) in enumerate(axes)
         id = Symbol("ax", k)
         ids[ax] = id
         # Without this, every axis-keyed interactable KeyErrors at manifest build
         # (interactables.jl indexes ctx.transforms[axis_id]).
         transforms[id] = if ax isa Makie.Axis3
-            Holo._axis3_transform(id, ax, scaling, out_h)
+            Masque._axis3_transform(id, ax, scaling, out_h)
         elseif ax isa Makie.PolarAxis
-            Holo._polar_transform(id, ax, scaling, out_h)
+            Masque._polar_transform(id, ax, scaling, out_h)
         else
-            Holo._axis_transform(id, ax, scaling, out_h)
+            Masque._axis_transform(id, ax, scaling, out_h)
         end
     end
     # Required so a ColorbarInteractable resolves its own transform instead of the wrong axis.
@@ -220,14 +220,14 @@ function Holo.context(b::WebGLBackend, fig, ppu)
     for (k, cb) in enumerate(cbs)
         id = Symbol("cb", k)
         ids[cb] = id
-        transforms[id] = Holo._colorbar_transform(id, cb, scaling, out_h)
+        transforms[id] = Masque._colorbar_transform(id, cb, scaling, out_h)
     end
     return InteractionContext(project, transforms, ids, out_w, out_h, scaling, display_scale)
 end
 
 # Path to the committed shim bundle (the WGLMakie bundle itself is sourced at runtime; see
 # `_wgl_bundle_path`).
-const SHIM_JS = joinpath(@__DIR__, "..", "assets", "holo-webgl.js")
+const SHIM_JS = joinpath(@__DIR__, "..", "assets", "masque-webgl.js")
 
 struct WebGLWidget
     scene::Dict{String, Any}        # serialize_scene payload (4-rule encoded)
@@ -238,34 +238,34 @@ struct WebGLWidget
     px_per_unit::Float64
 end
 
-Holo.make_widget(b::WebGLBackend, result::WebGLResult, manifest, display_css) =
+Masque.make_widget(b::WebGLBackend, result::WebGLResult, manifest, display_css) =
     WebGLWidget(result.scene, manifest, display_css, result.width, result.height, result.px_per_unit)
 
 # `*_expr`/`*_js` are JS expressions yielding the data/text: published_to_js for Pluto, or
 # inlined JSON for self-contained/testing.
 function _widget_html(w::WebGLWidget; scene_expr, manifest_expr, bundle_js, shim_js)
-    overlay = JavaScript(Holo._OVERLAY_JS[])
-    # Holo's overlay is base-agnostic (`querySelector("img, canvas")`; image-px scale from
+    overlay = JavaScript(Masque._OVERLAY_JS[])
+    # Masque's overlay is base-agnostic (`querySelector("img, canvas")`; image-px scale from
     # `manifest.width`, not the element's intrinsic size), so it binds directly to our
     # <canvas> with no sizer shim needed.
     return @htl(
         """
         <div class="ip-host" style="position:relative; display:inline-block; width:100%; max-width:$(w.display_css)px;">
-          <canvas class="holo-webgl-base" width="$(w.width)" height="$(w.height)"
+          <canvas class="masque-webgl-base" width="$(w.width)" height="$(w.height)"
                   style="display:block; width:100%; height:auto;"></canvas>
           <script>
             // regular (non-module) script: document.currentScript is set here (modules' is null),
             // so this resolves the canvas in both Pluto and standalone. Blob URLs let import()
             // load the WGLMakie bundle + shim with no server / no file:// path.
             const _s = document.currentScript;
-            const _canvas = _s.parentElement.querySelector("canvas.holo-webgl-base");
+            const _canvas = _s.parentElement.querySelector("canvas.masque-webgl-base");
             // M2 bundle-sharing, browser half: install the ~1MB WGLMakie bundle + shim blob URLs
-            // ONCE per notebook on window (the same idempotent-singleton trick Holo uses for
-            // window.Holo). `??=` short-circuits, so on a cache hit the published 1MB bundle ref is
+            // ONCE per notebook on window (the same idempotent-singleton trick Masque uses for
+            // window.Masque). `??=` short-circuits, so on a cache hit the published 1MB bundle ref is
             // never even dereferenced — every extra widget reuses the one module (ES imports are
             // URL-cached), instead of re-blobbing + re-importing ~1MB per cell. (The wire half — why
             // the bytes cross the wire only once — is documented at Base.show.)
-            const _H = (window.__HoloWGL ??= {});
+            const _H = (window.__MasqueWGL ??= {});
             const _blob = (t) => URL.createObjectURL(new Blob([t], { type: "text/javascript" }));
             const _bundleUrl = (_H.bundleUrl ??= _blob($(bundle_js)));
             const _shimUrl = (_H.shimUrl ??= _blob($(shim_js)));
@@ -278,7 +278,7 @@ function _widget_html(w::WebGLWidget; scene_expr, manifest_expr, bundle_js, shim
             $(overlay)
             const _o = document.currentScript;
             const manifest = $(manifest_expr);
-            window.Holo.mount(_o, manifest, typeof invalidation === "undefined" ? new Promise(() => {}) : invalidation);
+            window.Masque.mount(_o, manifest, typeof invalidation === "undefined" ? new Promise(() => {}) : invalidation);
           </script>
         </div>
         """
@@ -303,7 +303,7 @@ function Base.show(io::IO, m::MIME"text/html", w::WebGLWidget)
     return show(io, m, html)
 end
 
-# ---- bond plumbing: identical contract to HoloWidget (same overlay, same events) ----
+# ---- bond plumbing: identical contract to MasqueWidget (same overlay, same events) ----
 APD.Bonds.initial_value(::WebGLWidget) = nothing
 function APD.Bonds.transform_value(::WebGLWidget, js)
     js === nothing && return nothing
@@ -316,4 +316,4 @@ function APD.Bonds.transform_value(::WebGLWidget, js)
     return InteractionEvent(Symbol(js["layer"]), Int(js["index"]), get(js, "payload", nothing))
 end
 
-end # module HoloWGLMakieExt
+end # module MasqueWGLMakieExt

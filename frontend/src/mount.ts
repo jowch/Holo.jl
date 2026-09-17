@@ -20,8 +20,8 @@ const STYLE = `
 .surface.cur-ns { cursor: ns-resize; }
 .surface.cur-ew { cursor: ew-resize; }
 .surface.cur-move { cursor: move; }
-.holo-threshold-line { stroke-width: var(--holo-line-w, 2); }
-.holo-threshold-line.hovered { stroke-width: calc(var(--holo-line-w, 2) * 1.75); }
+.masque-threshold-line { stroke-width: var(--masque-line-w, 2); }
+.masque-threshold-line.hovered { stroke-width: calc(var(--masque-line-w, 2) * 1.75); }
 /* Default :focus-visible outline stays until a focus ring is actually drawn (kbd-ring, set by
    keyboard.ts's focusTo) — so tabbing in still shows *something* before the first arrow press,
    but the browser outline doesn't double up with our own ring once one exists. */
@@ -29,11 +29,11 @@ const STYLE = `
 svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
        clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-.holo-enter { animation: holo-in ${MOTION_MS}ms ease-out; }
-.holo-leave { animation: holo-out ${MOTION_MS}ms ease-in forwards; }
-@keyframes holo-in { from { opacity: 0 } to { opacity: 1 } }
-@keyframes holo-out { from { opacity: 1 } to { opacity: 0 } }
-/* --holo-fig-bg (set by mount.ts from the manifest's "background" field) is the figure's own
+.masque-enter { animation: masque-in ${MOTION_MS}ms ease-out; }
+.masque-leave { animation: masque-out ${MOTION_MS}ms ease-in forwards; }
+@keyframes masque-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes masque-out { from { opacity: 1 } to { opacity: 0 } }
+/* --masque-fig-bg (set by mount.ts from the manifest's "background" field) is the figure's own
    background colour — the tooltip theme follows IT, not just the OS prefers-color-scheme, so a
    dark Makie figure in a light Pluto page still gets a dark tooltip. Registering the property
    makes it interpolable/animatable and, more importantly, gives lch(from …) below a typed
@@ -44,65 +44,65 @@ svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: n
    never a tint of the figure's own hue — the mark accent (added by tooltip_* / colors, not
    here) is the only place the figure's actual colour is allowed to show through. The trailing
    / 1 forces full opacity: omitting the alpha component of lch(from …) inherits the ORIGIN
-   colour's own alpha, and holo() always forces the figure's background opaque before building
+   colour's own alpha, and masque() always forces the figure's background opaque before building
    the manifest, but a caller building the manifest directly (build_manifest's background
-   kwarg, not through holo()) isn't guaranteed to. */
-@property --holo-fig-bg { syntax: "<color>"; inherits: true; initial-value: #ffffff; }
+   kwarg, not through masque()) isn't guaranteed to. */
+@property --masque-fig-bg { syntax: "<color>"; inherits: true; initial-value: #ffffff; }
 :host {
-  --holo-tip-bg-resolved: var(--holo-tip-bg, lch(from var(--holo-fig-bg) clamp(12, calc((l - 49.44) * infinity), 100) 0 0 / 1));
-  --holo-tip-color-resolved: var(--holo-tip-color, lch(from var(--holo-fig-bg) clamp(12, calc((49.44 - l) * infinity), 100) 0 0 / 1));
-  --holo-tip-border-resolved: var(--holo-tip-border, color-mix(in lch, var(--holo-tip-bg-resolved), var(--holo-tip-color-resolved) 20%));
+  --masque-tip-bg-resolved: var(--masque-tip-bg, lch(from var(--masque-fig-bg) clamp(12, calc((l - 49.44) * infinity), 100) 0 0 / 1));
+  --masque-tip-color-resolved: var(--masque-tip-color, lch(from var(--masque-fig-bg) clamp(12, calc((49.44 - l) * infinity), 100) 0 0 / 1));
+  --masque-tip-border-resolved: var(--masque-tip-border, color-mix(in lch, var(--masque-tip-bg-resolved), var(--masque-tip-color-resolved) 20%));
 }
 /* Browsers without CSS relative colour syntax (no lch(from …)/calc(infinity)) fall back to
    exactly today's behaviour: a static light theme, OS prefers-color-scheme for dark — the
    figure's own background plays no part. */
 @supports not (color: lch(from red calc(l * infinity) 0 0)) {
   :host {
-    --holo-tip-bg-resolved: var(--holo-tip-bg, #ffffff);
-    --holo-tip-color-resolved: var(--holo-tip-color, #1a1a1a);
-    --holo-tip-border-resolved: var(--holo-tip-border, rgba(0,0,0,0.1));
+    --masque-tip-bg-resolved: var(--masque-tip-bg, #ffffff);
+    --masque-tip-color-resolved: var(--masque-tip-color, #1a1a1a);
+    --masque-tip-border-resolved: var(--masque-tip-border, rgba(0,0,0,0.1));
   }
   @media (prefers-color-scheme: dark) {
     :host {
-      --holo-tip-bg-resolved: var(--holo-tip-bg, #1e1e1e);
-      --holo-tip-color-resolved: var(--holo-tip-color, #e8e8e8);
-      --holo-tip-border-resolved: var(--holo-tip-border, rgba(255,255,255,0.15));
+      --masque-tip-bg-resolved: var(--masque-tip-bg, #1e1e1e);
+      --masque-tip-color-resolved: var(--masque-tip-color, #e8e8e8);
+      --masque-tip-border-resolved: var(--masque-tip-border, rgba(255,255,255,0.15));
     }
   }
 }
-.holo-tip { position: absolute; opacity: 0; pointer-events: none; z-index: 10;
-       padding: var(--holo-tip-padding, 8px 12px); border-radius: var(--holo-tip-radius, 4px);
-       background: var(--holo-tip-bg-resolved); color: var(--holo-tip-color-resolved);
-       border: 1px solid var(--holo-tip-border-resolved);
-       border-left: var(--holo-mark-border, 1px solid var(--holo-tip-border-resolved));
-       box-shadow: var(--holo-tip-shadow, 0 2px 4px rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.08));
-       font: var(--holo-tip-font-size, 11px)/1.4 var(--holo-tip-font, system-ui, -apple-system, sans-serif);
-       max-width: var(--holo-tip-maxwidth, 320px); white-space: normal;
+.masque-tip { position: absolute; opacity: 0; pointer-events: none; z-index: 10;
+       padding: var(--masque-tip-padding, 8px 12px); border-radius: var(--masque-tip-radius, 4px);
+       background: var(--masque-tip-bg-resolved); color: var(--masque-tip-color-resolved);
+       border: 1px solid var(--masque-tip-border-resolved);
+       border-left: var(--masque-mark-border, 1px solid var(--masque-tip-border-resolved));
+       box-shadow: var(--masque-tip-shadow, 0 2px 4px rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.08));
+       font: var(--masque-tip-font-size, 11px)/1.4 var(--masque-tip-font, system-ui, -apple-system, sans-serif);
+       max-width: var(--masque-tip-maxwidth, 320px); white-space: normal;
        transition: opacity ${MOTION_MS}ms ease-out; }
-.holo-tip.show { opacity: 1; }
-/* left's containing block is .holo-tip's PADDING box (absolute-position offsets are measured
+.masque-tip.show { opacity: 1; }
+/* left's containing block is .masque-tip's PADDING box (absolute-position offsets are measured
    from the padding edge, CSS 2.1 §10.1), 1px inside its own 1px border — and the 5px transparent
    left/right borders below put the visible apex at the horizontal CENTRE of this element's own
-   box, 5px right of its left edge. --holo-caret-x (geometry.ts's caretX) is "px from the anchored
+   box, 5px right of its left edge. --masque-caret-x (geometry.ts's caretX) is "px from the anchored
    tooltip's OUTER left edge to the anchor" — landing the apex exactly there needs both offsets
    backed out: -1 (border) -5 (this element's own half-width) = -6. The 14px fallback (used only
-   when --holo-caret-x is unset, i.e. every cursor-following, non-anchored placement) preserves
+   when --masque-caret-x is unset, i.e. every cursor-following, non-anchored placement) preserves
    the pre-existing default apex position (14-6=8, the literal this replaced). */
-.holo-tip::before { content: ""; position: absolute; top: -5px; left: calc(var(--holo-caret-x, 14px) - 6px);
-       border: 5px solid transparent; border-top: none; border-bottom-color: var(--holo-tip-bg-resolved);
-       display: var(--holo-tip-caret, block); }
-.holo-tip.flip-y::before { top: auto; bottom: -5px; border-bottom: none;
-       border-top: 5px solid var(--holo-tip-bg-resolved); }
-.holo-tip.flip-x::before { left: auto; right: 8px; }
-.holo-tip-row { display: flex; gap: 8px; justify-content: space-between; }
-.holo-tip-key { color: var(--holo-tip-accent, #6b7280); }
-.holo-tip-val { font-variant-numeric: tabular-nums; }
+.masque-tip::before { content: ""; position: absolute; top: -5px; left: calc(var(--masque-caret-x, 14px) - 6px);
+       border: 5px solid transparent; border-top: none; border-bottom-color: var(--masque-tip-bg-resolved);
+       display: var(--masque-tip-caret, block); }
+.masque-tip.flip-y::before { top: auto; bottom: -5px; border-bottom: none;
+       border-top: 5px solid var(--masque-tip-bg-resolved); }
+.masque-tip.flip-x::before { left: auto; right: 8px; }
+.masque-tip-row { display: flex; gap: 8px; justify-content: space-between; }
+.masque-tip-key { color: var(--masque-tip-accent, #6b7280); }
+.masque-tip-val { font-variant-numeric: tabular-nums; }
 @media (prefers-color-scheme: dark) {
-  .holo-tip { box-shadow: var(--holo-tip-shadow, 0 2px 4px rgba(0,0,0,0.4), 0 8px 16px rgba(0,0,0,0.3)); }
+  .masque-tip { box-shadow: var(--masque-tip-shadow, 0 2px 4px rgba(0,0,0,0.4), 0 8px 16px rgba(0,0,0,0.3)); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .holo-enter, .holo-leave { animation: none; }
-  .holo-tip { transition: none; }
+  .masque-enter, .masque-leave { animation: none; }
+  .masque-tip { transition: none; }
 }
 `
 
@@ -149,7 +149,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     // it later has no effect on the gesture already in flight.
     if (manifest.layers.some((l) => l.events.includes("drag"))) surface.style.touchAction = "none"
     const tip = document.createElement("div")
-    tip.className = "holo-tip"
+    tip.className = "masque-tip"
     tip.setAttribute("role", "tooltip")
     tip.setAttribute("aria-hidden", "true")
 
@@ -162,10 +162,10 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     surface.setAttribute("tabindex", "0")
     surface.setAttribute("role", "application")
     surface.setAttribute("aria-label", "Interactive plot")
-    surface.setAttribute("aria-describedby", "holo-kbd-hint")
+    surface.setAttribute("aria-describedby", "masque-kbd-hint")
 
     const kbdHint = document.createElement("div")
-    kbdHint.id = "holo-kbd-hint"
+    kbdHint.id = "masque-kbd-hint"
     kbdHint.className = "sr-only"
     kbdHint.textContent = "Use arrow keys to move between elements, Page Up or Page Down to jump between layers, " +
         "Enter to select, Escape to leave."
@@ -181,11 +181,11 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
 
     shadow.append(style, svg, surface, tip, kbdHint, liveRegion)
     host.appendChild(shadowHost)
-    // --holo-fig-bg drives the CSS-only tooltip theme (mount.ts's STYLE, lch(from …)); set
-    // before tipStyle below so an explicit tooltip_bg/tooltip_color kwarg (--holo-tip-bg/
-    // --holo-tip-color) still wins outright — they're independent custom properties consumed
+    // --masque-fig-bg drives the CSS-only tooltip theme (mount.ts's STYLE, lch(from …)); set
+    // before tipStyle below so an explicit tooltip_bg/tooltip_color kwarg (--masque-tip-bg/
+    // --masque-tip-color) still wins outright — they're independent custom properties consumed
     // together via nested var() fallbacks, not a write-order race.
-    if (manifest.background) shadowHost.style.setProperty("--holo-fig-bg", manifest.background)
+    if (manifest.background) shadowHost.style.setProperty("--masque-fig-bg", manifest.background)
     if (manifest.tipStyle) for (const [k, v] of Object.entries(manifest.tipStyle)) shadowHost.style.setProperty(k, v)
 
     const thresholdLines = thresholdDrag.buildThresholdLines(manifest, svg)

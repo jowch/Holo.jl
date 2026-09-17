@@ -22,11 +22,11 @@ export function buildThresholdLines(manifest: Manifest, svg: SVGSVGElement): Map
         const st = layer.style ?? DEFAULT_STYLE
         line.setAttribute("stroke", st.stroke)
         // Base width goes through a CSS custom property + class (not the stroke-width attribute)
-        // so the hover-thicken class (mount.ts's .holo-threshold-line.hovered, applied by
+        // so the hover-thicken class (mount.ts's .masque-threshold-line.hovered, applied by
         // hover.ts's setDragHoverChrome) can calc() off it — a presentation attribute would win
         // over the class's rule at equal specificity, silently defeating the hover thickening.
-        line.classList.add("holo-threshold-line")
-        line.style.setProperty("--holo-line-w", String(st.width))
+        line.classList.add("masque-threshold-line")
+        line.style.setProperty("--masque-line-w", String(st.width))
         line.setAttribute("vector-effect", "non-scaling-stroke")
         svg.appendChild(line) // sibling of hiGroup → never hover-cleared
         thresholdLines.set(layer.id, line)

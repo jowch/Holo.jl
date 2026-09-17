@@ -108,7 +108,7 @@ describe("keyboard navigation", () => {
         // Fades like any other g.hi clear (highlight.ts's clearHi) rather than an instant
         // remove — same convention overlay.test.ts asserts for hover-miss.
         const leaving = shadow.querySelector(".hi > *")
-        expect(leaving === null || leaving.classList.contains("holo-leave")).toBe(true)
+        expect(leaving === null || leaving.classList.contains("masque-leave")).toBe(true)
         expect(shadow.activeElement).not.toBe(surface)
     })
 
@@ -169,7 +169,7 @@ describe("keyboard navigation", () => {
         const { surface, shadow } = setup(manifest)
         surface.focus()
         down(surface, "ArrowRight") // focus a[0] — has a real tooltip (auto-table from {v: 1})
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         expect(tip.classList.contains("show")).toBe(true)
         const focusedHtml = tip.innerHTML
         // hover a different element (a[1]) — overwrites the visible tooltip with a[1]'s content
@@ -246,7 +246,7 @@ describe("keyboard navigation", () => {
             const { surface, shadow } = setup(noTip)
             surface.focus()
             down(surface, "ArrowRight")
-            expect(shadow.querySelector(".holo-tip")?.classList.contains("show")).toBe(false)
+            expect(shadow.querySelector(".masque-tip")?.classList.contains("show")).toBe(false)
             vi.advanceTimersByTime(200)
             const live = shadow.querySelector('[aria-live="polite"]') as HTMLElement
             expect(live.textContent).toBe("element 1 of 1") // no ": <plain>" suffix — tooltip suppressed
@@ -269,7 +269,7 @@ describe("keyboard navigation", () => {
             const { surface, shadow } = setup(tmplManifest)
             surface.focus()
             down(surface, "ArrowRight")
-            const tip = shadow.querySelector(".holo-tip") as HTMLElement
+            const tip = shadow.querySelector(".masque-tip") as HTMLElement
             expect(tip.innerHTML).toContain("<b>")
             expect(tip.innerHTML).toContain("&amp;") // esc() ran on the interpolated field
             vi.advanceTimersByTime(200)
@@ -293,7 +293,7 @@ describe("keyboard navigation", () => {
         // focusTipHtml is null (tooltip suppressed), hide rather than show the tooltip.
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 5, clientY: 5, bubbles: true }))
         expect(shadow.querySelector(".hi > *")).toBeTruthy()
-        expect(shadow.querySelector(".holo-tip")?.classList.contains("show")).toBe(false)
+        expect(shadow.querySelector(".masque-tip")?.classList.contains("show")).toBe(false)
     })
 
     it("PageDown/PageUp clamp (don't wrap) at the last/first layer", () => {
@@ -317,17 +317,17 @@ describe("keyboard navigation", () => {
         expect(shadow.querySelector(".hi > *")).toBeTruthy()
         surface.blur() // stands in for "Tab moved focus elsewhere" — fires focusout either way
         const leaving = shadow.querySelector(".hi > *")
-        expect(leaving === null || leaving.classList.contains("holo-leave")).toBe(true)
+        expect(leaving === null || leaving.classList.contains("masque-leave")).toBe(true)
         // A subsequent pointer miss must NOT restore a fresh ring — restoreFocus's cache
         // should be cleared, not just visually faded, so the element the fading circle above
-        // never gets re-entered with "holo-enter" (the regression restoreFocus (hover.ts)
+        // never gets re-entered with "masque-enter" (the regression restoreFocus (hover.ts)
         // could reintroduce if focusout didn't call focusTo(ctx, state, null)). Real timers
         // here, so the fading circle from blur() may still be mid-fade-out in the DOM —
         // exactly like the "Escape clears the ring" test above, that's expected, not a miss.
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 5, clientY: 5, bubbles: true }))
         const afterMiss = shadow.querySelector(".hi > *")
-        expect(afterMiss === null || afterMiss.classList.contains("holo-leave")).toBe(true)
-        expect(afterMiss?.classList.contains("holo-enter")).not.toBe(true)
+        expect(afterMiss === null || afterMiss.classList.contains("masque-leave")).toBe(true)
+        expect(afterMiss?.classList.contains("masque-enter")).not.toBe(true)
     })
 
     it("Enter does not preventDefault when nothing is keyboard-focused yet", () => {
@@ -390,7 +390,7 @@ describe("keyboard navigation", () => {
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 5, clientY: 5, bubbles: true }))
         await flushFrame()
         const afterMiss = shadow.querySelector(".hi > *")
-        expect(afterMiss === null || afterMiss.classList.contains("holo-leave")).toBe(true)
+        expect(afterMiss === null || afterMiss.classList.contains("masque-leave")).toBe(true)
     })
 
     it("a click on a non-focusable kind (e.g. :grid) leaves existing keyboard focus untouched", () => {
@@ -476,7 +476,7 @@ describe("keyboard navigation", () => {
         }
         const { surface, shadow } = setup(mixedManifest)
         surface.focus()
-        const tip = shadow.querySelector(".holo-tip") as HTMLElement
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
         down(surface, "ArrowRight") // seg[0]: midpoint of (0,0)-(100,100) = image (50,50) -> CSS (25,25)
         expect(tip.style.left).toBe("25px")
         expect(tip.style.top).toBe("15px") // 25 - ANCHOR_GAP(10)

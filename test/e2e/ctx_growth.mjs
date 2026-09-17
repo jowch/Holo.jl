@@ -1,5 +1,5 @@
 // WGL context-lifecycle measurement (LOCAL tool — deliberately not wired into CI): drives a
-// PlutoUI slider through N kernel re-renders of a :webgl holo widget and counts WebGL context
+// PlutoUI slider through N kernel re-renders of a :webgl masque widget and counts WebGL context
 // creations vs webglcontextlost events. Asserts the property docs/dev/perf-findings.md
 // §"WGL context lifecycle" records: LIVE contexts stay at 1 across the sweep, because
 // WGLMakie's check_screen disposes any context whose canvas left the DOM (re-run and delete
@@ -63,7 +63,7 @@ try {
 
   const before = await page.evaluate(() => ({
     created: window.__glCreated,
-    canvases: document.querySelectorAll("canvas.holo-webgl-base").length,
+    canvases: document.querySelectorAll("canvas.masque-webgl-base").length,
     cellId: document.querySelector(".ip-host")?.closest("pluto-cell")?.id ?? null,
   }));
   console.error("baseline before sweep:", JSON.stringify(before));
@@ -102,19 +102,19 @@ try {
     await new Promise((r) => setTimeout(r, 500));   // let check_screen's next RAF tick run
     const st = await page.evaluate(() => ({
       created: window.__glCreated, lost: window.__glLost, live: window.__glCreated - window.__glLost,
-      canvases: document.querySelectorAll("canvas.holo-webgl-base").length,
+      canvases: document.querySelectorAll("canvas.masque-webgl-base").length,
       cellId: document.querySelector(".ip-host")?.closest("pluto-cell")?.id ?? null,
     }));
     if (st.cellId !== before.cellId) cellIdStable = false;   // stability, not mere presence
     console.error(`after step ${s} (az=${moved}):`, JSON.stringify(st));
   }
 
-  const after = await page.evaluate(() => ({ created: window.__glCreated, lost: window.__glLost, canvases: document.querySelectorAll("canvas.holo-webgl-base").length }));
+  const after = await page.evaluate(() => ({ created: window.__glCreated, lost: window.__glLost, canvases: document.querySelectorAll("canvas.masque-webgl-base").length }));
   const live = after.created - after.lost;
   if (after.created < STEPS + 1) throw new Error(`only ${after.created} contexts created across ${STEPS} re-renders + mount — re-renders did not exercise the GL path; measurement is vacuous`);
   if (live !== 1) throw new Error(`LIVE contexts = ${live} after the sweep (expected exactly 1) — ${live > 1 ? 'the upstream check_screen disposal is gone' : 'the resident context was disposed spuriously'} (see perf-findings §"WGL context lifecycle")`);
 
-  // DELETE half — measured, not inferred: delete the holo cell via Pluto's UI and assert the
+  // DELETE half — measured, not inferred: delete the masque cell via Pluto's UI and assert the
   // last context is disposed (live → 0). Best-effort: Pluto's delete UI may change; report
   // delete_measured=false rather than fail if the controls aren't found.
   let deleteMeasured = false;
@@ -129,7 +129,7 @@ try {
   if (deleted === "clicked") {
     for (let i = 0; i < 40; i++) {
       await new Promise((r) => setTimeout(r, 250));
-      const st = await page.evaluate(() => ({ live: window.__glCreated - window.__glLost, canvases: document.querySelectorAll("canvas.holo-webgl-base").length }));
+      const st = await page.evaluate(() => ({ live: window.__glCreated - window.__glLost, canvases: document.querySelectorAll("canvas.masque-webgl-base").length }));
       if (st.live === 0 && st.canvases === 0) { deleteMeasured = true; break; }
     }
     if (!deleteMeasured) throw new Error("cell deleted but the context was never disposed (live never reached 0) — the delete half of the disposal claim FAILED");

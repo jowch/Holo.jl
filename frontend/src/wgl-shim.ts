@@ -1,14 +1,14 @@
-// HoloWGL :webgl bootstrap — renders a serialize_scene payload with NO Bonito runtime and
+// MasqueWGL :webgl bootstrap — renders a serialize_scene payload with NO Bonito runtime and
 // NO server. Imports WGLMakie's own bundle (version-matched, three.js inlined) and feeds it
 // through a tiny shim. Validated by the spikes (full 2D+3D fidelity, animation hook).
 //
-// Usage (from the Holo widget HTML, mount===:webgl):
-//   import { mountWebGL } from "./holo-webgl.js";  // committed ESM at assets/holo-webgl.js
+// Usage (from the Masque widget HTML, mount===:webgl):
+//   import { mountWebGL } from "./masque-webgl.js";  // committed ESM at assets/masque-webgl.js
 //   mountWebGL({ canvas, wglBundleUrl, scene: published, width, height, pxPerUnit });
 //
-// `scene` is the published_to_js payload from HoloWGLMakieExt.scene_payload (the 4-rule
+// `scene` is the published_to_js payload from MasqueWGLMakieExt.scene_payload (the 4-rule
 // encoding); `rewrap` is the JS half of that contract — it mirrors `_plain` in
-// ext/HoloWGLMakieExt.jl, so the two must stay in sync (the unit tests lock it).
+// ext/MasqueWGLMakieExt.jl, so the two must stay in sync (the unit tests lock it).
 
 // functional observable shim: stores callbacks, notify() runs them -> the animation hook
 export interface Obs<T = unknown> {
@@ -35,9 +35,9 @@ export function makeBonitoShim() {
         notify() {}
         on() { return () => {} }
         static send_error = (msg: string, e: unknown) =>
-            console.error("[holo-wgl]", msg, (e && (e as Error).stack) || e)
+            console.error("[masque-wgl]", msg, (e && (e as Error).stack) || e)
         // WGLMakie's shader-compile-error path calls this with a single already-formatted string
-        static send_warning = (...args: unknown[]) => console.warn("[holo-wgl]", ...args)
+        static send_warning = (...args: unknown[]) => console.warn("[masque-wgl]", ...args)
     }
     return {
         // MUST be true: WGLMakie gates observable updates on this. comm.send is a no-op, so
@@ -56,7 +56,7 @@ const TA = { f32: Float32Array, i32: Int32Array, u32: Uint32Array, u8: Uint8Arra
 type TKey = keyof typeof TA
 
 // rebuild the structures WGLMakie's deserialize expects from the 4-rule tags. `__obs__`/`__t__`
-// are Julia's wire tags (HoloWGLMakieExt.jl's `_plain`) — bracket-accessed, not `x.__obs__`,
+// are Julia's wire tags (MasqueWGLMakieExt.jl's `_plain`) — bracket-accessed, not `x.__obs__`,
 // so esbuild's `mangleProps: /_$/` (which would otherwise catch the trailing "__") can never
 // touch them.
 export function rewrap(x: any): any {

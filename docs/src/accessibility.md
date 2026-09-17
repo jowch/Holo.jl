@@ -45,14 +45,14 @@ list form), and [`PolygonInteractable`](@ref) — the same element-kind construc
 is accepted by, minus the kinds keyboard nav doesn't visit.
 
 ```julia
-holo(fig, [
+masque(fig, [
     PointInteractable(ax, pts; id = :cities, label = "City"),
     RectInteractable(ax; rects = bars, id = :bars, label = "Revenue by quarter"),
 ])
 ```
 
 `label` isn't yet threaded through the plot-object constructors (`PointInteractable(ax,
-p::Makie.Scatter)`, `RectInteractable(ax, p::Makie.BarPlot)`, and similar) or `holo(fig)`'s
+p::Makie.Scatter)`, `RectInteractable(ax, p::Makie.BarPlot)`, and similar) or `masque(fig)`'s
 auto-extraction — the same gap `tooltip` has today. Build the interactable explicitly with the
 keyword-argument form above to set a label.
 

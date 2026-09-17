@@ -1,16 +1,16 @@
-# Build ~/.julia/sysimages/holo-makie.so from this project.
+# Build ~/.julia/sysimages/masque-makie.so from this project.
 # Invoked with JULIA_NOSYSIMAGE=1 so a prior image never wraps the compiler.
-# CairoMakie + Holo only — do not bake WGLMakie (a dual-backend image makes implicit
-# holo() pick Cairo after the resolver harden, but WGL live-verify still wants stock Julia).
+# CairoMakie + Masque only — do not bake WGLMakie (a dual-backend image makes implicit
+# masque() pick Cairo after the resolver harden, but WGL live-verify still wants stock Julia).
 using Pkg
 using SHA: sha256
 
 const PROJECT = @__DIR__
-const HOLO_ROOT = joinpath(PROJECT, "..", "..")
+const MASQUE_ROOT = joinpath(PROJECT, "..", "..")
 Pkg.activate(PROJECT)
 
-# Holo from the checkout (not the registry — Holo is unregistered). Other deps via names.
-Pkg.develop(; path = HOLO_ROOT)
+# Masque from the checkout (not the registry — Masque is unregistered). Other deps via names.
+Pkg.develop(; path = MASQUE_ROOT)
 proj = Pkg.project()
 have = Set(string.(keys(proj.dependencies)))
 needed = ["Makie", "CairoMakie", "Pluto", "PackageCompiler"]
@@ -22,16 +22,16 @@ using PackageCompiler
 
 const SYSIMAGE = get(
     ENV,
-    "HOLO_JULIA_SYSIMAGE",
-    joinpath(homedir(), ".julia", "sysimages", "holo-makie.so"),
+    "MASQUE_JULIA_SYSIMAGE",
+    joinpath(homedir(), ".julia", "sysimages", "masque-makie.so"),
 )
 const STAMP = SYSIMAGE * ".stamp"
 const WORKLOAD = joinpath(PROJECT, "precompile_workload.jl")
 
 mkpath(dirname(SYSIMAGE))
 
-# Hash Holo sources too: the image bakes :Holo, so a checkout edit must invalidate the stamp.
-function _holo_src_bytes(root)
+# Hash Masque sources too: the image bakes :Masque, so a checkout edit must invalidate the stamp.
+function _masque_src_bytes(root)
     paths = String[]
     for sub in ("src", "ext")
         for (dir, _, files) in walkdir(joinpath(root, sub))
@@ -51,15 +51,15 @@ end
 
 manifest = joinpath(PROJECT, "Manifest.toml")
 isfile(manifest) || error("Manifest.toml missing after instantiate: $manifest")
-stamp = bytes2hex(sha256(String(read(manifest)) * String(read(WORKLOAD)) * _holo_src_bytes(HOLO_ROOT)))
+stamp = bytes2hex(sha256(String(read(manifest)) * String(read(WORKLOAD)) * _masque_src_bytes(MASQUE_ROOT)))
 
 if isfile(SYSIMAGE) && isfile(STAMP) && read(STAMP, String) == stamp
-    @info "Holo Makie sysimage up to date" SYSIMAGE
+    @info "Masque Makie sysimage up to date" SYSIMAGE
 else
-    @info "Building Holo Makie sysimage (Makie + CairoMakie + Holo + Pluto; no WGLMakie)" SYSIMAGE
+    @info "Building Masque Makie sysimage (Makie + CairoMakie + Masque + Pluto; no WGLMakie)" SYSIMAGE
     isfile(SYSIMAGE) && rm(SYSIMAGE)
     PackageCompiler.create_sysimage(
-        [:Makie, :CairoMakie, :Holo, :Pluto];
+        [:Makie, :CairoMakie, :Masque, :Pluto];
         sysimage_path = SYSIMAGE,
         project = PROJECT,
         precompile_execution_file = WORKLOAD,

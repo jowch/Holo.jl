@@ -18,7 +18,7 @@ end
 
 # ╔═╡ d0000000-0000-0000-0000-000000000001
 # Self-contained env: dev the local package via a checkout-relative path, add WGLMakie.
-# Pkg.develop disables Pluto's own pkg management (the local package is unregistered). Holo
+# Pkg.develop disables Pluto's own pkg management (the local package is unregistered). Masque
 # resolves exactly one backend per session from which extension loads — `using WGLMakie` here
 # (not CairoMakie) selects the `:webgl` backend automatically.
 begin
@@ -27,17 +27,17 @@ begin
     Pkg.develop(path = joinpath(@__DIR__, ".."))   # examples/ -> package root (portable)
     Pkg.add(["WGLMakie", "JSON3"])
     Pkg.instantiate()
-    using Holo
+    using Masque
     using WGLMakie
     import JSON3
 end
 
 # ╔═╡ d0000000-0000-0000-0000-000000000002
 md"""
-# Holo.jl — `:webgl` backend demo
+# Masque.jl — `:webgl` backend demo
 
-Each figure renders **live on the browser GPU** (a WGLMakie `<canvas>`) with Holo's interactive
-overlay on top — same `@bind` / `InteractionEvent` contract as the `:cairo` backend's `holo`, but
+Each figure renders **live on the browser GPU** (a WGLMakie `<canvas>`) with Masque's interactive
+overlay on top — same `@bind` / `InteractionEvent` contract as the `:cairo` backend's `masque`, but
 it handles **3D** and large/animated data the static `CairoBackend` can't. Click a marker; the
 bond below reports the typed event. (As of M3.1 the overlay binds straight to the canvas — no
 sizer shim.)
@@ -55,7 +55,7 @@ fig2d = let
 end;
 
 # ╔═╡ d0000000-0000-0000-0000-000000000012
-@bind ev2d holo(fig2d)
+@bind ev2d masque(fig2d)
 
 # ╔═╡ d0000000-0000-0000-0000-000000000013
 ev2d
@@ -83,7 +83,7 @@ fig3d = let
 end;
 
 # ╔═╡ d0000000-0000-0000-0000-000000000022
-@bind ev3d holo(fig3d)
+@bind ev3d masque(fig3d)
 
 # ╔═╡ d0000000-0000-0000-0000-000000000023
 ev3d
@@ -109,12 +109,12 @@ begin
         ax = Axis(f[1, 1]; title = "hover: templated tooltip")
         pts = [(1.0, 1.0), (2.0, 3.0), (3.0, 2.0)]
         scatter!(ax, first.(pts), last.(pts); markersize = 16)
-        holo(
+        masque(
             f, [
                 PointInteractable(
                     ax, pts; id = :tpts,
                     payloads = [(; index = k - 1, label = ("alpha", "beta", "gamma")[k]) for k in 1:3],
-                    tooltip = holo"point $(label)",
+                    tooltip = masque"point $(label)",
                 ),
             ]
         )
@@ -142,7 +142,7 @@ begin
         z = [Float64(i + 3j) for i in 1:4, j in 1:5]
         hm = heatmap!(ax, 1:4, 1:5, z)
         Colorbar(f[1, 2], hm)
-        holo(f)   # auto-extract: grid cells + colorbar
+        masque(f)   # auto-extract: grid cells + colorbar
     end
     nothing
 end
@@ -166,7 +166,7 @@ begin
         ax = Axis(f[1, 1]; title = "polygon / region / text", limits = (0, 10, 0, 6))
         poly!(ax, [Makie.Point2f(1, 1), Makie.Point2f(3, 1), Makie.Point2f(2, 3)]; color = :orange)
         txt = text!(ax, [8.0], [5.0]; text = ["labelled"], fontsize = 16)
-        holo(
+        masque(
             f, [
                 PolygonInteractable(ax, [[(1.0, 1.0), (3.0, 1.0), (2.0, 3.0)]]; id = :tri),
                 RegionInteractable(
@@ -199,7 +199,7 @@ begin
         f = Figure(; size = (480, 300))
         ax = Axis(f[1, 1]; title = "drag the line; click anywhere", limits = (0, 10, 0, 10))
         scatter!(ax, [2.0, 5.0, 8.0], [2.0, 5.0, 8.0]; markersize = 12)
-        holo(
+        masque(
             f, [
                 ThresholdInteractable(ax; orientation = :horizontal, value = 4.0, id = :thr),
                 AxisInteractable(ax; id = :axis),
@@ -228,7 +228,7 @@ begin
         ax = Axis(f[1, 1]; title = "drag the box over points", limits = (0, 10, 0, 10))
         pts = [(1.0, 1.0), (3.0, 3.0), (5.0, 5.0), (7.0, 7.0), (9.0, 9.0)]
         scatter!(ax, first.(pts), last.(pts); markersize = 14)
-        holo(
+        masque(
             f, [
                 PointInteractable(ax, pts; id = :pts),
                 ROIInteractable(ax; bounds = (2.0, 6.0, 2.0, 6.0), selects = :pts, id = :roi),

@@ -1,6 +1,6 @@
-using Holo
-using Holo: hitlayers, validate, events, HitLayer, build_manifest, HoloWidget
-import Holo as IP
+using Masque
+using Masque: hitlayers, validate, events, HitLayer, build_manifest, MasqueWidget
+import Masque as IP
 using CairoMakie
 import Makie
 using Test

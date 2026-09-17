@@ -1,9 +1,9 @@
 using Test
-using Holo
+using Masque
 using WGLMakie
 import Makie
 
-const _WGLExt = Base.get_extension(Holo, :HoloWGLMakieExt)
+const _WGLExt = Base.get_extension(Masque, :MasqueWGLMakieExt)
 
 # Smoke tests for the serialization bridge (no browser). The browser render is covered by
 # the spikes; these guard the Julia-side encoder + the version-coupled serialize_scene path.
@@ -54,13 +54,13 @@ end
     @test _WGLExt.scene_payload(fig) isa Dict{String, Any}
 end
 
-@testset "holo(fig) widget (WGLMakie loaded)" begin
+@testset "masque(fig) widget (WGLMakie loaded)" begin
     import HypertextLiteral: JavaScript
     import JSON3
     fig = Figure(; size = (400, 300))
     ax = Axis(fig[1, 1])
     scatter!(ax, 1:5, rand(5))
-    w = holo(fig, Holo.AbstractInteractable[]; backend = _WGLExt.WebGLBackend())
+    w = masque(fig, Masque.AbstractInteractable[]; backend = _WGLExt.WebGLBackend())
     @test w isa _WGLExt.WebGLWidget
     @test w.scene isa Dict{String, Any}
     @test (w.width, w.height) == (400, 300)
@@ -82,8 +82,8 @@ end
     @test occursin("canvas", html)
     @test occursin("mountWebGL", html)
     @test occursin("createObjectURL", html)      # blob delivery (no server / no file://)
-    @test occursin("window.__HoloWGL", html)     # M2: bundle/shim blob URLs cached once per notebook
-    @test occursin("window.Holo.mount", html)    # Holo's overlay reused verbatim
+    @test occursin("window.__MasqueWGL", html)     # M2: bundle/shim blob URLs cached once per notebook
+    @test occursin("window.Masque.mount", html)    # Masque's overlay reused verbatim
 end
 
 @testset "PolarAxis scene is JSON3-safe (pagepolar e2e)" begin
@@ -91,7 +91,7 @@ end
     fig = Figure(; size = (400, 300))
     ax = PolarAxis(fig[1, 1])
     scatter!(ax, Point2f[(0.0, 1.0), (π / 2, 2.0)]; markersize = 14, color = :red)
-    w = holo(fig; backend = _WGLExt.WebGLBackend())
+    w = masque(fig; backend = _WGLExt.WebGLBackend())
     @test w.manifest["transforms"]["ax1"]["ispolar"] === true
     @test JSON3.write(w.scene) isa String
     @test JSON3.write(w.manifest) isa String
@@ -103,13 +103,13 @@ end
     lines!(ax, 1:5, (1:5) .^ 2)
     Makie.update_state_before_display!(fig)
 
-    ctx = Holo.context(_WGLExt.WebGLBackend(), fig, 2.0)
-    @test ctx.transforms isa Dict{Symbol, Holo.AxisTransform}   # not Dict{Symbol,Any}
+    ctx = Masque.context(_WGLExt.WebGLBackend(), fig, 2.0)
+    @test ctx.transforms isa Dict{Symbol, Masque.AxisTransform}   # not Dict{Symbol,Any}
     @test haskey(ctx.transforms, :ax1)                           # was empty -> KeyError
 
     # an axis-keyed interactable must build its manifest without KeyError now
-    thr = Holo.ThresholdInteractable(ax; value = 10.0)
-    w = holo(fig, [thr]; backend = _WGLExt.WebGLBackend())
+    thr = Masque.ThresholdInteractable(ax; value = 10.0)
+    w = masque(fig, [thr]; backend = _WGLExt.WebGLBackend())
     @test w isa _WGLExt.WebGLWidget
     @test !isempty(w.manifest["transforms"])
 end
@@ -124,7 +124,7 @@ end
 
 @testset "backend wiring" begin
     b = _WGLExt.WebGLBackend()
-    @test b isa Holo.AbstractBackend
+    @test b isa Masque.AbstractBackend
     @test isfile(_WGLExt.SHIM_JS)
     @test isfile(_WGLExt._wgl_bundle_path())   # the version-matched renderer is on disk
 end
@@ -132,12 +132,12 @@ end
 @testset "version-coupling guard (WGLMakie/Bonito internals)" begin
     # This extension rides UNSTABLE WGLMakie/Bonito internals: the session-free
     # `serialize_scene`, the `Screen` + `NoConnection` atlas-population dance, and the JS
-    # bundle's `setup_scene_init` export the shim calls (assets/holo-webgl.js). A WGLMakie
+    # bundle's `setup_scene_init` export the shim calls (assets/masque-webgl.js). A WGLMakie
     # bump can move any of these and break the widget IN THE BROWSER with no Julia error —
     # the other testsets would still pass. Each check below names one coupling point so a
     # bump fails loudly *here*, cueing "re-verify the wire format" instead of a confusing
     # downstream symptom. Exercises the WGL-only compat block (`_wgl_bundle_path`,
-    # `_headless_screen`, `_serialize_scene` in ext/HoloWGLMakieExt.jl), not just `isdefined`.
+    # `_headless_screen`, `_serialize_scene` in ext/MasqueWGLMakieExt.jl), not just `isdefined`.
 
     @test isdefined(_WGLExt.Bonito, :NoConnection)   # session-free serialize (no live Pluto)
     @test isdefined(WGLMakie, :ScreenConfig)
@@ -193,7 +193,7 @@ end
     # `ConnStub`'s `on()` method.
     bundle = read(_WGLExt._wgl_bundle_path(), String)
 
-    shim_path = joinpath(pkgdir(Holo), "frontend", "src", "wgl-shim.ts")
+    shim_path = joinpath(pkgdir(Masque), "frontend", "src", "wgl-shim.ts")
     @test isfile(shim_path)
     shim_src = read(shim_path, String)
     # strip `//` line comments first, so a comment merely *mentioning* a symbol name (e.g.
@@ -233,20 +233,20 @@ end
 
 @testset "WGL accessors rewrap a moved internal" begin
     # Negative path for the WGL-only compat block, mirroring test/makie_compat_tests.jl's
-    # "accessors rewrap a moved internal" — a shape break must produce the Holo message,
+    # "accessors rewrap a moved internal" — a shape break must produce the Masque message,
     # not a raw MethodError/FieldError.
-    @test_throws r"^Holo: WGLMakie/Bonito internal `serialize_scene`" _WGLExt._serialize_scene(nothing)
-    @test_throws r"^Holo: WGLMakie/Bonito internal `headless screen construction`" _WGLExt._headless_screen(identity, nothing)
+    @test_throws r"^Masque: WGLMakie/Bonito internal `serialize_scene`" _WGLExt._serialize_scene(nothing)
+    @test_throws r"^Masque: WGLMakie/Bonito internal `headless screen construction`" _WGLExt._headless_screen(identity, nothing)
 end
 
 @testset "@bind round-trip contract (click payload -> InteractionEvent)" begin
     import JSON3
     import AbstractPlutoDingetjes as APD
-    IE = Holo.InteractionEvent
+    IE = Masque.InteractionEvent
 
     fig = Figure(; size = (400, 300)); ax = Axis(fig[1, 1])
     scatter!(ax, 1:5, (1:5) .^ 2)
-    w = holo(fig; backend = _WGLExt.WebGLBackend())   # auto-extract -> one :scatter circles layer
+    w = masque(fig; backend = _WGLExt.WebGLBackend())   # auto-extract -> one :scatter circles layer
     layer = only(w.manifest["layers"])
     @test layer["id"] == "scatter"
 
@@ -270,7 +270,7 @@ end
 end
 
 # MUST run last in this file: this loads CairoMakie on top of the already-loaded WGLMakie.
-# After that, implicit holo() defaults to Cairo (sysimage-safe) — nothing after this
+# After that, implicit masque() defaults to Cairo (sysimage-safe) — nothing after this
 # testset may rely on the WGLMakie-only auto-resolution path.
 # ---- cross-backend parity harness: within-backend golden drift (:webgl half) ----
 # (JSON3 is already a hard dep of this GROUP — no guard needed; see core_tests.jl's
@@ -283,24 +283,24 @@ include("parity_corpus.jl")
     for (name, build) in _parity_corpus()
         fig, ints = build()
         bk = _WGLExt.WebGLBackend()
-        ctx = Holo.context(bk, fig, Holo._ppu(bk, fig))
-        live = JSON3.read(JSON3.write(Holo.build_manifest(ints, ctx)))
+        ctx = Masque.context(bk, fig, Masque._ppu(bk, fig))
+        live = JSON3.read(JSON3.write(Masque.build_manifest(ints, ctx)))
         golden = JSON3.read(read(joinpath(dir, "$name.webgl.json"), String))
         @test live == golden
     end
 end
 
-@testset "holo(fig) with both backends loaded defaults to Cairo" begin
+@testset "masque(fig) with both backends loaded defaults to Cairo" begin
     using CairoMakie
-    cairo_ext = Base.get_extension(Holo, :HoloCairoMakieExt)
+    cairo_ext = Base.get_extension(Masque, :MasqueCairoMakieExt)
     fig = Figure(; size = (300, 200)); ax = Axis(fig[1, 1]); scatter!(ax, 1:5, rand(5))
 
-    implicit = holo(fig)
-    @test implicit isa Holo.HoloWidget
+    implicit = masque(fig)
+    @test implicit isa Masque.MasqueWidget
 
-    cairo = holo(fig; backend = cairo_ext.CairoBackend())
-    @test cairo isa Holo.HoloWidget
+    cairo = masque(fig; backend = cairo_ext.CairoBackend())
+    @test cairo isa Masque.MasqueWidget
 
-    wgl = holo(fig; backend = _WGLExt.WebGLBackend())
+    wgl = masque(fig; backend = _WGLExt.WebGLBackend())
     @test wgl isa _WGLExt.WebGLWidget
 end
