@@ -1,23 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 58 256 130" width="256" height="130" role="img" aria-label="Masque.jl logo: a gold Venetian eye mask set with four jewels in the Julia colours">
   <style>
-    .halo {
-      fill: none;
-      stroke-width: 2.5;
-      opacity: 0;
+    .glint {
       transform-box: fill-box;
       transform-origin: center;
-      animation: masque-pulse 6s ease-out infinite;
+      transform: scale(0);
+      animation: masque-twinkle 5s ease-in-out infinite;
     }
-    .h2 { animation-delay: 1.5s; }
-    .h3 { animation-delay: 3s; }
-    .h4 { animation-delay: 4.5s; }
-    @keyframes masque-pulse {
-      0%   { transform: scale(1);   opacity: 0.9; }
-      22%  { transform: scale(2.2); opacity: 0; }
-      100% { transform: scale(2.2); opacity: 0; }
+    .g2 { animation-delay: 2.6s; }
+    @keyframes masque-twinkle {
+      0%   { transform: scale(0) rotate(0deg); }
+      6%   { transform: scale(1) rotate(25deg); }
+      12%  { transform: scale(0.55) rotate(45deg); }
+      18%  { transform: scale(0.9) rotate(60deg); }
+      26%  { transform: scale(0) rotate(90deg); }
+      100% { transform: scale(0) rotate(90deg); }
     }
     @media (prefers-reduced-motion: reduce) {
-      .halo { animation: none; }
+      .glint { animation: none; transform: scale(0.7); }
     }
   </style>
   <path fill="#C9962B" fill-rule="evenodd" d="
@@ -38,8 +37,10 @@
   <circle cx="78" cy="76" r="8" fill="#9558B2"/>
   <circle cx="178" cy="76" r="8" fill="#389826"/>
   <circle cx="128" cy="150" r="7" fill="#4063D8"/>
-  <circle class="halo h1" cx="128" cy="88" r="12" stroke="#CB3C33"/>
-  <circle class="halo h2" cx="78" cy="76" r="10" stroke="#9558B2"/>
-  <circle class="halo h3" cx="178" cy="76" r="10" stroke="#389826"/>
-  <circle class="halo h4" cx="128" cy="150" r="9" stroke="#4063D8"/>
+  <g transform="translate(184 113)">
+    <path class="glint g1" fill="#C9962B" d="M 0 -11 Q 1.6 -1.6 11 0 Q 1.6 1.6 0 11 Q -1.6 1.6 -11 0 Q -1.6 -1.6 0 -11 Z"/>
+  </g>
+  <g transform="translate(66 116)">
+    <path class="glint g2" fill="#C9962B" d="M 0 -6 Q 1 -1 6 0 Q 1 1 0 6 Q -1 1 -6 0 Q -1 -1 0 -6 Z"/>
+  </g>
 </svg>
