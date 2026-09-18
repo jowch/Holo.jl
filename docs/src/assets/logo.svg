@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 58 256 130" width="256" height="130" role="img" aria-label="Masque.jl logo: a Venetian eye mask with a red marker at the brow">
+  <path fill="#3A6F7C" fill-rule="evenodd" d="
+    M 14 104
+    C 30 76, 84 60, 128 86
+    C 172 60, 226 76, 242 104
+    C 236 146, 210 178, 176 172
+    C 154 168, 142 152, 128 148
+    C 114 152, 102 168, 80 172
+    C 46 178, 20 146, 14 104 Z
+    M 48 112 C 66 92, 100 98, 114 126 C 98 142, 62 140, 48 112 Z
+    M 208 112 C 190 92, 156 98, 142 126 C 158 142, 194 140, 208 112 Z
+    M 142 88 A 14 14 0 1 0 114 88 A 14 14 0 1 0 142 88 Z"/>
+  <circle cx="128" cy="88" r="10" fill="#CB3C33"/>
+</svg>
