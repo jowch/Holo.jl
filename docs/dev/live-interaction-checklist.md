@@ -87,6 +87,7 @@ bake it; hover/click or drag only.
 | Threshold | `:threshold` | none | drag commit → `@bind` |
 | ROI / box-select | `:roi` | none | drag commit → `@bind` (vector if `selects=`) |
 | View (2D pan) | `:view` | none | drag-to-pan commit → `@bind` (`xmin`/`xmax`). Axis3 orbit is `examples/view_manip*.jl` — skip if it would enlarge the PR |
+| Legend | `:rects` | wash (entry row) | tip = entry label, hover fans out linked layers into `g.link` (wash/ring on the marks, on-mark geometry, fade on leave, `g.sel` untouched), click `@bind` payload carries `targets` |
 
 ### Hover (element kinds)
 

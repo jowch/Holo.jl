@@ -594,6 +594,16 @@ function _construct(ax, p, id)
     return error("auto_interactables: $(typeof(p).name.name) passed _plotbase but has no _construct branch")
 end
 
+# Recursive `_child_plots` walk: registers `ids` for every descendant of `p` that isn't
+# already in `plotmap` (a leaf plot's `_child_plots` is `[]`, so this terminates there).
+function _register_descendants!(plotmap, p, ids)
+    for c in _child_plots(p)
+        haskey(plotmap, c) || (plotmap[c] = ids)
+        _register_descendants!(plotmap, c, ids)
+    end
+    return nothing
+end
+
 """
     auto_interactables(fig) -> Vector{AbstractInteractable}
 
@@ -651,7 +661,15 @@ function auto_interactables(fig)
             id = n == 1 ? base : Symbol(base, :_, n)
             built = _construct(ax, p, id)
             append!(ints, built)
-            plotmap[p] = [ii.id for ii in built]
+            ids = [ii.id for ii in built]
+            plotmap[p] = ids
+            # A compound recipe (ScatterLines/Stem/…) is what `_construct` ran on, but Makie's
+            # `legendelements` fallback puts the recipe's drawn CHILD plots on the legend entry
+            # (`Makie.get_plots(element)` returns those children, not `p`) — so every descendant
+            # of `p` needs the same ids in `plotmap` too, to auto-link. `haskey` keeps a plot's
+            # own top-level entry (set by its own iteration of this loop) from being overwritten
+            # by an ancestor's.
+            _register_descendants!(plotmap, p, ids)
         end
     end
     # Colorbar blocks live in fig.content, not in an Axis's scene.

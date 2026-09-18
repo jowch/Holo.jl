@@ -836,6 +836,34 @@ end
 # `lenient` is true only for (c)/(d): those links are auto-derived, so build_manifest warns and
 # drops one that targets an unselectable-kind layer instead of erroring (an explicit (a)/(b)
 # target is the caller's own claim and fails loud on the same problem).
+# One entry's/key's `targets=` value -> Vector{Symbol}. Accepts `nothing`, a single
+# Symbol/AbstractString, or a Vector of Symbol/AbstractString — checking AbstractString BEFORE
+# the Vector branch matters: a bare String IS iterable (over its chars), so without this order
+# `collect(Symbol, "lines")` would silently produce bogus per-character layer ids instead of
+# failing loud. `desc` names the offending entry/key for the error message.
+function _coerce_legend_target_ids(v, desc)
+    v === nothing && return Symbol[]
+    v isa Symbol && return [v]
+    v isa AbstractString && return [Symbol(v)]
+    if v isa AbstractVector
+        return Symbol[
+            if t isa Symbol
+                t
+            elseif t isa AbstractString
+                Symbol(t)
+            else
+                throw(
+                    ArgumentError(
+                        "LegendInteractable: targets for $desc must be a Symbol/String or a Vector of them, got $(typeof(t)) inside the Vector",
+                    ),
+                )
+            end
+                for t in v
+        ]
+    end
+    throw(ArgumentError("LegendInteractable: targets for $desc must be a Symbol/String or a Vector of them, got $(typeof(v))"))
+end
+
 function _resolve_legend_targets(entries, targets, plotmap)
     n = length(entries)
     if targets isa AbstractDict
@@ -850,12 +878,7 @@ function _resolve_legend_targets(entries, targets, plotmap)
                 ),
             )
         end
-        result = [
-            let v = get(targets, e.label, nothing)
-                v === nothing ? Symbol[] : (v isa Symbol ? [v] : collect(Symbol, v))
-            end
-                for e in entries
-        ]
+        result = [_coerce_legend_target_ids(get(targets, e.label, nothing), "\"$(e.label)\"") for e in entries]
         return result, false
     elseif targets isa AbstractVector
         length(targets) == n || throw(
@@ -863,7 +886,10 @@ function _resolve_legend_targets(entries, targets, plotmap)
                 "LegendInteractable: targets must have one entry per legend entry (got $(length(targets)) for $(n) entries)",
             ),
         )
-        result = [t === nothing ? Symbol[] : (t isa Symbol ? [t] : collect(Symbol, t)) for t in targets]
+        result = [
+            _coerce_legend_target_ids(t, "entry $(k - 1) (\"$(entries[k].label)\")")
+                for (k, t) in enumerate(targets)
+        ]
         return result, false
     elseif targets === nothing
         plotmap === nothing && return [Symbol[] for _ in 1:n], true
@@ -968,7 +994,11 @@ function hitlayers(i::LegendInteractable, ctx)
         push!(links, tgt)
     end
     colors = _legend_colors(entries)
-    return [HitLayer(i.id, :rects, g, payloads, aid, events(i), "Legend", colors, links)]
+    # `nothing` (not `[[],[]]`) when every entry's links are empty, per HitLayer's own
+    # documented contract that `nothing` omits `"links"` from the manifest — the frontend
+    # treats absent and `[]` identically (`links?.[index]`), so this is cosmetic, not behavioral.
+    links_field = all(isempty, links) ? nothing : links
+    return [HitLayer(i.id, :rects, g, payloads, aid, events(i), "Legend", colors, links_field)]
 end
 
 # ============================ ViewInteractable =============================

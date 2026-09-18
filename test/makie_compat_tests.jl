@@ -126,6 +126,43 @@
         @test_throws r"^Masque: Makie internal `raw_colormap`" Masque._raw_colormap(nothing)
     end
 
+    @testset "_legend_bbox + _legend_entry_boxes + _legend_entries_meta + _legend_entries" begin
+        legfig = Figure(; size = (400, 300))
+        legax = Axis(legfig[1, 1])
+        lines!(legax, [1.0, 2.0, 3.0], [1.0, 2.0, 3.0]; label = "a")
+        lines!(legax, [1.0, 2.0, 3.0], [3.0, 2.0, 1.0]; label = "b")
+        leg = axislegend(legax)
+        Masque._finalize!(legfig)
+
+        bb = Masque._legend_bbox(leg)
+        @test bb isa Makie.Rect2
+
+        boxes = Masque._legend_entry_boxes(leg)
+        @test length(boxes) == 2   # one bbox per entry
+
+        meta = Masque._legend_entries_meta(leg)
+        @test length(meta) == 2
+        for m in meta
+            @test m isa NamedTuple
+            @test hasproperty(m, :group) && hasproperty(m, :label) && hasproperty(m, :plots) && hasproperty(m, :elements)
+        end
+        @test [m.label for m in meta] == ["a", "b"]
+
+        entries = Masque._legend_entries(leg)
+        @test length(entries) == 2
+        for e in entries
+            @test hasproperty(e, :group) && hasproperty(e, :label) && hasproperty(e, :plots) &&
+                hasproperty(e, :elements) && hasproperty(e, :bbox)
+        end
+
+        # Negative path: a moved/renamed internal must produce the Masque compat message.
+        @test_throws r"^Masque: Makie internal `computedbbox`" Masque._legend_bbox(nothing)
+        @test_throws r"^Masque: Makie internal `grid`" Masque._legend_entry_boxes(nothing)
+        @test_throws r"^Masque: Makie internal `entrygroups`" Masque._legend_entries_meta(nothing)
+        # _legend_entries(nothing) delegates straight to _legend_entries_meta (no `.grid` reached).
+        @test_throws r"^Masque: Makie internal `entrygroups`" Masque._legend_entries(nothing)
+    end
+
     # _finalize! must NOT rewrap an error raised by the user's own observable callback as a
     # Makie compat break — regression test for the _MAKIE_DOWNSTREAM_ERRORS split.
     @testset "_finalize! lets a user callback error through unrewrapped" begin

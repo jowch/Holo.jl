@@ -173,8 +173,10 @@ end
 _links_lenient(::AbstractInteractable) = false
 _links_lenient(i::LegendInteractable) = i.lenient
 
-# Fail loud (or, for a lenient/auto-resolved layer, warn and drop) when a `links` id is absent
-# from the manifest, or names a layer whose kind can't be pre-highlighted.
+# An unknown `links` id (absent from the manifest entirely) always fails loud, in both modes —
+# it's not a "can't highlight this" shape, it's a typo/dangling reference. Only an id that
+# resolves to a layer whose KIND can't be pre-highlighted is lenient-mode-dependent: fail loud
+# by default, or (for a lenient/auto-resolved layer) warn and drop.
 function _validate_links(layer_owners, layers)
     kinds = Dict(l["id"] => Symbol(l["kind"]) for l in layers)
     for (owner, d) in zip(layer_owners, layers)
@@ -257,9 +259,19 @@ function build_manifest(interactables, ctx::InteractionContext; selected = nothi
     end
     _validate_selectors(interactables, layers)
     _validate_links(layer_owners, layers)
-    # View layers are catch-all viewport hits; sort after Tier-0 threshold/ROI so ordinary
-    # drag wins without a modifier (Shift+drag still forces view in overlay.ts).
-    sort!(layers; by = (d) -> (d["kind"] == "view", 0), alg = Base.Sort.DEFAULT_STABLE)
+    # Precedence for the frontend's first-match-in-manifest-order `hitTest` (geometry.ts):
+    # `LegendInteractable` layers sort FIRST (a legend drawn over plot geometry must win the
+    # pixels under it, or it's unhoverable), `:view` layers sort LAST (catch-all viewport hits
+    # go after Tier-0 threshold/ROI so an ordinary drag wins without a modifier — Shift+drag
+    # still forces view in overlay.ts), everything else keeps its original relative order.
+    # `layers`/`layer_owners` are parallel; one stable sortperm keeps them aligned.
+    rank = [
+        layer_owners[k] isa LegendInteractable ? 0 : (layers[k]["kind"] == "view" ? 2 : 1)
+            for k in eachindex(layers)
+    ]
+    perm = sortperm(rank; alg = Base.Sort.DEFAULT_STABLE)
+    permute!(layers, perm)
+    permute!(layer_owners, perm)
     m = Dict{String, Any}(
         "width" => ctx.width, "height" => ctx.height, "scaling" => ctx.scaling,
         "layers" => layers,

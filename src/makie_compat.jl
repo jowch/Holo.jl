@@ -264,12 +264,17 @@ function _legend_entries_meta(leg)
     for (title, entries) in entrygroups
         group = title === nothing ? nothing : String(title)
         for e in entries
-            label = try
-                String(e.label[])
+            # `String(lbl)` itself must run OUTSIDE the compat try/catch: `_MAKIE_SHAPE_ERRORS`
+            # includes MethodError, so a non-`AbstractString` label (e.g. `Makie.rich(...)`,
+            # a `Makie.RichText`) would otherwise be misreported as a Makie compat break rather
+            # than converted via `string(...)` like any other label value.
+            lbl = try
+                e.label[]
             catch err
                 err isa _MAKIE_SHAPE_ERRORS || rethrow()
                 return _makie_compat_error("label", "a LegendEntry to expose `.label[]`")
             end
+            label = lbl isa AbstractString ? String(lbl) : string(lbl)
             elements = try
                 e.elements
             catch err

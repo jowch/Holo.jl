@@ -89,6 +89,22 @@ kind_sweep_meta() = [
             ],
         ),
     ),
+    Dict(
+        "key" => "legend_overlap", "layerId" => "legend", "layerKind" => "rects",
+        "selected" => nothing, "halo" => false, "selectedIndex" => 0, "clickIndex" => 0,
+        "tip" => "trend", "mode" => "element",
+        "links" => Dict(
+            "cases" => [
+                Dict("index" => 0, "label" => "trend"),
+            ],
+        ),
+        # This legend sits ON TOP of a heatmap that fills the whole axis (build_manifest must
+        # sort `LegendInteractable` layers before everything but :view — see src/render.jl,
+        # ~line 259). "overlapsGrid" names the grid layer id the legend row's hit-test pixel
+        # must ALSO fall inside, so kind_sweep.mjs can assert both (a) manifest order puts
+        # `legend` before this grid layer and (b) the hit-test pixel is genuinely contested.
+        "overlapsGrid" => "cells",
+    ),
 ]
 
 function build_kind_sweep()
@@ -274,8 +290,25 @@ function build_kind_sweep()
         masque(fig)   # zero-config: legend auto-extracted, links auto-resolved from Makie.get_plots
     end
 
+    # A legend genuinely overlapping filled plot geometry: the heatmap fills the whole axis
+    # (explicit `limits` matching its edges exactly, so there's no autolimit padding to dodge
+    # into), and the `:lt` inset legend sits inside that axis viewport — so every legend-entry
+    # pixel is also a heatmap-cell pixel. Regression case for the `build_manifest` layer
+    # precedence fix: without it, the heatmap's `:grid` layer (added after the legend by
+    # `auto_interactables`) would win every hit under the legend box.
+    legend_overlap = let
+        n = 6
+        z = [Float64(i + j) for i in 1:n, j in 1:n]
+        fig = Figure(size = (480, 320))
+        ax = Axis(fig[1, 1]; title = "legend-overlap", limits = (0.5, n + 0.5, 0.5, n + 0.5))
+        heatmap!(ax, 1:n, 1:n, z)
+        lines!(ax, 1:n, 1:n; label = "trend", color = :steelblue, linewidth = 4)
+        axislegend(ax; position = :lt)
+        masque(fig)   # zero-config: exercises the real auto-extraction + precedence path
+    end
+
     return (;
         scatter, lines, segments, heatmap, image, barplot, poly,
-        polar, scatter_dark, arrows3d, hlines, threshold, roi, view, legend,
+        polar, scatter_dark, arrows3d, hlines, threshold, roi, view, legend, legend_overlap,
     )
 end

@@ -323,6 +323,34 @@ try {
     const layers = await layersOf(key);
     const layer = findLayer(layers, spec);
 
+    // Regression check for the `build_manifest` precedence fix (src/render.jl ~line 259):
+    // a `LegendInteractable` layer drawn over filled plot geometry must sort BEFORE that
+    // geometry's layer in the manifest, or the frontend's first-match `hitTest` gives every
+    // contested pixel to the plot underneath instead of the legend.
+    if (spec.overlapsGrid) {
+      const gridLayer = layers.find((l) => l.id === spec.overlapsGrid);
+      if (!gridLayer) throw new Error(`${key}: no grid layer "${spec.overlapsGrid}" in manifest`);
+      const legendIdx = layers.indexOf(layer);
+      const gridIdx = layers.indexOf(gridLayer);
+      if (!(legendIdx < gridIdx)) {
+        throw new Error(`${key}: legend layer index ${legendIdx} not before grid layer "${spec.overlapsGrid}" index ${gridIdx}`);
+      }
+      // Prove the test is meaningful: the pixel the generic hover/click checks below use must
+      // genuinely fall inside BOTH layers' claimed geometry, not just two non-overlapping boxes.
+      const hp = hitPoint(layer, spec.selectedIndex);
+      const g = gridLayer.geometry;
+      // Pixel space: xedges/yedges keep their original edge order, which can be descending
+      // (top-left-origin, y-flipped projection) — sort before treating as [min, max].
+      const xs = [g.xedges[0], g.xedges.at(-1)].sort((a, b) => a - b);
+      const ys = [g.yedges[0], g.yedges.at(-1)].sort((a, b) => a - b);
+      const inGrid = hp.x >= xs[0] && hp.x <= xs[1] && hp.y >= ys[0] && hp.y <= ys[1];
+      if (!inGrid) {
+        throw new Error(`${key}: legend test pixel ${JSON.stringify(hp)} not inside grid extent x[${xs}] y[${ys}]`);
+      }
+      passed.push(`${key}/legend-precedence-order`);
+      passed.push(`${key}/legend-precedence-pixel-contested`);
+    }
+
     if (spec.mode === "drag") {
       const p = hitPoint(layer, 0);
       const before = await textOf(`#out_${key}`);
@@ -501,6 +529,13 @@ try {
       }
     }
     passed.push(`${key}/click-bind`);
+    // `InteractionEvent` has no custom `show`, so `repr(ev)` is Julia's default positional
+    // struct print: `InteractionEvent(:legend, 0, …)` — the ":<layerId>," prefix pins which
+    // layer actually won the hit-test. Belt-and-suspenders on top of the index regex above:
+    // this fails loud specifically on "resolved to the wrong layer", not just "wrong index".
+    if (spec.overlapsGrid && new RegExp(`:${spec.overlapsGrid},\\s*\\d+\\b`).test(after)) {
+      throw new Error(`${key}-click: bond resolved to grid layer "${spec.overlapsGrid}", not legend: ${after.slice(0, 220)}`);
+    }
     console.error(`OK  ${key} — ${after.slice(0, 110)}`);
 
     // A legend entry's linked highlight (HitLayer.links) draws the SELECTED recipe for every

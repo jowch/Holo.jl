@@ -404,10 +404,17 @@ them cleanly:
    catch-all. `ColorbarInteractable` (M3) also uses `:axis` but ships a bbox so the hit region is
    bounded to the colorbar's pixel extent. Worth the shared channel: both collapse into the
    `AxisTransform` already shipped, with no new JS primitive.
-2. No z-order/`Consume` model for overlapping custom regions — JS is first-match-wins in manifest
-   order (deterministic; resolves the only v1 collision, ScatterLines points-over-segments). We adopt
-   Makie's `events` *vocabulary* now for forward-compat, not its propagation machinery. YAGNI until
-   users actually stack overlapping custom regions.
+2. No general z-order/`Consume` model for overlapping custom regions — JS is first-match-wins in
+   manifest order. `build_manifest` now imposes one fixed precedence on that order (not a general
+   layering model): `LegendInteractable` layers sort first (a legend drawn over plot geometry
+   must win the pixels under it, or it's unhoverable — M3 Legend, §"M3 Legend" below), `:view`
+   layers sort last (an ordinary drag wins over the catch-all pan/orbit gesture without a
+   modifier — resolves the v1 ScatterLines points-over-segments collision too), everything else
+   keeps its original relative order. We adopt Makie's `events` *vocabulary* now for
+   forward-compat, not its propagation machinery. A general Consume/z-order model for
+   user-stacked custom regions stays YAGNI until someone actually needs to control ordering
+   between two of their OWN overlapping interactables — the two cases handled by the fixed rule
+   above are structural (a legend/view layer's role, not the caller's choice).
 
 ## 7. v1 scope
 

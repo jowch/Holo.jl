@@ -31,7 +31,8 @@ works on `Axis3` and `PolarAxis` too — see [3D axes and `PolarAxis`](@ref) at 
 page.
 
 [`examples/demo.jl`](https://github.com/jowch/Masque.jl/blob/main/examples/demo.jl) is a
-runnable gallery of every kind below plus the selection round-trip.
+runnable gallery of the core element/axis/view kinds above plus the selection round-trip;
+see [Legend](@ref) for a runnable [`LegendInteractable`](@ref) example.
 
 **Pan, zoom, and 3D rotation** re-render through the same `@bind` loop as everything else:
 change `limits` (2D) or `azimuth`/`elevation` (`Axis3`) and rebuild the widget — `masque`
