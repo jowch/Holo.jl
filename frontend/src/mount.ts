@@ -15,6 +15,48 @@ import type { Hit, Manifest } from "./types"
 const HOVER_FILL_OPACITY = 0.18
 const SELECTED_FILL_OPACITY = 0.35
 
+// Blend-tint prototype (highlight.ts's makeHiElement): for a highlight with neither a resolved
+// mark colour nor an explicit hoverstyle stroke, the grey below is composited over the figure
+// with mix-blend-mode instead of colour-mixed toward --masque-ink. One grey + one blend mode per
+// theme, single source here; mount() below picks light vs dark and writes both onto the host.
+const BLEND_TINT = {
+    light: { blend: "multiply", hover: "#8c8c8c", sel: "#666666" },
+    dark: { blend: "screen", hover: "#737373", sel: "#999999" },
+}
+
+// Parses the handful of CSS colour syntaxes build_manifest's `background` kwarg actually emits
+// (#rrggbb/#rgb, rgb()/rgba()) — not a general CSS colour parser (no named colours, hsl(), etc.);
+// an unparseable or absent string falls through to "light" below anyway.
+function parseRGB(css: string): [number, number, number] | null {
+    const hex6 = css.match(/^#([0-9a-f]{6})$/i)
+    if (hex6) { const n = parseInt(hex6[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255] }
+    const hex3 = css.match(/^#([0-9a-f]{3})$/i)
+    if (hex3) { const [r, g, b] = [...hex3[1]].map((c) => parseInt(c + c, 16)); return [r, g, b] }
+    const rgb = css.match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i)
+    if (rgb) return [parseFloat(rgb[1]), parseFloat(rgb[2]), parseFloat(rgb[3])]
+    return null
+}
+
+// Same light/dark pivot as --masque-ink below: 49.44 is the lch lightness of middle grey
+// (#808080), the exact threshold the CSS lch(from --masque-fig-bg …) clamp already pivots on for
+// the tooltip theme. --masque-hi-blend has to be a static value written once at mount (it can't
+// be a live lch(from …) derivation like the tooltip vars — mix-blend-mode takes a keyword, not a
+// colour), so this mirrors that CSS math in JS: sRGB → relative luminance → CIE L*. A plain WCAG
+// relative-luminance cutoff (Y > 0.5) pivots at a different point than lch lightness and would
+// disagree with the tooltip theme on some backgrounds (light tooltip next to a "multiply" tint,
+// or vice versa) — matching the constant keeps the two derivations in lockstep.
+function isLightBackground(css: string | undefined): boolean {
+    const rgb = css ? parseRGB(css) : null
+    if (!rgb) return true // unparseable/absent → light, matching --masque-fig-bg's own #ffffff default
+    const [r, g, b] = rgb.map((c) => {
+        const s = c / 255
+        return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
+    })
+    const y = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    const lStar = y > 0.008856 ? 116 * Math.cbrt(y) - 16 : 903.3 * y
+    return lStar > 49.44
+}
+
 const STYLE = `
 :host { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
 .surface { position: absolute; inset: 0; cursor: crosshair; pointer-events: auto; }
@@ -39,6 +81,17 @@ svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: n
 .masque-leave { animation: masque-out ${MOTION_MS}ms ease-in forwards; }
 @keyframes masque-in { from { opacity: 0 } to { opacity: 1 } }
 @keyframes masque-out { from { opacity: 1 } to { opacity: 0 } }
+/* Blend-tint prototype fade override: mix-blend-mode only composites against the backdrop while
+   its own element is at full opacity — animating the <g>'s opacity (the rules above) would leave
+   the tint invisible until the fade finished, then pop in. Animate each child's own
+   fill-opacity/stroke-opacity instead; omitting the "to" (leave: "from") keyframe value lets the
+   browser interpolate to/from whatever that child's own classes already resolve it to (0, 0.18,
+   0.35, or 1) — no extra custom properties or per-class keyframes needed. */
+.masque-hi-blend.masque-enter, .masque-hi-blend.masque-leave { animation: none; }
+.masque-hi-blend.masque-enter > * { animation: masque-in-blend ${MOTION_MS}ms ease-out; }
+.masque-hi-blend.masque-leave > * { animation: masque-out-blend ${MOTION_MS}ms ease-in forwards; }
+@keyframes masque-in-blend { from { fill-opacity: 0; stroke-opacity: 0 } }
+@keyframes masque-out-blend { to { fill-opacity: 0; stroke-opacity: 0 } }
 /* --masque-fig-bg (set by mount.ts from the manifest's "background" field) is the figure's own
    background colour — the tooltip theme follows IT, not just the OS prefers-color-scheme, so a
    dark Makie figure in a light Pluto page still gets a dark tooltip. Registering the property
@@ -95,6 +148,19 @@ svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: n
 .masque-hi.masque-wash { fill: var(--masque-hi-c); fill-opacity: ${SELECTED_FILL_OPACITY}; }
 .masque-hi.masque-fill { fill: var(--masque-hi-c); }
 .masque-hi.masque-nostroke { stroke: none; }
+/* Blend-tint prototype (highlight.ts's makeHiElement splits an uncoloured closed highlight into
+   a g.masque-hi-blend of two clones): masque-nofill kills the stroke clone's inherited
+   .masque-hover/.masque-wash fill — 3 classes beats those rules' 2 regardless of stylesheet
+   order, so no ordering trick is needed here the way masque-nostroke above relies on one. The
+   tint clone keeps .masque-hover/.masque-wash (for the mode) plus .masque-tint, which is what
+   actually picks the blended grey — 3-class selectors again, so they always win over the plain
+   2-class .masque-hover/.masque-wash rule above regardless of source order. --masque-hi-blend
+   and the two --masque-hi-tint-* greys are written onto the shadow host by mount() below, picked
+   from BLEND_TINT off the figure's own background (manifest.background → isLightBackground). */
+.masque-hi.masque-hover.masque-nofill, .masque-hi.masque-wash.masque-nofill { fill: none; }
+.masque-hi.masque-tint { mix-blend-mode: var(--masque-hi-blend, multiply); stroke: none; fill-opacity: 1; }
+.masque-hi.masque-tint.masque-hover { fill: var(--masque-hi-tint-hover, #8c8c8c); }
+.masque-hi.masque-tint.masque-wash { fill: var(--masque-hi-tint-sel, #666666); }
 .masque-tip { position: absolute; opacity: 0; pointer-events: none; z-index: 10;
        padding: var(--masque-tip-padding, 8px 12px); border-radius: var(--masque-tip-radius, 4px);
        background: var(--masque-tip-bg-resolved); color: var(--masque-tip-color-resolved);
@@ -131,6 +197,7 @@ svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: n
 }
 @media (prefers-reduced-motion: reduce) {
   .masque-enter, .masque-leave { animation: none; }
+  .masque-hi-blend.masque-enter > *, .masque-hi-blend.masque-leave > * { animation: none; }
   .masque-tip { transition: none; }
 }
 `
@@ -216,6 +283,12 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     // together via nested var() fallbacks, not a write-order race.
     if (manifest.background) shadowHost.style.setProperty("--masque-fig-bg", manifest.background)
     if (manifest.tipStyle) for (const [k, v] of Object.entries(manifest.tipStyle)) shadowHost.style.setProperty(k, v)
+    // Blend-tint prototype: pick multiply (light figure) vs screen (dark figure) once at mount,
+    // from the same manifest.background the tooltip theme reads — see isLightBackground above.
+    const blendTint = isLightBackground(manifest.background) ? BLEND_TINT.light : BLEND_TINT.dark
+    shadowHost.style.setProperty("--masque-hi-blend", blendTint.blend)
+    shadowHost.style.setProperty("--masque-hi-tint-hover", blendTint.hover)
+    shadowHost.style.setProperty("--masque-hi-tint-sel", blendTint.sel)
 
     const thresholdLines = thresholdDrag.buildThresholdLines(manifest, svg)
     const roiBoxes = roiDrag.buildROIBoxes(manifest, svg)

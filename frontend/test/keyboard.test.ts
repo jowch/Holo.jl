@@ -369,7 +369,10 @@ describe("keyboard navigation", () => {
         // A later pointer miss must restore a[1]'s ring (the clicked element), not a[0]'s
         // (the stale keyboard focus commitClick is supposed to overwrite).
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 5, clientY: 5, bubbles: true }))
-        const ring = shadow.querySelector(".hi > *") as SVGCircleElement
+        // ".hi > *" would land on the blend-tint wrapper (g.masque-hi-blend, no cx) for this
+        // uncoloured layer — go straight to the stroke clone, which carries the real geometry
+        // either way (wrapped or not).
+        const ring = shadow.querySelector(".hi .masque-hi:not(.masque-tint)") as SVGCircleElement
         expect(ring).toBeTruthy()
         expect(ring.getAttribute("cx")).toBe("300") // a[1]'s cx, not a[0]'s (100)
     })

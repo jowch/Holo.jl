@@ -90,7 +90,27 @@ export function makeHiElement(hit: Hit, mode: HiMode = "hover"): SVGElement | nu
         el.classList.add("masque-wash")
         el.setAttribute("stroke-width", "2")
     }
-    return el
+
+    // Blend-tint prototype: when neither a resolved mark colour nor an explicit hoverstyle
+    // stroke is set (today's neutral-ink case), swap the flat colour-mix tint for a blend-mode
+    // fill (mount.ts's --masque-hi-blend: multiply on a light figure, screen on a dark one) that
+    // darkens/lightens whatever is under the mark instead of mixing toward a fixed ink colour.
+    // Open geometry (seg) never reaches here with a fill class, so it's excluded automatically.
+    if (mark || st.stroke || open) return el
+    if (g[0] === "rectfill") {
+        // No stroke component to split off in either recipe — the ROI box draws that outline —
+        // so rectfill just gains the tint class on the one element it already has.
+        el.classList.add("masque-tint")
+        return el
+    }
+    const tint = el.cloneNode(true) as SVGElement
+    tint.classList.add("masque-tint")
+    tint.removeAttribute("stroke-width")
+    el.classList.add("masque-nofill")
+    const wrap = document.createElementNS(SVG_NS, "g")
+    wrap.classList.add("masque-hi-blend")
+    wrap.append(tint, el) // tint fill under the stroke outline
+    return wrap
 }
 
 // --- highlight/selection DOM-lifecycle: keyed by OverlayState.hiKey_ / selKeys_ ---
