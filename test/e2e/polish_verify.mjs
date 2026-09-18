@@ -1,16 +1,18 @@
 // Overlay visual-fidelity driver (LOCAL — not CI). Required by
 // docs/dev/live-interaction-checklist.md together with kind_sweep.mjs.
-// Runs on the kind-sweep notebooks. Asserts wash/ring/halo/overlay-pin,
-// remount fade / no pulse, steel-teal (not #ff3b30), and Pluto/OS
-// prefers-color-scheme (official Pluto has no notebook toggle).
+// Runs on the kind-sweep notebooks. Asserts wash/ring/hover (tint + flush stroke)/overlay-pin,
+// remount fade / no pulse, mark-derived (not fixed steel-teal, not #ff3b30) ink, a Cairo-only
+// flush-radius pixel check, and Pluto/OS prefers-color-scheme (official Pluto has no notebook
+// toggle).
 //
 //   node polish_verify.mjs <base-url> <notebook-abs-path> <cairo|webgl> [artifact-dir]
 import { chromium } from "playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  assertNoAlertRed, assertWash, assertRing, assertHoverRecipe,
+  assertNoAlertRed, assertNoTeal, assertWash, assertRing, assertHoverRecipe, assertCircleR,
   assertRemountStable, assertLeaveFade, assertTooltipColorScheme, assertCaretAtAnchor,
+  assertMarkDerivedInk, colorLightness,
 } from "./visual_assert.mjs";
 
 const [base, notebook, backend, artifactDirArg] = process.argv.slice(2);
@@ -64,8 +66,11 @@ try {
   let ready = false, tick = 0;
   while (Date.now() < deadline) {
     const st = await page.evaluate(() => {
+      // See kind_sweep.mjs: click the safe-preview banner exactly once — a repeated click on
+      // an already-running notebook re-triggers Pluto's reactive run and can interrupt the
+      // in-flight cell (InterruptException) under slow/contended first-open precompilation.
       const runBtn = [...document.querySelectorAll("button, a")].find((b) => /run notebook code/i.test(b.innerText || b.title || ""));
-      if (runBtn) runBtn.click();
+      if (runBtn && !window.__masqueClickedRun) { runBtn.click(); window.__masqueClickedRun = true; }
       const hosts = [...document.querySelectorAll(".ip-host")];
       let surfaces = 0;
       for (const h of hosts) {
@@ -103,17 +108,22 @@ try {
       if (el.tagName.toLowerCase() === "g") {
         return {
           kind: "ring",
-          lines: [...el.querySelectorAll("line")].map((ln) => ({
-            fill: ln.getAttribute("fill"), stroke: ln.getAttribute("stroke"),
-            width: ln.getAttribute("stroke-width"), opacity: ln.getAttribute("stroke-opacity"),
-          })),
+          lines: [...el.querySelectorAll("line")].map((ln) => {
+            const cs = getComputedStyle(ln);
+            return {
+              className: ln.getAttribute("class"), stroke: cs.stroke, fill: cs.fill, fillOpacity: cs.fillOpacity,
+              width: ln.getAttribute("stroke-width"), opacity: ln.getAttribute("stroke-opacity"),
+            };
+          }),
         };
       }
+      const cs = getComputedStyle(el);
       return {
         kind: "closed", tag: el.tagName.toLowerCase(),
-        fill: el.getAttribute("fill"), stroke: el.getAttribute("stroke"),
+        className: el.getAttribute("class"), stroke: cs.stroke, fill: cs.fill, fillOpacity: cs.fillOpacity,
         width: el.getAttribute("stroke-width"), r: el.getAttribute("r"),
         cx: el.getAttribute("cx"), cy: el.getAttribute("cy"),
+        mark: el.style.getPropertyValue("--masque-mark"),
       };
     });
     return {
@@ -146,13 +156,16 @@ try {
     const t = sr.querySelector(".masque-tip");
     const hi = sr.querySelector("g.hi")?.firstElementChild;
     const cs = t ? getComputedStyle(t) : null;
+    const hiCs = hi ? getComputedStyle(hi) : null;
     return {
       show: t?.classList.contains("show"), text: t?.innerText ?? "",
       bg: cs?.backgroundColor, color: cs?.color,
       hi: hi ? {
-        fill: hi.getAttribute("fill"), stroke: hi.getAttribute("stroke"),
+        className: hi.getAttribute("class"),
+        fill: hiCs.fill, stroke: hiCs.stroke, fillOpacity: hiCs.fillOpacity,
         width: hi.getAttribute("stroke-width"), opacity: hi.getAttribute("stroke-opacity"),
         r: hi.getAttribute("r"), enter: hi.classList.contains("masque-enter"),
+        mark: hi.style.getPropertyValue("--masque-mark"),
       } : null,
       sel: sr.querySelector("g.sel")?.children.length ?? 0,
     };
@@ -174,17 +187,57 @@ try {
   passed.push("overlay-on-base");
   assertNoAlertRed(scatter.css, "overlay-css");
   assertNoAlertRed(scatter.kids, "scatter/sel");
+  assertNoTeal(scatter.css, "overlay-css");
+  assertNoTeal(scatter.kids, "scatter/sel");
 
   const wash = scatter.kids.find((k) => k.kind === "closed");
   assertWash(wash, "scatter");
   passed.push("selected-wash");
 
   const pts = (await layersOf("scatter")).find((l) => l.kind === "circles");
+  // `rGeom` is whatever geometry the manifest shipped, not a fixed literal — the scatter
+  // notebook's markersize=22 built from the Scatter plot object, so this is the marker's drawn
+  // radius, ≈0.3525·22·2 (px_per_unit) ≈ 15.5 image px, not the old markersize/2.
   const rGeom = pts.geometry[5]; // selectedIndex 1 → r at 3*1+2
-  if (String(Number(wash.r)) !== String(rGeom + 2)) {
-    throw new Error(`halo r=${wash.r} geom r=${rGeom} (want r+2)`);
+  assertCircleR(wash.r, rGeom, "scatter/selected");
+  passed.push("circle-r");
+
+  // Flush-radius pixel test (Cairo only — the base is an <img>; a WGL <canvas> readback isn't
+  // reliable across GPU/driver combos, so this only proves the recipe where it can be proven).
+  // Confirms the highlight `r` sits ON the marker's drawn edge, not offset from it: sample the
+  // rendered marker (not the SVG overlay — the highlight is unhit/unhovered here) at r+3 (just
+  // outside) and r-3 (just inside) along +x from its centre. r+3 must read as the figure
+  // background (near-white — the scatter notebook uses the default white Figure background);
+  // r-3 must read as the marker's own (non-background) colour.
+  if (backend === "cairo") {
+    const scx = pts.geometry[3], scy = pts.geometry[4]; // element 1 ("beta"), same point as hx/hy below
+    const flush = await page.evaluate(([k, cx, cy, r]) => {
+      const span = document.querySelector(`#coords_${k}`);
+      const hosts = [...document.querySelectorAll(".ip-host")];
+      const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
+      const img = host.querySelector("img");
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+      const sample = (x, y) => {
+        const d = ctx.getImageData(Math.round(x), Math.round(y), 1, 1).data;
+        return { r: d[0], g: d[1], b: d[2] };
+      };
+      return { outside: sample(cx + r + 3, cy), inside: sample(cx + r - 3, cy) };
+    }, ["scatter", scx, scy, Number(rGeom)]);
+    const isBg = (p) => p.r > 240 && p.g > 240 && p.b > 240;
+    if (!isBg(flush.outside)) {
+      throw new Error(`scatter/flush-radius: pixel at r+3 not figure background ${JSON.stringify(flush.outside)}`);
+    }
+    if (isBg(flush.inside)) {
+      throw new Error(`scatter/flush-radius: pixel at r-3 is background — marker not flush with r ${JSON.stringify(flush.inside)}`);
+    }
+    passed.push("flush-radius");
+  } else {
+    passed.push("flush-radius-skipped-webgl"); // canvas readback of a WGL <canvas> isn't reliable
   }
-  passed.push("halo-r+2");
 
   const lines = await inspect("lines");
   pin(lines, "lines");
@@ -197,6 +250,7 @@ try {
   const dwash = dark.kids.find((k) => k.kind === "closed");
   assertWash(dwash, "scatter_dark");
   assertNoAlertRed(dark.kids, "scatter_dark");
+  assertNoTeal(dark.kids, "scatter_dark");
   passed.push("dark-figure-wash");
 
   const hx = pts.geometry[3], hy = pts.geometry[4];
@@ -207,7 +261,7 @@ try {
     await new Promise((r) => setTimeout(r, 200));
   }
   if (!tip?.show || !/beta/i.test(tip.text)) throw new Error(`tooltip ${JSON.stringify(tip)}`);
-  assertHoverRecipe(tip.hi, "scatter");
+  assertHoverRecipe(tip.hi, "scatter", true); // scatter is a closed (circle) mark: tint + stroke
   if (tip.sel < 1) throw new Error("g.sel gone during hover");
   passed.push("tooltip");
   passed.push("hover-distinct");
@@ -293,6 +347,23 @@ try {
 
   const darkPts = (await layersOf("scatter_dark")).find((l) => l.kind === "circles");
   const dhx = darkPts.geometry[3], dhy = darkPts.geometry[4];
+
+  // Mark-colour derivation (the point of this change): scatter/scatter_dark resolve `colors`
+  // (from scatter!'s color=), so the hover stroke must be that mark colour mixed toward the
+  // ink — darker on the light figure, lighter on the dark one.
+  const markLightness = async (mark) => colorLightness(await page.evaluate((m) => {
+    const tmp = document.createElement("span");
+    tmp.style.color = m;
+    document.body.appendChild(tmp);
+    const c = getComputedStyle(tmp).color;
+    tmp.remove();
+    return c;
+  }, mark));
+  assertMarkDerivedInk(colorLightness(tip.hi.stroke), await markLightness(tip.hi.mark), true, "scatter/mark-ink");
+  const darkTip = await hoverAt("scatter_dark", dhx, dhy);
+  assertMarkDerivedInk(colorLightness(darkTip.hi.stroke), await markLightness(darkTip.hi.mark), false, "scatter_dark/mark-ink");
+  passed.push("mark-ink");
+
   await assertTooltipColorScheme(page, {
     css: () => inspect("scatter").then((m) => m.css),
     computedFor: async (which) => {
@@ -304,6 +375,7 @@ try {
 
   if (unexpected.length) throw new Error(`page errors: ${unexpected.join(" | ")}`);
   passed.push("no-console-errors");
+
   console.log(`POLISH VERIFY OK — ${backend}: ${passed.join(", ")}`);
 } catch (e) {
   failed = e;

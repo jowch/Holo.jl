@@ -153,7 +153,9 @@ events(::AbstractInteractable)::Tuple = (:click, :hover)   # which events the ov
 # The per-element `tooltip(interactable, idx, payload)` dispatch is retired (M2.3).
 # See §10 Tooltips, below.
 # hoverstyle is per-LAYER too — the manifest ships one `style` per layer, not per element.
-hoverstyle(::AbstractInteractable)::NamedTuple = (; stroke="#3A6F7C", width=2)
+# stroke=nothing (default) omits "stroke" from the manifest; the overlay then derives the
+# colour itself (mark colour when resolvable via `colors`, else a neutral figure-aware ink).
+hoverstyle(::AbstractInteractable)::NamedTuple = (; stroke=nothing, width=2)
 ```
 
 **`validate` is per-capability, not a global scale gate** (fixes a latent silent-coordinate bug).

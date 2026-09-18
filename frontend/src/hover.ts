@@ -1,7 +1,7 @@
 import { anchorFor, computeAnchoredPlacement, hitTest, resolvePayload, CURSOR_FOLLOWING_KINDS, ANCHOR_GAP } from "./geometry"
 import type { Anchor } from "./geometry"
 import { renderTemplate, renderAutoTable, esc } from "./template"
-import { drawHi, clearHi } from "./highlight"
+import { drawHi, clearHi, markColorFor } from "./highlight"
 import { fmt, imgPx, cssAnchor, prefersReducedMotion, MOTION_MS, cancelPendingMove, cancelPendingDrag } from "./state"
 import type { OverlayCtx, OverlayState } from "./state"
 import type { Hit, ThresholdGeometry } from "./types"
@@ -67,25 +67,21 @@ export function setTipVisible(ctx: OverlayCtx, visible: boolean): void {
     ctx.tip_.setAttribute("aria-hidden", visible ? "false" : "true")
 }
 
-// hit.layer.colors is per-LAYER (a single string, or a layer-wide palette + one index per
-// element) — never resolved per the specific hit here beyond that one palette lookup, so an
-// out-of-range index (a payload/colors length mismatch) degrades to no accent rather than
-// throwing.
-function markColorFor(hit: Hit): string | null {
-    const c = hit.layer.colors
-    if (!c) return null
-    if (typeof c === "string") return c
-    return c.palette[c.index[hit.index]] ?? null
-}
-
 // Drives .masque-tip's border-left accent (mount.ts's STYLE). Called from applyTipHtml (set, from
 // the hit whose content is being shown), hideTip (clear), and bond.ts's applyDrag (clear — a
 // drag readout's text is set directly via setTipText, not applyTipHtml, so it doesn't go through
 // the set path above and would otherwise keep wearing whatever element was last hovered).
 export function setMarkAccent(ctx: OverlayCtx, hit: Hit | null): void {
     const color = hit && markColorFor(hit)
-    if (color) ctx.tip_.style.setProperty("--masque-mark-border", `3px solid ${color}`)
-    else ctx.tip_.style.removeProperty("--masque-mark-border")
+    if (color) {
+        ctx.tip_.style.setProperty("--masque-mark-border", `3px solid ${color}`)
+        // Width-only twin of the rule above — the caret rule (mount.ts) needs the accent's
+        // border-left WIDTH alone (to re-derive its padding-box offset), not the shorthand.
+        ctx.tip_.style.setProperty("--masque-mark-border-w", "3px")
+    } else {
+        ctx.tip_.style.removeProperty("--masque-mark-border")
+        ctx.tip_.style.removeProperty("--masque-mark-border-w")
+    }
 }
 
 export function hideTip(ctx: OverlayCtx, state: OverlayState): void {

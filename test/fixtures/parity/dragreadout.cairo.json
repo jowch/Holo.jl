@@ -46,7 +46,6 @@
             },
             "id": "threshold",
             "style": {
-                "stroke": "#3A6F7C",
                 "width": 2
             },
             "payloads": [
@@ -67,7 +66,6 @@
             },
             "id": "roi",
             "style": {
-                "stroke": "#3A6F7C",
                 "width": 2
             },
             "payloads": [
@@ -83,7 +81,6 @@
             "geometry": null,
             "id": "axis",
             "style": {
-                "stroke": "#3A6F7C",
                 "width": 2
             },
             "payloads": [

@@ -506,8 +506,11 @@ describe("mount", () => {
         surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 125, clientY: 125, bubbles: true }))
         const el = shadowOf(host).querySelector("g.sel")!.firstElementChild as SVGElement
         expect(el.tagName.toLowerCase()).toBe("rect")
-        expect(el.getAttribute("fill")).toBe("rgba(58, 111, 124, 0.12)")
-        expect(el.getAttribute("stroke")).toBe("none")
+        expect(el.classList.contains("masque-hi")).toBe(true)
+        expect(el.classList.contains("masque-wash")).toBe(true)
+        expect(el.classList.contains("masque-nostroke")).toBe(true)
+        expect(el.getAttribute("fill")).toBeNull()
+        expect(el.getAttribute("stroke")).toBeNull()
     })
 })
 
@@ -805,9 +808,20 @@ describe("tooltips (mount/showTip)", () => {
         const surface = shadow.querySelector(".surface") as HTMLElement
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
         expect(tip.style.getPropertyValue("--masque-mark-border")).toBe("3px solid rgb(9,9,9)")
+        // width-only twin the caret rule subtracts (mount.ts): the ::before is positioned off the
+        // padding box, so a 3px accent would otherwise push the apex 2px right of the anchor
+        expect(tip.style.getPropertyValue("--masque-mark-border-w")).toBe("3px")
         await flushFrame() // onMove rAF-coalesces; the pending move above must land before the next one
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 450, clientY: 200, bubbles: true }))
         expect(tip.style.getPropertyValue("--masque-mark-border")).toBe("")
+        expect(tip.style.getPropertyValue("--masque-mark-border-w")).toBe("")
+    })
+
+    it("caret rule backs the accent border width out of --masque-caret-x", () => {
+        const { host, script } = setup()
+        mount(script, manifest)
+        const css = shadowOf(host).querySelector("style")!.textContent ?? ""
+        expect(css).toMatch(/\.masque-tip::before\s*\{[^}]*var\(--masque-mark-border-w, 1px\)/)
     })
 
     it("resolves a palette+index colors field per element", async () => {
@@ -954,7 +968,7 @@ describe("tooltips (mount/showTip)", () => {
         expect(sel.children.length).toBe(2)                 // pre-selection survived the hovers
         const leaving = (shadow.querySelector("g.hi") as SVGGElement).firstElementChild
         expect(leaving === null || leaving.classList.contains("masque-leave")).toBe(true)
-        expect(sel.querySelector("circle")!.getAttribute("fill")).toBe("rgba(58, 111, 124, 0.12)")
+        expect(sel.querySelector("circle")!.classList.contains("masque-wash")).toBe(true)
     })
 
     // issue #39: selected= fail-loud on unsupported kinds / OOB (mirror Julia build_manifest)
@@ -1220,14 +1234,13 @@ describe("tooltips (mount/showTip)", () => {
     })
 })
 
-// Overlay visual recipes (locked — cite visual-design.md, do not reopen).
+// Overlay visual recipes (locked — the recipe is: an outline on the mark's own edge, coloured
+// as a mark-derived shade (color-mix toward --masque-ink) with a figure-aware neutral ink
+// default; see CLAUDE.md's overlay-chrome-redesign entry — do not reopen).
 // Units are necessary, not live-verify: agents still run
 // docs/dev/live-interaction-checklist.md (kind_sweep.mjs + polish_verify.mjs)
 // on Cairo and WGL for interaction AND visual.
 describe("overlay visual polish", () => {
-    const ink = "#3A6F7C"
-    const wash = "rgba(58, 111, 124, 0.12)"
-
     it("keeps the hover node across mousemove on the same marker", async () => {
         const { host, script } = setup()
         mount(script, manifest)
@@ -1271,19 +1284,63 @@ describe("overlay visual polish", () => {
         surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 135, clientY: 125, bubbles: true }))
     })
 
-    it("selected wash keeps the layer stroke hue when stroke is not #RRGGBB", () => {
+    it("an explicit layer hoverstyle stroke sets --masque-hi-stroke verbatim; no --masque-mark needed", () => {
         const { host, script } = setup()
         mount(script, {
             width: 1200, height: 800, scaling: 2, transforms: {},
             layers: [{
                 id: "pts", kind: "circles", geometry: [300, 200, 20],
                 payloads: [{ i: 0 }], axis: "ax1", events: ["click", "hover"], selected: [0],
-                style: { stroke: "steelblue", width: 2 },
+                style: { stroke: "#123456", width: 2 },
             }],
         })
         const el = shadowOf(host).querySelector("g.sel")!.firstElementChild as SVGElement
-        expect(el.getAttribute("fill")).toBe("color-mix(in srgb, steelblue 12%, transparent)")
-        expect(el.getAttribute("stroke")).toBe("steelblue")
+        expect(el.classList.contains("masque-wash")).toBe(true)
+        expect(el.style.getPropertyValue("--masque-hi-stroke")).toBe("#123456")
+        expect(el.style.getPropertyValue("--masque-mark")).toBe("")
+    })
+
+    it("a circles layer's colors sets --masque-mark on its hover outline", () => {
+        const { host, script } = setup()
+        mount(script, {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [{ id: "pts", kind: "circles", geometry: [600, 400, 20], payloads: [{ i: 0 }],
+                axis: "ax1", events: ["hover"], colors: "#0072b2" }],
+        })
+        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
+        const el = shadowOf(host).querySelector("g.hi")!.firstElementChild as SVGElement
+        expect(el.style.getPropertyValue("--masque-mark")).toBe("#0072b2")
+    })
+
+    it("resolves a palette+index colors field per element for --masque-mark; an out-of-range index sets nothing", async () => {
+        const { host, script } = setup()
+        mount(script, {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [{
+                id: "pts", kind: "circles", axis: "ax1", events: ["hover"],
+                geometry: [600, 400, 20, 900, 400, 20],
+                payloads: [{ i: 0 }, { i: 1 }],
+                colors: { palette: ["#111111", "#222222"], index: [1, 5] }, // index 5 is out of range
+            }],
+        })
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
+        expect((shadow.querySelector("g.hi")!.firstElementChild as SVGElement).style.getPropertyValue("--masque-mark")).toBe("#222222")
+        await flushFrame()
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 450, clientY: 200, bubbles: true }))
+        expect((shadow.querySelector("g.hi")!.firstElementChild as SVGElement).style.getPropertyValue("--masque-mark")).toBe("")
+    })
+
+    it("a plain mark with no colors and no style sets neither --masque-mark nor --masque-hi-stroke", () => {
+        const { host, script } = setup()
+        mount(script, manifest)
+        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
+        const el = shadowOf(host).querySelector("g.hi")!.firstElementChild as SVGElement
+        expect(el.style.getPropertyValue("--masque-mark")).toBe("")
+        expect(el.style.getPropertyValue("--masque-hi-stroke")).toBe("")
     })
 
     it("fades hover chrome out instead of instant remove", async () => {
@@ -1299,7 +1356,7 @@ describe("overlay visual polish", () => {
         expect(shadow.querySelector("g.hi")!.children.length).toBe(0)
     })
 
-    it("hover is stroke-only inspector ink (2px, opacity 0.85, fill none)", () => {
+    it("hover on a closed mark tints the whole shape: masque-hi masque-hover, no colour/fill attributes, 1.5px, opaque", () => {
         const { host, script } = setup()
         mount(script, manifest)
         const shadow = shadowOf(host)
@@ -1307,13 +1364,36 @@ describe("overlay visual polish", () => {
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
         const el = shadow.querySelector("g.hi")!.firstElementChild as SVGElement
         expect(el.tagName.toLowerCase()).toBe("circle")
-        expect(el.getAttribute("fill")).toBe("none")
-        expect(el.getAttribute("stroke")).toBe(ink)
-        expect(el.getAttribute("stroke-width")).toBe("2")
-        expect(el.getAttribute("stroke-opacity")).toBe("0.85")
+        expect(el.classList.contains("masque-hi")).toBe(true)
+        expect(el.classList.contains("masque-hover")).toBe(true)
+        expect(el.classList.contains("masque-wash")).toBe(false)
+        expect(el.getAttribute("fill")).toBeNull() // the .masque-hi.masque-hover stylesheet rule handles the tint
+        expect(el.getAttribute("stroke")).toBeNull() // colour comes from the stylesheet, not a presentation attribute
+        expect(el.getAttribute("stroke-width")).toBe("1.5")
+        expect(el.getAttribute("stroke-opacity")).toBeNull() // fully opaque
     })
 
-    it("selected closed geometry gets a wash fill + 2.5px stroke", () => {
+    it("hover on an open (seg) mark stays stroke-only: no masque-hover class, no fill", () => {
+        const { host, script } = setup()
+        mount(script, {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [{
+                id: "segs", kind: "segments", geometry: [100, 100, 400, 200],
+                payloads: [{ i: 0 }], axis: "ax1", events: ["hover"],
+            }],
+        })
+        const surface = shadowOf(host).querySelector(".surface") as HTMLElement
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 125, clientY: 75, bubbles: true }))
+        const el = shadowOf(host).querySelector("g.hi")!.firstElementChild as SVGElement
+        expect(el.tagName.toLowerCase()).toBe("line")
+        expect(el.classList.contains("masque-hi")).toBe(true)
+        expect(el.classList.contains("masque-hover")).toBe(false)
+        expect(el.classList.contains("masque-wash")).toBe(false)
+        expect(el.getAttribute("fill")).toBeNull()
+        expect(el.getAttribute("stroke-width")).toBe("1.5")
+    })
+
+    it("selected closed geometry gets a wash class + 2px stroke, geometry r exactly (edge outline, not a halo)", () => {
         const { host, script } = setup()
         mount(script, {
             width: 1200, height: 800, scaling: 2, transforms: {},
@@ -1324,23 +1404,25 @@ describe("overlay visual polish", () => {
         })
         const el = shadowOf(host).querySelector("g.sel")!.firstElementChild as SVGElement
         expect(el.tagName.toLowerCase()).toBe("circle")
-        expect(el.getAttribute("fill")).toBe(wash)
-        expect(el.getAttribute("stroke")).toBe(ink)
-        expect(el.getAttribute("stroke-width")).toBe("2.5")
-        expect(el.getAttribute("stroke-opacity") ?? "1").toBe("1")
-        // visual-design.md: halo sits just outside the marker (r + 2), not flush or undersized
-        expect(el.getAttribute("r")).toBe("22")
+        expect(el.classList.contains("masque-hi")).toBe(true)
+        expect(el.classList.contains("masque-wash")).toBe(true)
+        expect(el.getAttribute("fill")).toBeNull()
+        expect(el.getAttribute("stroke")).toBeNull()
+        expect(el.getAttribute("stroke-width")).toBe("2")
+        expect(el.getAttribute("stroke-opacity")).toBeNull()
+        // outline sits ON the mark's own edge now, not a halo outside it (was r + 2)
+        expect(el.getAttribute("r")).toBe("20")
         expect(el.getAttribute("cx")).toBe("300")
         expect(el.getAttribute("cy")).toBe("200")
     })
 
-    it("hover halo is the same r+2, concentric with the marker", () => {
+    it("hover outline uses the geometry r exactly, concentric with the marker", () => {
         const { host, script } = setup()
         mount(script, manifest)
         const surface = shadowOf(host).querySelector(".surface") as HTMLElement
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
         const el = shadowOf(host).querySelector("g.hi")!.firstElementChild as SVGElement
-        expect(el.getAttribute("r")).toBe("22") // geometry r=20
+        expect(el.getAttribute("r")).toBe("20") // geometry r=20, on the mark edge (no +2)
         expect(el.getAttribute("cx")).toBe("600")
         expect(el.getAttribute("cy")).toBe("400")
     })
@@ -1394,12 +1476,12 @@ describe("overlay visual polish", () => {
             const el = shadowOf(host).querySelector("g.sel")!.firstElementChild as SVGElement
             expect(el.getAttribute("cx")).toBe("600")
             expect(el.getAttribute("cy")).toBe("400")
-            expect(el.getAttribute("fill")).toBe(wash)
-            expect(el.getAttribute("r")).toBe("22")
+            expect(el.classList.contains("masque-wash")).toBe(true)
+            expect(el.getAttribute("r")).toBe("20")
         })
     })
 
-    it("selected open geometry gets a ring (inner 2px + outer ~4px, fill none)", () => {
+    it("selected open geometry gets a ring (inner 2px + outer ~4px, class-based colour, fill none)", () => {
         const { host, script } = setup()
         mount(script, {
             width: 1200, height: 800, scaling: 2, transforms: {},
@@ -1413,15 +1495,16 @@ describe("overlay visual polish", () => {
             ? [...node.querySelectorAll("line")]
             : [node]
         expect(lines.length).toBe(2)
-        expect(lines.every((ln) => ln.getAttribute("fill") === "none")).toBe(true)
-        expect(lines.every((ln) => ln.getAttribute("stroke") === ink)).toBe(true)
+        expect(lines.every((ln) => ln.classList.contains("masque-hi"))).toBe(true)
+        expect(lines.every((ln) => ln.getAttribute("fill") === null)).toBe(true)
+        expect(lines.every((ln) => ln.getAttribute("stroke") === null)).toBe(true)
         const widths = lines.map((ln) => ln.getAttribute("stroke-width")).sort()
         expect(widths).toEqual(["2", "4"])
         const outer = lines.find((ln) => ln.getAttribute("stroke-width") === "4")!
         expect(outer.getAttribute("stroke-opacity")).toBe("0.25")
     })
 
-    it("threshold chrome falls back to inspector ink when style is missing", () => {
+    it("threshold line gets masque-hi with no explicit --masque-hi-stroke when style is missing", () => {
         const { host, script } = setup()
         mount(script, {
             width: 1200, height: 800, scaling: 2,
@@ -1431,7 +1514,9 @@ describe("overlay visual polish", () => {
                 geometry: { orientation: "h", pos: 400, span: [0, 1200] } }],
         })
         const line = shadowOf(host).querySelector("line") as SVGLineElement
-        expect(line.getAttribute("stroke")).toBe(ink)
+        expect(line.classList.contains("masque-hi")).toBe(true)
+        expect(line.getAttribute("stroke")).toBeNull()
+        expect(line.style.getPropertyValue("--masque-hi-stroke")).toBe("")
     })
 
     it("tooltip show/hide uses a class so opacity can fade", () => {
@@ -1464,6 +1549,16 @@ describe("overlay visual polish", () => {
         expect(css).toMatch(/#e8e8e8/)
         expect(css).toMatch(/#ffffff/)
         expect(css).not.toMatch(/#ff3b30/)
+    })
+
+    it("overlay CSS defines the figure-aware highlight ink and its color-mix derivation", () => {
+        const { host, script } = setup()
+        mount(script, manifest)
+        const css = shadowOf(host).querySelector("style")!.textContent!
+        expect(css).toMatch(/--masque-ink/)
+        expect(css).toMatch(/@supports \(color: color-mix/)
+        expect(css).toMatch(/--masque-mark/)
+        expect(css).toMatch(/--masque-hi-stroke/)
     })
 
     it("does not rewrite tooltip HTML on same-hit mousemove", async () => {
@@ -1736,7 +1831,8 @@ describe("coverage gaps: grid-value tooltip, drag-target hover cursor, rects/pol
         expect(el.getAttribute("height")).toBe("20")
         // An element-indexed rects selection keeps its stroke — only the grid cell-block union
         // rect from an ROI's `selects` (a distinct "rectfill" geom tag) is fill-only.
-        expect(el.getAttribute("stroke")).toBe("#3A6F7C")
+        expect(el.classList.contains("masque-hi")).toBe(true)
+        expect(el.classList.contains("masque-nostroke")).toBe(false)
     })
 
     it("selected= on a polygons layer draws a polygon wash (hitLayerByIndex + makeHiElement poly branch)", () => {
@@ -1749,7 +1845,7 @@ describe("coverage gaps: grid-value tooltip, drag-target hover cursor, rects/pol
         const el = shadowOf(host).querySelector("g.sel")!.firstElementChild as SVGElement
         expect(el.tagName.toLowerCase()).toBe("polygon")
         expect(el.getAttribute("points")).toBe("0,0 10,0 10,10 0,10")
-        expect(el.getAttribute("fill")).not.toBe("none") // closed kind → wash, not a ring
+        expect(el.classList.contains("masque-wash")).toBe(true) // closed kind → wash, not a ring
     })
 
     it("plain axis hover on a categorical x-axis formats the label via String(), not toPrecision", () => {

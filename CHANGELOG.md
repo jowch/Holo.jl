@@ -93,6 +93,20 @@ All notable changes to this project are documented here. The format is based on
   scaled to the rendered image's DPI like `PointInteractable`'s `radius` — e.g. at the common
   2× DPI, 12 image px instead of 8. Pass `tol = 8 / scaling` to keep the old numeric slack, or
   rely on the new default (slightly more forgiving at typical DPI).
+- The hover/selection outline now hugs the mark's own edge and takes the mark's own colour
+  (mixed toward a neutral, figure-aware ink — darker on light figures, lighter on dark)
+  instead of drawing a fixed steel-teal ring 2px outside it; a circle highlight's `r` now
+  equals the geometry `r` exactly (no more `r + 2` halo). Hover on a closed shape (circle/
+  rect/poly) now adds an 18% opacity tint fill in that same derived colour, not just a
+  stroke; hover on an open shape (lines/segments) stays stroke-only. Selected (wash) fill
+  opacity is now 35% (was 12%), for stronger contrast against the hover tint. `hoverstyle`'s
+  default `stroke` is now `nothing` (the overlay derives the colour) instead of the fixed
+  `"#3A6F7C"`; the manifest now omits `style.stroke` unless an interactable explicitly sets
+  one.
+- `PointInteractable(ax, ::Makie.Scatter)` now derives the circle radius from the marker's
+  drawn extent (≈0.35·`markersize` for the default `:circle`) instead of `markersize / 2`,
+  so highlights sit flush on the marker; the overlay's own 4px hit slack keeps clicking as
+  forgiving as before.
 
 ### Removed
 - `docs/design.md`, `docs/research-findings.md`, `docs/survey-makie-surfaces.md` — superseded
@@ -148,6 +162,7 @@ All notable changes to this project are documented here. The format is based on
   `Connection.send_warning`, which WGLMakie's bundled JS calls from its shader-compile-error
   path (`on_shader_error`). Previously this threw `TypeError: Bonito.Connection.send_warning
   is not a function` on top of the shader error it was trying to report.
+- Anchored tooltip caret was 2px off the mark when the per-element accent border was shown.
 
 ### Internal
 - Every non-public Makie/WGLMakie/Bonito internal Masque relies on (`converted`, child

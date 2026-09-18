@@ -11,13 +11,24 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
             f = Figure(size = (500, 350)); a = Axis(f[1, 1])
             p = scatter!(a, [1.0, 2.0, 3.0], [1.0, 4.0, 9.0]; markersize = 20)
             _, _, c = ctx_for(f)
-            # markersize=20 (diameter, :pixel) -> radius 10
-            @test geom(PointInteractable(a, p), c) == geom(PointInteractable(a, p.converted[][1]; radius = 10), c)
+            # markersize=20, default :circle marker draws a disc of diameter 0.705*markersize
+            # (Makie.default_marker_map()[:circle]'s BezierPath bbox) -> radius 0.3525*20 = 7.05
+            @test geom(PointInteractable(a, p), c) == geom(PointInteractable(a, p.converted[][1]; radius = 0.3525 * 20), c)
             @test only(hitlayers(PointInteractable(a, p), c)).id === :scatter
             # geometry lands on a rendered marker
             g = only(hitlayers(PointInteractable(a, p), c)).geometry
             img = Makie.colorbuffer(f; px_per_unit = 2.0)
             @test drawn_near(img, g[1], g[2])
+        end
+
+        @testset "scatter radius derived from marker's drawn extent" begin
+            f = Figure(size = (200, 200)); a = Axis(f[1, 1])
+            p_circle = scatter!(a, [1.0], [1.0]; marker = :circle, markersize = 22)
+            @test Masque._marker_radius(p_circle) ≈ 0.3525 * 22
+            p_char = scatter!(a, [1.0], [1.0]; marker = '●', markersize = 22)
+            @test Masque._marker_radius(p_char) == 22 / 2   # conservative fallback: unreadable bbox
+            p_img = scatter!(a, [1.0], [1.0]; marker = rand(4, 4), markersize = 22)
+            @test Masque._marker_radius(p_img) == 22 / 2   # image marker: same fallback
         end
 
         @testset "scatter radius fails loud on non-:pixel markerspace" begin

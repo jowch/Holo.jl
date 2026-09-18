@@ -48,8 +48,8 @@ the grid `values[]` cap is a pure-Julia change with no visible markup, yet it ch
 text and the bond payload → it gets a live check on every backend × the kinds it touches.)
 - **What "live-verified" means:** on each backend, open the affected cases in headless Pluto,
   drive them with Playwright (hover/click/drag), and confirm the actual on-screen result —
-  tooltip text **and** tooltip theme, highlight recipe (wash / ring / halo), remount fade
-  (no pulse), `@bind` round-trip, geometry on the mark (not offset), no console errors —
+  tooltip text **and** tooltip theme, highlight recipe (wash / ring / hover outline), remount
+  fade (no pulse), `@bind` round-trip, geometry on the mark (not offset), no console errors —
   matches intent. Inspect the real `published_to_js` manifest in-page when the change is
   about payload shape (unit tests never call `show`). **Agents run**
   `docs/dev/live-interaction-checklist.md` via **both** `test/e2e/kind_sweep.mjs` **and**
@@ -57,9 +57,20 @@ text and the bond payload → it gets a live check on every backend × the kinds
   heatmap/image, barplot, poly, polar, dark-figure scatter, arrows3d, hlines/vlines,
   threshold, ROI, and view-pan. Interaction without visual is unfinished; visual chrome
   without the kind sweep is unfinished. Overlay recipes (locked — cite, do not reopen):
-  inspector ink `#3A6F7C` (not `#ff3b30`), hover = stroke only, selected closed = wash,
-  selected open = ring, circle halo `r + 2`, 80–120 ms fade, tooltip theme derived from the
-  FIGURE's own background (CSS relative-colour syntax, `--masque-fig-bg`) — not just OS
+  highlight ink `--masque-ink` is neutral, derived from the figure background (near-black on
+  light figures, near-white on dark, not `#ff3b30`); when the element's colour is resolvable
+  (`colors`, today `scatter!`'s `color=`) the outline is that colour mixed 70/30 toward the ink
+  (darker on light, lighter on dark); an explicit `hoverstyle` stroke is used verbatim;
+  hover on a closed mark (circle/rect/poly) = 1.5px stroke flush on the mark's own drawn edge
+  + an 18% tint fill in that same colour (class `masque-hi masque-hover`); hover on an open
+  seg (lines/segments) stays stroke-only, no tint (`masque-hi`, no `masque-hover`). A scatter
+  circle's highlight `r` is the marker's DRAWN radius, not `markersize / 2` — flush against
+  the visible disc (default `:circle` marker ≈0.3525×`markersize`; a `Circle`/`Rect` geometry
+  marker draws at `markersize`; anything else falls back to `markersize / 2`); the overlay's
+  own 4px hit slack keeps clicking as forgiving as before. Selected closed = 35% wash fill +
+  2px stroke; selected open = ring (2px + 4px @ 0.25); 80–120 ms fade; tooltip
+  theme derived from the FIGURE's own background (CSS relative-colour syntax,
+  `--masque-fig-bg`) — not just OS
   `prefers-color-scheme` (official Pluto has no notebook toggle), which is now only the
   fallback for browsers without relative-colour support — tooltip anchored ABOVE the hovered
   mark (not the cursor) with a 10px gap and the caret on the anchor — flips below on a

@@ -50,6 +50,9 @@
 > 32` stops) + one small int per element — bounded by the fixed palette size regardless of N,
 > plus ~1–2 B/element for the index, not measured directly here since neither bench fixture
 > sets a numeric/vector `color=`.
+> The mark-derived hover outline change dropped the per-layer `"style"."stroke"` key by
+> default (`hoverstyle`'s stroke is now `nothing`; was always `"#3A6F7C"`, ~18 B per layer).
+> Not re-run: it only removes bytes, and neither bench fixture sets a custom `hoverstyle`.
 > baseline established after int-pixel geometry quantization, CairoMakie 0.15, Julia 1.12):
 > - **base64-PNG / manifest / render numbers** — `julia --project=. bench/payload_envelope.jl`
 >   (normal envelope) and `julia --project=. bench/stress.jl` (the 10× extremes). Both `seed!(0)`,

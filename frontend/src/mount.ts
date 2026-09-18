@@ -9,6 +9,12 @@ import { createOverlayState, cancelPendingMove, cancelPendingDrag, MOTION_MS } f
 import type { OverlayCtx } from "./state"
 import type { Hit, Manifest } from "./types"
 
+// Single source for the two highlight tint strengths (mount.ts's STYLE reads both; the e2e
+// drivers assert these exact computed fillOpacity values) — hover tints lightly, selection more
+// strongly, so the two states stay visually distinct in the same derived colour.
+const HOVER_FILL_OPACITY = 0.18
+const SELECTED_FILL_OPACITY = 0.35
+
 const STYLE = `
 :host { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
 .surface { position: absolute; inset: 0; cursor: crosshair; pointer-events: auto; }
@@ -70,6 +76,25 @@ svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: n
     }
   }
 }
+/* Highlight ink. --masque-ink is the neutral default: near-black on light figures, near-white
+   on dark ones (it reuses the tooltip text colour, which already carries that lightness clamp
+   off --masque-fig-bg). A highlight element that knows its mark's colour sets --masque-mark
+   inline; its stroke is then that colour pulled 30% toward the ink — darker on a light figure,
+   lighter on a dark one. An explicit per-layer hoverstyle stroke from Julia arrives inline as
+   --masque-hi-stroke and is used verbatim. Browsers without color-mix get the plain ink. A bare
+   stroke ring reads as an odd outline on its own, so both hover and selection also tint the
+   whole closed mark in this same derived colour — hover lightly (so it doesn't compete with the
+   marks around it), selection more strongly (so the two states stay visually distinct); open
+   geometry (masque-hi with neither class, and the ring in makeRing) is unaffected. */
+:host { --masque-ink: var(--masque-tip-color-resolved); }
+.masque-hi { --masque-hi-c: var(--masque-hi-stroke, var(--masque-ink)); stroke: var(--masque-hi-c); fill: none; }
+@supports (color: color-mix(in lch, red, blue)) {
+  .masque-hi { --masque-hi-c: var(--masque-hi-stroke, color-mix(in lch, var(--masque-mark, var(--masque-ink)) 70%, var(--masque-ink))); }
+}
+.masque-hi.masque-hover { fill: var(--masque-hi-c); fill-opacity: ${HOVER_FILL_OPACITY}; }
+.masque-hi.masque-wash { fill: var(--masque-hi-c); fill-opacity: ${SELECTED_FILL_OPACITY}; }
+.masque-hi.masque-fill { fill: var(--masque-hi-c); }
+.masque-hi.masque-nostroke { stroke: none; }
 .masque-tip { position: absolute; opacity: 0; pointer-events: none; z-index: 10;
        padding: var(--masque-tip-padding, 8px 12px); border-radius: var(--masque-tip-radius, 4px);
        background: var(--masque-tip-bg-resolved); color: var(--masque-tip-color-resolved);
@@ -87,8 +112,12 @@ svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: n
    tooltip's OUTER left edge to the anchor" — landing the apex exactly there needs both offsets
    backed out: -1 (border) -5 (this element's own half-width) = -6. The 14px fallback (used only
    when --masque-caret-x is unset, i.e. every cursor-following, non-anchored placement) preserves
-   the pre-existing default apex position (14-6=8, the literal this replaced). */
-.masque-tip::before { content: ""; position: absolute; top: -5px; left: calc(var(--masque-caret-x, 14px) - 6px);
+   the pre-existing default apex position (14-6=8, the literal this replaced). The -1 above assumed
+   the default 1px border-left; the 3px accent border (hover.ts's setMarkAccent, --masque-mark-border)
+   pushes the padding box 2px further right, so the extra width beyond the baked-in 1px
+   (--masque-mark-border-w, set alongside the accent) is backed out too. */
+.masque-tip::before { content: ""; position: absolute; top: -5px;
+       left: calc(var(--masque-caret-x, 14px) - 6px - var(--masque-mark-border-w, 1px) + 1px);
        border: 5px solid transparent; border-top: none; border-bottom-color: var(--masque-tip-bg-resolved);
        display: var(--masque-tip-caret, block); }
 .masque-tip.flip-y::before { top: auto; bottom: -5px; border-bottom: none;

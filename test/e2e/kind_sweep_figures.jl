@@ -1,78 +1,81 @@
 # Shared figures for the agent kind-sweep notebooks (Cairo / WGL).
 # Each widget is one interactable kind (interaction + visual). `selected=` is baked only
-# on supported kinds (`circles`, `rects`, `polygons`, `segments`, `polyline`).
+# on supported kinds (`circles`, `rects`, `polygons`, `segments`, `polyline`). `circle` marks a
+# kind whose highlight is a circle, so the driver checks r == geometry r (no halo offset).
 # Grid / threshold / roi / view are hover-click or drag only. `scatter_dark` is a dark
-# Makie figure so inspector ink is live-checked on dark axes.
+# Makie figure so the neutral/mark-derived ink is live-checked on dark axes; `scatter` and
+# `scatter_dark` are built from the scatter plot object (not raw points) so `colors` resolves
+# and the mark-colour-derivation check has something to derive from.
 
 kind_sweep_meta() = [
     Dict(
         "key" => "scatter", "layerId" => "scatter", "layerKind" => "circles",
-        "selected" => "wash", "halo" => true, "selectedIndex" => 1, "clickIndex" => 0,
+        "selected" => "wash", "circle" => true, "selectedIndex" => 1, "clickIndex" => 0,
         "tip" => "beta", "mode" => "element",
     ),
     Dict(
         "key" => "lines", "layerId" => "lines", "layerKind" => "polyline",
-        "selected" => "ring", "halo" => false, "selectedIndex" => 1, "clickIndex" => 0,
+        "selected" => "ring", "circle" => false, "selectedIndex" => 1, "clickIndex" => 0,
         "tip" => "seg-b", "mode" => "element",
     ),
     Dict(
         "key" => "segments", "layerId" => "segments", "layerKind" => "segments",
-        "selected" => "ring", "halo" => false, "selectedIndex" => 0, "clickIndex" => 1,
+        "selected" => "ring", "circle" => false, "selectedIndex" => 0, "clickIndex" => 1,
         "tip" => "pair-a", "mode" => "element",
     ),
     Dict(
         "key" => "heatmap", "layerId" => "cells", "layerKind" => "grid",
-        "selected" => nothing, "halo" => false, "selectedIndex" => 0, "clickIndex" => 0,
+        "selected" => nothing, "circle" => false, "selectedIndex" => 0, "clickIndex" => 0,
         "tip" => "0,0", "mode" => "element",
     ),
     Dict(
         "key" => "image", "layerId" => "cells", "layerKind" => "grid",
-        "selected" => nothing, "halo" => false, "selectedIndex" => 0, "clickIndex" => 0,
+        "selected" => nothing, "circle" => false, "selectedIndex" => 0, "clickIndex" => 0,
         "tip" => "0,0", "mode" => "element",
     ),
     Dict(
         "key" => "barplot", "layerId" => "bars", "layerKind" => "rects",
-        "selected" => "wash", "halo" => false, "selectedIndex" => 1, "clickIndex" => 0,
+        "selected" => "wash", "circle" => false, "selectedIndex" => 1, "clickIndex" => 0,
         "tip" => "value", "mode" => "element",
     ),
     Dict(
         "key" => "poly", "layerId" => "poly", "layerKind" => "polygons",
-        "selected" => "wash", "halo" => false, "selectedIndex" => 0, "clickIndex" => 1,
+        "selected" => "wash", "circle" => false, "selectedIndex" => 0, "clickIndex" => 1,
         "tip" => "ring1", "mode" => "element",
     ),
     Dict(
         "key" => "polar", "layerId" => "polar", "layerKind" => "circles",
-        "selected" => "wash", "halo" => true, "selectedIndex" => 1, "clickIndex" => 0,
+        "selected" => "wash", "circle" => true, "selectedIndex" => 1, "clickIndex" => 0,
         "tip" => "north", "mode" => "element",
     ),
     Dict(
         "key" => "scatter_dark", "layerId" => "scatter_dark", "layerKind" => "circles",
-        "selected" => "wash", "halo" => true, "selectedIndex" => 1, "clickIndex" => 0,
+        "selected" => "wash", "circle" => true, "selectedIndex" => 1, "clickIndex" => 0,
         "tip" => "beta", "mode" => "element",
     ),
     Dict(
         "key" => "arrows3d", "layerId" => "arrows3d", "layerKind" => "segments",
-        "selected" => "ring", "halo" => false, "selectedIndex" => 0, "clickIndex" => 1,
+        "selected" => "ring", "circle" => false, "selectedIndex" => 0, "clickIndex" => 1,
         "tip" => "index", "mode" => "element",
     ),
     Dict(
         "key" => "hlines", "layerId" => "hlines", "layerKind" => "segments",
-        "selected" => "ring", "halo" => false, "selectedIndex" => 0, "clickIndex" => 1,
+        "selected" => "ring", "circle" => false, "selectedIndex" => 0, "clickIndex" => 1,
         "tip" => "segment_index", "mode" => "element",
     ),
     Dict(
         "key" => "threshold", "layerId" => "threshold", "layerKind" => "threshold",
-        "selected" => nothing, "halo" => false, "selectedIndex" => 0, "clickIndex" => 0,
+        "selected" => nothing, "circle" => false, "selectedIndex" => 0, "clickIndex" => 0,
         "tip" => "", "mode" => "drag",
     ),
     Dict(
         "key" => "roi", "layerId" => "roi", "layerKind" => "roi",
-        "selected" => nothing, "halo" => false, "selectedIndex" => 0, "clickIndex" => 0,
+        "selected" => nothing, "circle" => false, "selectedIndex" => 0, "clickIndex" => 0,
         "tip" => "", "mode" => "drag",
     ),
     Dict(
         "key" => "view", "layerId" => "view", "layerKind" => "view",
-        "selected" => nothing, "halo" => false, "selectedIndex" => 0, "clickIndex" => 0,
+        "selected" => nothing, "circle" => false, "selectedIndex" => 0, "clickIndex" => 0,
         "tip" => "", "mode" => "drag",
     ),
 ]
@@ -82,11 +85,13 @@ function build_kind_sweep()
         pts = [(1.0, 1.0), (2.0, 2.0), (3.0, 1.2)]
         fig = Figure(size = (480, 260))
         ax = Axis(fig[1, 1]; title = "scatter")
-        scatter!(ax, first.(pts), last.(pts); color = :gray, markersize = 22)
+        # Built from the plot object (not raw pts) so PointInteractable resolves `colors` from
+        # `color=` — the mark-colour-derivation check needs a resolvable mark colour.
+        sc = scatter!(ax, first.(pts), last.(pts); color = :gray, markersize = 22)
         masque(
             fig,
             PointInteractable(
-                ax, pts; id = :scatter,
+                ax, sc; id = :scatter,
                 payloads = [(; label = "alpha"), (; label = "beta"), (; label = "gamma")],
             );
             selected = Dict(:scatter => [1]),
@@ -191,11 +196,11 @@ function build_kind_sweep()
             ytickcolor = :gray80,
             titlecolor = :gray90,
         )
-        scatter!(ax, first.(pts), last.(pts); color = :gray, markersize = 22)
+        sc = scatter!(ax, first.(pts), last.(pts); color = :gray, markersize = 22)
         masque(
             fig,
             PointInteractable(
-                ax, pts; id = :scatter_dark,
+                ax, sc; id = :scatter_dark,
                 payloads = [(; label = "alpha"), (; label = "beta"), (; label = "gamma")],
             );
             selected = Dict(:scatter_dark => [1]),

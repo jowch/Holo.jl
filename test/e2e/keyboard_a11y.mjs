@@ -49,8 +49,11 @@ try {
   let ready = false, tick = 0;
   while (Date.now() < deadline) {
     const st = await page.evaluate(() => {
+      // See kind_sweep.mjs: click the safe-preview banner exactly once — a repeated click on
+      // an already-running notebook re-triggers Pluto's reactive run and can interrupt the
+      // in-flight cell (InterruptException) under slow/contended first-open precompilation.
       const runBtn = [...document.querySelectorAll("button, a")].find((b) => /run notebook code/i.test(b.innerText || b.title || ""));
-      if (runBtn) runBtn.click();
+      if (runBtn && !window.__masqueClickedRun) { runBtn.click(); window.__masqueClickedRun = true; }
       const hosts = [...document.querySelectorAll(".ip-host")];
       let surfaces = 0;
       for (const h of hosts) {

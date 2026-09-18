@@ -44,7 +44,6 @@
             ],
             "id": "region_c",
             "style": {
-                "stroke": "#3A6F7C",
                 "width": 2
             },
             "payloads": [
@@ -66,7 +65,6 @@
             ],
             "id": "region_r",
             "style": {
-                "stroke": "#3A6F7C",
                 "width": 2
             },
             "payloads": [
@@ -92,7 +90,6 @@
             ],
             "id": "region_p",
             "style": {
-                "stroke": "#3A6F7C",
                 "width": 2
             },
             "payloads": [

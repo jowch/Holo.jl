@@ -71,8 +71,8 @@ All of these, then Jonathan registers:
    Highlights: masque(fig) auto-extract + explicit interactables; tooltips and
    selection; ROI / thresholds; Axis3 and PolarAxis discrete overlays;
    Arrows3D start→end segments; drag-to-pan / drag-to-rotate
-   (ViewInteractable, commit-on-release); overlay chrome #3A6F7C wash / ring /
-   halo.
+   (ViewInteractable, commit-on-release); overlay chrome mark-derived / neutral-ink
+   wash / ring / hover outline.
 
    Install: ] add Masque
    0.1.x stays additive; breaking changes go to 0.2.

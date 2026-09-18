@@ -59,7 +59,7 @@ export interface AxisTransform {
 }
 
 export interface LayerStyle {
-    stroke: string
+    stroke?: string
     width: number
 }
 

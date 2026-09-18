@@ -9,8 +9,9 @@ import { chromium } from "playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  assertNoAlertRed, assertWash, assertRing, assertHoverRecipe,
+  assertNoAlertRed, assertNoTeal, assertWash, assertRing, assertHoverRecipe, assertCircleR,
   assertRemountStable, assertLeaveFade, assertTooltipColorScheme,
+  assertMarkDerivedInk, assertNeutralDarkInk, colorLightness,
 } from "./visual_assert.mjs";
 
 const [base, notebook, backend, artifactDirArg] = process.argv.slice(2);
@@ -114,8 +115,13 @@ try {
   let ready = false, tick = 0;
   while (Date.now() < deadline) {
     const st = await page.evaluate(() => {
+      // Click the "Run notebook code" safe-preview banner exactly once per page: it can stay
+      // in the DOM (just visually superseded) for the whole first-open precompile, and a
+      // repeated click on an already-running notebook re-triggers Pluto's reactive run,
+      // interrupting the in-flight cell (surfaces as InterruptException under slow/contended
+      // precompilation — seen when Cairo and WGL open concurrently on a loaded box).
       const runBtn = [...document.querySelectorAll("button, a")].find((b) => /run notebook code/i.test(b.innerText || b.title || ""));
-      if (runBtn) runBtn.click();
+      if (runBtn && !window.__masqueClickedRun) { runBtn.click(); window.__masqueClickedRun = true; }
       const hosts = [...document.querySelectorAll(".ip-host")];
       let surfaces = 0;
       for (const h of hosts) {
@@ -179,18 +185,22 @@ try {
       if (el.tagName.toLowerCase() === "g") {
         return {
           kind: "ring",
-          lines: [...el.querySelectorAll("line")].map((ln) => ({
-            fill: ln.getAttribute("fill"), stroke: ln.getAttribute("stroke"),
-            width: ln.getAttribute("stroke-width"), opacity: ln.getAttribute("stroke-opacity"),
-            x1: ln.getAttribute("x1"), y1: ln.getAttribute("y1"),
-            x2: ln.getAttribute("x2"), y2: ln.getAttribute("y2"),
-          })),
+          lines: [...el.querySelectorAll("line")].map((ln) => {
+            const cs = getComputedStyle(ln);
+            return {
+              className: ln.getAttribute("class"), stroke: cs.stroke, fill: cs.fill, fillOpacity: cs.fillOpacity,
+              width: ln.getAttribute("stroke-width"), opacity: ln.getAttribute("stroke-opacity"),
+              x1: ln.getAttribute("x1"), y1: ln.getAttribute("y1"),
+              x2: ln.getAttribute("x2"), y2: ln.getAttribute("y2"),
+            };
+          }),
         };
       }
+      const cs = getComputedStyle(el);
       return {
         kind: "closed", tag: el.tagName.toLowerCase(),
-        fill: el.getAttribute("fill"), stroke: el.getAttribute("stroke"),
-        width: el.getAttribute("stroke-width"),
+        className: el.getAttribute("class"), stroke: cs.stroke, fill: cs.fill, fillOpacity: cs.fillOpacity,
+        width: el.getAttribute("stroke-width"), mark: el.style.getPropertyValue("--masque-mark"),
         r: el.getAttribute("r"), cx: el.getAttribute("cx"), cy: el.getAttribute("cy"),
         x: el.getAttribute("x"), y: el.getAttribute("y"),
         w: el.getAttribute("width"), h: el.getAttribute("height"),
@@ -234,15 +244,17 @@ try {
     }
     const tip = sr.querySelector(".masque-tip");
     const hi = sr.querySelector("g.hi")?.firstElementChild;
+    const hiCs = hi ? getComputedStyle(hi) : null;
     return {
       show: tip?.classList.contains("show"),
       text: (tip?.innerText || "").replace(/\s+/g, " ").trim(),
       hi: hi ? {
         tag: hi.tagName.toLowerCase(),
-        fill: hi.getAttribute("fill"),
-        stroke: hi.getAttribute("stroke"),
+        className: hi.getAttribute("class"),
+        fill: hiCs.fill, stroke: hiCs.stroke, fillOpacity: hiCs.fillOpacity,
         width: hi.getAttribute("stroke-width"),
         opacity: hi.getAttribute("stroke-opacity"),
+        mark: hi.style.getPropertyValue("--masque-mark"),
         r: hi.getAttribute("r"), cx: hi.getAttribute("cx"), cy: hi.getAttribute("cy"),
         x1: hi.getAttribute("x1"), y1: hi.getAttribute("y1"),
         x2: hi.getAttribute("x2"), y2: hi.getAttribute("y2"),
@@ -365,15 +377,16 @@ try {
     if (spec.selected === "wash") {
       const wash = m.kids.find((k) => k.kind === "closed");
       assertWash(wash, key);
-      if (spec.halo) {
+      if (spec.circle) {
+        // `hp.r` is whatever geometry the manifest shipped, not a fixed literal here — for
+        // `scatter`/`scatter_dark` (markersize=22, built from the Scatter plot object) it's the
+        // marker's drawn radius, ≈0.3525·22·2 (px_per_unit) ≈ 15.5 image px, not markersize/2.
         const hp = hitPoint(layer, spec.selectedIndex);
-        if (String(Number(wash.r)) !== String(hp.r + 2)) {
-          throw new Error(`${key}: halo r=${wash.r} geom r=${hp.r} (want r+2)`);
-        }
+        assertCircleR(wash.r, hp.r, key);
         if (Math.abs(Number(wash.cx) - hp.x) > 0.6 || Math.abs(Number(wash.cy) - hp.y) > 0.6) {
           throw new Error(`${key}: selected not centered cx=${wash.cx},${wash.cy} geom=${hp.x},${hp.y}`);
         }
-        passed.push(`${key}/halo-r+2`);
+        passed.push(`${key}/circle-r`);
       }
       if (layer.kind === "rects") {
         const hp = hitPoint(layer, spec.selectedIndex);
@@ -409,8 +422,34 @@ try {
       await new Promise((r) => setTimeout(r, 200));
     }
     if (!tipHit(tip)) throw new Error(`${key}: tooltip ${JSON.stringify(tip)}`);
-    assertHoverRecipe(tip.hi, key);
+    // Open (stroke-only, no tint) kinds are line-geometry layers (polyline/segments); every
+    // other element-kind layer (circles/rects/polygons/grid) is closed (tint + stroke).
+    const closedHover = layer.kind !== "polyline" && layer.kind !== "segments";
+    assertHoverRecipe(tip.hi, key, closedHover);
     assertNoAlertRed(m.kids, `${key}/sel`);
+    assertNoTeal(m.kids, `${key}/sel`);
+
+    // Mark-colour derivation (the point of this change): scatter/scatter_dark resolve `colors`
+    // (from scatter!'s color=), so the hover stroke must be that mark colour mixed toward the
+    // ink — darker on the light figure, lighter on the dark one. heatmap/lines have no `colors`,
+    // so their hover stroke must fall back to the neutral, figure-aware dark ink.
+    if (layer.colors && (key === "scatter" || key === "scatter_dark")) {
+      const resolvedMark = await page.evaluate((mark) => {
+        const tmp = document.createElement("span");
+        tmp.style.color = mark;
+        document.body.appendChild(tmp);
+        const c = getComputedStyle(tmp).color;
+        tmp.remove();
+        return c;
+      }, tip.hi.mark);
+      const strokeL = colorLightness(tip.hi.stroke), markL = colorLightness(resolvedMark);
+      assertMarkDerivedInk(strokeL, markL, key === "scatter", `${key}/mark-ink`);
+      passed.push(`${key}/mark-ink`);
+    } else if (!layer.colors && (key === "heatmap" || key === "lines")) {
+      assertNeutralDarkInk(colorLightness(tip.hi.stroke), `${key}/neutral-ink`);
+      passed.push(`${key}/neutral-ink`);
+    }
+
     const hiStable = await page.evaluate(([k, ix, iy]) => {
       const span = document.querySelector(`#coords_${k}`);
       const hosts = [...document.querySelectorAll(".ip-host")];
@@ -440,11 +479,9 @@ try {
     }, [key, hoverPt.x, hoverPt.y]);
     assertRemountStable(hiStable, key);
     passed.push(`${key}/no-pulse`);
-    if (spec.halo && tip.hi?.r != null) {
+    if (spec.circle && tip.hi?.r != null) {
       const hp = hitPoint(layer, spec.selectedIndex);
-      if (String(Number(tip.hi.r)) !== String(hp.r + 2)) {
-        throw new Error(`${key}: hover halo r=${tip.hi.r} want ${hp.r + 2}`);
-      }
+      assertCircleR(tip.hi.r, hp.r, `${key}/hover`);
       if (Math.abs(Number(tip.hi.cx) - hp.x) > 0.6 || Math.abs(Number(tip.hi.cy) - hp.y) > 0.6) {
         throw new Error(`${key}: hover not centered`);
       }

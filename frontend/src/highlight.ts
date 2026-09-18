@@ -1,36 +1,47 @@
 import { hitKey, prefersReducedMotion, MOTION_MS } from "./state"
 import type { OverlayState } from "./state"
-import type { Hit } from "./types"
+import type { Hit, LayerStyle } from "./types"
 
 export const SVG_NS = "http://www.w3.org/2000/svg"
 
-// Inspector ink is a locked design decision (CLAUDE.md) — not a theming API.
-export const INSPECTOR_INK = "#3A6F7C"
-export const DEFAULT_STYLE = { stroke: INSPECTOR_INK, width: 2 }
+export const DEFAULT_STYLE: LayerStyle = { width: 2 }
 
 // --- highlight element factory (shared by hover drawHi and box-selection selGroup) ---
 type HiMode = "hover" | "selected"
 
-export function colorWithAlpha(stroke: string, a: number): string {
-    const m = /^#([0-9a-f]{6})$/i.exec(stroke.trim())
-    if (!m) return `color-mix(in srgb, ${stroke} ${Math.round(a * 100)}%, transparent)`
-    const n = parseInt(m[1], 16)
-    return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${a})`
+// hit.layer.colors is per-LAYER (a single string, or a layer-wide palette + one index per
+// element) — never resolved per the specific hit here beyond that one palette lookup, so an
+// out-of-range index (a payload/colors length mismatch) degrades to no accent rather than
+// throwing.
+export function markColorFor(hit: Hit): string | null {
+    const c = hit.layer.colors
+    if (!c) return null
+    if (typeof c === "string") return c
+    return c.palette[c.index[hit.index]] ?? null
 }
 
-export function makeRing(shape: SVGElement, stroke: string): SVGGElement {
+// Applies the two colour-derivation inputs (mount.ts's STYLE .masque-hi rules read them): the
+// mark's own colour (drives the color-mix toward --masque-ink) and an explicit per-layer
+// hoverstyle override (wins outright, used verbatim). Shared by every highlight element —
+// hover/selected circles, rings, the ROI rect/handles, the threshold line.
+function setHiColorProps(el: SVGElement | SVGGElement, mark: string | null, stroke: string | undefined): void {
+    if (mark) el.style.setProperty("--masque-mark", mark)
+    if (stroke) el.style.setProperty("--masque-hi-stroke", stroke)
+}
+
+export function makeRing(shape: SVGElement, mark: string | null, stroke: string | undefined): SVGGElement {
     const g = document.createElementNS(SVG_NS, "g")
     const inner = shape
     const outer = shape.cloneNode(true) as SVGElement
     for (const el of [inner, outer]) {
-        el.setAttribute("fill", "none")
-        el.setAttribute("stroke", stroke)
+        el.classList.add("masque-hi")
         el.setAttribute("vector-effect", "non-scaling-stroke")
     }
     inner.setAttribute("stroke-width", "2")
     inner.setAttribute("stroke-opacity", "1")
     outer.setAttribute("stroke-width", "4")
     outer.setAttribute("stroke-opacity", "0.25")
+    setHiColorProps(g, mark, stroke) // custom properties inherit — set once on the wrapper
     g.append(outer, inner) // outer under inner so the 2px stroke stays crisp
     return g
 }
@@ -42,7 +53,7 @@ export function makeHiElement(hit: Hit, mode: HiMode = "hover"): SVGElement | nu
     let el: SVGElement | null = null
     if (g[0] === "circle") {
         el = document.createElementNS(SVG_NS, "circle")
-        el.setAttribute("cx", String(g[1])); el.setAttribute("cy", String(g[2])); el.setAttribute("r", String((g[3] as number) + 2))
+        el.setAttribute("cx", String(g[1])); el.setAttribute("cy", String(g[2])); el.setAttribute("r", String(g[3]))
     } else if (g[0] === "rect" || g[0] === "rectfill") {
         el = document.createElementNS(SVG_NS, "rect")
         el.setAttribute("x", String((g[1] as number) - (g[3] as number) / 2))
@@ -61,25 +72,23 @@ export function makeHiElement(hit: Hit, mode: HiMode = "hover"): SVGElement | nu
     }
     if (!el) return null
     const open = g[0] === "seg"
-    if (mode === "selected" && open) return makeRing(el, st.stroke)
+    const mark = markColorFor(hit)
+    if (mode === "selected" && open) return makeRing(el, mark, st.stroke)
+    el.classList.add("masque-hi")
     el.setAttribute("vector-effect", "non-scaling-stroke")
+    setHiColorProps(el, mark, st.stroke)
     if (mode === "hover") {
-        el.setAttribute("stroke", st.stroke)
-        el.setAttribute("fill", "none")
-        el.setAttribute("stroke-width", "2")
-        el.setAttribute("stroke-opacity", "0.85")
+        el.setAttribute("stroke-width", "1.5")
+        if (!open) el.classList.add("masque-hover") // seg stays stroke-only, no fill class
     } else if (g[0] === "rectfill") {
         // The grid cell-block union rect from an ROI's selects: fill only, no stroke — the ROI
         // box itself is already drawing that outline, and stroking this rect too doubles it
         // into two parallel edges that persist after release (see selection.ts's cellRange/grid
         // branch for why this rect exists at all).
-        el.setAttribute("fill", colorWithAlpha(st.stroke, 0.12))
-        el.setAttribute("stroke", "none")
+        el.classList.add("masque-wash", "masque-nostroke")
     } else {
-        el.setAttribute("stroke", st.stroke)
-        el.setAttribute("fill", colorWithAlpha(st.stroke, 0.12))
-        el.setAttribute("stroke-width", "2.5")
-        el.setAttribute("stroke-opacity", "1")
+        el.classList.add("masque-wash")
+        el.setAttribute("stroke-width", "2")
     }
     return el
 }

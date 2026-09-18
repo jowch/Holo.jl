@@ -79,7 +79,7 @@ applies. The `ax` argument is passed because a plot has no back-reference to its
 ```julia
 begin
     p = scatter!(ax, xs, ys; markersize = 14)
-    pt = PointInteractable(ax, p)   # radius taken from markersize
+    pt = PointInteractable(ax, p)   # radius derived from the marker's drawn extent
 end
 ```
 
@@ -93,7 +93,7 @@ tooltip contract, plot-specific default payload and `id`:
 
 | Produces | From these plots |
 |---|---|
-| [`PointInteractable`](@ref) | `Scatter` (`radius` from `markersize/2`); `MeshScatter` (data-space `radius3d` on a 3D axis) |
+| [`PointInteractable`](@ref) | `Scatter` (`radius` from the marker's drawn extent — ≈0.35×`markersize` for the default `:circle`, `markersize` for a `Circle`/`Rect` geometry marker, `markersize/2` fallback otherwise); `MeshScatter` (data-space `radius3d` on a 3D axis) |
 | [`SegmentInteractable`](@ref) | `Lines`, `Stairs` (`:polyline`); `LineSegments`, `Errorbars`, `Rangebars` (`:pairs`); `Wireframe` (rendered edges); `Arrows3D` (shaft start→end); `HLines`/`VLines` (the rendered span) |
 | [`RectInteractable`](@ref) | `Heatmap`/`Image` (compact grid); `BarPlot` (dodge/stack/auto-width honored); `Hist`, `Waterfall`, `CrossBar`, `Spy`, `HSpan`, `VSpan` |
 | [`PolygonInteractable`](@ref) | `Poly` (one ring or many); `Band`, `Density` (filled curve); `Contourf` (filled levels); `Violin`; `Voronoiplot` (cell polygons) |

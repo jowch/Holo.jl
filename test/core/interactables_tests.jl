@@ -1,6 +1,15 @@
 using Test, Masque, CairoMakie, Makie
 include(joinpath(@__DIR__, "..", "testutils.jl"))
 
+# Minimal AbstractInteractable subtype exercising the extension interface's hoverstyle
+# override: delegates hitlayers to its wrapped PointInteractable, but ships an explicit
+# stroke rather than the derived-colour default.
+struct _CustomHoverInteractable <: Masque.AbstractInteractable
+    inner::PointInteractable
+end
+Masque.hitlayers(i::_CustomHoverInteractable, ctx::Masque.InteractionContext) = hitlayers(i.inner, ctx)
+Masque.hoverstyle(::_CustomHoverInteractable) = (; stroke = "#123456", width = 3)
+
 @testset "Interactables" begin
     @testset "RectInteractable grid is compact" begin
         fh = Figure(); axh = Axis(fh[1, 1]); z = rand(20, 30); heatmap!(axh, 1:20, 1:30, z)
@@ -165,10 +174,20 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
         @test [L["kind"] for L in m["layers"]] == ["circles", "axis"]
         @test haskey(m["transforms"], "ax1")
 
-        # inspector ink (first polish PR): hoverstyle default + shipped layer.style
-        @test Masque.hoverstyle(PointInteractable(bax, pts; id = :scatter)).stroke == "#3A6F7C"
+        # hover outline: default stroke is nothing (overlay derives the colour), so the
+        # manifest's style dict omits "stroke" and carries only "width".
+        @test Masque.hoverstyle(PointInteractable(bax, pts; id = :scatter)).stroke === nothing
         @test Masque.hoverstyle(PointInteractable(bax, pts; id = :scatter)).width == 2
-        @test m["layers"][1]["style"]["stroke"] == "#3A6F7C"
+        @test !haskey(m["layers"][1]["style"], "stroke")
+        @test m["layers"][1]["style"]["width"] == 2
+
+        # a custom interactable subtype can override hoverstyle with an explicit stroke; it
+        # rides the manifest verbatim.
+        @test Masque.hoverstyle(_CustomHoverInteractable(PointInteractable(bax, pts; id = :customhover))) ==
+            (; stroke = "#123456", width = 3)
+        mc = build_manifest([_CustomHoverInteractable(PointInteractable(bax, pts; id = :customhover))], bctx)
+        @test mc["layers"][1]["style"]["stroke"] == "#123456"
+        @test mc["layers"][1]["style"]["width"] == 3
 
         # selection round-trip: pre-highlight indices ride the manifest keyed by layer id
         @test !haskey(m["layers"][1], "selected")                       # absent when unselected

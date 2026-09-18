@@ -43,13 +43,15 @@ export function buildROIBoxes(manifest: Manifest, svg: SVGSVGElement): Map<strin
         const rg = layer.geometry as ROIGeometry
         const st = layer.style ?? DEFAULT_STYLE
         const rect = document.createElementNS(SVG_NS, "rect")
-        rect.setAttribute("fill", "none"); rect.setAttribute("stroke", st.stroke)
+        rect.classList.add("masque-hi")
         rect.setAttribute("stroke-width", String(st.width)); rect.setAttribute("vector-effect", "non-scaling-stroke")
+        if (st.stroke) rect.style.setProperty("--masque-hi-stroke", st.stroke)
         svg.appendChild(rect)
         const handles: SVGRectElement[] = []
         for (let k = 0; k < 8; k++) {
             const hdl = document.createElementNS(SVG_NS, "rect")
-            hdl.setAttribute("fill", st.stroke)
+            hdl.classList.add("masque-hi", "masque-fill")
+            if (st.stroke) hdl.style.setProperty("--masque-hi-stroke", st.stroke)
             svg.appendChild(hdl); handles.push(hdl)
         }
         // box.g_ aliases the manifest ROIGeometry so drag mutations stay visible to hitLayer,

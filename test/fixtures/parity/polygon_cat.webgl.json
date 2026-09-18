@@ -84,7 +84,6 @@
             ],
             "id": "polygons",
             "style": {
-                "stroke": "#3A6F7C",
                 "width": 2
             },
             "payloads": [
@@ -103,17 +102,16 @@
             "geometry": [
                 696,
                 691,
-                9,
+                6,
                 921,
                 377,
-                9,
+                6,
                 1146,
                 63,
-                9
+                6
             ],
             "id": "scatter",
             "style": {
-                "stroke": "#3A6F7C",
                 "width": 2
             },
             "colors": "rgb(0,114,178)",

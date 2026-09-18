@@ -79,8 +79,11 @@ Optional (default shown; all non-exported — extend as `Masque.<name>`):
 - `Masque.tooltip_spec(i)` — `nothing` for the auto name/value table, a [`Markup`](@ref) (built
   with `masque"..."`) template, or `false` to suppress. Default: `nothing`.
 - `Masque.hoverstyle(i) -> NamedTuple` — one `(; stroke, width)` hover outline style per *layer*
-  (the manifest ships one style per layer, not per element). Default:
-  `(; stroke = "#3A6F7C", width = 2)`.
+  (the manifest ships one style per layer, not per element). Default: `(; stroke = nothing,
+  width = 2)` — `stroke = nothing` means the overlay derives the outline colour itself (a
+  darker/lighter shade of the element's own colour when it can be resolved via `colors`, else a
+  neutral ink that follows the figure background); a CSS colour string overrides it verbatim for
+  that layer.
 - `Masque.hit_tol(i) -> Union{Nothing,Real}` — logical-px hit-test slack for `:segments`/
   `:polyline` layers, shipped in the manifest as image px (`round(Int, hit_tol(i) *
   ctx.scaling)`). `nothing` (default) omits the field; the overlay then falls back to its
@@ -105,7 +108,9 @@ events(::AbstractInteractable) = (:click, :hover)
 # Per-layer: nothing = auto name/value table (default), Markup = template, false = suppress.
 tooltip_spec(::AbstractInteractable) = nothing
 # One hover style per LAYER (the manifest ships one `style` dict per layer, not per element).
-hoverstyle(::AbstractInteractable) = (; stroke = "#3A6F7C", width = 2)
+# stroke = nothing: the overlay derives the outline colour (mark colour when resolvable via
+# `colors`, else a neutral figure-aware ink); a CSS colour string here overrides it verbatim.
+hoverstyle(::AbstractInteractable) = (; stroke = nothing, width = 2)
 # Logical-px hit-test slack for :segments/:polyline layers; nothing omits the manifest field.
 hit_tol(::AbstractInteractable) = nothing
 
@@ -227,8 +232,15 @@ Scatter-style points, hit-tested as circles. Produces one `:circles` [`HitLayer`
 
 # From a plot object
 `PointInteractable(ax, p::Makie.Scatter)` reads points from `p`'s converted data and derives
-`radius` from `markersize / 2` — this requires `markerspace = :pixel` (the default); pass
-`radius=` explicitly for any other markerspace, or it errors. It also resolves `colors` from
+`radius` from the marker's drawn extent, not the full `markersize` square — Makie's default
+`:circle` marker draws a disc of diameter ≈0.705·`markersize` (radius ≈0.3525·`markersize`), so
+that's what ships; other `default_marker_map()` symbols/`BezierPath`s use their own bbox in the
+same way, a `GeometryBasics` `Circle`/`Rect` marker draws at the full `markersize` (radius =
+`markersize / 2`), and anything else (a `Char` glyph, an image, a per-element vector of markers)
+falls back to `markersize / 2` as a conservative bound. This requires `markerspace = :pixel` (the
+default); pass `radius=` explicitly for any other markerspace, or it errors. The overlay adds its
+own hit-test slack on top, so the smaller radius doesn't make small markers harder to click. It
+also resolves `colors` from
 `p.color[]`: a single colour (including a bare numeric value mapped through `colormap`) ships
 as one CSS string; a numeric (colormap-driven) or explicit per-point colour vector ships as a
 shared palette + one index per point; anything else (e.g. no colour, or unresolvable) omits
@@ -245,7 +257,7 @@ pts = [(1.0, 1.0), (2.0, 4.0), (3.0, 9.0)]
 PointInteractable(ax, pts; payloads = ["a", "b", "c"])
 
 p = scatter!(ax, xs, ys; markersize = 14)
-PointInteractable(ax, p)   # radius = 14/2, taken from markersize
+PointInteractable(ax, p)   # radius ≈ 0.3525 * 14, the drawn :circle disc's radius
 ```
 """
 struct PointInteractable <: AbstractInteractable
