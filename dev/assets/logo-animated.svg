@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 58 256 130" width="256" height="130" role="img" aria-label="Masque.jl logo: a gold Venetian eye mask set with four jewels in the Julia colours">
+  <style>
+    .sp {
+      transform-box: fill-box;
+      transform-origin: center;
+      transform: scale(0);
+      animation: masque-twinkle 8s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+    }
+    .sp1 { animation-delay: 0.3s; }
+    .sp2 { animation-delay: 0.6s; }
+    .sp3 { animation-delay: 0.85s; }
+    .sp4 { animation-delay: 2.6s; }
+    .sp5 { animation-delay: 2.95s; }
+    .sp6 { animation-delay: 5.5s; }
+    @keyframes masque-twinkle {
+      0%   { transform: scale(0)    rotate(0deg); }
+      4%   { transform: scale(1.25) rotate(30deg); }
+      7%   { transform: scale(0.6)  rotate(50deg); }
+      10%  { transform: scale(1)    rotate(70deg); }
+      14%  { transform: scale(0)    rotate(110deg); }
+      100% { transform: scale(0)    rotate(110deg); }
+    }
+    .lid {
+      transform-box: fill-box;
+      transform-origin: center top;
+      transform: scaleY(0);
+      animation: masque-wink 8s ease-in-out infinite;
+    }
+    @keyframes masque-wink {
+      0%, 54% { transform: scale(1.04, 0); }
+      56%     { transform: scale(1.04, 1.08); }
+      59%     { transform: scale(1.04, 1.08); }
+      62%     { transform: scale(1.04, 0); }
+      100%    { transform: scale(1.04, 0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .sp  { animation: none; transform: scale(0.7); }
+      .lid { animation: none; }
+    }
+  </style>
+  <path fill="#C9962B" fill-rule="evenodd" d="
+    M 14 104
+    C 30 76, 84 60, 128 86
+    C 172 60, 226 76, 242 104
+    C 236 146, 210 178, 176 172
+    C 154 168, 142 152, 128 148
+    C 114 152, 102 168, 80 172
+    C 46 178, 20 146, 14 104 Z
+    M 48 112 C 66 92, 100 98, 114 126 C 98 142, 62 140, 48 112 Z
+    M 208 112 C 190 92, 156 98, 142 126 C 158 142, 194 140, 208 112 Z
+    M 90 76 A 12 12 0 1 0 66 76 A 12 12 0 1 0 90 76 Z
+    M 190 76 A 12 12 0 1 0 166 76 A 12 12 0 1 0 190 76 Z
+    M 142 88 A 14 14 0 1 0 114 88 A 14 14 0 1 0 142 88 Z
+    M 139 150 A 11 11 0 1 0 117 150 A 11 11 0 1 0 139 150 Z"/>
+  <circle cx="128" cy="88" r="10" fill="#CB3C33"/>
+  <circle cx="78" cy="76" r="8" fill="#9558B2"/>
+  <circle cx="178" cy="76" r="8" fill="#389826"/>
+  <circle cx="128" cy="150" r="7" fill="#4063D8"/>
+  <!-- right-eye wink: a gold copy of the eye hole that closes vertically -->
+  <path class="lid" fill="#C9962B" d="M 208 112 C 190 92, 156 98, 142 126 C 158 142, 194 140, 208 112 Z"/>
+  <!-- sparkles: a unit four-point star, placed and sized by the wrapper transform -->
+  <g fill="#C9962B">
+    <g transform="translate(184 113) scale(11)"><path class="sp sp1" d="M 0 -1 Q .15 -.15 1 0 Q .15 .15 0 1 Q -.15 .15 -1 0 Q -.15 -.15 0 -1 Z"/></g>
+    <g transform="translate(166 124) scale(5)"><path class="sp sp2" d="M 0 -1 Q .15 -.15 1 0 Q .15 .15 0 1 Q -.15 .15 -1 0 Q -.15 -.15 0 -1 Z"/></g>
+    <g transform="translate(197 122) scale(4)"><path class="sp sp3" d="M 0 -1 Q .15 -.15 1 0 Q .15 .15 0 1 Q -.15 .15 -1 0 Q -.15 -.15 0 -1 Z"/></g>
+    <g transform="translate(70 114) scale(9)"><path class="sp sp4" d="M 0 -1 Q .15 -.15 1 0 Q .15 .15 0 1 Q -.15 .15 -1 0 Q -.15 -.15 0 -1 Z"/></g>
+    <g transform="translate(92 124) scale(4.5)"><path class="sp sp5" d="M 0 -1 Q .15 -.15 1 0 Q .15 .15 0 1 Q -.15 .15 -1 0 Q -.15 -.15 0 -1 Z"/></g>
+    <g transform="translate(176 118) scale(6)"><path class="sp sp6" d="M 0 -1 Q .15 -.15 1 0 Q .15 .15 0 1 Q -.15 .15 -1 0 Q -.15 -.15 0 -1 Z"/></g>
+  </g>
+</svg>
