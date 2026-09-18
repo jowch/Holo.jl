@@ -17,27 +17,16 @@
   <img src="docs/src/assets/demo.gif" width="720" alt="A CairoMakie scatter in Pluto: hovering a point shows a tooltip, clicking it selects the point and updates the bound value in the cell below">
 </p>
 
-Masque adds a thin JavaScript overlay to a Makie figure in a Pluto notebook. Hover shows
-a tooltip, click selects, and the click reaches Julia through `@bind`. The figure itself is
-rendered by CairoMakie or WGLMakie as usual.
+Masque adds a thin JavaScript overlay to Makie figures in a Pluto notebook.
+Hovering over plot elements shows a tooltip, click selects, and the
+click reaches Julia through `@bind`. The figure itself is rendered by CairoMakie
+or WGLMakie as usual.
 
 - Points, lines, heatmap cells, bars, polygons, and text, on 2D, polar, and 3D axes.
 - Drag gestures: region of interest, threshold line, pan.
 - Hover and select still work in a static HTML export of the notebook.
 
-## Backends
-
-Loading `CairoMakie` or `WGLMakie` activates the matching extension. The `masque` call and
-the `@bind` value are the same on both.
-
-- **CairoMakie** renders the figure once to a static image and the overlay hit-tests on top.
-  No WebGL and no server; a Julia process is needed only when a click should recompute
-  something. Every re-render rasterises the whole figure, so it is a poor fit for animation.
-- **WGLMakie** (`:webgl`, experimental) renders the figure live on the browser GPU. Use it
-  for animation, large or live-updating data, or 3D you want to rotate. The page is heavier
-  and needs WebGL.
-
-See [Backends](https://jowch.github.io/Masque.jl/stable/backends/) for the cost model.
+Tooltips and interactions can be customized.
 
 ## Install
 
@@ -74,7 +63,19 @@ end
 sel === nothing ? "click a point" : "you picked $(sel.payload)"
 ```
 
-(Each fenced block above is its own Pluto cell — Pluto allows one top-level expression per
-cell, so multi-statement setup goes in `begin ... end`.)
-
 For more information, refer to our [documentation](https://jowch.github.io/Masque.jl). See [`examples/`](examples/) for several runnable Pluto notebooks.
+
+## Backends
+
+Loading `CairoMakie` or `WGLMakie` activates the matching extension. The `masque` call and
+the `@bind` value are the same on both.
+
+- **CairoMakie** renders the figure once to a static image and the overlay
+  hit-tests on top. Every re-render rasterises the whole figure, so it is a poor
+  fit for animation.
+- **WGLMakie** (`:webgl`, experimental) renders the figure live on the browser
+  GPU. Use it for animation, large or live-updating data, or 3D you want to
+  rotate. The page is heavier
+  and needs WebGL.
+
+See [Backends](https://jowch.github.io/Masque.jl/stable/backends/) for the cost model.
