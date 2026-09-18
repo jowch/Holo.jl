@@ -189,6 +189,8 @@ struct HitLayer
     axis     :: Symbol            # which AxisTransform applies (for data-coord tooltips / inversion)
     events   :: Tuple             # copied from the interactable
     label    :: Union{Nothing,String}  # optional screen-reader announcement prefix (keyboard nav, §11)
+    colors   :: Any                # optional per-element tooltip accent (§10.4)
+    links    :: Union{Nothing,Vector{Vector{Symbol}}}  # optional per-element cross-layer highlight (LegendInteractable, M3)
 end
 ```
 
@@ -235,6 +237,7 @@ per hit primitive (`:axis` shared by two; `TextInteractable` reuses `:rects`, no
 | `PolygonInteractable` | `:polygons` | Poly, Band, Pie, Density, Contourf, Violin, Voronoiplot | Band/Density/Voronoiplot `(; index)`; Contourf `(; low, high)`; Violin `(; x)` |
 | `AxisInteractable` | `:axis` (unbounded) | the Axis area itself (linear + log) | `(; x, y)` inverted client-side |
 | `ColorbarInteractable` *(M3)* | `:axis` (bounded bbox) | Colorbar — auto-extracted from `fig.content` | `(; value)` inverted client-side via `AxisTransform.valueaxis` |
+| `LegendInteractable` *(M3)* | `:rects` | Legend — auto-extracted from `fig.content` | `(; label, group, targets)` — `targets` also ships as `HitLayer.links` |
 | `TextInteractable` *(Phase 2 text labels)* | `:rects` | Text, Annotation (via `_descendant(p, Makie.Text)`) — data-space only | `(; text, index, x, y)` |
 
 `SegmentInteractable` carries `mode ∈ {:polyline,:pairs}`; `RectInteractable` carries
@@ -431,7 +434,9 @@ profile shows JS hit-test *specifically* is the bottleneck.
 
 **Phase 2b (shipped):** Band, Density, Contourf, Violin, Voronoiplot — extracted as `:polygons`; surface-specific payloads (Band/Density/Voronoiplot `(; index)`, Contourf `(; low, high)`, Violin `(; x)`). BoxPlot box-body auto-extracted as `:rects` (un-notched) / `:polygons` (notched) with `(; q1, median, q3)`. Tricontourf deferred; BoxPlot whiskers/outliers decorative (box-body-only).
 
-**M3 Colorbar (shipped):** `ColorbarInteractable` — hover/click value readout for any `Colorbar` block, auto-extracted by `masque(fig)` via a figure-block walk over `fig.content`. Rides the `:axis` channel with a bounded bbox geometry; `AxisTransform.valueaxis` tags the value axis so JS inverts the cursor pixel to a scalar `(; value)`. Legend remains deferred (a linking capability, its own arc).
+**M3 Colorbar (shipped):** `ColorbarInteractable` — hover/click value readout for any `Colorbar` block, auto-extracted by `masque(fig)` via a figure-block walk over `fig.content`. Rides the `:axis` channel with a bounded bbox geometry; `AxisTransform.valueaxis` tags the value axis so JS inverts the cursor pixel to a scalar `(; value)`.
+
+**M3 Legend (shipped):** `LegendInteractable` — a `Makie.Legend` block's entries as `:rects` hit regions, auto-extracted by the same figure-block walk as Colorbar. Each entry's pixel row is recovered by walking `leg.grid` (GridLayoutBase) for the 2-column shade `Box` Makie's own click-to-toggle hit-tests (`makie_compat.jl`'s `_legend_entries`/`_legend_bbox`); the entry↔plot link comes from `Makie.get_plots` on the entry's elements, the same linkage Makie's built-in legend interaction uses. This introduces `HitLayer`'s only cross-layer field, `links :: Union{Nothing, Vector{Vector{Symbol}}}` — one id-list per element, naming other layers to highlight together with the hovered/selected one (serialized as `"links"`, an array of string-id arrays). `build_manifest` validates every `links` id against the manifest's own layers and their `kind` (must be in `_SELECTED_KINDS`, §5's `selected=` list): an explicit `targets=` failing that check is a build-time `ArgumentError` (the caller's own claim); an auto-resolved (plotmap-derived) one is instead warned and dropped, since silently-unlinkable plots (e.g. a heatmap in the same legend) are a normal, not exceptional, shape. Custom legends (`LineElement`/`MarkerElement`/`PolyElement` built without `plots=`) resolve to empty links — still hittable, no highlight — unless the caller passes `targets=` explicitly.
 
 **Phase 2 text labels (shipped):** `TextInteractable` — `text!` and `annotation!` labels as
 click-to-pick buttons, auto-extracted by `masque(fig)` for data-space text. Rides `:rects`; geometry
@@ -439,7 +444,7 @@ from `Makie.string_boundingboxes` (no font-metric measurement needed — the ori
 `bbox` primitive was never built). `TextLabel` (a `Block`, needs the figure-block walk rather than
 the plot-scene walk) remains deferred.
 
-**v2:** plot-object introspection constructors; ABLines/Arc, Legend,
+**v2:** plot-object introspection constructors; ABLines/Arc,
 `TextLabel` (Block) support, animation frames, SVG-overlay annotations, spatial hit-test acceleration.
 
 **Backend scope — corrected (2026-07-02), core shipped (WS-3D).** The earlier framing here

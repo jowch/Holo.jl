@@ -89,6 +89,11 @@ function Masque.context(b::CairoBackend, fig, ppu)
         id = Symbol("cb", k); ids[cb] = id
         transforms[id] = Masque._colorbar_transform(id, cb, scaling, out_h)
     end
+    legs = [c for c in fig.content if c isa Makie.Legend]
+    for (k, leg) in enumerate(legs)
+        id = k == 1 ? :legend : Symbol(:legend_, k); ids[leg] = id
+        transforms[id] = Masque._legend_transform(id, leg, scaling, out_h)
+    end
     return InteractionContext(project, transforms, ids, out_w, out_h, scaling, display_scale)
 end
 

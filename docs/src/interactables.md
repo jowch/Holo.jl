@@ -9,6 +9,8 @@ Declare interactables explicitly (geometry in data space):
 - [`AxisInteractable`](@ref) — the whole axis: click anywhere → data `(x, y)` (linear + log)
 - [`ColorbarInteractable`](@ref) — a `Makie.Colorbar` block: hover/click anywhere on the bar
   inverts the cursor to the bar's data value
+- [`LegendInteractable`](@ref) — a `Makie.Legend` block: hover/click an entry to highlight the
+  plot(s) it labels — see [Legend](@ref)
 - [`TextInteractable`](@ref) — `text!`/`annotation!` labels as click-to-pick buttons
   (bounding-box hit regions)
 - [`ThresholdInteractable`](@ref) — a draggable horizontal/vertical line; drag for a live
@@ -42,19 +44,23 @@ demonstrates both.
 ## Constructors
 
 Every constructor in the table below takes an `Axis` (or, for [`ColorbarInteractable`](@ref),
-a `Makie.Colorbar`) and geometry in **data space**, and all of them accept `id` — the
-`Symbol` the event reports as `layer`. The element kinds — [`PointInteractable`](@ref),
-[`SegmentInteractable`](@ref), [`RectInteractable`](@ref), [`PolygonInteractable`](@ref), and
-(documented on their own pages) [`TextInteractable`](@ref) and [`RegionInteractable`](@ref)
-— also accept `payloads` (one entry per element, auto-generated with a 0-based `index` if
-omitted) and `tooltip` (`nothing` / `masque"..."` / `false`, see [Tooltips](@ref)). The
-whole-axis and drag kinds — [`AxisInteractable`](@ref), [`ColorbarInteractable`](@ref),
-[`ThresholdInteractable`](@ref), [`ROIInteractable`](@ref), [`ViewInteractable`](@ref) —
-report one client-computed value per event rather than a discrete element, so they take only
-`id` plus their own keywords below; passing `payloads=`/`tooltip=` to one of these is a
-`MethodError`. [`FunctionInteractable`](@ref) is the outlier: it takes neither an `Axis` nor
-`id` as constructor arguments at all — see [Custom interactions](@ref). The table below lists
-the keywords *beyond* `id`/`payloads`/`tooltip` for the constructors it covers.
+a `Makie.Colorbar`, or for [`LegendInteractable`](@ref), a `Makie.Legend`) and geometry in
+**data space**, and all of them accept `id` — the `Symbol` the event reports as `layer`. The
+element kinds — [`PointInteractable`](@ref), [`SegmentInteractable`](@ref),
+[`RectInteractable`](@ref), [`PolygonInteractable`](@ref), and (documented on their own
+pages) [`TextInteractable`](@ref) and [`RegionInteractable`](@ref) — also accept `payloads`
+(one entry per element, auto-generated with a 0-based `index` if omitted) and `tooltip`
+(`nothing` / `masque"..."` / `false`, see [Tooltips](@ref)). The whole-axis and drag kinds —
+[`AxisInteractable`](@ref), [`ColorbarInteractable`](@ref), [`ThresholdInteractable`](@ref),
+[`ROIInteractable`](@ref), [`ViewInteractable`](@ref) — report one client-computed value per
+event rather than a discrete element, so they take only `id` plus their own keywords below;
+passing `payloads=`/`tooltip=` to one of these is a `MethodError`.
+[`LegendInteractable`](@ref) sits between the two: it does report one payload per (entry)
+element like the element kinds, but the payload shape is fixed (`; label, group, targets`),
+not user-supplied — see [Legend](@ref). [`FunctionInteractable`](@ref) is the outlier: it
+takes neither an `Axis` nor `id` as constructor arguments at all — see
+[Custom interactions](@ref). The table below lists the keywords *beyond*
+`id`/`payloads`/`tooltip` for the constructors it covers.
 
 | Constructor | Geometry | Extra keywords | Default payload |
 |---|---|---|---|
@@ -65,6 +71,7 @@ the keywords *beyond* `id`/`payloads`/`tooltip` for the constructors it covers.
 | `PolygonInteractable(ax, rings; id = :polygons)` | `rings :: Vector{Vector{(x, y)}}` — one or more filled rings | — | `(; index)` |
 | `AxisInteractable(ax; id = :axis)` | the whole axis: a click anywhere returns the data coordinate | — | `Dict("x" => …, "y" => …)` |
 | `ColorbarInteractable(cb; id = :colorbar)` | takes a `Makie.Colorbar` block, not an `Axis`; hit region bounded to the colorbar's pixel bbox | — | `(; value)`, resolved client-side |
+| `LegendInteractable(leg; targets = nothing, id = :legend)` | takes a `Makie.Legend` block, not an `Axis`; one hit region per entry, bounded to that entry's row | `targets` — a `Dict{label => id(s)}` or one entry per legend entry; default auto-resolves from the plots each entry's elements were built from | `(; label, group, targets)` — see [Legend](@ref) |
 | `ThresholdInteractable(ax; orientation = :horizontal, value, id = :threshold)` | a draggable line (`:horizontal` = constant-y, dragged vertically; `:vertical` = constant-x); live readout while dragging, commit on mouse-up | `orientation`, `value` (initial position) | scalar data coord, on release |
 | `ROIInteractable(ax; bounds = (xmin, xmax, ymin, ymax), selects = nothing, id = :roi)` | a draggable + resizable box; move (interior) / resize (a corner resizes two edges, an edge midpoint resizes just that one); commit on mouse-up | `selects` — another layer's `id`; if set, the box reports every element of that layer it encloses instead of committing its own bounds (`circles`/`grid` layers only — see [Multi-element selectors](@ref)) | `Dict("xmin"=>…, "xmax"=>…, "ymin"=>…, "ymax"=>…)`, on release (or `Vector{InteractionEvent}` with `selects`) |
 | `ViewInteractable(ax; id = :view)` | drag-to-pan (2D) or drag-to-rotate (Axis3); commit on mouse-up; Shift+drag forces view over ROI/threshold | — | 2D: `Dict("xmin"=>…, "xmax"=>…, "ymin"=>…, "ymax"=>…)`; 3D: `Dict("azimuth"=>…, "elevation"=>…)` |
@@ -115,8 +122,8 @@ interaction; see [Custom interactions](@ref).
 
 ## Zero-config: `masque(fig)`
 
-Skip the constructors entirely — `masque(fig)` walks every `Axis`, `Axis3`, `PolarAxis`, and
-`Colorbar` block, introspects each supported plot, and overlays the lot:
+Skip the constructors entirely — `masque(fig)` walks every `Axis`, `Axis3`, `PolarAxis`,
+`Colorbar`, and `Legend` block, introspects each supported plot, and overlays the lot:
 
 ```julia
 begin
@@ -133,8 +140,9 @@ end
 
 Layer ids are the plot kind (`:scatter`, `:hist`, `:band`, …, from the table above — note the
 `heatmap!` above gets `:cells`, not `:heatmap`; see the exceptions listed there) plus
-`:colorbar` for any `Colorbar` block, suffixed `_2`, `_3`, … when a kind repeats within one
-figure. Unsupported plot types are skipped with a `@warn`, not an error.
+`:colorbar` for any `Colorbar` block and `:legend` for any `Legend` block, suffixed `_2`,
+`_3`, … when a kind repeats within one figure. Unsupported plot types are skipped with a
+`@warn`, not an error.
 
 [`auto_interactables`](@ref) returns the same `Vector{AbstractInteractable}` `masque(fig)`
 builds, so you can grab it, tweak ids/payloads or append custom interactables, then pass it

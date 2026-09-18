@@ -176,6 +176,15 @@ HTML(
         "<span id=\"coords_view\" style=\"display:none\">$(JSON3.write(sweep.view.manifest["layers"]))</span>",
 )
 
+# ╔═╡ c1000000-0000-0000-0000-000000000038
+@bind ev_legend sweep.legend
+
+# ╔═╡ c1000000-0000-0000-0000-000000000039
+HTML(
+    "<span id=\"out_legend\">LEGEND=$(repr(ev_legend))</span>" *
+        "<span id=\"coords_legend\" style=\"display:none\">$(JSON3.write(sweep.legend.manifest["layers"]))</span>",
+)
+
 # ╔═╡ c1000000-0000-0000-0000-000000000040
 HTML(
     "<span id=\"kind_meta\" style=\"display:none\">$(JSON3.write(kind_sweep_meta()))</span>" *
@@ -216,4 +225,6 @@ HTML(
 # ╠═c1000000-0000-0000-0000-000000000033
 # ╠═c1000000-0000-0000-0000-000000000034
 # ╠═c1000000-0000-0000-0000-000000000035
+# ╠═c1000000-0000-0000-0000-000000000038
+# ╠═c1000000-0000-0000-0000-000000000039
 # ╠═c1000000-0000-0000-0000-000000000040

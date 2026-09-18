@@ -75,6 +75,20 @@ kind_sweep_meta() = [
         "selected" => nothing, "halo" => false, "selectedIndex" => 0, "clickIndex" => 0,
         "tip" => "", "mode" => "drag",
     ),
+    Dict(
+        "key" => "legend", "layerId" => "legend", "layerKind" => "rects",
+        "selected" => nothing, "halo" => false, "selectedIndex" => 2, "clickIndex" => 2,
+        "tip" => "pts", "mode" => "element",
+        # A legend entry's linked highlight isn't wash/ring on the legend layer itself (that
+        # meta stays `selected = nothing`, like heatmap/grid) — it's g.link on OTHER layers.
+        # "cases" checks two fan-out kinds: a polyline entry (ring) and a circles entry (wash).
+        "links" => Dict(
+            "cases" => [
+                Dict("index" => 0, "label" => "quad"),
+                Dict("index" => 2, "label" => "pts"),
+            ],
+        ),
+    ),
 ]
 
 function build_kind_sweep()
@@ -249,8 +263,19 @@ function build_kind_sweep()
         masque(fig, [PointInteractable(ax, pts; id = :pts), ViewInteractable(ax; id = :view)])
     end
 
+    legend = let
+        xs = collect(0.0:0.5:3.0)
+        fig = Figure(size = (480, 320))
+        ax = Axis(fig[1, 1]; title = "legend")
+        lines!(ax, xs, xs .^ 2; label = "quad", color = :steelblue, linewidth = 3)
+        lines!(ax, xs, 2 .* xs; label = "lin", color = :seagreen, linewidth = 3)
+        scatter!(ax, [0.5, 1.5, 2.5], [1.0, 3.0, 5.0]; label = "pts", markersize = 18, color = :orange)
+        axislegend(ax; position = :lt)
+        masque(fig)   # zero-config: legend auto-extracted, links auto-resolved from Makie.get_plots
+    end
+
     return (;
         scatter, lines, segments, heatmap, image, barplot, poly,
-        polar, scatter_dark, arrows3d, hlines, threshold, roi, view,
+        polar, scatter_dark, arrows3d, hlines, threshold, roi, view, legend,
     )
 end

@@ -127,6 +127,49 @@ export function drawHi(state: OverlayState, hiGroup: SVGGElement, hit: Hit): voi
     state.hiKey_ = key
 }
 
+// --- g.link lifecycle: a legend entry's linked highlight, keyed by the SOURCE hit (not the
+// individual target hits it fans out to) — mirrors drawHi/clearHi's single-key convention, just
+// over a whole hit array instead of one element.
+
+export function clearLinkImmediate(state: OverlayState, linkGroup: SVGGElement): void {
+    if (state.linkLeaveTimer_ != null) { clearTimeout(state.linkLeaveTimer_); state.linkLeaveTimer_ = null }
+    state.linkKey_ = null
+    while (linkGroup.firstChild) linkGroup.removeChild(linkGroup.firstChild)
+}
+
+export function clearLink(state: OverlayState, linkGroup: SVGGElement, fade = false): void {
+    if (!fade || !linkGroup.firstChild || prefersReducedMotion()) {
+        clearLinkImmediate(state, linkGroup)
+        return
+    }
+    state.linkKey_ = null
+    for (const el of [...linkGroup.children]) {
+        el.classList.remove("masque-enter")
+        el.classList.add("masque-leave")
+    }
+    if (state.linkLeaveTimer_ != null) clearTimeout(state.linkLeaveTimer_)
+    state.linkLeaveTimer_ = setTimeout(() => {
+        state.linkLeaveTimer_ = null
+        while (linkGroup.firstChild) linkGroup.removeChild(linkGroup.firstChild)
+    }, MOTION_MS)
+}
+
+// Same-key repeat (still hovering/focusing the same legend element) is a no-op, like drawHi.
+// A different key replaces the whole set immediately (no leave-fade in between) — cheap since
+// this only ever swaps between two legend entries' worth of selected-recipe elements — and the
+// new set enters with the usual fade-in.
+export function drawLink(state: OverlayState, linkGroup: SVGGElement, key: string, hits: Hit[]): void {
+    if (key === state.linkKey_ && linkGroup.firstChild && !(linkGroup.firstElementChild as Element).classList.contains("masque-leave")) return
+    clearLinkImmediate(state, linkGroup)
+    for (const h of hits) {
+        const el = makeHiElement(h, "selected")
+        if (!el) continue
+        el.classList.add("masque-enter")
+        linkGroup.appendChild(el)
+    }
+    state.linkKey_ = key
+}
+
 export function drawSelection(state: OverlayState, selGroup: SVGGElement, hits: Hit[]): void {
     const next = new Set(hits.map(hitKey))
     const entering = new Set<string>()

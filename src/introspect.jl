@@ -612,6 +612,10 @@ yourself for huge data.
 function auto_interactables(fig)
     ints = AbstractInteractable[]
     seen = Dict{Symbol, Int}()
+    # plot -> the id(s) of the interactable(s) `_construct` built from it — the only thing
+    # LegendInteractable's plotmap-based resolution (priority (c)) needs to link a legend entry
+    # back to the layer(s) its plot(s) became.
+    plotmap = IdDict{Any, Vector{Symbol}}()
     for ax in fig.content
         ax isa Union{Makie.Axis, Makie.Axis3, Makie.PolarAxis} || continue
         for p in _child_plots(ax.scene)
@@ -645,7 +649,9 @@ function auto_interactables(fig)
             n = get(seen, base, 0) + 1
             seen[base] = n
             id = n == 1 ? base : Symbol(base, :_, n)
-            append!(ints, _construct(ax, p, id))
+            built = _construct(ax, p, id)
+            append!(ints, built)
+            plotmap[p] = [ii.id for ii in built]
         end
     end
     # Colorbar blocks live in fig.content, not in an Axis's scene.
@@ -655,6 +661,15 @@ function auto_interactables(fig)
         nc += 1
         id = nc == 1 ? :colorbar : Symbol(:colorbar_, nc)
         push!(ints, ColorbarInteractable(c; id))
+    end
+    # Likewise Legend blocks; resolved via the plotmap built above (priority (c) in
+    # LegendInteractable's own targets resolution — see src/interactables.jl).
+    nl = 0
+    for c in fig.content
+        c isa Makie.Legend || continue
+        nl += 1
+        id = nl == 1 ? :legend : Symbol(:legend_, nl)
+        push!(ints, LegendInteractable(c; id, plotmap))
     end
     return ints
 end
