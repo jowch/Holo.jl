@@ -3,6 +3,10 @@
 Source for `docs/src/assets/demo.gif`: a real Pluto session, driven by Playwright, showing
 hover tooltips, a click, and the `@bind` round-trip on a CairoMakie scatter.
 
+Prerequisites: Julia with Pluto in the default env, the `masque-dev` env (or let the
+notebook build a temp env), Playwright installed in `test/e2e` (`npm install` there), and
+`ffmpeg`, `ffprobe`, and `python3` on PATH for the assembly step.
+
 1. Start Pluto with the dev env (see `test/e2e/serve.jl` for the same flags):
    ```sh
    MASQUE_DEV_ENV=~/.julia/environments/masque-dev \

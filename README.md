@@ -75,7 +75,6 @@ the `@bind` value are the same on both.
   fit for animation.
 - **WGLMakie** (`:webgl`, experimental) renders the figure live on the browser
   GPU. Use it for animation, large or live-updating data, or 3D you want to
-  rotate. The page is heavier
-  and needs WebGL.
+  rotate. The page is heavier and needs WebGL.
 
 See [Backends](https://jowch.github.io/Masque.jl/stable/backends/) for the cost model.

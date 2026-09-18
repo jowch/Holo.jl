@@ -29,8 +29,6 @@ console.error(`fresh-kernel copy: ${notebook} -> ${runNotebook}`);
 // Must match the cell UUIDs in notebook.jl.
 const ID_BIND = "d1000000-0000-0000-0000-000000000003";
 const ID_OUT = "d1000000-0000-0000-0000-000000000004";
-const ID_ENV = "d1000000-0000-0000-0000-000000000001";
-const ID_FIG = "d1000000-0000-0000-0000-000000000002";
 const ID_COORDS = "d1000000-0000-0000-0000-000000000005";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
