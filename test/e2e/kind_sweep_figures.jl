@@ -94,6 +94,12 @@ kind_sweep_meta() = [
         "key" => "legend", "layerId" => "legend", "layerKind" => "rects",
         "selected" => nothing, "halo" => false, "selectedIndex" => 2, "clickIndex" => 2,
         "tip" => "pts", "mode" => "element",
+        # Nothing is baked (`selected = nothing`, like heatmap/grid), so per the module
+        # doc-comment convention `hoverIndex`/`hoverTip` repeat `selectedIndex`/`tip` — this
+        # drives the GENERIC hover-recipe check on the legend row itself (default hoverstyle,
+        # no explicit stroke override on `LegendInteractable` -> the normal split dodge-fill/
+        # grey-edge recipe applies, same as any other `rects` layer).
+        "hoverIndex" => 2, "hoverTip" => "pts",
         # A legend entry's linked highlight isn't wash/ring on the legend layer itself (that
         # meta stays `selected = nothing`, like heatmap/grid) — it's g.link on OTHER layers.
         # "cases" checks two fan-out kinds: a polyline entry (ring) and a circles entry (wash).
@@ -108,6 +114,7 @@ kind_sweep_meta() = [
         "key" => "legend_overlap", "layerId" => "legend", "layerKind" => "rects",
         "selected" => nothing, "halo" => false, "selectedIndex" => 0, "clickIndex" => 0,
         "tip" => "trend", "mode" => "element",
+        "hoverIndex" => 0, "hoverTip" => "trend",
         "links" => Dict(
             "cases" => [
                 Dict("index" => 0, "label" => "trend"),

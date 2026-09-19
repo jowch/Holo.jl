@@ -207,6 +207,60 @@ try {
     passed.push(`${key}/tab-away-clears-focus`);
   }
 
+  // A legend entry's linked highlight (g.link) is keyboard-reachable via the SAME focusTo ->
+  // updateLinkForHit path pointer hover uses (keyboard.ts's focusTo calls updateLinkForHit
+  // unconditionally, mirroring hover.ts) — this had zero prior driver coverage. `legend`'s
+  // manifest sorts the LegendInteractable layer before the plot layers it labels (src/render.jl
+  // ~line 259, regression-checked live by kind_sweep.mjs's legend-precedence assertions), so its
+  // own rows are the FIRST FOCUSABLE_KINDS entries in the flat focus list.
+  {
+    const key = "legend";
+    const linkGCount = (k) => page.evaluate((kk) => {
+      const span = document.querySelector(`#coords_${kk}`);
+      const hosts = [...document.querySelectorAll(".ip-host")];
+      const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
+      let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
+      const groups = ["svg.masque-fill", "svg.masque-edge", "svg.masque-plain"].map((sel) => sr.querySelector(sel)?.querySelector("g.link"));
+      const populated = groups.find((g) => g && g.children.length > 0);
+      return {
+        count: groups.reduce((n, g) => n + (g?.children.length ?? 0), 0),
+        leaving: populated ? populated.firstElementChild.classList.contains("masque-leave") : null,
+      };
+    }, k);
+
+    const layers = await layersOf(key);
+    const legendLayer = layers.find((l) => l.id === "legend");
+    if (!legendLayer) throw new Error(`${key}: no "legend" layer in manifest`);
+    const legendIdx = layers.indexOf(legendLayer);
+    const countOf = (l) => {
+      const g = l.geometry;
+      if (l.kind === "circles") return g.length / 3;
+      if (l.kind === "rects") return g.length / 4;
+      if (l.kind === "segments") return g.length / 4;
+      if (l.kind === "polyline") return Math.max(0, g.length / 2 - 1);
+      if (l.kind === "polygons") return g.length;
+      return 0; // :grid/:threshold/:roi/:view aren't in FOCUSABLE_KINDS
+    };
+    const FOCUSABLE = new Set(["circles", "rects", "polygons", "segments", "polyline"]);
+    let before = 0;
+    for (let i = 0; i < legendIdx; i++) if (FOCUSABLE.has(layers[i].kind)) before += countOf(layers[i]);
+    // "pts" is legend row index 2 (kind_sweep_figures.jl's links.cases) -> flat focus index
+    // before+2, landed after (before+3) ArrowRight presses (this file's k-presses-lands-k-1 rule).
+    const target = before + 2;
+    const surface = await surfaceHandle(key);
+    await surface.focus();
+    for (let i = 0; i <= target; i++) await page.keyboard.press("ArrowRight");
+    const li = await linkGCount(key);
+    if (li.count === 0) throw new Error(`${key}: keyboard focus on a legend row drew no g.link content`);
+    passed.push("legend/keyboard-focus-draws-link");
+
+    await page.keyboard.press("Escape");
+    const afterEsc = await linkGCount(key);
+    if (afterEsc.count === 0) throw new Error(`${key}: Escape cleared g.link instantly (no remount fade)`);
+    if (!afterEsc.leaving) throw new Error(`${key}: Escape did not apply masque-leave to g.link`);
+    passed.push("legend/keyboard-escape-fades-link");
+  }
+
   // :grid (heatmap) must never enter the focus list — arrowing must draw nothing.
   {
     const surface = await surfaceHandle("heatmap");

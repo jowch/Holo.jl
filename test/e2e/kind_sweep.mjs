@@ -661,32 +661,55 @@ try {
     // element of the target layer(s) into g.link — distinct from g.sel/g.hi. Generic: skipped
     // for every spec except the one(s) that carry a "links" meta key.
     if (spec.links) {
+      // g.link exists in ALL THREE sibling svgs (mount.ts's `linkGroup` — fill_/edge_/plain_,
+      // same as g.sel/g.hi), and `drawLink` fans a SELECTED-recipe element into whichever
+      // group(s) each hit's geometry calls for (closed -> fill+edge pair, open -> plain-only
+      // ring) — mirror `inspect()`'s existing `kidsOf` fan-out (tagged `layer: "fill"|"edge"|
+      // "plain"`) instead of reading a single `g.link` (which would only ever see svg.masque-
+      // fill's group, in DOM order first, and be empty for any ring-only case).
       const linkInspect = (k) => page.evaluate((kk) => {
         const span = document.querySelector(`#coords_${kk}`);
         const hosts = [...document.querySelectorAll(".ip-host")];
         const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
         let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
-        const grp = sr.querySelector("g.link");
-        const kids = [...(grp?.children ?? [])].map((el) => {
+        const svgFill = sr.querySelector("svg.masque-fill"), svgEdge = sr.querySelector("svg.masque-edge"), svgPlain = sr.querySelector("svg.masque-plain");
+        const kidsOf = (svg, layerName) => [...(svg?.querySelector("g.link")?.children ?? [])].map((el) => {
           if (el.tagName.toLowerCase() === "g") {
             return {
-              kind: "ring",
-              lines: [...el.querySelectorAll("line")].map((ln) => ({
-                fill: ln.getAttribute("fill"), stroke: ln.getAttribute("stroke"),
-                width: ln.getAttribute("stroke-width"), opacity: ln.getAttribute("stroke-opacity"),
-                x1: ln.getAttribute("x1"), y1: ln.getAttribute("y1"),
-                x2: ln.getAttribute("x2"), y2: ln.getAttribute("y2"),
-              })),
+              layer: layerName, kind: "ring",
+              lines: [...el.querySelectorAll("line")].map((ln) => {
+                const cs = getComputedStyle(ln);
+                return {
+                  className: ln.getAttribute("class"), stroke: cs.stroke, fill: cs.fill, fillOpacity: cs.fillOpacity,
+                  width: ln.getAttribute("stroke-width"), opacity: ln.getAttribute("stroke-opacity"),
+                  x1: ln.getAttribute("x1"), y1: ln.getAttribute("y1"),
+                  x2: ln.getAttribute("x2"), y2: ln.getAttribute("y2"),
+                };
+              }),
             };
           }
+          const cs = getComputedStyle(el);
           return {
-            kind: "closed", tag: el.tagName.toLowerCase(),
-            fill: el.getAttribute("fill"), stroke: el.getAttribute("stroke"), width: el.getAttribute("stroke-width"),
+            layer: layerName, kind: "closed", tag: el.tagName.toLowerCase(),
+            className: el.getAttribute("class"), stroke: cs.stroke, fill: cs.fill, fillOpacity: cs.fillOpacity,
+            width: el.getAttribute("stroke-width"),
+            blend: layerName === "plain" ? null : getComputedStyle(svg).mixBlendMode,
             r: el.getAttribute("r"), cx: el.getAttribute("cx"), cy: el.getAttribute("cy"),
           };
         });
-        const leaving = grp?.firstElementChild ? grp.firstElementChild.classList.contains("masque-leave") : null;
-        return { count: grp?.children.length ?? 0, kids, sel: sr.querySelector("g.sel")?.children.length ?? 0, leaving };
+        const kFill = kidsOf(svgFill, "fill"), kEdge = kidsOf(svgEdge, "edge"), kPlain = kidsOf(svgPlain, "plain");
+        const kids = [...kFill, ...kEdge, ...kPlain];
+        // Element count: a closed target draws fill+edge PAIRS (count once via fill), an open
+        // target draws a single plain ring per element — same convention as layerElementCount.
+        const count = kFill.filter((x) => x.kind === "closed").length + kPlain.filter((x) => x.kind === "ring").length;
+        const sel = (svgFill?.querySelector("g.sel")?.children.length ?? 0)
+          + (svgEdge?.querySelector("g.sel")?.children.length ?? 0)
+          + (svgPlain?.querySelector("g.sel")?.children.length ?? 0);
+        const firstPopulated = [svgFill, svgEdge, svgPlain]
+          .map((svg) => svg?.querySelector("g.link"))
+          .find((g) => g && g.children.length > 0);
+        const leaving = firstPopulated ? firstPopulated.firstElementChild.classList.contains("masque-leave") : null;
+        return { count, kids, sel, leaving };
       }, k);
 
       const layerElementCount = (l) => {
@@ -703,6 +726,20 @@ try {
         const targetIds = (layer.links && layer.links[c.index]) || [];
         if (!targetIds.length) throw new Error(`${key}/links[${c.index}]: legend entry "${c.label}" has no links`);
         const hp = hitPoint(layer, c.index);
+        // Geometry: the first linked element must sit ON the plotted mark, not beside it.
+        const tl0 = layers.find((l) => l.id === targetIds[0]);
+        if (!tl0) throw new Error(`${key}/links[${c.index}]: target layer ${targetIds[0]} missing from manifest`);
+        const hp0 = hitPoint(tl0, 0);
+
+        // Visibility (screenshot-based, closed/circles targets only): DOM shape alone can't
+        // catch a z-order or blend surprise that leaves the nodes present but invisible — same
+        // method as the TINT_CHECK_KEYS block above (`color-dodge` against the near-black fill
+        // source can only raise luminance). Sampled BEFORE this case's hover dispatch below.
+        let lumBefore = null;
+        if (tl0.kind === "circles") {
+          lumBefore = meanLuminance(PNG.sync.read(await clipShot(key, hp0.x, hp0.y)));
+        }
+
         const norm = (s) => String(s || "").toLowerCase().replace(/\s+/g, "");
         let t = null;
         for (let a = 0; a < 8; a++) {
@@ -727,21 +764,25 @@ try {
         }
         if (li.sel !== 0) throw new Error(`${key}/links[${c.index}]: g.sel changed during legend hover (${li.sel})`);
 
-        // Geometry: the first linked element must sit ON the plotted mark, not beside it.
-        const tl0 = layers.find((l) => l.id === targetIds[0]);
-        const hp0 = hitPoint(tl0, 0);
         if (tl0.kind === "circles") {
-          const circleKid = li.kids.find((kk) => kk.tag === "circle");
+          const wash = {
+            fill: li.kids.find((kk) => kk.layer === "fill" && kk.kind === "closed"),
+            edge: li.kids.find((kk) => kk.layer === "edge" && kk.kind === "closed"),
+            plain: li.kids.find((kk) => kk.layer === "plain" && kk.kind === "closed"),
+          };
+          assertWash(wash, `${key}/links[${c.index}]/wash`, wantDark);
+          const circleKid = wash.fill || wash.edge;
           if (!circleKid) throw new Error(`${key}/links[${c.index}]: no circle in g.link`);
-          assertWash(circleKid, `${key}/links[${c.index}]/wash`);
           if (Math.abs(Number(circleKid.cx) - hp0.x) > 0.6 || Math.abs(Number(circleKid.cy) - hp0.y) > 0.6) {
             throw new Error(`${key}/links[${c.index}]: link circle off-mark ${JSON.stringify(circleKid)} vs ${JSON.stringify(hp0)}`);
           }
-          if (String(Number(circleKid.r)) !== String(hp0.r + 2)) {
-            throw new Error(`${key}/links[${c.index}]: link circle halo r=${circleKid.r} want ${hp0.r + 2}`);
-          }
+          assertCircleR(circleKid.r, hp0.r, `${key}/links[${c.index}]/circle-r`);
+          await new Promise((r) => setTimeout(r, 200)); // let the 80-120ms enter fade settle
+          const lumAfter = meanLuminance(PNG.sync.read(await clipShot(key, hp0.x, hp0.y)));
+          assertTintApplied(lumBefore, lumAfter, `${key}/links[${c.index}]/tint-applied`);
+          passed.push(`${key}/links[${c.index}]/tint-applied`);
         } else if (tl0.kind === "polyline" || tl0.kind === "segments") {
-          const ringKid = li.kids.find((kk) => kk.kind === "ring");
+          const ringKid = li.kids.find((kk) => kk.layer === "plain" && kk.kind === "ring");
           if (!ringKid) throw new Error(`${key}/links[${c.index}]: no ring in g.link`);
           assertRing(ringKid, `${key}/links[${c.index}]/ring`);
           const ln = ringKid.lines[0];
@@ -753,16 +794,17 @@ try {
       }
 
       // Moving off the last-hovered legend entry fades g.link (not an instant clear), same
-      // contract as g.hi.
+      // contract as g.hi — fanned across all three svgs, same reasoning as linkInspect above.
       const fadeLink = await page.evaluate((k) => {
         const span = document.querySelector(`#coords_${k}`);
         const hosts = [...document.querySelectorAll(".ip-host")];
         const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
         let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
         sr.querySelector(".surface").dispatchEvent(new PointerEvent("pointerleave", { bubbles: true, pointerId: 1, pointerType: "mouse", isPrimary: true }));
-        const grp = sr.querySelector("g.link");
-        const first = grp?.firstElementChild;
-        return { count: grp?.children.length ?? 0, leaving: !!(first && first.classList.contains("masque-leave")) };
+        const groups = ["svg.masque-fill", "svg.masque-edge", "svg.masque-plain"].map((sel) => sr.querySelector(sel)?.querySelector("g.link"));
+        const count = groups.reduce((n, g) => n + (g?.children.length ?? 0), 0);
+        const firstPopulated = groups.find((g) => g && g.children.length > 0);
+        return { count, leaving: !!(firstPopulated && firstPopulated.firstElementChild.classList.contains("masque-leave")) };
       }, key);
       if (fadeLink.count === 0) throw new Error(`${key}/links: cleared instantly (no remount fade)`);
       if (!fadeLink.leaving) throw new Error(`${key}/links: leave did not apply masque-leave`);
