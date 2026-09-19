@@ -813,11 +813,29 @@ try {
         // source can only raise luminance). Sampled BEFORE this case's hover dispatch below.
         let lumBefore = null;
         if (tl0.kind === "circles") {
-          const expectColor = expectedColorFor(tl0.colors, spec.tintColor);
+          // The `tintColor` fallback must come from the TARGET layer's own spec, not this
+          // legend widget's `spec` — a legend spec's `tintColor` (if it ever gains one)
+          // describes the legend row's own baked colour, not the plot layer the row links to.
+          // `layerId` isn't a global key, though: it's kind-based and repeats across UNRELATED
+          // widgets (heatmap/image both use "cells"; the legend figure's embedded `scatter!`
+          // gets auto-id "scatter", same as the entirely separate standalone `scatter` widget,
+          // which is a different Figure with a different baked colour: :gray there vs :orange
+          // here). A bare `meta.find(m => m.layerId === tl0.id)` would silently borrow that
+          // unrelated widget's spec. Scope the lookup to THIS widget's own meta entry (`key`) —
+          // today no meta entry describes a layer embedded inside another widget's figure, so
+          // this correctly resolves to no spec, and `baselineFrom` says so plainly instead of
+          // fabricating a provenance.
+          const targetSpec = meta.find((m) => m.key === key && m.layerId === tl0.id);
+          const expectColor = expectedColorFor(tl0.colors, targetSpec?.tintColor);
+          const baselineFrom = typeof tl0.colors === "string"
+            ? `target layer "${tl0.id}" colors=${JSON.stringify(tl0.colors)}`
+            : targetSpec
+              ? `spec "${targetSpec.key}" tintColor`
+              : `NO baseline source (no meta entry for key "${key}" layerId "${tl0.id}")`;
           lumBefore = meanLuminance(PNG.sync.read(
             await stableClipShot(key, hp0.x, hp0.y, { expectLum: rawColorLuminance(expectColor) }),
           ));
-          assertRawColorMatch(lumBefore, expectColor, `${key}/links[${c.index}]/tint-applied`);
+          assertRawColorMatch(lumBefore, expectColor, `${key}/links[${c.index}]/tint-applied (baseline: ${baselineFrom})`);
         }
 
         const norm = (s) => String(s || "").toLowerCase().replace(/\s+/g, "");

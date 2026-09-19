@@ -114,6 +114,22 @@ try {
     };
   }, key);
 
+  // scheduleAnnounce (keyboard.ts) writes the live region asynchronously, so a single read
+  // right after the keypress can land before the text arrives (issue #96: 4 CI sightings, one
+  // read, no poll). Bounded-poll for a non-empty match instead — same "poll with a cap, return
+  // the last observation on timeout" shape as kind_sweep.mjs's stableClipShot — so a genuine
+  // regression (announcement never arrives) still fails, just after the deadline instead of
+  // instantly.
+  const waitForLiveRegion = async (key, re, { tries = 20, interval = 150 } = {}) => {
+    let s = null;
+    for (let i = 0; i < tries; i++) {
+      s = await state(key);
+      if (re.test(s.liveText)) return s;
+      await new Promise((r) => setTimeout(r, interval));
+    }
+    return s;
+  };
+
   // Element count per kind, matching selection.ts's layerNElements — used to pick an Enter
   // target index guaranteed to differ from whatever this layer's bond value already holds
   // (this notebook session is shared across kind_sweep.mjs/polish_verify.mjs, which already
@@ -157,10 +173,9 @@ try {
     if (!s.tipShown) throw new Error(`${key}: ArrowRight showed no tooltip`);
     passed.push(`${key}/arrow-ring+tip`);
 
-    await page.waitForTimeout(250); // live-region debounce (150ms) + margin
-    s = await state(key);
     const liveRe = new RegExp(`element ${landed + 1} of ${n}`);
-    if (!liveRe.test(s.liveText)) throw new Error(`${key}: live region text unexpected: ${JSON.stringify(s.liveText)}`);
+    s = await waitForLiveRegion(key, liveRe);
+    if (!liveRe.test(s.liveText)) throw new Error(`${key}: live region text unexpected (timed out waiting for a match): ${JSON.stringify(s.liveText)}`);
     passed.push(`${key}/live-region`);
 
     const before = await textOf(`#out_${key}`);
