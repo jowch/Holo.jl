@@ -3,81 +3,92 @@
 # on supported kinds (`circles`, `rects`, `polygons`, `segments`, `polyline`). `circle` marks a
 # kind whose highlight is a circle, so the driver checks r == geometry r (no halo offset).
 # Grid / threshold / roi / view are hover-click or drag only. `scatter_dark` is a dark
-# Makie figure so the blend-tint recipe (multiply on light figures, screen on dark) is
-# live-checked on dark axes too; `scatter` and `scatter_dark` are built from the scatter plot
-# object (not raw points) so `colors` resolves and the tooltip-accent check has something to
-# derive from.
+# Makie figure so the split-blend recipe (dodge fill both figures, multiply/screen edge stroke
+# on light/dark) is live-checked on dark axes too; `scatter` and `scatter_dark` are built from
+# the scatter plot object (not raw points) so `colors` resolves and the tooltip-accent check has
+# something to derive from.
+#
+# `selectedIndex`/`tip` are the BAKED-selected element (where `selected` isn't `nothing`) — used
+# for the persisted-wash / selected-survives-unhover checks. `hoverIndex`/`hoverTip` are a
+# DIFFERENT element for the standard hover-recipe check: hovering an already-selected mark draws
+# no highlight (see CLAUDE.md), so a kind with a baked selection needs its own, distinct hover
+# target to exercise the normal recipe at all. Where nothing is baked, `hoverIndex`/`hoverTip`
+# just repeat `selectedIndex`/`tip`. `tintIndex` (only set where it must differ) is the element
+# the screenshot-based tint-applied check hovers — for `heatmap` this steers off `selectedIndex`'s
+# cell (viridis' darkest, where a dodge brightening is hardest to measure) onto a brighter one.
 
 kind_sweep_meta() = [
     Dict(
         "key" => "scatter", "layerId" => "scatter", "layerKind" => "circles",
         "selected" => "wash", "circle" => true, "selectedIndex" => 1, "clickIndex" => 0,
-        "tip" => "beta", "mode" => "element",
+        "tip" => "beta", "hoverIndex" => 0, "hoverTip" => "alpha", "mode" => "element",
     ),
     Dict(
         "key" => "lines", "layerId" => "lines", "layerKind" => "polyline",
         "selected" => "ring", "circle" => false, "selectedIndex" => 1, "clickIndex" => 0,
-        "tip" => "seg-b", "mode" => "element",
+        "tip" => "seg-b", "hoverIndex" => 0, "hoverTip" => "seg-a", "mode" => "element",
     ),
     Dict(
         "key" => "segments", "layerId" => "segments", "layerKind" => "segments",
         "selected" => "ring", "circle" => false, "selectedIndex" => 0, "clickIndex" => 1,
-        "tip" => "pair-a", "mode" => "element",
+        "tip" => "pair-a", "hoverIndex" => 1, "hoverTip" => "pair-b", "mode" => "element",
     ),
     Dict(
         "key" => "heatmap", "layerId" => "cells", "layerKind" => "grid",
         "selected" => nothing, "circle" => false, "selectedIndex" => 0, "clickIndex" => 0,
-        "tip" => "0,0", "mode" => "element",
+        "tip" => "0,0", "hoverIndex" => 0, "hoverTip" => "0,0", "tintIndex" => 11,
+        "mode" => "element",
     ),
     Dict(
         "key" => "image", "layerId" => "cells", "layerKind" => "grid",
         "selected" => nothing, "circle" => false, "selectedIndex" => 0, "clickIndex" => 0,
-        "tip" => "0,0", "mode" => "element",
+        "tip" => "0,0", "hoverIndex" => 0, "hoverTip" => "0,0", "mode" => "element",
     ),
     Dict(
         "key" => "barplot", "layerId" => "bars", "layerKind" => "rects",
         "selected" => "wash", "circle" => false, "selectedIndex" => 1, "clickIndex" => 0,
-        "tip" => "value", "mode" => "element",
+        "tip" => "value", "hoverIndex" => 0, "hoverTip" => "value", "mode" => "element",
     ),
     Dict(
         "key" => "poly", "layerId" => "poly", "layerKind" => "polygons",
         "selected" => "wash", "circle" => false, "selectedIndex" => 0, "clickIndex" => 1,
-        "tip" => "ring1", "mode" => "element",
+        "tip" => "ring1", "hoverIndex" => 1, "hoverTip" => "ring2", "mode" => "element",
     ),
     Dict(
         "key" => "polar", "layerId" => "polar", "layerKind" => "circles",
         "selected" => "wash", "circle" => true, "selectedIndex" => 1, "clickIndex" => 0,
-        "tip" => "north", "mode" => "element",
+        "tip" => "north", "hoverIndex" => 0, "hoverTip" => "east", "mode" => "element",
     ),
     Dict(
         "key" => "scatter_dark", "layerId" => "scatter_dark", "layerKind" => "circles",
         "selected" => "wash", "circle" => true, "selectedIndex" => 1, "clickIndex" => 0,
-        "tip" => "beta", "mode" => "element",
+        "tip" => "beta", "hoverIndex" => 0, "hoverTip" => "alpha", "mode" => "element",
     ),
     Dict(
         "key" => "arrows3d", "layerId" => "arrows3d", "layerKind" => "segments",
         "selected" => "ring", "circle" => false, "selectedIndex" => 0, "clickIndex" => 1,
-        "tip" => "index", "mode" => "element",
+        "tip" => "index", "hoverIndex" => 1, "hoverTip" => "index", "mode" => "element",
     ),
     Dict(
         "key" => "hlines", "layerId" => "hlines", "layerKind" => "segments",
         "selected" => "ring", "circle" => false, "selectedIndex" => 0, "clickIndex" => 1,
-        "tip" => "segment_index", "mode" => "element",
+        "tip" => "segment_index", "hoverIndex" => 1, "hoverTip" => "segment_index",
+        "mode" => "element",
     ),
     Dict(
         "key" => "threshold", "layerId" => "threshold", "layerKind" => "threshold",
         "selected" => nothing, "circle" => false, "selectedIndex" => 0, "clickIndex" => 0,
-        "tip" => "", "mode" => "drag",
+        "tip" => "", "hoverIndex" => 0, "hoverTip" => "", "mode" => "drag",
     ),
     Dict(
         "key" => "roi", "layerId" => "roi", "layerKind" => "roi",
         "selected" => nothing, "circle" => false, "selectedIndex" => 0, "clickIndex" => 0,
-        "tip" => "", "mode" => "drag",
+        "tip" => "", "hoverIndex" => 0, "hoverTip" => "", "mode" => "drag",
     ),
     Dict(
         "key" => "view", "layerId" => "view", "layerKind" => "view",
         "selected" => nothing, "circle" => false, "selectedIndex" => 0, "clickIndex" => 0,
-        "tip" => "", "mode" => "drag",
+        "tip" => "", "hoverIndex" => 0, "hoverTip" => "", "mode" => "drag",
     ),
 ]
 

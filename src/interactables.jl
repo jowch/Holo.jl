@@ -80,12 +80,13 @@ Optional (default shown; all non-exported — extend as `Masque.<name>`):
   with `masque"..."`) template, or `false` to suppress. Default: `nothing`.
 - `Masque.hoverstyle(i) -> NamedTuple` — one `(; stroke, width)` hover outline style per *layer*
   (the manifest ships one style per layer, not per element). Default: `(; stroke = nothing,
-  width = 2)` — `stroke = nothing` means the overlay draws its own blend-mode grey tint
-  (`mix-blend-mode: multiply` on a light figure, `screen` on a dark one) instead of a stroke
-  colour, so every layer darkens/lightens in its own hue without Masque resolving the element's
-  colour; a CSS colour string overrides it verbatim for that layer (no blend, the outline is
-  exactly that colour). `colors` (see [`HitLayer`](@ref)) no longer affects the hover/selection
-  outline at all — it only drives the tooltip's accent border.
+  width = 2)` — `stroke = nothing` means the overlay draws its own split blend highlight: a
+  brightening `color-dodge` fill plus a darkening `mix-blend-mode: multiply` (light figure) /
+  `screen` (dark figure) edge stroke, instead of a stroke colour, so every layer brightens/darkens
+  without Masque resolving the element's colour; a CSS colour string overrides it verbatim for
+  that layer (no blend, single unblended element, the outline is exactly that colour). `colors`
+  (see [`HitLayer`](@ref)) no longer affects the hover/selection outline at all — it only drives
+  the tooltip's accent border.
 - `Masque.hit_tol(i) -> Union{Nothing,Real}` — logical-px hit-test slack for `:segments`/
   `:polyline` layers, shipped in the manifest as image px (`round(Int, hit_tol(i) *
   ctx.scaling)`). `nothing` (default) omits the field; the overlay then falls back to its
@@ -110,9 +111,10 @@ events(::AbstractInteractable) = (:click, :hover)
 # Per-layer: nothing = auto name/value table (default), Markup = template, false = suppress.
 tooltip_spec(::AbstractInteractable) = nothing
 # One hover style per LAYER (the manifest ships one `style` dict per layer, not per element).
-# stroke = nothing: the overlay draws its own blend-mode grey tint (multiply on a light figure,
-# screen on a dark one) instead of a stroke colour — `colors` no longer feeds this, only the
-# tooltip accent; a CSS colour string here overrides it verbatim (no blend).
+# stroke = nothing: the overlay draws its own split blend highlight — a color-dodge fill plus a
+# multiply/screen (light/dark figure) edge stroke — instead of a stroke colour; `colors` no
+# longer feeds this, only the tooltip accent; a CSS colour string here overrides it verbatim
+# (no blend, single unblended element).
 hoverstyle(::AbstractInteractable) = (; stroke = nothing, width = 2)
 # Logical-px hit-test slack for :segments/:polyline layers; nothing omits the manifest field.
 hit_tol(::AbstractInteractable) = nothing

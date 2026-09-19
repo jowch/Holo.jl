@@ -1,7 +1,7 @@
 // Overlay visual-fidelity driver (LOCAL — not CI). Required by
 // docs/dev/live-interaction-checklist.md together with kind_sweep.mjs.
-// Runs on the kind-sweep notebooks. Asserts wash/ring/hover (blend-mode grey tint + flush
-// stroke)/overlay-pin, remount fade / no pulse, the blend recipe on a dark figure too (not fixed
+// Runs on the kind-sweep notebooks. Asserts wash/ring/hover (dodge fill + darkening edge
+// stroke)/overlay-pin, remount fade / no pulse, the split recipe on a dark figure too (not fixed
 // steel-teal, not #ff3b30), a Cairo-only flush-radius pixel check, and Pluto/OS
 // prefers-color-scheme (official Pluto has no notebook toggle).
 //
@@ -101,19 +101,23 @@ try {
     const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
     let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
     const baseEl = host.querySelector("img, canvas");
-    // Two overlay svgs, same box/viewBox: svg.masque-blend (mix-blend-mode on the svg element
-    // itself — Firefox only honours it on a top-level svg, not nested SVG content, so there is
-    // no per-element wrapper) holds the default blend-tint hover/wash; svg.masque-plain holds
-    // ROI/threshold, the selected-seg ring, and any explicit-`hoverstyle` highlight.
-    const svgBlend = sr.querySelector("svg.masque-blend");
+    // THREE sibling overlay svgs, same box/viewBox: svg.masque-fill (mix-blend-mode:
+    // color-dodge — the brightening half) and svg.masque-edge (multiply/screen — the darkening
+    // half) together draw a closed mark's hover/selected highlight as two identical-geometry
+    // shapes, one per svg; svg.masque-plain (no blend) holds ROI/threshold, the selected-open
+    // ring, and any explicit-`hoverstyle` highlight. Firefox only honours `mix-blend-mode` on a
+    // top-level svg, not nested SVG content, which is why each is its own sibling svg rather
+    // than a per-element wrapper.
+    const svgFill = sr.querySelector("svg.masque-fill");
+    const svgEdge = sr.querySelector("svg.masque-edge");
     const svgPlain = sr.querySelector("svg.masque-plain");
     const bb = baseEl.getBoundingClientRect();
     const hb = host.getBoundingClientRect();
-    const sbBlend = svgBlend.getBoundingClientRect(), sbPlain = svgPlain.getBoundingClientRect();
-    const kidsOf = (svg, blended) => [...(svg?.querySelector("g.sel")?.children ?? [])].map((el) => {
+    const sbFill = svgFill.getBoundingClientRect(), sbEdge = svgEdge.getBoundingClientRect(), sbPlain = svgPlain.getBoundingClientRect();
+    const kidsOf = (svg, layerName) => [...(svg?.querySelector("g.sel")?.children ?? [])].map((el) => {
       if (el.tagName.toLowerCase() === "g") {
         return {
-          kind: "ring",
+          layer: layerName, kind: "ring",
           lines: [...el.querySelectorAll("line")].map((ln) => {
             const cs = getComputedStyle(ln);
             return {
@@ -125,24 +129,28 @@ try {
       }
       const cs = getComputedStyle(el);
       return {
-        kind: "closed", tag: el.tagName.toLowerCase(),
+        layer: layerName, kind: "closed", tag: el.tagName.toLowerCase(),
         className: el.getAttribute("class"), stroke: cs.stroke, fill: cs.fill, fillOpacity: cs.fillOpacity,
         width: el.getAttribute("stroke-width"), r: el.getAttribute("r"),
         cx: el.getAttribute("cx"), cy: el.getAttribute("cy"),
-        blend: blended ? getComputedStyle(svg).mixBlendMode : null,
+        blend: layerName === "plain" ? null : getComputedStyle(svg).mixBlendMode,
       };
     });
-    const kids = [...kidsOf(svgBlend, true), ...kidsOf(svgPlain, false)];
+    const kids = [...kidsOf(svgFill, "fill"), ...kidsOf(svgEdge, "edge"), ...kidsOf(svgPlain, "plain")];
+    const count = (sel) => (svgFill.querySelector(sel)?.children.length ?? 0)
+      + (svgEdge.querySelector(sel)?.children.length ?? 0)
+      + (svgPlain.querySelector(sel)?.children.length ?? 0);
     return {
       baseTag: baseEl.tagName.toLowerCase(),
       host: { w: hb.width, h: hb.height },
       base: { w: bb.width, h: bb.height, x: bb.x, y: bb.y },
-      svgBlend: { w: sbBlend.width, h: sbBlend.height, x: sbBlend.x, y: sbBlend.y },
+      svgFill: { w: sbFill.width, h: sbFill.height, x: sbFill.x, y: sbFill.y },
+      svgEdge: { w: sbEdge.width, h: sbEdge.height, x: sbEdge.x, y: sbEdge.y },
       svgPlain: { w: sbPlain.width, h: sbPlain.height, x: sbPlain.x, y: sbPlain.y },
       kids,
       css: sr.querySelector("style")?.textContent || "",
-      hi: (svgBlend.querySelector("g.hi")?.children.length ?? 0) + (svgPlain.querySelector("g.hi")?.children.length ?? 0),
-      sel: (svgBlend.querySelector("g.sel")?.children.length ?? 0) + (svgPlain.querySelector("g.sel")?.children.length ?? 0),
+      hi: count("g.hi"),
+      sel: count("g.sel"),
     };
   }, key);
 
@@ -154,7 +162,7 @@ try {
     const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
     let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
     const b = host.querySelector("img, canvas").getBoundingClientRect();
-    const outW = sr.querySelector("svg.masque-blend").viewBox.baseVal.width;
+    const outW = sr.querySelector("svg.masque-plain").viewBox.baseVal.width;
     const s = b.width / outW;
     sr.querySelector(".surface").dispatchEvent(new PointerEvent("pointermove", {
       bubbles: true, composed: true, cancelable: true,
@@ -162,33 +170,37 @@ try {
       pointerId: 1, pointerType: "mouse", isPrimary: true,
     }));
     const t = sr.querySelector(".masque-tip");
-    // Bare shape in g.hi — svg.masque-blend for the default blend-tint recipe, svg.masque-plain
-    // for an explicit `hoverstyle` (no wrapper either way). At most one of the two has a g.hi
-    // child for a given hit.
-    const svgBlend = sr.querySelector("svg.masque-blend"), svgPlain = sr.querySelector("svg.masque-plain");
-    const hiBlend = svgBlend?.querySelector("g.hi")?.firstElementChild;
-    const hiPlain = svgPlain?.querySelector("g.hi")?.firstElementChild;
-    const hi = hiBlend || hiPlain;
+    // Bare shape in g.hi — svg.masque-fill (fill half) + svg.masque-edge (edge half) for the
+    // default split-blend recipe, svg.masque-plain for an explicit `hoverstyle` (no wrapper
+    // either way).
+    const svgFill = sr.querySelector("svg.masque-fill"), svgEdge = sr.querySelector("svg.masque-edge"), svgPlain = sr.querySelector("svg.masque-plain");
+    const capture = (svg, layerName) => {
+      const el = svg?.querySelector("g.hi")?.firstElementChild;
+      if (!el) return null;
+      const cs = getComputedStyle(el);
+      return {
+        layer: layerName, className: el.getAttribute("class"),
+        fill: cs.fill, stroke: cs.stroke, fillOpacity: cs.fillOpacity,
+        width: el.getAttribute("stroke-width"), opacity: el.getAttribute("stroke-opacity"),
+        r: el.getAttribute("r"), enter: el.classList.contains("masque-enter"),
+        blend: layerName === "plain" ? null : getComputedStyle(svg).mixBlendMode,
+      };
+    };
     const cs = t ? getComputedStyle(t) : null;
-    const hiCs = hi ? getComputedStyle(hi) : null;
     return {
       show: t?.classList.contains("show"), text: t?.innerText ?? "",
       bg: cs?.backgroundColor, color: cs?.color,
-      hi: hi ? {
-        className: hi.getAttribute("class"),
-        fill: hiCs.fill, stroke: hiCs.stroke, fillOpacity: hiCs.fillOpacity,
-        width: hi.getAttribute("stroke-width"), opacity: hi.getAttribute("stroke-opacity"),
-        r: hi.getAttribute("r"), enter: hi.classList.contains("masque-enter"),
-        blend: hi === hiBlend ? getComputedStyle(svgBlend).mixBlendMode : null,
-      } : null,
-      sel: (svgBlend?.querySelector("g.sel")?.children.length ?? 0) + (svgPlain?.querySelector("g.sel")?.children.length ?? 0),
+      hi: { fill: capture(svgFill, "fill"), edge: capture(svgEdge, "edge"), plain: capture(svgPlain, "plain") },
+      sel: (svgFill?.querySelector("g.sel")?.children.length ?? 0)
+        + (svgEdge?.querySelector("g.sel")?.children.length ?? 0)
+        + (svgPlain?.querySelector("g.sel")?.children.length ?? 0),
     };
   }, [key, x, y]);
 
   const expectBase = backend === "webgl" ? "canvas" : "img";
   const pin = (m, key) => {
     if (m.baseTag !== expectBase) throw new Error(`${key}: expected ${expectBase}, got ${m.baseTag}`);
-    for (const [name, svgBox] of [["masque-blend", m.svgBlend], ["masque-plain", m.svgPlain]]) {
+    for (const [name, svgBox] of [["masque-fill", m.svgFill], ["masque-edge", m.svgEdge], ["masque-plain", m.svgPlain]]) {
       const dx = Math.abs(svgBox.x - m.base.x), dy = Math.abs(svgBox.y - m.base.y);
       const dw = Math.abs(svgBox.w - m.base.w), dh = Math.abs(svgBox.h - m.base.h);
       if (dx > 1.5 || dy > 1.5 || dw > 2 || dh > 2) {
@@ -205,16 +217,23 @@ try {
   assertNoTeal(scatter.css, "overlay-css");
   assertNoTeal(scatter.kids, "scatter/sel");
 
-  const wash = scatter.kids.find((k) => k.kind === "closed");
+  const wash = {
+    fill: scatter.kids.find((k) => k.layer === "fill" && k.kind === "closed"),
+    edge: scatter.kids.find((k) => k.layer === "edge" && k.kind === "closed"),
+    plain: scatter.kids.find((k) => k.layer === "plain" && k.kind === "closed"),
+  };
   assertWash(wash, "scatter", false);
   passed.push("selected-wash");
 
   const pts = (await layersOf("scatter")).find((l) => l.kind === "circles");
   // `rGeom` is whatever geometry the manifest shipped, not a fixed literal — the scatter
   // notebook's markersize=22 built from the Scatter plot object, so this is the marker's drawn
-  // radius, ≈0.3525·22·2 (px_per_unit) ≈ 15.5 image px, not the old markersize/2.
+  // radius, ≈0.3525·22·2 (px_per_unit) ≈ 15.5 image px, not the old markersize/2. Fill and edge
+  // shapes are identical geometry — check both.
   const rGeom = pts.geometry[5]; // selectedIndex 1 → r at 3*1+2
-  assertCircleR(wash.r, rGeom, "scatter/selected");
+  for (const shape of [wash.fill, wash.edge].filter(Boolean)) {
+    assertCircleR(shape.r, rGeom, `scatter/selected-${shape.layer}`);
+  }
   passed.push("circle-r");
 
   // Flush-radius pixel test (Cairo only — the base is an <img>; a WGL <canvas> readback isn't
@@ -262,28 +281,36 @@ try {
 
   const dark = await inspect("scatter_dark");
   pin(dark, "scatter_dark");
-  const dwash = dark.kids.find((k) => k.kind === "closed");
+  const dwash = {
+    fill: dark.kids.find((k) => k.layer === "fill" && k.kind === "closed"),
+    edge: dark.kids.find((k) => k.layer === "edge" && k.kind === "closed"),
+    plain: dark.kids.find((k) => k.layer === "plain" && k.kind === "closed"),
+  };
   assertWash(dwash, "scatter_dark", true);
   assertNoAlertRed(dark.kids, "scatter_dark");
   assertNoTeal(dark.kids, "scatter_dark");
   passed.push("dark-figure-wash");
 
-  const hx = pts.geometry[3], hy = pts.geometry[4];
+  // Element 0 ("alpha"), NOT the baked-selected element 1 ("beta"): hovering an already-selected
+  // mark is a no-op (no highlight — see CLAUDE.md/kind_sweep.mjs's dedicated
+  // hover-on-selected-noop check), so the standard hover-recipe check here needs its own,
+  // distinct target to have anything to assert.
+  const hx = pts.geometry[0], hy = pts.geometry[1];
   let tip = null;
   for (let a = 0; a < 8; a++) {
     tip = await hoverAt("scatter", hx, hy);
-    if (tip.show && /beta/i.test(tip.text) && tip.hi) break;
+    if (tip.show && /alpha/i.test(tip.text) && (tip.hi.fill || tip.hi.edge)) break;
     await new Promise((r) => setTimeout(r, 200));
   }
-  if (!tip?.show || !/beta/i.test(tip.text)) throw new Error(`tooltip ${JSON.stringify(tip)}`);
-  assertHoverRecipe(tip.hi, "scatter", true, false); // scatter is a closed (circle) mark: tint + stroke, light figure
+  if (!tip?.show || !/alpha/i.test(tip.text)) throw new Error(`tooltip ${JSON.stringify(tip)}`);
+  assertHoverRecipe(tip.hi, "scatter", true, false); // scatter is a closed (circle) mark: fill + edge, light figure
   if (tip.sel < 1) throw new Error("g.sel gone during hover");
   passed.push("tooltip");
   passed.push("hover-distinct");
 
   // Caret apex vs. anchor: a real-layout check (calc()/border-box math no jsdom/happy-dom unit
   // test can do) that the "caret on the anchor" contract actually holds on screen, not just that
-  // --masque-caret-x was assigned some value. hx/hy is element 1's circle centre, i.e. exactly its
+  // --masque-caret-x was assigned some value. hx/hy is element 0's circle centre, i.e. exactly its
   // anchor (anchorFor's circle case) — so the anchor's page-space x is the same b.left+hx*s the
   // hover itself was dispatched at.
   const caret = await page.evaluate(([ix]) => {
@@ -292,7 +319,7 @@ try {
     const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
     let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
     const b = host.querySelector("img, canvas").getBoundingClientRect();
-    const outW = sr.querySelector("svg.masque-blend").viewBox.baseVal.width;
+    const outW = sr.querySelector("svg.masque-plain").viewBox.baseVal.width;
     const s = b.width / outW;
     const t = sr.querySelector(".masque-tip");
     const tipRect = t.getBoundingClientRect();
@@ -312,16 +339,17 @@ try {
     const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
     let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
     const b = host.querySelector("img, canvas").getBoundingClientRect();
-    const outW = sr.querySelector("svg.masque-blend").viewBox.baseVal.width;
+    const outW = sr.querySelector("svg.masque-plain").viewBox.baseVal.width;
     const s = b.width / outW;
     const o = {
       bubbles: true, composed: true, cancelable: true, clientX: b.left + ix * s, clientY: b.top + iy * s,
       pointerId: 1, pointerType: "mouse", isPrimary: true,
     };
     const surface = sr.querySelector(".surface");
-    // Bare shape in g.hi (svg.masque-blend or svg.masque-plain, see hoverAt above) — no wrapper,
-    // so masque-enter/masque-leave live on the node itself.
-    const hiOf = () => sr.querySelector("svg.masque-blend g.hi")?.firstElementChild
+    // Bare shape in g.hi (fill/edge/plain — see hoverAt above) — no wrapper, so
+    // masque-enter/masque-leave live on the node itself.
+    const hiOf = () => sr.querySelector("svg.masque-fill g.hi")?.firstElementChild
+      || sr.querySelector("svg.masque-edge g.hi")?.firstElementChild
       || sr.querySelector("svg.masque-plain g.hi")?.firstElementChild;
     surface.dispatchEvent(new PointerEvent("pointermove", o));
     const first = hiOf();
@@ -345,12 +373,17 @@ try {
     const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
     let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
     sr.querySelector(".surface").dispatchEvent(new PointerEvent("pointerleave", { bubbles: true, pointerId: 1, pointerType: "mouse", isPrimary: true }));
-    const hi = sr.querySelector("svg.masque-blend g.hi")?.firstElementChild
+    const hi = sr.querySelector("svg.masque-fill g.hi")?.firstElementChild
+      || sr.querySelector("svg.masque-edge g.hi")?.firstElementChild
       || sr.querySelector("svg.masque-plain g.hi")?.firstElementChild;
     return {
-      hi: (sr.querySelector("svg.masque-blend g.hi")?.children.length ?? 0) + (sr.querySelector("svg.masque-plain g.hi")?.children.length ?? 0),
+      hi: (sr.querySelector("svg.masque-fill g.hi")?.children.length ?? 0)
+        + (sr.querySelector("svg.masque-edge g.hi")?.children.length ?? 0)
+        + (sr.querySelector("svg.masque-plain g.hi")?.children.length ?? 0),
       leaving: !!(hi && hi.classList.contains("masque-leave")),
-      sel: (sr.querySelector("svg.masque-blend g.sel")?.children.length ?? 0) + (sr.querySelector("svg.masque-plain g.sel")?.children.length ?? 0),
+      sel: (sr.querySelector("svg.masque-fill g.sel")?.children.length ?? 0)
+        + (sr.querySelector("svg.masque-edge g.sel")?.children.length ?? 0)
+        + (sr.querySelector("svg.masque-plain g.sel")?.children.length ?? 0),
     };
   });
   assertLeaveFade(fade, "scatter");
@@ -366,12 +399,13 @@ try {
   passed.push("selected-survives-unhover");
 
   const darkPts = (await layersOf("scatter_dark")).find((l) => l.kind === "circles");
-  const dhx = darkPts.geometry[3], dhy = darkPts.geometry[4];
+  // Element 0, same reasoning as `hx`/`hy` above — element 1 is scatter_dark's baked-selected
+  // index and hovering it is a no-op.
+  const dhx = darkPts.geometry[0], dhy = darkPts.geometry[1];
 
-  // Blend recipe on the dark figure: the highlight no longer derives colour from the mark (that's
-  // gone — `colors` now only feeds the tooltip accent), so what's left to check on scatter_dark's
-  // hover is that it picks the dark-figure grey pair and `screen` blend mode, same as its wash did
-  // above.
+  // Split recipe on the dark figure: what's left to check on scatter_dark's hover is that the
+  // fill layer still dodges (colour-independent of figure background) and the edge layer picks
+  // the dark-figure grey stroke and `screen` blend, same as its wash did above.
   const darkTip = await hoverAt("scatter_dark", dhx, dhy);
   assertHoverRecipe(darkTip.hi, "scatter_dark", true, true);
   passed.push("dark-figure-hover");

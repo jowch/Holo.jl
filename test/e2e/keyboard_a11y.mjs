@@ -78,6 +78,7 @@ try {
   if (!ready) throw new Error(`${backend} timed out waiting for kind-sweep widgets`);
   console.error(`phase: widgets mounted (${backend})`);
 
+  const meta = await page.evaluate(() => JSON.parse(document.querySelector("#kind_meta").textContent));
   const layersOf = (key) => page.evaluate((k) => JSON.parse(document.querySelector(`#coords_${k}`).textContent), key);
   const textOf = (sel) => page.evaluate((q) => document.querySelector(q)?.innerText ?? "", sel);
 
@@ -96,10 +97,14 @@ try {
     const hosts = [...document.querySelectorAll(".ip-host")];
     const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
     let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
-    // Keyboard focus draws the same bare-shape highlight a hover would: svg.masque-blend's g.hi
-    // for the default blend-tint recipe, svg.masque-plain's g.hi for an explicit `hoverstyle` —
-    // no wrapper either way, so masque-leave lives on the node itself.
-    const hi = sr.querySelector("svg.masque-blend g.hi > *") || sr.querySelector("svg.masque-plain g.hi > *");
+    // Keyboard focus draws the same bare-shape highlight a hover would: svg.masque-fill's g.hi
+    // (dodge fill half) and svg.masque-edge's g.hi (darkening edge half) for the default
+    // split-blend recipe on a closed mark, svg.masque-plain's g.hi for an explicit `hoverstyle`
+    // or an open seg (edge-only) — no wrapper either way, so masque-leave lives on the node
+    // itself. Any populated layer is enough to prove a ring was drawn; grab whichever is first.
+    const hi = sr.querySelector("svg.masque-fill g.hi > *")
+      || sr.querySelector("svg.masque-edge g.hi > *")
+      || sr.querySelector("svg.masque-plain g.hi > *");
     const live = sr.querySelector('[aria-live="polite"]');
     return {
       focused: sr.activeElement === sr.querySelector(".surface"),
@@ -127,13 +132,26 @@ try {
     const layer = layers[0];
     const n = elementCount(layer);
     const surface = await surfaceHandle(key);
+    // The baked-`selected` index for this layer (poly bakes 0; scatter/barplot bake 1), or null
+    // when nothing is baked — see kind_sweep_figures.jl's meta.
+    const spec = meta.find((m) => m.key === key);
+    const bakedSelected = spec?.selected ? spec.selectedIndex : null;
 
     await surface.focus();
     let s = await state(key);
     if (!s.focused) throw new Error(`${key}: surface.focus() did not set DOM focus (tabindex missing?)`);
     passed.push(`${key}/focusable`);
 
+    // Landing index after k ArrowRight presses from an unfocused surface is k-1 (0-based).
+    // Focusing (like hovering) an already-selected mark is a no-op — no highlight — so if the
+    // first arrow would land on this layer's baked `selected` index, press one more ArrowRight
+    // to land somewhere else before asserting the ring was drawn.
     await page.keyboard.press("ArrowRight");
+    let landed = 0;
+    if (bakedSelected === landed) {
+      await page.keyboard.press("ArrowRight");
+      landed = 1;
+    }
     s = await state(key);
     if (!s.ring) throw new Error(`${key}: ArrowRight drew no ring`);
     if (!s.tipShown) throw new Error(`${key}: ArrowRight showed no tooltip`);
@@ -141,15 +159,19 @@ try {
 
     await page.waitForTimeout(250); // live-region debounce (150ms) + margin
     s = await state(key);
-    if (!/element 1 of \d+/.test(s.liveText)) throw new Error(`${key}: live region text unexpected: ${JSON.stringify(s.liveText)}`);
+    const liveRe = new RegExp(`element ${landed + 1} of ${n}`);
+    if (!liveRe.test(s.liveText)) throw new Error(`${key}: live region text unexpected: ${JSON.stringify(s.liveText)}`);
     passed.push(`${key}/live-region`);
 
     const before = await textOf(`#out_${key}`);
     const beforeIdxMatch = new RegExp(`:${layer.id},\\s*(\\d+)\\b`).exec(before);
     const beforeIdx = beforeIdxMatch ? Number(beforeIdxMatch[1]) : -1;
     const target = (beforeIdx + 1) % n; // guaranteed != beforeIdx as long as n > 1
-    // We're at index 0 (one ArrowRight, above) — walk to `target`.
-    for (let i = 0; i < target; i++) await page.keyboard.press("ArrowRight");
+    // We're at `landed` — walk to `target`. ArrowRight/ArrowLeft clamp at the ends, they don't
+    // wrap, so step in whichever direction `target` actually is from here.
+    const delta = target - landed;
+    const stepKey = delta >= 0 ? "ArrowRight" : "ArrowLeft";
+    for (let i = 0; i < Math.abs(delta); i++) await page.keyboard.press(stepKey);
     await page.keyboard.press("Enter");
     let after = before;
     for (let i = 0; i < 40 && after === before; i++) { await page.waitForTimeout(100); after = await textOf(`#out_${key}`); }

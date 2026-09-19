@@ -23,20 +23,23 @@ const manifest: Manifest = {
 
 const shadowOf = (host: HTMLElement) => (host.lastElementChild as HTMLElement).shadowRoot!
 
-// Two coordinate-identical top-level <svg>s (mount.ts's svg.masque-blend / svg.masque-plain),
-// each with its own g.hi/g.sel — a highlight lands in whichever side highlight.ts's
-// makeHiElement routed it to (no explicit style.stroke → blend; explicit stroke, the
-// selected-open ring, ROI, and threshold always → plain). These helpers combine both sides so
-// "the g.hi/g.sel content" reads the same regardless of which side is live.
+// Three coordinate-identical top-level <svg>s (mount.ts's svg.masque-fill / svg.masque-edge /
+// svg.masque-plain), each with its own g.hi/g.sel — a highlight lands in whichever svg(s)
+// highlight.ts's makeHiElement routed it to (no explicit style.stroke → a closed shape splits
+// into fill+edge, an open/seg shape → edge only, a rectfill → fill only; explicit stroke, the
+// selected-open ring, ROI, and threshold always → plain). These helpers combine all three sides
+// so "the g.hi/g.sel content" reads the same regardless of which side(s) are live.
 const hiGroupEls = (shadow: ShadowRoot): SVGGElement[] => [...shadow.querySelectorAll("g.hi")] as SVGGElement[]
 const selGroupEls = (shadow: ShadowRoot): SVGGElement[] => [...shadow.querySelectorAll("g.sel")] as SVGGElement[]
 const hiChildren = (shadow: ShadowRoot): SVGElement[] => hiGroupEls(shadow).flatMap((g) => [...g.children]) as SVGElement[]
 const selChildren = (shadow: ShadowRoot): SVGElement[] => selGroupEls(shadow).flatMap((g) => [...g.children]) as SVGElement[]
-// The specific blend- or plain-side group, regardless of content — for tests asserting a
+// The specific fill/edge/plain-side group, regardless of content — for tests asserting a
 // highlight landed on a particular side (or didn't).
-const blendHiGroup = (shadow: ShadowRoot): SVGGElement => hiGroupEls(shadow).find((g) => g.closest("svg")!.classList.contains("masque-blend"))!
+const fillHiGroup = (shadow: ShadowRoot): SVGGElement => hiGroupEls(shadow).find((g) => g.closest("svg")!.classList.contains("masque-fill"))!
+const edgeHiGroup = (shadow: ShadowRoot): SVGGElement => hiGroupEls(shadow).find((g) => g.closest("svg")!.classList.contains("masque-edge"))!
 const plainHiGroup = (shadow: ShadowRoot): SVGGElement => hiGroupEls(shadow).find((g) => g.closest("svg")!.classList.contains("masque-plain"))!
-const blendSelGroup = (shadow: ShadowRoot): SVGGElement => selGroupEls(shadow).find((g) => g.closest("svg")!.classList.contains("masque-blend"))!
+const fillSelGroup = (shadow: ShadowRoot): SVGGElement => selGroupEls(shadow).find((g) => g.closest("svg")!.classList.contains("masque-fill"))!
+const edgeSelGroup = (shadow: ShadowRoot): SVGGElement => selGroupEls(shadow).find((g) => g.closest("svg")!.classList.contains("masque-edge"))!
 const plainSelGroup = (shadow: ShadowRoot): SVGGElement => selGroupEls(shadow).find((g) => g.closest("svg")!.classList.contains("masque-plain"))!
 
 // onDrag/onMove are rAF-coalesced: a second pointermove dispatched before the browser has painted
@@ -425,8 +428,8 @@ describe("mount", () => {
         surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 200, clientY: 200, bubbles: true }))
         expect(committed!.items.map((e) => e.index)).toEqual([0, 1])
         expect(committed!.items.every((e) => e.layer === "pts")).toBe(true)
-        // two persistent selection highlights drawn
-        expect(selChildren(shadow).length).toBe(2)
+        // two persistent selection highlights drawn, each split into a fill + an edge shape
+        expect(selChildren(shadow).length).toBe(4)
     })
 
     it("box-select with nothing enclosed emits an empty items envelope", () => {
@@ -460,7 +463,7 @@ describe("mount", () => {
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 475, clientY: 375, bubbles: true }))
         surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 475, clientY: 375, bubbles: true }))
         expect(committed!.items.map((e) => e.index)).toEqual([0, 1, 2])
-        expect(selChildren(shadow).length).toBe(3)
+        expect(selChildren(shadow).length).toBe(6) // 3 points × (fill shape + edge shape)
     })
 
     it("box-select containing a single point emits a one-element envelope", () => {
@@ -475,7 +478,7 @@ describe("mount", () => {
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 125, clientY: 125, bubbles: true }))
         surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 125, clientY: 125, bubbles: true }))
         expect(committed!.items.map((e) => e.index)).toEqual([0])
-        expect(selChildren(shadow).length).toBe(1)
+        expect(selChildren(shadow).length).toBe(2) // 1 point × (fill shape + edge shape)
     })
 
     // Factory so each test gets a fresh geometry object — drag mutates geometry in-place.
@@ -520,15 +523,15 @@ describe("mount", () => {
         const surface = shadowOf(host).querySelector(".surface") as HTMLElement
         surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 125, clientY: 125, bubbles: true }))
         surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 125, clientY: 125, bubbles: true }))
-        // No explicit style.stroke on this layer → the blend path: a bare rect, directly in
-        // svg.masque-blend's g.sel, no wrapper.
-        const el = blendSelGroup(shadowOf(host)).firstElementChild as SVGElement
+        // No explicit style.stroke on this layer, and a rectfill only ever gets a fill shape —
+        // no edge shape at all, so it can't double the ROI box's own outline.
+        const el = fillSelGroup(shadowOf(host)).firstElementChild as SVGElement
         expect(el.tagName.toLowerCase()).toBe("rect")
         expect(el.classList.contains("masque-hi")).toBe(true)
-        expect(el.classList.contains("masque-wash")).toBe(true)
-        expect(el.classList.contains("masque-nostroke")).toBe(true)
+        expect(el.classList.contains("masque-fillshape")).toBe(true)
         expect(el.getAttribute("fill")).toBeNull()
         expect(el.getAttribute("stroke")).toBeNull()
+        expect(edgeSelGroup(shadowOf(host)).children.length).toBe(0)
     })
 })
 
@@ -810,13 +813,12 @@ describe("tooltips (mount/showTip)", () => {
         expect((host.lastElementChild as HTMLElement).style.getPropertyValue("--masque-fig-bg")).toBe("rgb(30,30,30)")
     })
 
-    it("picks the blend-tint multiply/screen mode (and its greys) from the figure's own background", () => {
+    it("picks the edge blend mode + line greys from the figure's own background; fill source is theme-independent", () => {
         const { host: lightHost, script: lightScript } = setup()
         mount(lightScript, { ...tipManifest({}), background: "rgb(255,255,255)" })
         const lightStyle = (lightHost.lastElementChild as HTMLElement).style
         expect(lightStyle.getPropertyValue("--masque-hi-blend")).toBe("multiply")
-        expect(lightStyle.getPropertyValue("--masque-hi-tint-hover")).toBe("#8c8c8c")
-        expect(lightStyle.getPropertyValue("--masque-hi-tint-sel")).toBe("#666666")
+        expect(lightStyle.getPropertyValue("--masque-hi-fill")).toBe("#141414")
         expect(lightStyle.getPropertyValue("--masque-hi-line-hover")).toBe("#555555")
         expect(lightStyle.getPropertyValue("--masque-hi-line-sel")).toBe("#333333")
 
@@ -824,20 +826,20 @@ describe("tooltips (mount/showTip)", () => {
         mount(darkScript, { ...tipManifest({}), background: "rgb(38,38,38)" })
         const darkStyle = (darkHost.lastElementChild as HTMLElement).style
         expect(darkStyle.getPropertyValue("--masque-hi-blend")).toBe("screen")
-        expect(darkStyle.getPropertyValue("--masque-hi-tint-hover")).toBe("#737373")
-        expect(darkStyle.getPropertyValue("--masque-hi-tint-sel")).toBe("#999999")
+        expect(darkStyle.getPropertyValue("--masque-hi-fill")).toBe("#141414")
         expect(darkStyle.getPropertyValue("--masque-hi-line-hover")).toBe("#aaaaaa")
         expect(darkStyle.getPropertyValue("--masque-hi-line-sel")).toBe("#cccccc")
     })
 
-    it("mounts two coordinate-identical top-level svgs, blend before plain (so plain paints on top)", () => {
+    it("mounts three coordinate-identical top-level svgs, fill/edge/plain in paint order", () => {
         const { host, script } = setup()
         mount(script, { ...tipManifest({}) })
         const shadow = (host.lastElementChild as HTMLElement).shadowRoot!
         const svgs = [...shadow.querySelectorAll("svg")]
-        expect(svgs.length).toBe(2)
-        expect(svgs[0].classList.contains("masque-blend")).toBe(true)
-        expect(svgs[1].classList.contains("masque-plain")).toBe(true)
+        expect(svgs.length).toBe(3)
+        expect(svgs[0].classList.contains("masque-fill")).toBe(true)
+        expect(svgs[1].classList.contains("masque-edge")).toBe(true)
+        expect(svgs[2].classList.contains("masque-plain")).toBe(true)
         for (const svg of svgs) {
             expect(svg.getAttribute("viewBox")).toBe(svgs[0].getAttribute("viewBox"))
             expect(svg.querySelector("g.sel")).toBeTruthy()
@@ -1011,15 +1013,16 @@ describe("tooltips (mount/showTip)", () => {
         }
         mount(script, selManifest)
         const shadow = shadowOf(host)
-        const sel = blendSelGroup(shadow) // plain circles, no style.stroke → the blend side
+        const sel = edgeSelGroup(shadow) // plain circles, no style.stroke → fill+edge split, wash lives on edge
         expect(sel.children.length).toBe(2)                 // BOTH indices, not just the last
         const surface = shadow.querySelector(".surface") as HTMLElement
-        // hover a non-selected element, then empty space (empty space fades g.hi)
+        // (300,200) is index 0, already selected — no hover chrome is drawn for it (skip-when-
+        // selected). Then empty space, which would fade g.hi if anything were there.
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 10, clientY: 10, bubbles: true }))
         await new Promise<void>((r) => requestAnimationFrame(() => r()))
         expect(sel.children.length).toBe(2)                 // pre-selection survived the hovers
-        const leaving = blendHiGroup(shadow).firstElementChild
+        const leaving = edgeHiGroup(shadow).firstElementChild
         expect(leaving === null || leaving.classList.contains("masque-leave")).toBe(true)
         expect(sel.querySelector("circle")!.classList.contains("masque-wash")).toBe(true)
     })
@@ -1100,7 +1103,7 @@ describe("tooltips (mount/showTip)", () => {
         const { host, script } = setup()
         mount(script, m)
         const shadow = shadowOf(host)
-        const sel = blendSelGroup(shadow) // plain circles, no style.stroke → the blend side
+        const sel = edgeSelGroup(shadow) // plain circles, no style.stroke → fill+edge split, one edge shape per selected point
         expect(sel.children.length).toBe(1)  // pre-highlight alone
         const surface = shadow.querySelector(".surface") as HTMLElement
         // commit current ROI enclosure (points 0 and 1) — replaces pre-selection of index 2
@@ -1301,12 +1304,12 @@ describe("overlay visual polish", () => {
         const shadow = shadowOf(host)
         const surface = shadow.querySelector(".surface") as HTMLElement
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
-        const a = blendHiGroup(shadow).firstElementChild as SVGElement // plain circle, no style.stroke → blend side
+        const a = edgeHiGroup(shadow).firstElementChild as SVGElement // plain circle, no style.stroke → edge side (the stroke half)
         expect(a.classList.contains("masque-enter")).toBe(true)
         // still inside r=20 at image (600,400); scale 2 → client (301,201) = image (602,402)
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 301, clientY: 201, bubbles: true }))
         await flushFrame()
-        const b = blendHiGroup(shadow).firstElementChild as SVGElement
+        const b = edgeHiGroup(shadow).firstElementChild as SVGElement
         expect(b).toBe(a)
     })
 
@@ -1327,12 +1330,12 @@ describe("overlay visual polish", () => {
         const surface = shadow.querySelector(".surface") as HTMLElement
         surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 125, clientY: 125, bubbles: true }))
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 130, clientY: 125, bubbles: true }))
-        const a = blendSelGroup(shadow).firstElementChild as SVGElement // rectfill, no style.stroke → blend side
+        const a = fillSelGroup(shadow).firstElementChild as SVGElement // rectfill → fill-only
         expect(a.classList.contains("masque-enter")).toBe(true)
         // rAF-coalesced: this second move lands on the trailing frame from the first, not synchronously.
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 135, clientY: 125, bubbles: true }))
         await flushFrame()
-        const b = blendSelGroup(shadow).firstElementChild as SVGElement
+        const b = fillSelGroup(shadow).firstElementChild as SVGElement
         expect(b).not.toBe(a)
         expect(b.classList.contains("masque-enter")).toBe(false)
         surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 135, clientY: 125, bubbles: true }))
@@ -1349,22 +1352,26 @@ describe("overlay visual polish", () => {
             }],
         })
         // An explicit style.stroke → the unblended plain path: bare circle in svg.masque-plain,
-        // no separate blend svg involved.
+        // no fill/edge svgs involved.
         const el = plainSelGroup(shadowOf(host)).firstElementChild as SVGElement
         expect(el.tagName.toLowerCase()).toBe("circle")
         expect(el.classList.contains("masque-wash")).toBe(true)
         expect(el.style.getPropertyValue("--masque-hi-stroke")).toBe("#123456")
-        expect(blendSelGroup(shadowOf(host)).children.length).toBe(0) // nothing landed on the blend side
+        expect(fillSelGroup(shadowOf(host)).children.length).toBe(0) // nothing landed on the fill side
+        expect(edgeSelGroup(shadowOf(host)).children.length).toBe(0) // nothing landed on the edge side
     })
 
-    it("a plain mark with no colors and no style still gets a hover highlight, via the blend side", () => {
+    it("a plain mark with no colors and no style still gets a hover highlight, split across fill+edge", () => {
         const { host, script } = setup()
         mount(script, manifest)
         const surface = shadowOf(host).querySelector(".surface") as HTMLElement
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
-        const el = blendHiGroup(shadowOf(host)).firstElementChild as SVGElement // bare shape, no wrapper
-        expect(el.tagName.toLowerCase()).toBe("circle")
-        expect(el.style.getPropertyValue("--masque-hi-stroke")).toBe("")
+        const fillEl = fillHiGroup(shadowOf(host)).firstElementChild as SVGElement
+        const edgeEl = edgeHiGroup(shadowOf(host)).firstElementChild as SVGElement
+        expect(fillEl.tagName.toLowerCase()).toBe("circle")
+        expect(edgeEl.tagName.toLowerCase()).toBe("circle")
+        expect(fillEl.style.getPropertyValue("--masque-hi-stroke")).toBe("")
+        expect(edgeEl.style.getPropertyValue("--masque-hi-stroke")).toBe("")
         expect(plainHiGroup(shadowOf(host)).children.length).toBe(0) // nothing landed on the plain side
     })
 
@@ -1375,32 +1382,41 @@ describe("overlay visual polish", () => {
         const surface = shadow.querySelector(".surface") as HTMLElement
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
         surface.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }))
-        const leaving = blendHiGroup(shadow).firstElementChild as SVGElement // plain circle, no style.stroke → blend side
-        expect(leaving.classList.contains("masque-leave")).toBe(true)
+        // closed mark, no style.stroke → both fill and edge shapes fade together, as one unit.
+        const leavingFill = fillHiGroup(shadow).firstElementChild as SVGElement
+        const leavingEdge = edgeHiGroup(shadow).firstElementChild as SVGElement
+        expect(leavingFill.classList.contains("masque-leave")).toBe(true)
+        expect(leavingEdge.classList.contains("masque-leave")).toBe(true)
         await new Promise((r) => setTimeout(r, 120))
         expect(hiChildren(shadow).length).toBe(0)
     })
 
-    it("hover on a closed mark blend-tints: bare circle.masque-hi.masque-hover in svg.masque-blend's g.hi, no colour/fill attributes, 1.5px, opaque", () => {
+    it("hover on a closed mark splits into a fill shape (svg.masque-fill) and a stroke shape (svg.masque-edge), no colour/fill attributes, 1.5px, opaque", () => {
         const { host, script } = setup()
         mount(script, manifest)
         const shadow = shadowOf(host)
         const surface = shadow.querySelector(".surface") as HTMLElement
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
-        const el = blendHiGroup(shadow).firstElementChild as SVGElement
-        expect(el.tagName.toLowerCase()).toBe("circle")
-        expect(el.classList.contains("masque-hi")).toBe(true)
-        expect(el.classList.contains("masque-hover")).toBe(true)
-        expect(el.classList.contains("masque-wash")).toBe(false)
-        expect(el.getAttribute("fill")).toBeNull() // the .masque-blend .masque-hi.masque-hover stylesheet rule handles the tint
-        expect(el.getAttribute("stroke")).toBeNull() // colour comes from the stylesheet, not a presentation attribute
-        expect(el.getAttribute("stroke-width")).toBe("1.5")
-        expect(el.getAttribute("stroke-opacity")).toBeNull() // fully opaque
-        // svg.masque-blend itself carries the mix-blend-mode, not this shape or a wrapper.
-        expect(el.closest("svg")!.classList.contains("masque-blend")).toBe(true)
+        const fillEl = fillHiGroup(shadow).firstElementChild as SVGElement
+        const edgeEl = edgeHiGroup(shadow).firstElementChild as SVGElement
+        expect(fillEl.tagName.toLowerCase()).toBe("circle")
+        expect(fillEl.classList.contains("masque-hi")).toBe(true)
+        expect(fillEl.classList.contains("masque-fillshape")).toBe(true)
+        expect(fillEl.getAttribute("fill")).toBeNull() // the svg.masque-fill stylesheet rule handles the tint
+        expect(fillEl.closest("svg")!.classList.contains("masque-fill")).toBe(true)
+
+        expect(edgeEl.tagName.toLowerCase()).toBe("circle")
+        expect(edgeEl.classList.contains("masque-hi")).toBe(true)
+        expect(edgeEl.classList.contains("masque-hover")).toBe(true)
+        expect(edgeEl.classList.contains("masque-wash")).toBe(false)
+        expect(edgeEl.getAttribute("stroke")).toBeNull() // colour comes from the stylesheet, not a presentation attribute
+        expect(edgeEl.getAttribute("stroke-width")).toBe("1.5")
+        expect(edgeEl.getAttribute("stroke-opacity")).toBeNull() // fully opaque
+        // svg.masque-edge itself carries the mix-blend-mode, not this shape or a wrapper.
+        expect(edgeEl.closest("svg")!.classList.contains("masque-edge")).toBe(true)
     })
 
-    it("hover on an open (seg) mark also blend-tints, but a line has no area so it stays visually stroke-only", () => {
+    it("hover on an open (seg) mark is edge-only — a line has no interior, so no fill shape is drawn", () => {
         const { host, script } = setup()
         mount(script, {
             width: 1200, height: 800, scaling: 2, transforms: {},
@@ -1411,15 +1427,16 @@ describe("overlay visual polish", () => {
         })
         const surface = shadowOf(host).querySelector(".surface") as HTMLElement
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 125, clientY: 75, bubbles: true }))
-        const el = blendHiGroup(shadowOf(host)).firstElementChild as SVGElement
+        const el = edgeHiGroup(shadowOf(host)).firstElementChild as SVGElement
         expect(el.tagName.toLowerCase()).toBe("line")
         expect(el.classList.contains("masque-hi")).toBe(true)
         expect(el.classList.contains("masque-hover")).toBe(true)
         expect(el.getAttribute("fill")).toBeNull()
         expect(el.getAttribute("stroke-width")).toBe("1.5")
+        expect(fillHiGroup(shadowOf(host)).children.length).toBe(0) // no fill shape for an open mark
     })
 
-    it("selected closed geometry blend-tints too: wash class + 2px stroke, geometry r exactly (edge outline, not a halo)", () => {
+    it("hovering an already-selected mark draws no hover highlight, but still shows its tooltip", async () => {
         const { host, script } = setup()
         mount(script, {
             width: 1200, height: 800, scaling: 2, transforms: {},
@@ -1428,18 +1445,50 @@ describe("overlay visual polish", () => {
                 payloads: [{ i: 0 }], axis: "ax1", events: ["click", "hover"], selected: [0],
             }],
         })
-        const el = blendSelGroup(shadowOf(host)).firstElementChild as SVGElement
-        expect(el.tagName.toLowerCase()).toBe("circle")
-        expect(el.classList.contains("masque-hi")).toBe(true)
-        expect(el.classList.contains("masque-wash")).toBe(true)
-        expect(el.getAttribute("fill")).toBeNull()
-        expect(el.getAttribute("stroke")).toBeNull()
-        expect(el.getAttribute("stroke-width")).toBe("2")
-        expect(el.getAttribute("stroke-opacity")).toBeNull()
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        // the selected wash is already drawn at mount
+        expect(edgeSelGroup(shadow).children.length).toBe(1)
+        // circle centre is image (300,200); display scale 1200/600=2 -> client (150,100)
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 150, clientY: 100, bubbles: true }))
+        await flushFrame()
+        // no hover chrome anywhere — a 1.5px hover stroke over the 2px selected stroke would
+        // thin the highlight, not add to it
+        expect(hiChildren(shadow).length).toBe(0)
+        // the selected wash is unaffected
+        expect(edgeSelGroup(shadow).children.length).toBe(1)
+        // the tooltip still shows — only the highlight is skipped
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
+        expect(tip.classList.contains("show")).toBe(true)
+    })
+
+    it("selected closed geometry splits too: wash class + 2px stroke on the edge shape, geometry r exactly on both (edge outline, not a halo)", () => {
+        const { host, script } = setup()
+        mount(script, {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [{
+                id: "pts", kind: "circles", geometry: [300, 200, 20],
+                payloads: [{ i: 0 }], axis: "ax1", events: ["click", "hover"], selected: [0],
+            }],
+        })
+        const fillEl = fillSelGroup(shadowOf(host)).firstElementChild as SVGElement
+        const edgeEl = edgeSelGroup(shadowOf(host)).firstElementChild as SVGElement
+        expect(fillEl.tagName.toLowerCase()).toBe("circle")
+        expect(fillEl.classList.contains("masque-fillshape")).toBe(true)
+        expect(fillEl.getAttribute("fill")).toBeNull()
+        expect(fillEl.getAttribute("r")).toBe("20")
+
+        expect(edgeEl.tagName.toLowerCase()).toBe("circle")
+        expect(edgeEl.classList.contains("masque-hi")).toBe(true)
+        expect(edgeEl.classList.contains("masque-wash")).toBe(true)
+        expect(edgeEl.getAttribute("fill")).toBeNull()
+        expect(edgeEl.getAttribute("stroke")).toBeNull()
+        expect(edgeEl.getAttribute("stroke-width")).toBe("2")
+        expect(edgeEl.getAttribute("stroke-opacity")).toBeNull()
         // outline sits ON the mark's own edge now, not a halo outside it (was r + 2)
-        expect(el.getAttribute("r")).toBe("20")
-        expect(el.getAttribute("cx")).toBe("300")
-        expect(el.getAttribute("cy")).toBe("200")
+        expect(edgeEl.getAttribute("r")).toBe("20")
+        expect(edgeEl.getAttribute("cx")).toBe("300")
+        expect(edgeEl.getAttribute("cy")).toBe("200")
     })
 
     it("hover outline uses the geometry r exactly, concentric with the marker", () => {
@@ -1447,7 +1496,7 @@ describe("overlay visual polish", () => {
         mount(script, manifest)
         const surface = shadowOf(host).querySelector(".surface") as HTMLElement
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }))
-        const el = blendHiGroup(shadowOf(host)).firstElementChild as SVGElement
+        const el = edgeHiGroup(shadowOf(host)).firstElementChild as SVGElement
         expect(el.getAttribute("r")).toBe("20") // geometry r=20, on the mark edge (no +2)
         expect(el.getAttribute("cx")).toBe("600")
         expect(el.getAttribute("cy")).toBe("400")
@@ -1477,7 +1526,7 @@ describe("overlay visual polish", () => {
         expect(overlay.style.height).toBe("320px")
         expect(overlay.style.left).toBe("0px")
         expect(overlay.style.top).toBe("0px")
-        const sel = blendSelGroup(shadowOf(host)).firstElementChild as SVGElement // plain circle, no style.stroke → blend side
+        const sel = edgeSelGroup(shadowOf(host)).firstElementChild as SVGElement // plain circle, no style.stroke → fill+edge split
         expect(sel.getAttribute("cx")).toBe("100")
         expect(sel.getAttribute("cy")).toBe("100")
     })
@@ -1493,13 +1542,13 @@ describe("overlay visual polish", () => {
         let resolve!: () => void
         const inval = new Promise<void>((r) => { resolve = r })
         mount(script, m([0]), inval)
-        expect((blendSelGroup(shadowOf(host)).firstElementChild as SVGElement).getAttribute("cx")).toBe("300")
+        expect((edgeSelGroup(shadowOf(host)).firstElementChild as SVGElement).getAttribute("cx")).toBe("300")
         resolve()
         return inval.then(() => Promise.resolve()).then(() => {
             const script2 = document.createElement("script")
             host.append(script2)
             mount(script2, m([1]))
-            const el = blendSelGroup(shadowOf(host)).firstElementChild as SVGElement
+            const el = edgeSelGroup(shadowOf(host)).firstElementChild as SVGElement
             expect(el.getAttribute("cx")).toBe("600")
             expect(el.getAttribute("cy")).toBe("400")
             expect(el.classList.contains("masque-wash")).toBe(true)
@@ -1578,14 +1627,15 @@ describe("overlay visual polish", () => {
         expect(css).not.toMatch(/#ff3b30/)
     })
 
-    it("overlay CSS defines the figure-aware highlight ink and the blend-tint fallback", () => {
+    it("overlay CSS defines the figure-aware highlight ink and the fill/edge split's blend rules + fallback", () => {
         const { host, script } = setup()
         mount(script, manifest)
         const css = shadowOf(host).querySelector("style")!.textContent!
         expect(css).toMatch(/--masque-ink/)
         expect(css).toMatch(/--masque-hi-stroke/)
-        expect(css).toMatch(/\.masque-blend \{ mix-blend-mode:/)
-        expect(css).toMatch(/@supports not \(mix-blend-mode: multiply\)/)
+        expect(css).toMatch(/svg\.masque-fill \{ mix-blend-mode: color-dodge/)
+        expect(css).toMatch(/svg\.masque-edge \{ mix-blend-mode:/)
+        expect(css).toMatch(/@supports not \(mix-blend-mode: color-dodge\)/)
     })
 
     it("does not rewrite tooltip HTML on same-hit mousemove", async () => {
@@ -1850,16 +1900,18 @@ describe("coverage gaps: grid-value tooltip, drag-target hover cursor, rects/pol
             layers: [{ id: "bars", kind: "rects", geometry: [100, 100, 40, 20, 300, 100, 40, 20],
                 payloads: [{ i: 0 }, { i: 1 }], axis: "ax1", events: ["click", "hover"], selected: [1] }],
         })
-        const el = blendSelGroup(shadowOf(host)).firstElementChild as SVGElement // no style.stroke → blend side
-        expect(el.tagName.toLowerCase()).toBe("rect")
-        expect(el.getAttribute("x")).toBe("280") // cx(300) - w/2(20)
-        expect(el.getAttribute("y")).toBe("90")  // cy(100) - h/2(10)
-        expect(el.getAttribute("width")).toBe("40")
-        expect(el.getAttribute("height")).toBe("20")
-        // An element-indexed rects selection keeps its stroke — only the grid cell-block union
-        // rect from an ROI's `selects` (a distinct "rectfill" geom tag) is fill-only.
-        expect(el.classList.contains("masque-hi")).toBe(true)
-        expect(el.classList.contains("masque-nostroke")).toBe(false)
+        const edgeEl = edgeSelGroup(shadowOf(host)).firstElementChild as SVGElement // no style.stroke → fill+edge split
+        expect(edgeEl.tagName.toLowerCase()).toBe("rect")
+        expect(edgeEl.getAttribute("x")).toBe("280") // cx(300) - w/2(20)
+        expect(edgeEl.getAttribute("y")).toBe("90")  // cy(100) - h/2(10)
+        expect(edgeEl.getAttribute("width")).toBe("40")
+        expect(edgeEl.getAttribute("height")).toBe("20")
+        // An element-indexed rects selection keeps its stroke (edge shape) — only the grid
+        // cell-block union rect from an ROI's `selects` (a distinct "rectfill" geom tag) is
+        // fill-only, with no edge shape at all.
+        expect(edgeEl.classList.contains("masque-hi")).toBe(true)
+        expect(edgeEl.classList.contains("masque-nostroke")).toBe(false)
+        expect(fillSelGroup(shadowOf(host)).firstElementChild).toBeTruthy() // fill shape also present
     })
 
     it("selected= on a polygons layer draws a polygon wash (hitLayerByIndex + makeHiElement poly branch)", () => {
@@ -1869,7 +1921,7 @@ describe("coverage gaps: grid-value tooltip, drag-target hover cursor, rects/pol
             layers: [{ id: "polys", kind: "polygons", geometry: [[0, 0, 10, 0, 10, 10, 0, 10]],
                 payloads: [{ i: 0 }], axis: "ax1", events: ["click", "hover"], selected: [0] }],
         })
-        const el = blendSelGroup(shadowOf(host)).firstElementChild as SVGElement // no style.stroke → blend side
+        const el = edgeSelGroup(shadowOf(host)).firstElementChild as SVGElement // no style.stroke → fill+edge split
         expect(el.tagName.toLowerCase()).toBe("polygon")
         expect(el.getAttribute("points")).toBe("0,0 10,0 10,10 0,10")
         expect(el.classList.contains("masque-wash")).toBe(true) // closed kind → wash, not a ring

@@ -46,13 +46,15 @@ export function makeRing(shape: SVGElement, stroke: string | undefined): SVGGEle
     return g
 }
 
-// blend: true → belongs in mount.ts's svg.masque-blend (its own g.hi/g.sel), whose
-// mix-blend-mode lives on the svg element itself, not on this shape — Firefox doesn't reliably
-// blend an element nested inside a second, unblended <svg> (verified live: the shape rendered as
-// a flat, unblended tint there), so the shape returned here is deliberately bare, never wrapped.
+// Which svg(s) a highlight lands in. An explicit hoverstyle stroke, or the selected-open ring,
+// is unblended → plain only. Otherwise a closed shape splits into a brightening fill shape
+// (fill svg) and a darkening stroke shape (edge svg) of identical geometry; an open (seg) shape
+// has no interior, so hover on it is edge-only; a rectfill (grid cell-block union rect) is
+// fill-only, since the ROI box itself already draws that outline.
 export interface HiResult {
-    el: SVGElement
-    blend: boolean
+    fill?: SVGElement
+    edge?: SVGElement
+    plain?: SVGElement
 }
 
 export function makeHiElement(hit: Hit, mode: HiMode = "hover"): HiResult | null {
@@ -81,62 +83,88 @@ export function makeHiElement(hit: Hit, mode: HiMode = "hover"): HiResult | null
     }
     if (!el) return null
     const open = g[0] === "seg"
-    // An explicit hoverstyle stroke routes to svg.masque-plain outright (today's unblended
-    // rules); every other layer (the default) routes to svg.masque-blend instead.
-    const blend = !st.stroke
+    const rectfill = g[0] === "rectfill"
+
+    // Explicit hoverstyle stroke: today's single unblended element in svg.masque-plain, unchanged.
+    if (st.stroke) {
+        if (mode === "selected" && open) return { plain: makeRing(el, st.stroke) }
+        el.classList.add("masque-hi")
+        el.setAttribute("vector-effect", "non-scaling-stroke")
+        setHiStroke(el, st.stroke)
+        if (mode === "hover") {
+            el.setAttribute("stroke-width", "1.5")
+            if (!open) el.classList.add("masque-hover")
+        } else if (rectfill) {
+            el.classList.add("masque-wash", "masque-nostroke")
+        } else {
+            el.classList.add("masque-wash")
+            el.setAttribute("stroke-width", "2")
+        }
+        return { plain: el }
+    }
 
     // Selected open geometry always renders as the unblended ring, in svg.masque-plain, whether
-    // or not this layer would otherwise blend — a bare stroke ring reads fine unblended, and
-    // mount.ts's ring rules never gained a blend variant.
-    if (mode === "selected" && open) return { el: makeRing(el, st.stroke), blend: false }
+    // or not this layer would otherwise split — a bare stroke ring reads fine unblended, and
+    // mount.ts's ring rules never gained a fill/edge variant.
+    if (mode === "selected" && open) return { plain: makeRing(el, undefined) }
 
-    el.classList.add("masque-hi")
-    el.setAttribute("vector-effect", "non-scaling-stroke")
-    setHiStroke(el, st.stroke)
-    if (mode === "hover") {
-        el.setAttribute("stroke-width", "1.5")
-        // The unblended path keeps a seg stroke-only (no fill class, matching its plain ink
-        // stroke); the blend path tints every kind including seg — a <line> has no area, so the
-        // fill is a no-op, but the class still selects the blended stroke colour (mount.ts's
-        // --masque-hi-line-hover) over the plain ink.
-        if (blend || !open) el.classList.add("masque-hover")
-    } else if (g[0] === "rectfill") {
-        // The grid cell-block union rect from an ROI's selects: fill only, no stroke — the ROI
-        // box itself is already drawing that outline, and stroking this rect too doubles it
-        // into two parallel edges that persist after release (see selection.ts's cellRange/grid
-        // branch for why this rect exists at all).
-        el.classList.add("masque-wash", "masque-nostroke")
-    } else {
-        el.classList.add("masque-wash")
-        el.setAttribute("stroke-width", "2")
+    if (rectfill) {
+        // Fill only: the ROI box itself already draws the outline, so an edge shape here would
+        // double it into two parallel edges that persist after release.
+        el.classList.add("masque-hi", "masque-fillshape")
+        return { fill: el }
     }
-    return { el, blend }
+
+    if (open) {
+        // A line has no interior — hover is edge (stroke) only, no fill shape.
+        el.classList.add("masque-hi", "masque-hover")
+        el.setAttribute("vector-effect", "non-scaling-stroke")
+        el.setAttribute("stroke-width", "1.5")
+        return { edge: el }
+    }
+
+    // Closed geometry: two shapes of identical geometry, cloned before either is modified — a
+    // brightening fill (no stroke) and a darkening stroke (no fill), same source colour for
+    // hover and selected, distinguished only by the edge shape's width/darkness.
+    const fillEl = el
+    const edgeEl = el.cloneNode(true) as SVGElement
+    fillEl.classList.add("masque-hi", "masque-fillshape")
+    edgeEl.classList.add("masque-hi")
+    edgeEl.setAttribute("vector-effect", "non-scaling-stroke")
+    if (mode === "hover") {
+        edgeEl.classList.add("masque-hover")
+        edgeEl.setAttribute("stroke-width", "1.5")
+    } else {
+        edgeEl.classList.add("masque-wash")
+        edgeEl.setAttribute("stroke-width", "2")
+    }
+    return { fill: fillEl, edge: edgeEl }
 }
 
 // --- highlight/selection DOM-lifecycle: keyed by OverlayState.hiKey_ / selKeys_ ---
-// Every function below takes BOTH sides (blend_/plain_) since a single hover/selection can land
-// in either, and a redraw or clear must not leave a stale element behind in the side it isn't
-// using this time (e.g. a hover moving off an explicit-stroke mark onto a plain one switches
-// which svg holds the live element).
+// Every function below takes ALL THREE groups (fill_/edge_/plain_) since a single
+// hover/selection can land in one or two of them, and a redraw or clear must not leave a stale
+// element behind in a group it isn't using this time (e.g. a hover moving off an explicit-stroke
+// mark onto a plain one switches which svg(s) hold the live element).
 
 // Fade-out is hover-only (leave / miss). selects-ROI remounts g.sel every drag
 // frame — a leave class there would wash the box-select on every pointer tick.
 export function clearHiImmediate(state: OverlayState, hiGroups: HiGroups): void {
     if (state.hiLeaveTimer_ != null) { clearTimeout(state.hiLeaveTimer_); state.hiLeaveTimer_ = null }
     state.hiKey_ = null
-    for (const hiGroup of [hiGroups.blend_, hiGroups.plain_]) {
+    for (const hiGroup of [hiGroups.fill_, hiGroups.edge_, hiGroups.plain_]) {
         while (hiGroup.firstChild) hiGroup.removeChild(hiGroup.firstChild)
     }
 }
 
 export function clearHi(state: OverlayState, hiGroups: HiGroups, fade = false): void {
-    const cur = hiGroups.blend_.firstChild ?? hiGroups.plain_.firstChild
+    const cur = hiGroups.fill_.firstChild ?? hiGroups.edge_.firstChild ?? hiGroups.plain_.firstChild
     if (!fade || !cur || prefersReducedMotion()) {
         clearHiImmediate(state, hiGroups)
         return
     }
     state.hiKey_ = null
-    for (const hiGroup of [hiGroups.blend_, hiGroups.plain_]) {
+    for (const hiGroup of [hiGroups.fill_, hiGroups.edge_, hiGroups.plain_]) {
         for (const el of [...hiGroup.children]) {
             el.classList.remove("masque-enter")
             el.classList.add("masque-leave")
@@ -145,27 +173,33 @@ export function clearHi(state: OverlayState, hiGroups: HiGroups, fade = false): 
     if (state.hiLeaveTimer_ != null) clearTimeout(state.hiLeaveTimer_)
     state.hiLeaveTimer_ = setTimeout(() => {
         state.hiLeaveTimer_ = null
-        for (const hiGroup of [hiGroups.blend_, hiGroups.plain_]) {
+        for (const hiGroup of [hiGroups.fill_, hiGroups.edge_, hiGroups.plain_]) {
             while (hiGroup.firstChild) hiGroup.removeChild(hiGroup.firstChild)
         }
     }, MOTION_MS)
 }
 
 export function clearSel(selGroups: HiGroups): void {
-    for (const selGroup of [selGroups.blend_, selGroups.plain_]) {
+    for (const selGroup of [selGroups.fill_, selGroups.edge_, selGroups.plain_]) {
         while (selGroup.firstChild) selGroup.removeChild(selGroup.firstChild)
     }
 }
 
+// Hovering an already-selected mark draws no hover chrome at all: both layers are opaque, so a
+// 1.5px hover stroke painting over the 2px selected stroke would thin it, reading as WEAKER, not
+// added emphasis — the selected wash/ring already shows this element. The tooltip is unaffected;
+// callers (hover.ts, keyboard.ts) show it via a separate call.
 export function drawHi(state: OverlayState, hiGroups: HiGroups, hit: Hit): void {
     const key = hitKey(hit)
-    const cur = hiGroups.blend_.firstElementChild ?? hiGroups.plain_.firstElementChild
+    if (state.selKeys_.has(key)) { clearHiImmediate(state, hiGroups); return }
+    const cur = hiGroups.fill_.firstElementChild ?? hiGroups.edge_.firstElementChild ?? hiGroups.plain_.firstElementChild
     if (key === state.hiKey_ && cur && !cur.classList.contains("masque-leave")) return
     clearHiImmediate(state, hiGroups)
     const made = makeHiElement(hit, "hover")
     if (!made) return
-    made.el.classList.add("masque-enter")
-    ;(made.blend ? hiGroups.blend_ : hiGroups.plain_).appendChild(made.el)
+    if (made.fill) { made.fill.classList.add("masque-enter"); hiGroups.fill_.appendChild(made.fill) }
+    if (made.edge) { made.edge.classList.add("masque-enter"); hiGroups.edge_.appendChild(made.edge) }
+    if (made.plain) { made.plain.classList.add("masque-enter"); hiGroups.plain_.appendChild(made.plain) }
     state.hiKey_ = key
 }
 
@@ -177,8 +211,10 @@ export function drawSelection(state: OverlayState, selGroups: HiGroups, hits: Hi
     for (const h of hits) {
         const made = makeHiElement(h, "selected")
         if (!made) continue
-        if (entering.has(hitKey(h))) made.el.classList.add("masque-enter")
-        ;(made.blend ? selGroups.blend_ : selGroups.plain_).appendChild(made.el)
+        const enter = entering.has(hitKey(h))
+        if (made.fill) { if (enter) made.fill.classList.add("masque-enter"); selGroups.fill_.appendChild(made.fill) }
+        if (made.edge) { if (enter) made.edge.classList.add("masque-enter"); selGroups.edge_.appendChild(made.edge) }
+        if (made.plain) { if (enter) made.plain.classList.add("masque-enter"); selGroups.plain_.appendChild(made.plain) }
     }
     state.selKeys_ = next
 }

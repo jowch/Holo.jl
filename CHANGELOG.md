@@ -93,24 +93,33 @@ All notable changes to this project are documented here. The format is based on
   scaled to the rendered image's DPI like `PointInteractable`'s `radius` — e.g. at the common
   2× DPI, 12 image px instead of 8. Pass `tol = 8 / scaling` to keep the old numeric slack, or
   rely on the new default (slightly more forgiving at typical DPI).
-- The hover/selection outline now hugs the mark's own edge and draws a blend-mode tint
-  (`mix-blend-mode: multiply` on a light figure, `screen` on a dark one) in fixed greys
-  derived from the figure background, instead of a fixed steel-teal ring 2px outside it —
-  every plot kind now darkens/lightens in its own hue without Masque resolving the element's
-  colour at all; `colors` no longer feeds the highlight, only the tooltip's accent border
-  (unchanged). Blended highlights live in their own overlay svg (`svg.masque-blend`,
-  `mix-blend-mode` on its root — Firefox only honours the blend mode there, not on nested SVG
-  content); ROI/threshold, the selected-seg ring, and an explicit `hoverstyle`'s highlight live
-  in a second, unblended `svg.masque-plain`; a browser without `mix-blend-mode` falls back to a
-  neutral-ink tint instead. A circle highlight's `r` still equals the geometry `r` exactly (no
-  `r + 2` halo). Hover on a closed shape (circle/rect/poly) still adds a tint fill on top of the
-  stroke, now fill-opacity 1 (was 18%) since the blend mode itself supplies the contrast; hover
-  on an open shape (lines/segments) carries the same tint class/fill but still reads as
-  stroke-only on screen, since a line has no interior area to fill. Selected (wash) uses a
-  stronger grey pair, also fill-opacity 1 (was 35%). `hoverstyle`'s default `stroke` stays
-  `nothing` (the overlay draws the blend tint) instead of the fixed `"#3A6F7C"`; an explicit
-  `stroke` still overrides it verbatim, unblended, and the manifest still omits `style.stroke`
-  unless an interactable sets one.
+- The hover/selection outline now hugs the mark's own edge and draws a SPLIT blend highlight —
+  a brightening fill plus a darkening stroke — instead of a single fixed steel-teal ring 2px
+  outside it: a `color-dodge` fill (`#141414` source; measured across a 10-colour palette as the
+  only fill candidate that never rotated hue more than 8° and never dimmed a mark) plus a
+  `multiply`/`screen` (light/dark figure) edge stroke in fixed greys derived from the figure
+  background. A single darkening layer alone made a highlighted mark read muddy on a light
+  figure, which is why the highlight split into two; `colors` still doesn't feed either layer,
+  only the tooltip's accent border (unchanged). The overlay now mounts THREE sibling top-level
+  svgs instead of two: `svg.masque-fill` (`color-dodge`) and `svg.masque-edge`
+  (`multiply`/`screen`) each draw one identical-geometry half of a closed mark's highlight;
+  `svg.masque-plain` (unblended, was already there) holds ROI/threshold, the selected-seg ring,
+  and an explicit `hoverstyle`'s highlight, unchanged. Firefox only honours `mix-blend-mode` on
+  a top-level svg, not nested SVG content, which is why each blend mode is its own sibling svg.
+  A browser without `mix-blend-mode` falls back to the plain neutral ink instead (fill layer at
+  0.18 opacity, edge layer as the plain ink stroke). A circle highlight's `r` still equals the
+  geometry `r` exactly (no `r + 2` halo) on both shapes. An open shape (lines/segments) draws
+  the edge shape only — no fill shape, since a line has no interior; a `selects`-ROI's grid
+  cell-block union rect (`"rectfill"`) draws the fill shape only, since the ROI box is already
+  its outline. Because the fill is identical between hover and selected states, the edge
+  stroke's width (1.5px hover, 2px selected, both fill-opacity/stroke as before) is what
+  actually distinguishes them — and **hovering a mark that is already selected now draws no
+  highlight at all** (both layers are already opaque from the selected wash; a 1.5px hover
+  stroke over the 2px selected stroke would read as weaker, not stronger). The tooltip and
+  `@bind` still fire on that hit; only the highlight is skipped. `hoverstyle`'s default `stroke`
+  stays `nothing` (the overlay draws the split highlight) instead of the fixed `"#3A6F7C"`; an
+  explicit `stroke` still overrides it verbatim, unblended, in `svg.masque-plain`, and the
+  manifest still omits `style.stroke` unless an interactable sets one.
 - `PointInteractable(ax, ::Makie.Scatter)` now derives the circle radius from the marker's
   drawn extent (≈0.35·`markersize` for the default `:circle`) instead of `markersize / 2`,
   so highlights sit flush on the marker; the overlay's own 4px hit slack keeps clicking as

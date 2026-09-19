@@ -57,30 +57,43 @@ text and the bond payload → it gets a live check on every backend × the kinds
   heatmap/image, barplot, poly, polar, dark-figure scatter, arrows3d, hlines/vlines,
   threshold, ROI, and view-pan. Interaction without visual is unfinished; visual chrome
   without the kind sweep is unfinished. Overlay recipes (locked — cite, do not reopen):
-  highlight is a blend-mode tint, not a mark-derived colour — `colors` (today `scatter!`'s
-  `color=`) no longer touches the highlight at all, only the tooltip accent (below). The shadow
-  root holds two overlay svgs with identical box/viewBox. Every hover/selected highlight without
-  an explicit Julia `hoverstyle` stroke is a BARE shape (no per-element wrapper) inside
-  `svg.masque-blend` (DOM-first) — `mix-blend-mode` (`multiply` on light figures, `screen` on
-  dark, chosen at mount from the figure background) sits on that svg element itself, since
-  Firefox only honours it on a top-level svg, not nested SVG content. Fixed greys: hover
-  fill/stroke `#8c8c8c`/`#555555` (dark figure `#737373`/`#aaaaaa`), fill-opacity 1, 1.5px stroke
-  flush on the mark's own drawn edge (`masque-hi masque-hover` — a `<line>` for seg hover carries
-  the same class and fill too, and reads as stroke-only on screen only because a line has no
-  interior area to fill); selected uses the stronger `#666666`/`#333333` (dark
-  `#999999`/`#cccccc`) pair at 2px, fill-opacity 1 (`masque-hi masque-wash`). The second svg,
-  `svg.masque-plain` (unblended), holds ROI box/handles, the threshold line, the selected-seg
-  ring (2px + 4px @ 0.25, unchanged ink), and hover/selected highlights for a layer with an
-  explicit `hoverstyle` stroke — single element, stroke verbatim + 18%/35% tint in that colour
-  (the pre-blend recipe, unchanged), open shapes staying stroke-only there (no `masque-hover`,
-  `fill: none`); browsers without `mix-blend-mode` fall back to that same neutral-ink tint. A
-  scatter circle's highlight `r` is the marker's DRAWN radius, not `markersize / 2` — flush
-  against the visible disc (default `:circle` marker ≈0.3525×`markersize`; a `Circle`/`Rect`
-  geometry marker draws at `markersize`; anything else falls back to `markersize / 2`); the
-  overlay's own 4px hit slack keeps clicking as forgiving as before. 80–120 ms fade — a plain
-  opacity fade on the highlight shape itself (`masque-enter`/`masque-leave`; the blend lives on
-  the svg root, so a fading child doesn't isolate it); tooltip theme derived from the FIGURE's
-  own background (CSS relative-colour syntax, `--masque-fig-bg`) — not just OS
+  highlight is a split blend — a brightening fill plus a darkening stroke, not a mark-derived
+  colour — `colors` (today `scatter!`'s `color=`) no longer touches the highlight at all, only
+  the tooltip accent (below). The shadow root holds THREE sibling top-level svgs, identical
+  box/viewBox, each with its own `g.hi`/`g.sel`: `svg.masque-fill` (`mix-blend-mode:
+  color-dodge`, both light and dark figures) draws the fill half of a closed mark's
+  hover/selected highlight (`masque-hi masque-fillshape`, computed fill `rgb(20, 20, 20)` /
+  `#141414`, fill-opacity 1, no stroke); `svg.masque-edge` (`multiply` on light figures, `screen`
+  on dark) draws the stroke half (`masque-hi masque-hover` at 1.5px hover, `masque-hi
+  masque-wash` at 2px selected, no fill) — Firefox only honours `mix-blend-mode` on a top-level
+  svg, not nested SVG content, which is why each blend mode gets its own sibling svg instead of
+  a per-element wrapper. Dodge against the near-black `#141414` source was, across a measured
+  10-colour palette, the only fill candidate that never rotated hue more than 8° and never
+  dimmed a mark (`bar_blue` is the limiting case for hue rotation, so the source stays
+  deliberately conservative); a single darkening layer alone made a highlighted mark read muddy
+  on a light figure, which is why the highlight split into two layers at all. Because the fill is
+  identical between hover and selected (same class, same colour, same opacity — fill strength
+  alone is sub-JND), the 1.5px-vs-2px edge-stroke width carries the entire hover-vs-selected
+  distinction. Hovering a mark that is already selected draws no highlight at all — both layers
+  are already opaque from the selected wash, so a 1.5px hover stroke over the 2px selected stroke
+  would read as weaker, not stronger — only the highlight is skipped; the tooltip and `@bind`
+  still fire for that hit. Per geometry: a closed mark (circle/rect/polygon) draws BOTH shapes,
+  identical geometry; an open seg (a line has no interior) draws the edge shape only; a
+  `selects`-ROI's grid cell-block union rect (`"rectfill"` geom tag) draws the fill shape only,
+  since the ROI box itself is already the rect's outline. The third svg, `svg.masque-plain` (no
+  blend), holds ROI box/handles, the threshold line, the selected-open-geometry ring (2px + 4px @
+  0.25, unchanged ink), and hover/selected highlights for a layer with an explicit `hoverstyle`
+  stroke — single element, stroke verbatim + 18%/35% tint in that colour (the pre-split recipe,
+  unchanged), open shapes staying stroke-only there (no `masque-hover`, `fill: none`); browsers
+  without `mix-blend-mode` fall back to the plain neutral ink instead — the fill layer to 0.18
+  opacity, the edge layer to the plain ink stroke. A scatter circle's highlight `r` is the
+  marker's DRAWN radius, not `markersize / 2` — flush against the visible disc (default `:circle`
+  marker ≈0.3525×`markersize`; a `Circle`/`Rect` geometry marker draws at `markersize`; anything
+  else falls back to `markersize / 2`); the overlay's own 4px hit slack keeps clicking as
+  forgiving as before. 80–120 ms fade — a plain opacity fade on each shape itself
+  (`masque-enter`/`masque-leave`; the blend lives on each svg root, so a fading child doesn't
+  isolate it); tooltip theme derived from the FIGURE's own background (CSS relative-colour
+  syntax, `--masque-fig-bg`) — not just OS
   `prefers-color-scheme` (official Pluto has no notebook toggle), which is now only the
   fallback for browsers without relative-colour support — tooltip anchored ABOVE the hovered
   mark (not the cursor) with a 10px gap and the caret on the anchor — flips below on a

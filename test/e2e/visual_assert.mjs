@@ -1,29 +1,33 @@
 // Shared visual-fidelity asserts for kind_sweep.mjs + polish_verify.mjs.
-// Recipe (locked in CLAUDE.md's "Overlay recipes" paragraph — cite, do not reopen):
-// the shadow root holds two overlay svgs with identical box/viewBox. `svg.masque-blend`
-// (DOM-first) carries `mix-blend-mode` (multiply on light figures, screen on dark) on the svg
-// element itself — Firefox only honours the blend mode on a top-level svg, not nested SVG
-// content, so there is no per-element wrapper. Every hover/selected highlight without an
-// explicit Julia `hoverstyle` stroke is a BARE shape inside it: `masque-hi masque-hover` (hover
-// — circle/rect/polygon, or a `line` for seg hover; the fill is inert on a line, so it reads as
-// stroke-only on screen even though the class/fill are the same) or `masque-hi masque-wash`
-// (selected). The shape's fill/stroke are fixed greys (GREY below), fill-opacity 1, stroke-width
-// 1.5 (hover) / 2 (selected). `svg.masque-plain` (after it, unblended) holds ROI/threshold, the
-// selected-seg ring (`g.sel > g > line×2`, unchanged ink), and hover/selected highlights for a
-// layer with an explicit `hoverstyle` stroke — single element, stroke verbatim, 18%/35% tint in
-// that colour (the pre-blend recipe, unchanged), open shapes staying stroke-only there (no
-// `masque-hover`, `fill: none`). Remount fade is a plain opacity fade on the shape itself
-// (`masque-enter`/`masque-leave`, no wrapper to isolate), 80-120ms.
+// Recipe (locked in CLAUDE.md's "Overlay recipes" paragraph — cite, do not reopen): the shadow
+// root holds THREE sibling top-level svgs, identical box/viewBox, in DOM order `svg.masque-fill`
+// (`mix-blend-mode: color-dodge`, both light and dark figures — a fixed `#141414` source
+// brightens without rotating hue, measured across a 10-colour palette), `svg.masque-edge`
+// (`multiply` on light figures, `screen` on dark — this is the darkening half, so the state
+// distinction — hover 1.5px vs. selected 2px — lives here), `svg.masque-plain` (no blend).
+// Firefox only honours `mix-blend-mode` on a top-level svg, not nested SVG content, which is why
+// there is no single wrapped svg with per-element blend classes. A closed mark (circle/rect/
+// polygon) hover or selected highlight is TWO shapes, identical geometry, one in each of
+// `masque-fill`/`masque-edge` (`masque-hi masque-fillshape` / `masque-hi masque-hover` or
+// `masque-wash`); an open seg (line has no interior) is edge-only; a `rectfill` (selects-ROI
+// grid cell-block union) is fill-only. `svg.masque-plain` holds ROI/threshold, the selected-open
+// ring (unchanged ink), and a layer with an explicit Julia `hoverstyle` stroke — single element,
+// unblended, verbatim colour + 18%/35% tint (the pre-split recipe). Hovering a mark that is
+// already selected draws no highlight at all (both layers are already opaque from the wash; a
+// 1.5px hover stroke over a 2px selected stroke would read as weaker, not stronger) — the
+// tooltip and `@bind` still work for that hit. Remount fade is a plain opacity fade on each
+// shape (`masque-enter`/`masque-leave`, no wrapper to isolate), 80-120ms.
 
 export const ALERT_RED = "#ff3b30";
 export const TEAL = "#3A6F7C";
 
-// Fixed greys the blend-tint recipe reads from host custom properties — see mount.ts. No mark
-// colour is involved: every kind darkens (light figure, multiply) or lightens (dark figure,
-// screen) in its own hue without Masque knowing the element's colour.
+// The fill layer's source colour (`color-dodge` against this near-black brightens without
+// rotating hue — see mount.ts). The edge layer keeps the old fixed-grey darkening stroke pair;
+// only the fill side is new (there is no more grey *fill*, dodge replaced it).
+export const DODGE_FILL = "rgb(20, 20, 20)";
 export const GREY = {
-  light: { hoverFill: "rgb(140, 140, 140)", hoverStroke: "rgb(85, 85, 85)", washFill: "rgb(102, 102, 102)", washStroke: "rgb(51, 51, 51)" },
-  dark: { hoverFill: "rgb(115, 115, 115)", hoverStroke: "rgb(170, 170, 170)", washFill: "rgb(153, 153, 153)", washStroke: "rgb(204, 204, 204)" },
+  light: { hoverStroke: "rgb(85, 85, 85)", washStroke: "rgb(51, 51, 51)" },
+  dark: { hoverStroke: "rgb(170, 170, 170)", washStroke: "rgb(204, 204, 204)" },
 };
 
 // getComputedStyle serializes a colour back out in whatever functional notation the browser
@@ -63,12 +67,12 @@ export function assertNoAlertRed(blob, where) {
 }
 
 // The old fixed steel-teal ring #3A6F7C is retired — every highlight now either draws the
-// fixed-grey blend tint (GREY above) or, for an explicit `hoverstyle`, the caller's own verbatim
-// colour, so this literal must never appear in the overlay.
+// dodge fill / fixed-grey edge stroke, or, for an explicit `hoverstyle`, the caller's own
+// verbatim colour, so this literal must never appear in the overlay.
 export function assertNoTeal(blob, where) {
   const s = typeof blob === "string" ? blob : JSON.stringify(blob);
   if (/#3a6f7c|rgb\(\s*58[\s,]+111[\s,]+124\s*\)/i.test(s)) {
-    throw new Error(`${where}: steel-teal ${TEAL} leaked (highlight colour must be the blend-tint grey or an explicit hoverstyle, not a fixed literal)`);
+    throw new Error(`${where}: steel-teal ${TEAL} leaked (highlight must be the dodge fill / grey edge, or an explicit hoverstyle, not a fixed literal)`);
   }
 }
 
@@ -80,41 +84,59 @@ function realColor(c) {
   return !!c && c !== "none" && c !== "rgba(0, 0, 0, 0)" && c !== "transparent";
 }
 
-// `wash`/`ring`/`hi` are captured in-page as { className, stroke, fill, fillOpacity (all
-// getComputedStyle), width, opacity (stroke-width/stroke-opacity attributes), blend
-// (getComputedStyle(svg.masque-blend).mixBlendMode when the shape lives in that svg, or null
-// when it's in `svg.masque-plain` instead — the explicit-`hoverstyle` case), … geometry }.
-// `wantDark` selects the figure-relative grey pair (GREY.dark for a dark figure, GREY.light
-// otherwise) — irrelevant when `blend` is null.
+// Every capture site (kind_sweep.mjs's `inspect`/`dispatchAt`, polish_verify.mjs's `inspect`/
+// `hoverAt`) hands assertWash/assertHoverRecipe an object `{ fill, edge, plain }`: `fill` is the
+// shape (if any) found in `svg.masque-fill`'s g.sel/g.hi, `edge` the one in `svg.masque-edge`,
+// `plain` the one in `svg.masque-plain` (an explicit-`hoverstyle` layer, or — only for
+// assertRing below — a selected-open-geometry ring). Each captured shape is `{ layer, tag,
+// className, stroke, fill, fillOpacity (all getComputedStyle), width, opacity (stroke-width/
+// stroke-opacity attributes), blend (getComputedStyle(svg).mixBlendMode, null for `plain`), …
+// geometry }`. `wantDark` selects the figure-relative grey edge stroke (GREY.dark on a dark
+// figure, GREY.light otherwise) — irrelevant for the `plain` (explicit-hoverstyle) path.
 export function assertWash(wash, where, wantDark) {
-  if (!wash || !hasClass(wash.className, "masque-hi") || !hasClass(wash.className, "masque-wash")) {
-    throw new Error(`${where}: wash element missing masque-hi/masque-wash class ${JSON.stringify(wash)}`);
+  const { fill, edge, plain } = wash || {};
+  if (plain && !fill && !edge) {
+    // Explicit `hoverstyle` stroke: unblended, single element, verbatim colour + 35% tint (the
+    // pre-split recipe, unchanged).
+    if (!hasClass(plain.className, "masque-hi") || !hasClass(plain.className, "masque-wash")) {
+      throw new Error(`${where}: wash element missing masque-hi/masque-wash class ${JSON.stringify(plain)}`);
+    }
+    if (plain.width !== "2") throw new Error(`${where}: wash recipe ${JSON.stringify(plain)}`);
+    if (!realColor(plain.fill) || plain.fill !== plain.stroke) {
+      throw new Error(`${where}: wash fill/stroke mismatch ${JSON.stringify(plain)}`);
+    }
+    if (String(plain.fillOpacity) !== "0.35") {
+      throw new Error(`${where}: wash fill-opacity ${plain.fillOpacity} (want 0.35)`);
+    }
+    assertNoAlertRed(plain, where);
+    assertNoTeal(plain, where);
+    return;
   }
-  if (wash.width !== "2") throw new Error(`${where}: wash recipe ${JSON.stringify(wash)}`);
-  if (wash.blend) {
-    if (wash.blend !== (wantDark ? "screen" : "multiply")) {
-      throw new Error(`${where}: wash blend mode ${wash.blend} (want ${wantDark ? "screen" : "multiply"})`);
-    }
-    const g = wantDark ? GREY.dark : GREY.light;
-    if (wash.fill !== g.washFill) throw new Error(`${where}: wash fill ${wash.fill} (want ${g.washFill})`);
-    if (wash.stroke !== g.washStroke) throw new Error(`${where}: wash stroke ${wash.stroke} (want ${g.washStroke})`);
-    if (String(wash.fillOpacity) !== "1") {
-      throw new Error(`${where}: wash fill-opacity ${wash.fillOpacity} (want 1)`);
-    }
-  } else {
-    // Explicit `hoverstyle` stroke: lives in svg.masque-plain, unblended, verbatim colour + 35%
-    // tint (unchanged).
-    if (!realColor(wash.fill) || wash.fill !== wash.stroke) {
-      throw new Error(`${where}: wash fill/stroke mismatch ${JSON.stringify(wash)}`);
-    }
-    if (String(wash.fillOpacity) !== "0.35") {
-      throw new Error(`${where}: wash fill-opacity ${wash.fillOpacity} (want 0.35)`);
-    }
+  if (!fill || !edge) throw new Error(`${where}: wash missing fill/edge pair ${JSON.stringify(wash)}`);
+  if (!hasClass(fill.className, "masque-hi") || !hasClass(fill.className, "masque-fillshape")) {
+    throw new Error(`${where}: wash fill shape missing masque-hi/masque-fillshape class ${JSON.stringify(fill)}`);
+  }
+  if (fill.fill !== DODGE_FILL) throw new Error(`${where}: wash fill colour ${fill.fill} (want ${DODGE_FILL})`);
+  if (String(fill.fillOpacity) !== "1") throw new Error(`${where}: wash fill-opacity ${fill.fillOpacity} (want 1)`);
+  if (fill.stroke !== "none") throw new Error(`${where}: wash fill shape stroke ${fill.stroke} (want none)`);
+  if (fill.blend !== "color-dodge") throw new Error(`${where}: wash fill blend ${fill.blend} (want color-dodge)`);
+
+  if (!hasClass(edge.className, "masque-hi") || !hasClass(edge.className, "masque-wash")) {
+    throw new Error(`${where}: wash edge shape missing masque-hi/masque-wash class ${JSON.stringify(edge)}`);
+  }
+  if (edge.width !== "2") throw new Error(`${where}: wash edge width ${edge.width} (want 2)`);
+  const g = wantDark ? GREY.dark : GREY.light;
+  if (edge.stroke !== g.washStroke) throw new Error(`${where}: wash edge stroke ${edge.stroke} (want ${g.washStroke})`);
+  if (edge.fill !== "none") throw new Error(`${where}: wash edge fill ${edge.fill} (want none)`);
+  if (edge.blend !== (wantDark ? "screen" : "multiply")) {
+    throw new Error(`${where}: wash edge blend ${edge.blend} (want ${wantDark ? "screen" : "multiply"})`);
   }
   assertNoAlertRed(wash, where);
   assertNoTeal(wash, where);
 }
 
+// Selected-open-geometry ring: unblended, lives only in `svg.masque-plain`, unchanged by the
+// fill/edge split.
 export function assertRing(ring, where) {
   if (!ring || ring.lines.length !== 2) throw new Error(`${where}: ring ${JSON.stringify(ring)}`);
   if (!ring.lines.every((l) => hasClass(l.className, "masque-hi"))) {
@@ -134,67 +156,91 @@ export function assertRing(ring, where) {
   assertNoTeal(ring, where);
 }
 
-// `closed` distinguishes the two UNBLENDED hover variants (explicit `hoverstyle`, `hi.blend`
-// null, `svg.masque-plain`): a closed shape (circle/rect/poly) gets a tint fill on top of the
-// stroke (masque-hover); an open shape (seg — lines/segments) stays stroke-only, no tint class.
-// In the default BLENDED path (`hi.blend` set, `svg.masque-blend`) every hover — closed or an
-// open seg's `<line>` — carries `masque-hover` and the same fixed-grey fill/stroke; a `<line>`
-// has no interior area, so its fill is inert and it still reads as stroke-only on screen even
-// though the DOM/CSS state is identical to a closed shape's. If `closed` is omitted, it's
-// inferred from `hi.tag` (only a `line` element is open) — pass it explicitly when the caller
-// didn't capture `tag`. `wantDark` selects GREY.dark/GREY.light; irrelevant when `hi.blend` is
-// null.
+// `closed` distinguishes a closed mark (circle/rect/poly — fill shape present, edge shape gets
+// the `masque-hover` tint class too even though its own fill is inert) from an open seg (line —
+// edge-only, no fill shape at all) in the default split-blend path, and the two UNBLENDED
+// `hoverstyle` variants (`hi.plain` set, `hi.fill`/`hi.edge` both absent) the same way the old
+// single-svg recipe did. If `closed` is omitted it's inferred from whichever shape is present
+// (a fill shape or a non-`line` plain tag means closed) — pass it explicitly when the caller
+// hovered an open seg (no fill shape to infer from). `wantDark` selects GREY.dark/GREY.light for
+// the edge stroke; irrelevant on the `plain` path.
 export function assertHoverRecipe(hi, where, closed, wantDark) {
-  if (!hi) throw new Error(`${where}: missing hover stroke`);
-  if (closed === undefined) closed = hi.tag !== "line";
-  if (!hasClass(hi.className, "masque-hi")) {
-    throw new Error(`${where}: hover element missing masque-hi class ${JSON.stringify(hi)}`);
+  const { fill, edge, plain } = hi || {};
+  if (plain && !fill && !edge) {
+    if (closed === undefined) closed = plain.tag !== "line";
+    if (!hasClass(plain.className, "masque-hi")) {
+      throw new Error(`${where}: hover element missing masque-hi class ${JSON.stringify(plain)}`);
+    }
+    if (plain.width !== "1.5" || plain.opacity !== null) {
+      throw new Error(`${where}: hover recipe ${JSON.stringify(plain)}`);
+    }
+    if (!realColor(plain.stroke)) throw new Error(`${where}: hover stroke not resolved ${JSON.stringify(plain)}`);
+    if (closed) {
+      // Explicit `hoverstyle` stroke, closed shape: unblended, verbatim colour + 18% tint.
+      if (!hasClass(plain.className, "masque-hover")) {
+        throw new Error(`${where}: closed hover missing masque-hover tint class ${JSON.stringify(plain)}`);
+      }
+      if (!realColor(plain.fill) || plain.fill !== plain.stroke) {
+        throw new Error(`${where}: hover tint fill/stroke mismatch ${JSON.stringify(plain)}`);
+      }
+      if (String(plain.fillOpacity) !== "0.18") {
+        throw new Error(`${where}: hover fill-opacity ${plain.fillOpacity} (want 0.18)`);
+      }
+    } else {
+      // Explicit `hoverstyle` stroke, open seg: unblended, stroke-only, no tint class.
+      if (hasClass(plain.className, "masque-hover")) {
+        throw new Error(`${where}: open hover unexpectedly has masque-hover tint class ${JSON.stringify(plain)}`);
+      }
+      if (plain.fill !== "none") throw new Error(`${where}: open hover fill ${plain.fill} (want none, stroke-only)`);
+    }
+    assertNoAlertRed(plain, where);
+    assertNoTeal(plain, where);
+    return;
   }
-  if (hi.width !== "1.5" || hi.opacity !== null) {
-    throw new Error(`${where}: hover recipe ${JSON.stringify(hi)}`);
+
+  if (!edge) throw new Error(`${where}: missing hover edge stroke ${JSON.stringify(hi)}`);
+  if (closed === undefined) closed = !!fill;
+  if (closed && !fill) throw new Error(`${where}: closed hover missing fill shape ${JSON.stringify(hi)}`);
+  if (!closed && fill) throw new Error(`${where}: open hover unexpectedly has a fill shape ${JSON.stringify(hi)}`);
+
+  if (!hasClass(edge.className, "masque-hi") || !hasClass(edge.className, "masque-hover")) {
+    throw new Error(`${where}: hover edge missing masque-hi/masque-hover class ${JSON.stringify(edge)}`);
   }
-  if (!realColor(hi.stroke)) {
-    throw new Error(`${where}: hover stroke not resolved ${JSON.stringify(hi)}`);
+  if (edge.width !== "1.5" || edge.opacity !== null) {
+    throw new Error(`${where}: hover edge recipe ${JSON.stringify(edge)}`);
   }
-  if (hi.blend) {
-    if (hi.blend !== (wantDark ? "screen" : "multiply")) {
-      throw new Error(`${where}: hover blend mode ${hi.blend} (want ${wantDark ? "screen" : "multiply"})`);
+  if (!realColor(edge.stroke)) throw new Error(`${where}: hover edge stroke not resolved ${JSON.stringify(edge)}`);
+  const g = wantDark ? GREY.dark : GREY.light;
+  if (edge.stroke !== g.hoverStroke) throw new Error(`${where}: hover edge stroke ${edge.stroke} (want ${g.hoverStroke})`);
+  if (edge.fill !== "none") throw new Error(`${where}: hover edge fill ${edge.fill} (want none)`);
+  if (edge.blend !== (wantDark ? "screen" : "multiply")) {
+    throw new Error(`${where}: hover edge blend ${edge.blend} (want ${wantDark ? "screen" : "multiply"})`);
+  }
+  if (closed) {
+    if (!hasClass(fill.className, "masque-hi") || !hasClass(fill.className, "masque-fillshape")) {
+      throw new Error(`${where}: hover fill missing masque-hi/masque-fillshape class ${JSON.stringify(fill)}`);
     }
-    if (!hasClass(hi.className, "masque-hover")) {
-      throw new Error(`${where}: hover missing masque-hover tint class ${JSON.stringify(hi)}`);
-    }
-    const g = wantDark ? GREY.dark : GREY.light;
-    if (hi.fill !== g.hoverFill) throw new Error(`${where}: hover fill ${hi.fill} (want ${g.hoverFill})`);
-    if (hi.stroke !== g.hoverStroke) throw new Error(`${where}: hover stroke ${hi.stroke} (want ${g.hoverStroke})`);
-    if (String(hi.fillOpacity) !== "1") {
-      throw new Error(`${where}: hover fill-opacity ${hi.fillOpacity} (want 1)`);
-    }
-  } else if (closed) {
-    // Explicit `hoverstyle` stroke, closed shape: unblended, verbatim colour + 18% tint (unchanged).
-    if (!hasClass(hi.className, "masque-hover")) {
-      throw new Error(`${where}: closed hover missing masque-hover tint class ${JSON.stringify(hi)}`);
-    }
-    if (!realColor(hi.fill) || hi.fill !== hi.stroke) {
-      throw new Error(`${where}: hover tint fill/stroke mismatch ${JSON.stringify(hi)}`);
-    }
-    if (String(hi.fillOpacity) !== "0.18") {
-      throw new Error(`${where}: hover fill-opacity ${hi.fillOpacity} (want 0.18)`);
-    }
-  } else {
-    // Explicit `hoverstyle` stroke, open seg: unblended, stroke-only, no tint class.
-    if (hasClass(hi.className, "masque-hover")) {
-      throw new Error(`${where}: open hover unexpectedly has masque-hover tint class ${JSON.stringify(hi)}`);
-    }
-    if (hi.fill !== "none") {
-      throw new Error(`${where}: open hover fill ${hi.fill} (want none, stroke-only)`);
-    }
+    if (fill.fill !== DODGE_FILL) throw new Error(`${where}: hover fill colour ${fill.fill} (want ${DODGE_FILL})`);
+    if (String(fill.fillOpacity) !== "1") throw new Error(`${where}: hover fill-opacity ${fill.fillOpacity} (want 1)`);
+    if (fill.stroke !== "none") throw new Error(`${where}: hover fill stroke ${fill.stroke} (want none)`);
+    if (fill.blend !== "color-dodge") throw new Error(`${where}: hover fill blend ${fill.blend} (want color-dodge)`);
   }
   assertNoAlertRed(hi, where);
   assertNoTeal(hi, where);
 }
 
-// Circle highlight geometry: r must equal the underlying geometry r exactly (no more r+2 halo),
-// for both hover and selected circles.
+// Hovering a mark that is already selected must NOT draw a hover highlight (both layers already
+// carry the opaque selected wash — see the module comment). The tooltip and `@bind` still fire;
+// only this is skipped.
+export function assertNoHighlight(hi, where) {
+  if (hi?.fill || hi?.edge) {
+    throw new Error(`${where}: highlight drawn on an already-selected mark ${JSON.stringify(hi)}`);
+  }
+}
+
+// Circle highlight geometry: r must equal the underlying geometry r exactly (no more r+2 halo).
+// Call once per shape present (a closed mark's hover/selected draws it into BOTH the fill and
+// edge layers, identical geometry — callers check both).
 export function assertCircleR(actualR, geomR, where) {
   if (String(Number(actualR)) !== String(Number(geomR))) {
     throw new Error(`${where}: circle r=${actualR} geom r=${geomR} (want equal, no halo)`);
@@ -265,14 +311,15 @@ export async function assertTooltipColorScheme(page, sample) {
   await page.emulateMedia({ colorScheme: "light" });
 }
 
-// Tint-applied (blend darkens/lightens the mark itself, screenshot-verified): mean luminance
-// (0-255) of a small page.screenshot() clip centred on the mark, taken before vs. after the
-// hover blend-tint applies. A light figure must get darker (drop), a dark figure lighter
-// (rise) — by at least `minDelta`, kept loose since exact grey/blend math varies by figure and
-// GPU/driver AA. This is what replaced the old mark-derived-ink lightness check: the highlight
-// no longer reads the mark's colour at all, so there is nothing per-element left to compare —
-// only whether the blend visibly tinted the pixels in the right direction. See PNG.sync.read
-// (pngjs, already a devDependency here) for the buffer -> RGBA decode.
+// Tint-applied (dodge fill brightens the mark itself, screenshot-verified): mean luminance
+// (0-255) of a small page.screenshot() clip centred INSIDE the mark (a small box well within the
+// drawn edge, not overlapping the rim — the rim is the darkening edge stroke, sampling across it
+// would cancel the fill-layer reading), taken before vs. after the hover highlight applies.
+// `color-dodge` against the near-black fill source can only raise luminance, so both a light and
+// a dark figure are expected to get BRIGHTER on hover — this is what replaced the old
+// darkens-on-light/lightens-on-dark check when the highlight split into a brightening fill and a
+// darkening stroke. See PNG.sync.read (pngjs, already a devDependency here) for the buffer -> RGBA
+// decode.
 export function meanLuminance(png) {
   let sum = 0;
   const n = png.width * png.height;
@@ -282,13 +329,12 @@ export function meanLuminance(png) {
   return sum / n;
 }
 
-export function assertTintApplied(lumBefore, lumAfter, wantDark, where, minDelta = 4) {
+export function assertTintApplied(lumBefore, lumAfter, where, minDelta = 4) {
   const delta = lumAfter - lumBefore;
-  const ok = wantDark ? delta >= minDelta : delta <= -minDelta;
-  if (!ok) {
+  if (delta < minDelta) {
     throw new Error(
       `${where}: luminance before=${lumBefore.toFixed(1)} after=${lumAfter.toFixed(1)} delta=${delta.toFixed(1)} ` +
-      `(want ${wantDark ? `>= +${minDelta}` : `<= -${minDelta}`})`,
+      `(want >= +${minDelta} — the dodge fill brightens the interior on every figure)`,
     );
   }
 }

@@ -40,15 +40,18 @@ export const cssAnchor = (base: HTMLElement, manifest: Manifest, a: Anchor): Anc
 // left unmangled: `.kind` is also how HitLayer's own boundary discriminant is spelled, and
 // keeping the two textually identical avoids having to thread that distinction through every
 // `.kind` read in bond.ts/hover.ts for a saving of a few bytes.
-// The overlay's two coordinate-identical top-level <svg>s (mount.ts): masque-blend carries
-// mix-blend-mode on itself (highlights with no explicit hoverstyle stroke); masque-plain is
-// everything that must never blend — ROI rect/handles, threshold lines, explicit-stroke
-// highlights, the selected-open-geometry ring — and paints ON TOP of masque-blend (DOM order),
-// so a wash never visually covers the ROI box outline it's drawn under. Each svg has its own
-// g.hi/g.sel; highlight.ts's drawHi/drawSelection/clearHi/clearSel take one of these per hi/sel
-// role and route each element into whichever side highlight.ts's makeHiElement picked.
+// The overlay's three coordinate-identical top-level <svg>s (mount.ts), in DOM/paint order:
+// masque-fill (mix-blend-mode: color-dodge, brightens — FILL-only shapes), masque-edge
+// (mix-blend-mode: multiply/screen, darkens — STROKE-only shapes), masque-plain (no blend —
+// ROI rect/handles, threshold lines, explicit-hoverstyle highlights, the selected-open-geometry
+// ring). Splitting fill and edge into separate svgs (not one svg holding both) is required, not
+// stylistic: mix-blend-mode has to live on the svg ELEMENT, one mode per element, and a closed
+// hover/selection needs both a brightening fill and a darkening stroke at once. Each svg has its
+// own g.hi/g.sel; highlight.ts's drawHi/drawSelection/clearHi/clearSel take one of these per
+// hi/sel role and route each element into whichever side(s) highlight.ts's makeHiElement picked.
 export interface HiGroups {
-    blend_: SVGGElement
+    fill_: SVGGElement
+    edge_: SVGGElement
     plain_: SVGGElement
 }
 

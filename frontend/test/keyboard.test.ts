@@ -39,10 +39,11 @@ const down = (surface: HTMLElement, key: string): KeyboardEvent => {
 // overlay.test.ts's identical helper.
 const flushFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()))
 
-// No layer in this file's manifest sets an explicit style.stroke, so every highlight lands in
-// svg.masque-blend's g.hi (mount.ts) as a bare shape — svg.masque-plain's own g.hi stays empty
-// throughout, and since svg.masque-blend is first in DOM order, plain ".hi > *" always finds the
-// blend side's live child without needing to disambiguate between the two svgs.
+// No layer in this file's manifest sets an explicit style.stroke, so every highlight lands as
+// bare shapes in svg.masque-fill's/svg.masque-edge's own g.hi (mount.ts) — svg.masque-plain's
+// g.hi stays empty throughout. A closed hit (this file's circles/rects) draws one shape in each
+// of fill and edge, so plain ".hi > *" (which matches across all three svgs) finds 2 elements —
+// still exactly one visual ring, no disambiguation between svgs needed.
 describe("keyboard navigation", () => {
     it("ignores keys when the surface isn't focused", () => {
         const { surface } = setup(manifest)
@@ -161,12 +162,31 @@ describe("keyboard navigation", () => {
         const { surface, shadow } = setup(manifest)
         surface.focus()
         down(surface, "ArrowRight") // focus a[0]
-        // hover a different element (a[1]): image (300,100) -> client (150,50)
+        // hover a different element (a[1]): image (300,100) -> client (150,50). Closed geometry
+        // with no style.stroke splits into a fill shape and an edge shape — 2 elements, one ring.
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 150, clientY: 50, bubbles: true }))
-        expect(shadow.querySelectorAll(".hi > *").length).toBe(1)
+        expect(shadow.querySelectorAll(".hi > *").length).toBe(2)
         // move the mouse off any element — the focus ring (still a[0]) must reappear, not vanish
         surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 5, clientY: 5, bubbles: true }))
-        expect(shadow.querySelectorAll(".hi > *").length).toBe(1)
+        expect(shadow.querySelectorAll(".hi > *").length).toBe(2)
+    })
+
+    it("keyboard-focusing an already-selected element shows its tooltip with no extra hover ring", () => {
+        const selManifest: Manifest = {
+            width: 1200, height: 800, scaling: 2, transforms: {},
+            layers: [
+                { id: "a", kind: "circles", geometry: [100, 100, 10, 300, 100, 10], payloads: [{ v: 1 }, { v: 2 }],
+                    axis: "ax1", events: ["click", "hover"], label: "Scatter", selected: [0] },
+            ],
+        }
+        const { surface, shadow } = setup(selManifest)
+        surface.focus()
+        down(surface, "ArrowRight") // focus a[0], the selected element
+        // drawHi (highlight.ts) skips a hover/focus ring for a key already in selKeys_ — only
+        // the pre-existing selected wash should be in g.hi/g.sel, nothing drawn into g.hi.
+        expect(shadow.querySelectorAll("g.hi > *").length).toBe(0)
+        const tip = shadow.querySelector(".masque-tip") as HTMLElement
+        expect(tip.classList.contains("show")).toBe(true)
     })
 
     it("a pointer miss restores BOTH the ring and the tooltip content of the keyboard-focused element", async () => {
