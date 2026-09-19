@@ -30,21 +30,16 @@ explicit constructors for every primitive; `Axis`, `Axis3`, and `PolarAxis` (dis
 backends; tooltips (`masque"…"` templates, auto table, figure-aware theme, mark-anchored
 placement); selection round-trip and re-highlight; box-select via a `selects`-ROI; threshold
 and ROI drags; drag-to-pan/rotate and slider-driven view changes through `@bind` re-render;
-keyboard navigation and screen-reader announcements; the `:cairo` (PNG) and `:webgl` (live
-canvas) backends behind one contract; a Documenter site with static notebook exports; and eight
-CI jobs covering Julia on two versions, the no-backend error path, the WGLMakie extension with
-its own real-browser end-to-end check, a second through-Pluto bind end-to-end, every example
-notebook, the frontend, Runic, and an advisory live kind sweep.
+keyboard navigation and screen-reader announcements; the split-blend highlight (#93: a
+brightening fill plus a darkening stroke, not a mark-derived colour, with `scatter!`'s drawn
+radius replacing `markersize/2`); the `:cairo` (PNG) and `:webgl` (live canvas) backends behind
+one contract; a Documenter site with static notebook exports; and eight CI jobs covering Julia
+on two versions, the no-backend error path, the WGLMakie extension with its own real-browser
+end-to-end check, a second through-Pluto bind end-to-end, every example notebook, the frontend,
+Runic, and an advisory live kind sweep.
 
 ## In flight
 
-- **#93 Split blend highlight** (draft): replaces the fixed `#3A6F7C` ring drawn outside the
-  mark with a highlight flush on the mark, built from blend modes rather than from the mark's
-  colour, so it works for every kind without Masque resolving a colour at all. The fill
-  brightens with `color-dodge` and the stroke darkens with `multiply`, or `screen` on a dark
-  figure. A resolved `colors` now feeds only the tooltip accent. Also ships the drawn radius
-  for `scatter!` instead of `markersize/2`. If it lands, the locked recipe text in `CLAUDE.md`
-  and `live-interaction-checklist.md` changes with it.
 - **#49 Registration prep** (draft, stale): superseded rather than merged. TagBot, the
   `Base64` compat bound and the README install line reached `main` by other routes, but its
   `test/registry_readiness.jl` was deliberately dropped in #55, its `docs/` paths moved under
@@ -120,7 +115,7 @@ canvas-identity strategy keeps projection Julia-authored.
   overlay is displayed at `width:100%`, so an image-pixel handle grows and shrinks with the
   figure instead of staying a constant size on screen. A client-side constant in CSS pixels is
   both simpler and more correct. The eight-handle recipe is written into `CLAUDE.md` and the
-  live checklist as locked, so both change with it, the same way #93 moves the highlight
+  live checklist as locked, so both change with it, the same way #93 moved the highlight
   recipe.
 - **The browser's focus outline boxes the whole figure on a heatmap.** The overlay surface is
   a focus stop, and the default `:focus-visible` outline is suppressed only once Masque draws
@@ -265,11 +260,12 @@ tick it and update the docs page (#90) whenever `_plotbase` grows a branch.
     recorded, and a reader hovers the doc page itself.
   - **Recorded GIFs** for anything a kernel has to answer: the `@bind` round-trip, selection,
     threshold and ROI drags, view pan and rotate. A static export cannot show these.
-  - Open: recorded media rots when overlay chrome changes, and #93 is in flight and changes
-    the highlight recipe right now, which would date every GIF showing a hover or a selection.
-    The harness makes re-recording cheap but not free, since it needs a live Pluto plus
-    `ffmpeg` and is a manual run today. Decide how many scenarios are worth that upkeep before
-    recording a set of them.
+  - Open: recorded media rots when overlay chrome changes, and #93 landed, changing the
+    highlight recipe — every existing GIF showing a hover or a selection, including the one
+    #80 shipped, is dated now, not at some future point. The harness makes re-recording cheap
+    but not free, since it needs a live Pluto plus `ffmpeg` and is a manual run today. Decide
+    how many of the dated scenarios are worth re-recording now, and how many are worth keeping
+    current going forward.
 - **#90 Supported-recipes page**: one lookup table (recipe, layer id, kind, hit unit, Axis /
   Axis3 / PolarAxis) sourced from `_plotbase`, linked from Home, Getting started, and
   Interactables. Kept in lockstep with #91.
@@ -423,7 +419,7 @@ A proposed sequence, not a decided one. Only the dependency edges are real: #92 
 #85 wants #83 and #84, #86 is not reconsidered until #84 and #85 exist, and registration wants
 the API to have stopped moving.
 
-1. Land or park #93, the remaining in-flight PR; resolve #49.
+1. Resolve #49.
 2. Pre-registration revisions, including new work wanted in 0.1.0. Self-contained and cheap:
    #83, #88, #89, #81, #90, keyboard drag nudging, and the composite-recipe child walk.
 3. The remount path (#84 hold, then #85 preview). Both backends, live-verified on view-pan.
