@@ -317,6 +317,55 @@ try {
     return page.screenshot({ clip: { x: pt.x - size / 2, y: pt.y - size / 2, width: size, height: size } });
   };
 
+  // A HitLayer's `colors` manifest field is a plain "rgb(r,g,b)" string when every element
+  // shares one resolvable colour (scatter/scatter_dark's `color=`, and a legend link target with
+  // a resolvable colour) — parse it to the luminance the mark's own interior must read at, before
+  // any hover tint. A `colors` palette dict (per-index categorical) or an absent field (barplot,
+  // poly, heatmap today) isn't parsed here; callers treat a null return as "no expectation".
+  const rawColorLuminance = (colors) => {
+    if (typeof colors !== "string") return null;
+    const m = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(colors);
+    if (!m) return null;
+    return 0.2126 * Number(m[1]) + 0.7152 * Number(m[2]) + 0.0722 * Number(m[3]);
+  };
+  const RAW_COLOR_TOLERANCE = 20; // margin for AA/rim bleed inside the small clip box, tight enough to catch a stale/blank frame
+
+  // A WGL <canvas>'s compositor frame isn't guaranteed fresh the first time a host is scrolled
+  // into view for a page.screenshot() clip (Cairo's baked <img> has no such gap) — seen in CI as
+  // a `tint-applied` false negative: the very first clipShot() on a given host (always the
+  // "before" sample of a case with no earlier screenshot-based check on it, e.g. a legend link
+  // target reached only after a long scroll) returned a stale/blank frame that stayed constant
+  // across repeats — a plain "retry until two reads agree" loop would exit on that SAME wrong
+  // reading, since a stuck frame is trivially self-consistent. When `expectLum` is available
+  // (from rawColorLuminance), retry until the reading actually matches it instead; only fall back
+  // to inter-frame stability (no expectation to check against) when it isn't.
+  const stableClipShot = async (key, ix, iy, { size = 8, retries = 6, tol = 1.5, expectLum = null } = {}) => {
+    let prevLum = null, buf = null;
+    for (let i = 0; i < retries; i++) {
+      buf = await clipShot(key, ix, iy, size);
+      const lum = meanLuminance(PNG.sync.read(buf));
+      if (expectLum !== null) {
+        if (Math.abs(lum - expectLum) <= RAW_COLOR_TOLERANCE) return buf;
+      } else if (prevLum !== null && Math.abs(lum - prevLum) < tol) {
+        return buf;
+      }
+      prevLum = lum;
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    return buf;
+  };
+
+  const assertRawColorMatch = (lumBefore, colors, where) => {
+    const expected = rawColorLuminance(colors);
+    if (expected === null) return;
+    if (Math.abs(lumBefore - expected) > RAW_COLOR_TOLERANCE) {
+      throw new Error(
+        `${where}: lumBefore=${lumBefore.toFixed(1)} doesn't match the mark's own resolved colour ${colors} ` +
+        `(expected luminance ≈${expected.toFixed(1)}) — the clip likely sampled a stale/blank frame, not the mark`,
+      );
+    }
+  };
+
   const drag = async (key, x0, y0, x1, y1, shift = false) => {
     const a = await page.evaluate(([k, ix, iy]) => {
       const span = document.querySelector(`#coords_${k}`);
@@ -520,10 +569,13 @@ try {
     if (doTintCheck) {
       const tintIndex = spec.tintIndex ?? (spec.selected ? spec.clickIndex : spec.selectedIndex);
       const tintPt = hitPoint(layer, tintIndex);
-      const lumBefore = meanLuminance(PNG.sync.read(await clipShot(key, tintPt.x, tintPt.y)));
+      const lumBefore = meanLuminance(PNG.sync.read(
+        await stableClipShot(key, tintPt.x, tintPt.y, { expectLum: rawColorLuminance(layer.colors) }),
+      ));
+      assertRawColorMatch(lumBefore, layer.colors, `${key}/tint-applied`);
       await dispatchAt(key, tintPt.x, tintPt.y, "pointermove");
       await new Promise((r) => setTimeout(r, 200)); // let the 80-120ms enter fade settle
-      const lumAfter = meanLuminance(PNG.sync.read(await clipShot(key, tintPt.x, tintPt.y)));
+      const lumAfter = meanLuminance(PNG.sync.read(await stableClipShot(key, tintPt.x, tintPt.y)));
       assertTintApplied(lumBefore, lumAfter, `${key}/tint-applied`);
       passed.push(`${key}/tint-applied`);
       await page.evaluate((k) => {
@@ -737,7 +789,10 @@ try {
         // source can only raise luminance). Sampled BEFORE this case's hover dispatch below.
         let lumBefore = null;
         if (tl0.kind === "circles") {
-          lumBefore = meanLuminance(PNG.sync.read(await clipShot(key, hp0.x, hp0.y)));
+          lumBefore = meanLuminance(PNG.sync.read(
+            await stableClipShot(key, hp0.x, hp0.y, { expectLum: rawColorLuminance(tl0.colors) }),
+          ));
+          assertRawColorMatch(lumBefore, tl0.colors, `${key}/links[${c.index}]/tint-applied`);
         }
 
         const norm = (s) => String(s || "").toLowerCase().replace(/\s+/g, "");
@@ -778,7 +833,7 @@ try {
           }
           assertCircleR(circleKid.r, hp0.r, `${key}/links[${c.index}]/circle-r`);
           await new Promise((r) => setTimeout(r, 200)); // let the 80-120ms enter fade settle
-          const lumAfter = meanLuminance(PNG.sync.read(await clipShot(key, hp0.x, hp0.y)));
+          const lumAfter = meanLuminance(PNG.sync.read(await stableClipShot(key, hp0.x, hp0.y)));
           assertTintApplied(lumBefore, lumAfter, `${key}/links[${c.index}]/tint-applied`);
           passed.push(`${key}/links[${c.index}]/tint-applied`);
         } else if (tl0.kind === "polyline" || tl0.kind === "segments") {
