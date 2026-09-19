@@ -1,320 +1,436 @@
 # Masque.jl — Roadmap
 
-Where v0.1 is and how the rest of the feature set gets built. Grounded in the design:
-`architecture.md` (the contract + tiers), `frontend-delivery.md` (build/delivery).
-Priorities, not promises — reorder freely.
+What is open, why, and in what order. The design contract is `architecture.md`; build and
+delivery decisions are in `frontend-delivery.md`; every size and latency figure lives in
+`perf-findings.md`. Priorities, not promises: reorder by demand. `#nn` is a GitHub issue or
+PR on `jowch/Masque.jl`.
 
-## Guiding principles (don't drift)
+## Principles
+
 - **Explicit declaration is the contract; introspection is sugar** on top of it.
-- **Frontend is a stateless view**; authoritative state lives in Julia via `@bind`.
-- **No parallel server**; inspection survives offline/static-export, clicks need a kernel.
+- **The frontend is a stateless view.** Authoritative state lives in Julia via `@bind`.
+- **No parallel server.** Inspection survives static export; clicks need a kernel.
 - **Fail loud, never silently wrong** (per-capability `validate`).
-- **YAGNI**: build a surface/feature when a real use pulls for it, not preemptively.
-- **Live-verify on every supported backend** (today CairoMakie + WGLMakie / `:webgl`; same rule
-  for any future backend) before calling a user-facing change done — **interaction and
-  visual**, across the interactable kinds, via `live-interaction-checklist.md` (see
-  `CLAUDE.md`).
+- **Backends differ in cost, never in the interaction contract.** No feature ships on one
+  backend that the other can never have (parity goldens in `test/fixtures/parity/`).
+- **YAGNI.** Build a surface or feature when a real use pulls for it.
+- **Live-verify on every backend** (`live-interaction-checklist.md`) before a user-facing
+  change is called done. Interaction and visual, across the interactable kinds.
 
-## Status — v0.1 (done)
-Backend seam (CairoBackend) · `AbstractInteractable` + `HitLayer` · 5 built-ins
-(Point/Segment/Rect[list+grid]/Polygon/Axis) with explicit-geometry constructors · custom
-paths (Region/Function) · TS overlay bundle + `published_to_js` + shadow DOM · typed
-`InteractionEvent` · categorical/log/multi-axis · DPI policy · CI (Julia + frontend + Runic).
-**Live-verified end-to-end for `PointInteractable`**; other kinds unit-tested only.
+## Where things stand
 
----
+v0.1.0 is unreleased and open: the pre-registration revisions can carry new work, and
+everything below is a candidate for it. `CHANGELOG.md` `[Unreleased]` is the running record.
 
-## M1 — Harden v1 (finish what exists) ✅ *done*
-*Goal: every shipped feature is real and demonstrated. No new surfaces.*
+Shipped: `masque(fig)` auto-extraction over Scatter, Lines/LineSegments/ScatterLines, Stairs,
+Stem, Errorbars/Rangebars, HLines/VLines, HSpan/VSpan, Heatmap, Image, Spy, BarPlot, Hist,
+Waterfall, CrossBar, BoxPlot (box body), Band, Density, Violin, Contourf, Voronoiplot, Poly,
+Text/Annotation, Colorbar, Legend, MeshScatter, Wireframe, Arrows3D (#91 tracks the full list);
+explicit constructors for every primitive; `Axis`, `Axis3`, and `PolarAxis` (discrete hits) on both
+backends; tooltips (`masque"…"` templates, auto table, figure-aware theme, mark-anchored
+placement); selection round-trip and re-highlight; box-select via a `selects`-ROI; threshold
+and ROI drags; drag-to-pan/rotate and slider-driven view changes through `@bind` re-render;
+keyboard navigation and screen-reader announcements; the `:cairo` (PNG) and `:webgl` (live
+canvas) backends behind one contract; a Documenter site with static notebook exports; and eight
+CI jobs covering Julia on two versions, the no-backend error path, the WGLMakie extension with
+its own real-browser end-to-end check, a second through-Pluto bind end-to-end, every example
+notebook, the frontend, Runic, and an advisory live kind sweep.
 
-- [x] **Live-verify the remaining kinds** in Pluto: Segment, Rect(list+grid/heatmap), Polygon, Axis-readout. (Machinery is proven for circles; this closes the per-kind gap.) *Done: `examples/demo.jl` exercises all five live on `:cairo` (headless Pluto + Playwright); standing practice is every backend — `:webgl` covered by later sweeps / `webgl_demo.jl`.*
-- [x] **Selection round-trip → re-highlight.** Wire the designed loop: bond value → Julia marks selected indices on the manifest → overlay pre-highlights on mount (`HitLayer.selected` already exists in the TS). *Done: `selected` keyword on `masque`/`build_manifest`; clicked points re-highlight flicker-free (verified live).*
-- [x] **`examples/` notebook** — self-contained Pluto notebook (`examples/demo.jl`) that devs the package via a checkout-relative `@__DIR__` path. *Done: opens and runs clean from a fresh checkout; a CI job runs it headlessly so it can't rot.* (Used Pluto's self-contained notebook env, not a sidecar `Project.toml`.)
-- [x] **Docs**: expanded README API section (`masque`, each interactable, custom paths, payload-is-`Dict` contract, selection round-trip). Documenter site deferred to M5 (pre-registration → YAGNI).
-- [x] **Robustness validation**: fail loud on out-of-scope configs (PolarAxis/Axis3/LScene) at `masque()` time — one `AbstractAxis`-not-`Axis` guard in `context()`.
+## In flight
 
-## M2 — Ergonomics (the big unlock)
-*Goal: stop hand-writing geometry.*
+- **#93 Split blend highlight** (draft): replaces the fixed `#3A6F7C` ring drawn outside the
+  mark with a highlight flush on the mark, built from blend modes rather than from the mark's
+  colour, so it works for every kind without Masque resolving a colour at all. The fill
+  brightens with `color-dodge` and the stroke darkens with `multiply`, or `screen` on a dark
+  figure. A resolved `colors` now feeds only the tooltip accent. Also ships the drawn radius
+  for `scatter!` instead of `markersize/2`. If it lands, the locked recipe text in `CLAUDE.md`
+  and `live-interaction-checklist.md` changes with it.
+- **#49 Registration prep** (draft, stale): superseded rather than merged. TagBot, the
+  `Base64` compat bound and the README install line reached `main` by other routes, but its
+  `test/registry_readiness.jl` was deliberately dropped in #55, its `docs/` paths moved under
+  `docs/dev/`, the `releasing.md` it added is deleted by this PR, and the changelog freeze it
+  proposed is explicitly reversed. Close it; nothing in it is still wanted.
 
-- [x] **Plot-introspection constructors**: `PointInteractable(ax, scatter)`, `RectInteractable(ax, heatmap)`, `SegmentInteractable(ax, lines)`, etc. — pull geometry from live Makie plot objects via `plot.converted[]`. *Done (`src/introspect.jl`): Scatter/Lines/LineSegments/Heatmap/Image/BarPlot/Poly delegate to the explicit constructors with identical hitlayers (tested). Gotchas handled: markersize→radius (pixel space), heatmap `EndPoints`→edge expansion, bar dodge/stack/auto-width read from the laid-out child rects. `ax` is passed (a plot has no axis back-reference); single-arg sugar arrives with M2.2's scene walk.*
-- [x] **`masque(fig)` auto-extraction**: walk the scene graph, emit a concrete `Vector{AbstractInteractable}` (the same one a user could write). Unknown plot type → skip + warn. Sugar over M2.1, not a separate path. *Done (`src/introspect.jl`): `auto_interactables(fig)` walks each `Axis`'s `scene.plots`, maps each supported plot via the M2.1 constructors, dedupes layer ids (`:scatter`, `:scatter_2`, …), and skips unsupported types with a warning. `masque(fig)` is the zero-config overlay; both exported.*
-- [x] **Richer tooltips (M2.3)** — `masque"…"` template macro, auto name/value table default, and figure-level `tooltip_*` theming. *Done (PR #10): see Phase 1 / `architecture.md` §10 Tooltips.*
+## Open work
 
-## M3 — Surface coverage (v2 from the survey)
-*Goal: more plot types, same primitives. Add per real demand.*
+### Release
 
-- [x] **Cheap wins** (existing primitives): Stairs, Errorbars/Rangebars, HLines/VLines, Stem, Spy, ScatterLines (composite → two layers). *Done (`src/introspect.jl`): introspection constructors delegating to the M1 primitives — Stairs→`Segment(:polyline)` (reads the child Lines' expanded staircase, not the raw input pts), Errorbars/Rangebars→`Segment(:pairs)`, HLines/VLines→`Segment(:pairs)` spanning `finallimits`, Spy→`Rect(:list)` of unit cells off the `:data`-markerspace child Scatter, Stem/ScatterLines→two layers (Point+Segment) via their child plots. All wired into `masque(fig)`; unit-tested against the explicit constructors + rendered-geometry. Deferred: richer `{i,j,value}`/`value`/`equation` payloads (→ M2.3 tooltips), fractional HLines/VLines span attrs.*
-- [x] **Filled-area curves (Band/Density)**: Band and Density auto-extracted by `masque(fig)` as `:polygons` with `(; index)` payload. *Done (`src/introspect.jl`).*
-- [x] **Computational-geometry extraction**: Contourf/Violin/Voronoiplot + BoxPlot box-body shipped; Tricontourf deferred; BoxPlot box-body-only (whiskers/outliers decorative). *Done (`src/introspect.jl`): Contourf → `:polygons` per contour level with `(; low, high)` from Makie's computed level range; Violin → `:polygons` with `(; x)` from the data position; Voronoiplot → `:polygons` with `(; index)`; BoxPlot box-body → `:rects` (un-notched) / `:polygons` (notched) with `(; q1, median, q3)` from Makie's computed-stats node. Principle: hit geometry from rendered shapes; payload values from Makie's computed values. Deferred: Contourf compound-polygon (ring-group) support for annular holes; Voronoiplot `(; x, y)` payload via point-in-cell matching (today's default is `(; index)`).*
-- [x] **Bars/areas** *(Hist/Waterfall/CrossBar/HSpan/VSpan done; Colorbar + Legend done M3)*: Hist, Waterfall, CrossBar, HSpan, VSpan now auto-extracted by `masque(fig)` as `:rects` (same primitive as BarPlot, no new JS path). Shared bar payload schema — semantic, no redundant `index` (element index lives in `InteractionEvent.index`): BarPlot/Waterfall `(; low, high, value)`, Hist `(; value, low, high)`, CrossBar `(; midpoint, low, high)`, HSpan/VSpan `(; low, high)`. Span hit-rects clamped to the owning axis's pixel viewport (prevents cross-axis bleed in multi-axis figures). Uniform fail-loud payload-length validation (`_check_payloads`) added to `SegmentInteractable`/`RectInteractable`/`PolygonInteractable` — a wrong-length `payloads=` now throws `ArgumentError` at construction. *Colorbar: done (M3) — `ColorbarInteractable` auto-extracted from `fig.content`. Legend: done (M3) — `LegendInteractable`, same figure-block walk; entries link to the layer(s) their plots became via the new `HitLayer.links` field.*
-- [x] **Text bboxes** (Text/Annotation): `TextInteractable` — `text!`/`annotation!` labels auto-extracted as `:rects` click-to-pick buttons, payload `(; text, index, x, y)`. *Done: the original "needs font-metric measurement → new `bbox` primitive" premise was obsolete — `Makie.string_boundingboxes` already returns per-string boxes, so no new geometry kind or dependency was needed. `TextLabel` (a `Block`, not a plot — needs the figure-block walk `ColorbarInteractable` uses, not the scene-plot walk) is the remaining deferred piece.*
-- [ ] **SVG output path**: no groundwork exists today (the `CairoBackend(vector=true)`/`mount` scaffolding was dead code — zero callers — and was removed pre-registration); would need to be built from scratch: emit SVG base + overlay for sparse, low-primitive plots (cleaner coords, no raster).
-- [x] **Axis3 overlays (parity) — core** *(delivered 2026-07-02, WS-3D core widening)*:
-      Point/Segment/Polygon storage + the shared projection closure widened to 3D (`Point3f`,
-      z=0 for 2-coord input — every pre-existing golden value-identical modulo the new `is3d`
-      transform key, so the widen provably didn't move 2D); `:cairo` guard lifted (`Axis3`
-      collected on both backends; `LScene` still rejected pending its decision item below;
-      `PolarAxis` discrete overlays since the PolarAxis parity item); `is3d` `AxisTransform` (degenerate lims — `Axis`/`Threshold`/`ROI`
-      interactables fail loud: a screen pixel on a 3D axis is a ray, not a data point); z-aware
-      `{index,x,y,z}` payloads; 3-coord `Scatter`/`Lines` introspection; `axis3` parity-corpus
-      figure (goldens **byte-identical across backends**); an Axis3 case in the real-browser
-      E2E (click + z payload through `transform_value`). Live-verified on both halves:
-      `:cairo` through-Pluto (hover tooltip shows the z row; bond round-trips through a live
-      kernel) and the `:webgl` **canvas-alignment spike — passed** (every build-time projected
-      marker center sits on a GPU-rendered marker pixel; figure recorded in `perf-findings.md`
-      §"Axis3 projection hinge spike"; re-runnable via `test/e2e/alignment.mjs`).
-- [x] **Axis3 per-type extraction — MeshScatter + Wireframe** *(delivered 2026-07-02)*:
-      `MeshScatter` → `PointInteractable` with **depth-correct per-element pixel radii** — its
-      `markersize` is data-space by construction (no `markerspace` attribute at all, spike-verified),
-      so `PointInteractable` gained an optional `radius3d` (data-space half-extents; hitlayers
-      projects the ±axis offsets per element — the wire shape is unchanged, `:circles` always
-      carried per-element r). `Wireframe` → `SegmentInteractable(:pairs)` from its child
-      `LineSegments`' converted (data space, spike-verified; includes the triangulation diagonals
-      a grid-edge reconstruction would miss). Both graduate out of the Axis3 introspection gate;
-      rendered-pixel unit tests + through-Pluto live-verify.
-- [x] **Axis3 per-type extraction — Arrows3D** *(delivered 2026-09-11)*: premise from
-      2026-07-02 stands — raw `pos→pos+dir` is wrong under `lengthscale`/`align` and children
-      live in float32convert space — but the fix is to read Makie's processed
-      `startpoints`/`endpoints` (DATA space; the span the shaft+tip MeshScatter children cover
-      after `arrowscale`). Emits `SegmentInteractable(:pairs)` with `{index,x,y,z,u,v,w}`
-      payloads. Unit tests cover anisotropic limits + `lengthscale=0.5` (raw midpoints miss;
-      processed midpoints hit). Dual-backend Pluto+browser live-verify **PASS** (Cairo +
-      WebGL; evidence in PR #43 / store `docs/arrows3d-arc.md`).
-- [ ] **Axis3 per-type extraction — `Surface` (deferred)** — unbounded per-cell payload +
-      occlusion, same class as the heatmap `values[]` hole. Occlusion policy for all 3D types:
-      **document-and-accept on both backends** (no `:webgl`-only GPU-pick); upgrade path = a
-      build-time CPU painter's cull in Julia, backend-symmetric by construction.
-- [ ] **View manipulation via `@bind` re-render (pan/zoom/rotate, parity)** — supersedes the
-      2026-07-01 "investigated → deferred" framing, which scoped the problem as a *client-side*
-      camera (the shim disables WGLMakie's `use_orbit_cam`; 2D zoom/pan is dead under
-      `Bonito.NoConnection` — still true, still intentional). The re-frame: view params (2D
-      `limits`, 3D `azimuth`/`elevation`) are ordinary `@bind` state — change → server re-render →
-      fresh overlay — **backend-symmetric and drift-free by construction** (Julia recomputes the
-      overlay every step). **Sliders: shipped** — `examples/view_manip.jl` (CI-run) demonstrates
-      2D `limits` zoom, 3D `azimuth`/`elevation` rotation, and selection persisting across view
-      re-renders via `selected=`; live-verified through Pluto on `:cairo` (this arc) and the
-      `:webgl` slider path in the #37 sweep. The former "`:webgl` gated on GL-context reuse"
-      premise was **measured FALSE** (2026-07-02; figures, mechanism, and scope in
-      `perf-findings.md` §"WGL context lifecycle"; re-runnable via `test/e2e/ctx_growth.mjs`).
-      What remains on `:webgl` is per-step context+scene re-init *cost* — the camera-only
-      resident-scene patch is the planned optimization, no longer a feasibility gate.
-      Remaining in this item — ~~drag-to-pan/rotate~~ **shipped** (`ViewInteractable`,
-      commit-on-release; Shift+drag vs box-select/ROI; live drag *preview* still shares the
-      Animation/scrubbing item's payload gate — M4, below). The **client-side GPU camera stays out** (Masque-wide
-      non-goal): a camera Julia never hears about desyncs the Julia-projected overlay and is
-      structurally one-backend-only. 3D rotation additionally depends on the Axis3 item above.
-- [x] **`PolarAxis` overlay parity — discrete hits** *(delivered)*:
-      `:cairo` guard lifted for `PolarAxis` (both backends collect it); shared projection
-      closure already applies `Makie.Polar` via `transform_func`, so Scatter/Lines hit
-      geometry lands on rendered markers; `ispolar` `AxisTransform` (degenerate lims —
-      `Axis`/`Threshold`/`ROI` fail loud until continuous θ/r ships); auto-extract gate
-      (Scatter/Lines/LineSegments/ScatterLines; separable-grid/rect recipes warn-and-skip);
-      `polaraxis` parity-corpus figure; real-browser E2E click. Continuous θ/r readout
-      (polar transform serialized to JS) remains follow-up; `LScene` stays deferred.
-- [ ] **`LScene` disposition** — needs its own camera/scoping look (parity item or Masque-wide
-      non-goal). Until then `:cairo` rejects it; `:webgl` may render live but builds no
-      overlay transforms (interactables keyed to it fail loud).
-- [ ] **`PolarAxis` continuous θ/r readout** — ship `Makie.Polar` (+ letterboxed scene lims)
-      to JS `invertAxis` so `AxisInteractable` works on polar axes; gated by the discrete
-      hits item above.
+- **Register v0.1.0 in General.** When the maintainer decides the API has stopped moving;
+  there is no fixed cut. Mechanics are one row in `frontend-delivery.md` (register a CI-green
+  `main` commit; TagBot tags).
+- **After registration:** drop `Pkg.develop` from the example notebooks (Pluto's package
+  manager takes over) and re-enable the Binder link in `docs/export_notebooks.jl`.
 
-## M4 — Interaction depth (new capabilities, not new surfaces)
-*Goal: the Tier-0/Tier-1 interactions the architecture already supports.*
+### View manipulation and the remount (#82, tracking)
 
-- [x] **Drag (Tier 0)**: draggable overlay geometry with live data readout via the shipped `AxisTransform`; commit on mouse-up. 60 fps, no per-frame Julia. *Done (first cut): `ThresholdInteractable` — a draggable horizontal/vertical line. The line lives entirely in the overlay (base PNG never redraws); mouse-up inverts the dragged pixel to a data scalar via `invertAxis` and round-trips it through `@bind`. `ROIInteractable` adds a draggable + resizable box (data-space bounds → `@bind`); movable points reuse the same mechanism (deferred).*
-- [ ] **Animation / scrubbing (Tier 1)**: precomputed frame sequence in the manifest + a JS scrubber; bond value = current frame/param. *Payload* (not latency) is the gate: total = frames × per-frame PNG = 5.5–22 MB typical, 144–481 MB at stress scale (`perf-findings.md`) — naive full-res scrub is not viable; must shrink per-frame cost (downscale / fewer frames).
-- [x] **Multi-select / box-select**: `Vector{InteractionEvent}` bond via `AbstractSelector` /
-  `selects`-ROI (Design D — clicks stay single; `selects`-ROI returns the vector: points target
-  → N events, grid target → 1-element region descriptor for server-side stats, empty box →
-  `InteractionEvent[]`). Shipped with `gallery/gallery.jl` recipes (box-select scatter;
-  image ROI per-channel stats).
-- [ ] **Wide mode**: `masque(fig, …; max_width=W)` vendoring the `PlutoUI.WideCell` technique inside the widget (it no-ops under `@bind` if used externally).
-- [ ] **`:webgl` tier-2 animation ergonomics**: in-place buffer patching (`find_plots(uuid)`, no new
-      scene re-ship per frame) already works as a manual technique on the `:webgl` backend; still
-      open is wrapping it in a proper API — a Julia accessor for a plot's uuid + a tidy
-      `updatePlotData(uuid, attr, frame)` JS helper. Sibling of the `:cairo` Animation/scrubbing item
-      above (that one is payload-gated; this one is a pure ergonomics wrapper around a working
-      mechanism). Folded in from the former `MasqueWGL/docs/roadmap.md`'s M1 on the Phase 2
-      backend-selection fold-in.
+`ViewInteractable` is commit-on-release: nothing moves during the drag, and the commit
+replaces the cell output, which on `:webgl` is a blank canvas plus a scene re-init. Two
+problems and five children: four steps in this order, plus #86, which corrects an earlier
+claim rather than adding work.
 
-## M5 — Scale & polish
-- [ ] **Spatial acceleration** (quadtree/grid) for large-N hit-testing — only when the documented O(n) ceiling is actually hit (`log()` the cap until then). *Phase 0 reframe:* hit-test is ~0 ms; the wall is manifest **payload size** (~290 ms serialize+transfer at 4.78 MB), so wire-encoding (int-pixel coords / capping `values[]`) outranks a quadtree (see Phase 4). Direct `hitTest` microbenchmark (not just inferred from render time) confirms this — perf-findings.md's "JS hit-test microbenchmark".
-- [x] **Perf benchmarking**: the unmeasured Q5 envelope — base64 size + click latency knee; confirm MsgPack fast-path engages. *Done (`bench/payload_envelope.jl` → `perf-findings.md`): single plots 50–400 KB, manifest O(N) elements, heatmaps O(cells), animation = frames × PNG (the hard ceiling, 5.5–22 MB). MsgPack confirmed (generic maps, not the TypedArray fast-path). Full click round-trip measured live (headless Pluto + Chromium): ~65 ms median — render-bound, browser overhead negligible. Editor-lag knee (editor stutter, distinct from latency) deferred.*
-- [ ] **Theming**: marker-highlight styling (`highlight_*` / `--masque-hi-*`, shadow-DOM scoped). *(Tooltip card already matches official Pluto: both use `prefers-color-scheme`. Official Pluto has no notebook light/dark toggle — Settings → Dark mode is help text. Remaining work is highlight theming, not a Pluto theme hook.)*
-- [ ] **GLMakie-static backend**: GPU offscreen → PNG, same `AbstractBackend` contract (for envs with a GPU).
-- [x] **Register in General — path** *(prep)*: CHANGELOG frozen at `0.1.0` after
-      drag-to-pan / `ViewInteractable` and overlay polish; TagBot workflow;
-      `Base64` compat; README `] add Masque`. Remaining human step: Jonathan
-      comments `@JuliaRegistrator register` on a CI-green `main` commit
-      **after this merges** (not on the PR), then TagBot's `v0.1.0` tag. Name
-      is 4 letters → AutoMerge needs a human (guideline is ≥5). See
-      `releasing.md`.
-- [x] **Distribution decision**: folded into `ext/MasqueWGLMakieExt.jl` as a package extension of
-      `Masque`, rather than shipping `MasqueWGL` as a separate registered package. (This also obsoletes
-      the former `MasqueWGL`'s own "General-registry readiness" item — there's no longer a second
-      package needing its own `[compat]` bound or registration path; the item above is Masque's one
-      registration story for both backends.)
+1. **#83 Spurious second `@bind` on remount** (bug). `Bonds.initial_value` returns `nothing`,
+   so every remounted widget emits a bond update that re-runs the reading cell. Fix the
+   protocol handling, not by inventing a fake event. Removes one of the two remounts.
+2. **#84 Last-frame hold.** Park the last painted frame (Cairo PNG `src`, or a bitmap from the
+   WGL canvas) and show it until the new base is ready. Hides the remaining remount. Not a
+   GL-context transfer: a context cannot move to a new canvas.
+3. **#85 2D photographic preview.** During pan and wheel zoom, CSS-transform the host so the
+   base and overlay slide together; commit the existing `limits` payload once on release or
+   wheel idle. Julia authored the frame being slid, so this is not a client camera. Accepted
+   artifacts: ticks and decorations move with the photograph until the commit.
+4. **#87 3D orbit preview**: parked. The overlay is a projection at the old
+   `azimuth`/`elevation`, so a live orbit either freezes the overlay or needs 3D coordinates
+   in JS. Decide an overlay policy before any camera work. Orbit stays commit-on-release.
 
----
+**#86 corrects an earlier roadmap claim.** The camera-only resident-scene patch for `:webgl`
+is gated on DOM identity, not payload size: Pluto destroys the `<canvas>` on every cell
+replacement. It needs a portaled canvas outside the cell output or a Pluto that morphs
+instead of replacing. Do not build `find_plots` camera patching as if the scene survived.
+Reopen only after #84 and #85 exist, commit is still too slow on large scenes, and a
+canvas-identity strategy keeps projection Julia-authored.
 
-## Non-goals (by design)
-**Masque-wide** (every backend — the parity doctrine forbids capability one backend can never have):
-the **client-side GPU camera** (a JS camera driven without a Julia round-trip — it desyncs the
-Julia-projected overlay and is structurally `:webgl`-only) and **GPU-pick occlusion** (same
-reason; the symmetric alternative, a build-time CPU cull, stays available). **High-frequency
-live redraw** — per-frame kernel round-trips as a smooth-drag guarantee — is a shared *cost*
-limit on both backends, not a capability split.
+### Overlay interactions
 
-Per-backend there are no *feature* non-goals, only substrate facts: `:cairo` ships a static base
-(its former "3D needs a browser-side renderer" note was wrong — CairoMakie renders static 3D
-natively; the `Axis3` guard **lifted 2026-07-02** with the M3 Axis3 core item, so `Axis3`
-overlays now ship on both backends; **`PolarAxis` discrete overlays** ship too — continuous θ/r
-readout and `LScene` remain the open M3 follow-ups), and
-`:webgl` ships a live canvas (so it renders 3D live today and re-renders cheaply). Backends
-differ in **cost**, never in the interaction contract — enforced by the parity golden harness
-(`test/fixtures/parity/`).
+- **#92 Cursor slice / crosshair.** A first-class probe: invert the pointer to data x (or y),
+  sample attached 1-D series client-side, draw a hairline plus dots, show every series' value
+  in the tooltip. Replaces the notebook workaround of baking hundreds of full-height segments.
+  Hover-only by default; gated like the other continuous invert consumers (2D `Axis`, fail
+  loud on Axis3/Polar). Wants #89 so a `lines!` is one series to sample.
+- **#88 Right-click passthrough.** Ignore non-primary buttons in drag start, and let
+  `contextmenu` land on the base `<img>` so the browser's Save image as… works on `:cairo`.
+  No custom menu. `:webgl` gets no image menu without a canvas snapshot (out of scope).
+- **Cursor should say what pressing will do.** The surface already defaults to `crosshair`,
+  which is right, and the drag kinds already pick a cursor per part through
+  `cursorForDragHit`. The gap is everything else: hovering any hittable element sets one
+  binary `hot` class, so every non-drag kind becomes the finger `pointer`. A heatmap therefore
+  reads as a button across its whole area when the user is reading a value, not pressing
+  anything. Replace the binary class with a per-kind mapping. `pointer` is genuinely right for
+  a legend entry and arguably for a discrete mark that emits a bond, while a grid wants
+  `crosshair` or the CSS `cell` cursor, which exists for exactly this. Decide the map once
+  rather than special-casing heatmap.
+- **Smaller, corners-only ROI handles.** Decided: drop the four edge-midpoint handles, shrink
+  the corner squares, and fill them for contrast against the figure rather than in a fixed
+  colour, light on a dark figure and dark grey on a light one. Edges stay resizable, losing
+  only their drawn handle: hovering one still shows the vertical or horizontal resize cursor,
+  which becomes the whole affordance. The theme half needs no new machinery, since tooltips
+  already derive from the figure background through `--masque-fig-bg`. Take the handle size out
+  of the manifest while here. Julia ships `handle` as 8 logical px times the DPI scale, in
+  image pixels, only so it lands in the same coordinate space as the ROI rect. It is pure
+  chrome that no Julia value depends on, and shipping it that way is actively worse: the
+  overlay is displayed at `width:100%`, so an image-pixel handle grows and shrinks with the
+  figure instead of staying a constant size on screen. A client-side constant in CSS pixels is
+  both simpler and more correct. The eight-handle recipe is written into `CLAUDE.md` and the
+  live checklist as locked, so both change with it, the same way #93 moves the highlight
+  recipe.
+- **The browser's focus outline boxes the whole figure on a heatmap.** The overlay surface is
+  a focus stop, and the default `:focus-visible` outline is suppressed only once Masque draws
+  its own keyboard focus ring, through the `kbd-ring` class. Grid layers are deliberately not
+  keyboard-focusable, so on a heatmap that ring never appears, nothing suppresses the browser
+  outline, and focusing the figure draws a rectangle around the entire surface. This is not
+  specific to heatmaps: it is any figure where focus lands on the surface without producing a
+  Masque ring. Suppress the default outline on its own terms rather than as a side effect of
+  drawing a ring, without costing keyboard users their focus indicator.
+- **Highlighting a large element washes the whole plot.** The hover and selected recipes
+  assume an element is a small discrete mark, so they stroke and fill the element itself. That
+  is wrong for any element covering much of the axis, and several shipped kinds do: `density!`
+  and `band!` are a single polygon each, a span rect is clamped to the full axis viewport, an
+  outer `contourf!` level or a boundary Voronoi cell can cover most of the plot, and lines from
+  `hlines!` span the limits. Feedback that repaints the entire plot area is a flash, not a
+  signal. Decide what the recipe becomes at that scale, perhaps outline only, or an indicator
+  at the cursor rather than over the element. Related to the probe in #92, which is the other
+  half of making a large filled region readable.
+- **Keyboard equivalents for drags**: arrow-key nudging for threshold, ROI, and view
+  interactables. Promised as "on the roadmap" in the site's accessibility page.
+- **Animation / scrubbing**: precomputed frames in one manifest plus a JS scrubber; bond value
+  is the frame or parameter. Gated on payload, not latency: frames × per-frame PNG is the hard
+  ceiling in `perf-findings.md`, so per-frame cost must shrink first (downscale, fewer frames).
+- **`:webgl` in-place buffer patching API**: the manual `find_plots(uuid)` technique works for
+  data updates on a canvas that is still alive; wrap it in a Julia uuid accessor and a JS
+  `updatePlotData(uuid, attr, frame)` helper. Same canvas-identity caveat as #86 across a
+  remount.
+- **Wide mode**: `max_width` already sets the render width; the cell-widening half (vendor
+  `PlutoUI.WideCell`'s technique inside the widget, since WideCell no-ops under `@bind`) is
+  not built. A `max_width` change forces a full re-render, not a CSS resize.
+- **A Julia-declared theme, injected into the browser.** Wanted: a lightweight way for a user
+  to set the overlay's look from Julia, which means every style becomes variable-controlled
+  rather than baked in. Gated on a feasibility spike before any design is settled; this entry
+  records what the spike starts from, not an answer. Supersedes the narrower idea of exposing
+  hooks for the highlight recipe alone.
 
-## Suggested order
+  The pattern is already proven on one surface. Tooltips take `tooltip_*` keywords in Julia and
+  land as custom properties inside the shadow root, which is most of the `--masque-*`
+  properties that exist today. Custom properties inherit across the shadow
+  boundary, so the transport works and nothing leaks into the notebook.
 
-Done: M1 · M2.1/M2.2 · M2.3 tooltips · M3 cheap-wins · M4 drag · M4 box-select · Phase 0 measure. What remains, sequenced for a polished
-(not-MVP) first release. The order is driven by four real dependency edges, not by milestone
-number — everything else is reorderable by demand.
+  The gap is that the rest is not CSS at all. The hover, selected and link recipes set their
+  stroke widths, opacities and the halo radius as literals through `setAttribute` in
+  `highlight.ts`, so no custom property can reach them. Making them themeable is a refactor of
+  imperative drawing code, not a stylesheet edit, and that is the part the spike should size
+  first.
 
-**The four edges that constrain order:**
-- **Perf envelope → everything payload-heavy.** Tooltips, animation frames, SVG, and the
-  multi-select return shape all inflate the base64/manifest payload, whose ceiling is an
-  *undocumented empirical unknown*. Measure it first so the rest is built against a known knee.
-- **Richer tooltips → all surface payloads.** ✅ *Landed (M2.3, PR #10).* Every surface added after
-  ships a real tooltip (a `masque"…"` template or the auto-table default) instead of payload JSON. The
-  per-element `tooltip()` seam was replaced by a per-layer `tooltip_spec`; M3's deferred payloads
-  (`{i,j,value}`, `value`, `equation`) now surface through it.
-- **Multi-select → the bond contract.** `Vector{InteractionEvent}` is the forward-compatible
-  extension v1 was shaped for (`architecture.md`:261). Land the contract change before stacking
-  more surfaces on it. Preserve the "never `Nothing`" invariant (empty vector, not nothing).
-- **Everything → registration.** Last, after the API stops moving. Path is now
-  ready (CHANGELOG `0.1.0` freeze); the remaining work is Jonathan's Registrator
-  comment on a CI-green `main` commit after the prep PR merges — see
-  `releasing.md`.
+  Three questions it should answer. Whether the Julia surface mirrors Makie's own `Theme` and
+  `set_theme!` vocabulary that users already know, or stays a flat keyword set like
+  `tooltip_*`. Whether there is a raw-CSS escape hatch or structured keys only. And how far it
+  reaches, since the locked chrome recipes in `CLAUDE.md` become defaults rather than constants
+  the moment any of this ships.
 
-### Phase 0 — Measure (front-loaded spike) ✅ *done*
-- **Perf benchmarking** — *Done. See `perf-findings.md` (`bench/payload_envelope.jl` to
-  re-run).* The envelope: single interactive plots land 50–400 KB (at/just above Q5's plausible
-  band, not below the <10 KB anecdote); manifest is O(N) elements (int-pixel geometry; per-element bytes
-  in `perf-findings.md`) and O(cells) for heatmaps; **animation = frames × per-frame PNG is the hard ceiling (5.5–22 MB) — gate it.** Tooltip
-  budget: <~200 B/element at N≈1 000. MsgPack confirmed (generic maps; geometry doesn't hit the
-  TypedArray fast-path because the root is `Dict{String,Any}`). Full click round-trip measured
-  live (headless Pluto + Chromium): **~65 ms median** (render-bound; browser/websocket overhead is
-  ~tens of ms). Only the editor-lag *knee* (editor stutter at MB-scale output, distinct from
-  latency) is deferred — a cheap follow-up if animation ships. **Stress-tested to the extremes:**
-  round-trip is render-bound below ~1 MB but flips to *payload-bound* above a few MB (measured at a 1000²
-  heatmap's 4.78 MB manifest → 553 ms, mostly serialize+transfer; that heatmap is now `values[]`-capped to
-  KB, so high-N *scatter* — 200k → 7.72 MB — is the payload wall). The manifest is the high-N wall, not the
-  PNG — it degrades gracefully, nothing breaks.
+### Surface coverage
 
-### Phase 1 — Foundations that unblock the rest
-- [x] **M2.3 Richer tooltips** — *Done (PR #10; `architecture.md` §10 Tooltips).* Shipped as a **per-layer
-  `masque"…"` template** interpolated browser-side from the already-shipped `payloads[]` — not the
-  per-element-HTML approach first sketched here — so rich tooltips add **zero** new per-element wire
-  bytes and the old per-element `tooltips[]` term was dropped (the budget concern is sidestepped, not
-  just bounded). Plus an auto name/value table default, `tooltip_*` theming → `--masque-tip-*`,
-  escape-by-default data, d3-format numbers, and two-phase validation. (d3-format is the first JS
-  runtime dep; bundle delta in `perf-findings.md`.)
-- [x] **Bound the grid `values[]` payload (robustness fix).** *Done (`src/interactables.jl`:
-  `GRID_VALUES_MIN_SCREEN_PX`, gated on `InteractionContext.display_scale`; overlay tolerates an
-  absent `values[]`). Day-one bug in shipped `masque(fig)`, shipped independently of M2.3.* The `:grid` manifest shipped the full
-  source-resolution `values[]` matrix (by design today, tens of MB for a 2000²–4000²
-  `heatmap!`/`image!`) purely for the `(i,j)=value` hover. **De-speculated** (`bench/encoding_experiment.jl`):
-  dropping it is far smaller (see `perf-findings.md` for the measured ratio) and hit-testing needs only
-  edges+dims. **Cap criterion =
-  the cell's *expected on-screen* size, computed on the fly.** A Pluto cell is only so wide — display is
-  bounded by the column (`max_width`, 700 px default), so we know it at build: `cell_screen_px =
-  (viewport_image_px/ncols) × (display_css/image_width)`, `display_css = min(scene, max_width)`. (Today's DPI
-  renders at 2× display, so the ratio is 0.5 ≈ ÷2 — compute it, don't hardcode.) Ship `values[]` only when
-  `min(cell_screen_px) ≥ τ` (τ≈1–2 px); sub-pixel-on-screen cells can't be cursor-targeted → drop, payload
-  `{i,j}`, one-time `@warn`. For a 600-wide figure: 50²≈12 px (keep), 200²≈3 px (keep), **1000²≈0.6 px (drop)**,
-  2000²–4000² (drop). It's an *expected* size (overlay still hit-tests against the true runtime scale).
-  Self-tuning and **subsumes the special `Image` case** (source-res > display-res → sub-pixel → auto-drop).
-  See `architecture.md` §8.
-- [x] **M4 Multi-select / box-select** — *Done.* `AbstractSelector <: AbstractInteractable`
-  interface (`selects(sel)`, `compatible_kinds(sel)`) + `ROIInteractable(…; selects=:id)` as the
-  first concrete selector. Design-D bond contract: clicks / bounds-only ROI stay single
-  `InteractionEvent`; a `selects`-ROI returns `Vector{InteractionEvent}` — points target → N
-  events, grid target → 1-element region descriptor `(; i0,i1,j0,j1,xmin,xmax,ymin,ymax)` for
-  server-side stats (browser never needs `values[]` for selection), empty box →
-  `InteractionEvent[]` (never `nothing`). Wire: only new manifest field is `selects` string on
-  the ROI layer; `transform_value` keys on the `{ items: [...] }` JS envelope shape.
-  `targetKind`/`arity` were dropped as redundant. Shipped with `gallery/gallery.jl` recipes
-  (box-select scatter; image ROI per-channel stats).
+All Julia-side extractors over existing primitives. The live extracted/skipped table is #91;
+tick it and update the docs page (#90) whenever `_plotbase` grows a branch.
 
-### Phase 2 — Surface coverage (parallel; each now carries a real payload)
-No new JS primitive in this phase — every surface reuses v1's `:rects`/`:polygons` tests; the
-work is always a Julia-side extractor. (`update_state_before_display!(fig)` is the mandatory
-pre-manifest step for all three.)
-- [x] **Bars/areas** *(done — Colorbar + Legend done M3; see M3)*: Hist/Waterfall/CrossBar/HSpan/VSpan auto-extracted as `:rects`; shared bar payload schema (semantic, no `index`); span viewport-clamp; uniform payload-length validation. Colorbar: done (M3) — `ColorbarInteractable` via figure-block walk. Legend: done (M3) — `LegendInteractable`, same walk, links entries to the layer(s) they label.
-- [x] **Filled-area curves (Band/Density)**: Band and Density auto-extracted as `:polygons` with `(; index)` payload.
-- [x] **Computational-geometry extraction** (Contourf/Tricontourf, Violin, Voronoiplot, BoxPlot
-  notches → polygons): Contourf/Violin/Voronoiplot + BoxPlot box-body shipped; Tricontourf
-  deferred; BoxPlot box-body-only — whiskers/outliers decorative. All reuse v1's `:polygons`
-  even-odd test; no new JS primitive. Principle: hit geometry from rendered shapes; payload from
-  Makie's computed values.
-- [x] **Text bboxes** (Text, Annotation) — *not* a 7th primitive, but not for the reason originally
-  guessed either: the plan was that rotated text needs a degenerate-polygon `bbox` primitive plus
-  **font-metric measurement** (the one thing the coord system was built not to model). Both
-  turned out obsolete — `Makie.string_boundingboxes(p)` already returns each string's
-  scene-local pixel box (font metrics included), so `TextInteractable` rides plain `:rects`
-  instead: a rotated label just gets its box expanded to stay axis-aligned. Payload
-  `(; text, index, x, y)`; `masque(fig)` auto-detects `text!` directly and `annotation!` via
-  `_descendant(p, Makie.Text)`; only data-space text is auto-detected (pixel/relative-space text
-  is skipped with a warning). **`TextLabel` is deferred**: it's a `Makie.Block`, not a plot, so it
-  needs the figure-block walk (`fig.content`, the mechanism `ColorbarInteractable` uses), not the
-  scene-plot walk this arc used — a small follow-up, not a design unknown.
+- **#89 `lines!` and `series!` as whole lines.** A `lines!` hit is one element with one
+  payload, and the highlight traces the whole polyline, instead of one interactable per edge.
+  `series!` becomes one layer with N polylines. `LineSegments`, Errorbars, HLines, Wireframe,
+  and Arrows3D stay per-piece.
+- **Informative default payloads for statistical recipes.** `architecture.md`'s rule is hit
+  geometry from the rendered shape, payload values from Makie's computed values. Some
+  extractors follow it — `violin!` ships `(; x)`, `contourf!` `(; low, high)`, `boxplot!`
+  `(; q1, median, q3)`, `barplot!`/`hist!`/`waterfall!` `(; low, high, value)`, and `crossbar!`
+  `(; midpoint, low, high)`. Others fall through to the
+  primitive's generic `(; index)` and so tell the user nothing they can't see: `density!` and
+  `band!` are each a single polygon whose entire payload is `index = 0`, and `voronoiplot!`
+  ships a cell index where the generating point would be more useful. Give these the
+  statistics Makie already computed, so the default hover is worth reading before anyone
+  writes a `masque"…"` template. Distinct from #92: the probe answers "what is the height
+  at this x", this answers "what is this shape". The field list per recipe is the issue's
+  job, not the roadmap's.
+- **Composite recipes.** `rainclouds!`, `hexbin!`, `textrepel!` and any recipe whose parent
+  is unknown are skipped without visiting known children. Add a generic child walk for
+  unknown parents (with a double-register guard for recipes that later get their own
+  constructor), and warn with the recipe name rather than `Plot` (#91 comments).
+- **Named gaps from #91**, cheapest first: `ablines!`, `arc!`, `stephist!`, `ecdfplot!`,
+  `qqplot!`, `bracket!`, `timeseries!`, 2D `arrows!`, `pie!`, `contour!` lines,
+  `tricontourf!`/`triplot!`, `dendrogram!`, `streamplot!`, `hexbin!` (needs hex polygons and
+  count payloads), `datashader!`, `mesh!`, `volume!`/`voxels!`. Not a commitment to all of
+  them; each waits for a real use.
+- **`TextLabel`**: a `Block`, not a plot, so it needs the figure-block walk `Colorbar` and
+  `Legend` use. Small.
+- **Legend follow-ups.** First, tick Legend in #91's table, which still lists it as not
+  auto-extracted even though #94 merged. Two further gaps, both already tracked elsewhere: an
+  entry cannot highlight a `:grid` target, which is one of the grid's special cases listed
+  above, and `series!` entries resolve to no layer until #89 extracts series. Separately,
+  Makie's own `Legend(fig, polaraxis)` raises a `MethodError`, which is upstream rather than
+  ours but worth confirming before promising polar legends.
+- **Contour family**: compound polygons (ring groups) so Contourf levels with holes hit-test
+  correctly.
+- **HLines/VLines fractional span attributes** (`xmin`/`xmax`, `ymin`/`ymax`): ignored today,
+  lines always span `finallimits`.
+- **Dense cell fields: revisit `heatmap!`/`image!` and `surface!` together.** Not two items.
+  The shipped `:grid` works but is the awkward corner of the contract, and designing `surface!`
+  on its own would build a second corner with the same shape.
 
-These three are independent and can run concurrently.
+  What is awkward today. `:grid` is the only one of the six geometry kinds that is not a list
+  of elements, so it needs its own hit-test branch, its own selection result, its own tooltip
+  behaviour with no per-element payload, no keyboard focus, and it cannot be a highlight target
+  for a legend. Its `values[]` matrix is the only term in the manifest bounded by source
+  resolution rather than by display size, which is why it needs the on-screen-size cap at all.
+  That cap makes the user-visible contract depend on a rendering detail. It is one
+  all-or-nothing decision per grid, taken from the average cell size, so the same heatmap hovers
+  values at one display width and only `(i, j)` at a narrower one.
 
-### Phase 3 — Interaction depth
-- **Animation / scrubbing (Tier 1)** — precomputed frames baked into one manifest (the snapshot
-  model *forces* this, not live Observables). Rehydrate scrubber position from
-  `data-*`/sessionStorage/`@bind`, never element instance state. Payload-heavy → must fit the
-  Phase-0 envelope; a JS scrubber may trip the framework-revisit trigger.
-- **Wide mode** (`max_width=W`) — *not* cheap: vendor the WideCell technique inside the widget
-  (PlutoUI's no-ops under `@bind`), and a `max_width` change forces a full re-render (new Screen
-  + regenerated manifest), not a CSS resize. Self-contained; slot anytime in this phase.
+  What `surface!` adds. The same dense cell field and the same unbounded per-cell payload, plus
+  self-occlusion and a hit-test that is no longer a 2-D bin search. Its occlusion policy is
+  already settled in `architecture.md`: document-and-accept on both backends, with a build-time
+  CPU cull in Julia as the upgrade path, since GPU picking is a Masque-wide non-goal.
 
-### Phase 4 — Output & scale (gated by Phase 0)
-- **SVG output path** — no `mount`/`vector` seam exists (removed as dead code pre-registration);
-  base SVG output and the overlay over a vector base both need building from scratch. Least-validated item: gate behind a viability spike (primitive-count
-  threshold; SVG uses `pt_per_unit/0.75`, not `px_per_unit`). Sparse-plot mode only — dense plots
-  stay PNG. Pairs naturally with Phase 0.
-- **Spatial acceleration** (quadtree/grid) — demand-gated; may never be built. Grids are already
-  O(log n) (the `findBin` binary search on the edge array), fast enough in practice that scope is
-  only flat list layers (Scatter/rect-`:list`/segments). JS-only; must preserve manifest-order
-  first-match. **Phase 0 measured hit-test at ~0 ms** (scatter-50/10k) and found the first wall is
-  manifest *payload size* (serialize+transfer), not hit-test CPU — so build this *only* if a
-  profile ever shows JS hit-test **specifically** (not serialize/transfer) is the bottleneck.
-  Direct measurement (not inference) now backs this — see perf-findings.md's "JS hit-test
-  microbenchmark" for the numbers (mixed vs. worst-case-miss, per kind, plus the grid case).
-  (Phase 0 did not stress hit-test at extreme N≈200k; but there the 7.72 MB manifest dominates anyway.)
-- [x] **Int-pixel geometry quantization (perf win).** *Done (`src/interactables.jl`: per-element geometry
-  vectors built as `Int` via `_q(x) = round(Int, x)` — circles/segments/rects/polygons/regions + grid edges).*
-  **De-speculated** (`bench/encoding_experiment.jl`): real MsgPack gives **−58%** on the geometry term
-  (5.00 → 2.10 B/coord); it needs **no manifest-shape change** (msgpack already encodes small ints in 1–3 B;
-  the frontend reads numbers either way), and ≤0.5px rounding is inside the ~1px hit-test tolerance. On a
-  whole realistic manifest the saving is ~17 % (geometry is one term beside the payload's Float64 `x`/`y`);
-  at high-N scatter it pushed the 200k wall 9.28 → 7.72 MB (`perf-findings.md`). **Constraint (held):**
-  quantize per-element geometry only — `AxisTransform` lims/viewport stay `Float64` (the M4 drag inverts
-  pixel→data through them). See `architecture.md` §9.
-  - *Rejected by the same experiment:* lifting geometry to a top-level typed `Vector` to engage MsgPack's
-    TypedArray binary fast-path — measured only ~5% beyond int-quantization (2.00 vs 2.10 B/coord), not
-    worth the manifest-shape rewrite. `Float16` is a non-starter (no msgpack float16; lossy >2048px).
+  The question to answer once, for both. Should per-cell values be pushed into the manifest at
+  build time, as today plus a cap, or pulled per hit from the kernel that clicks already
+  require? Pull removes the cap and the resolution-dependent contract, but hover stops working
+  in a static export, which the principles say inspection should survive. Answer that before
+  either is built on further.
 
-### Phase 5 — Polish & release
-- **Theming** — tooltip card already matches official Pluto (`prefers-color-scheme`; no
-  notebook toggle). Remaining work is marker-highlight theming. The opaque base PNG
-  can't follow the theme without a re-render — scope accordingly.
-- **GLMakie-static backend** — first do the prerequisite seam refactor (move
-  `data_to_image_px`/projection onto the rendercontext so it isn't hard-bound to CairoMakie),
-  then the backend slots in behind the same contract. Must stay static→PNG (no 3D/live). Optional.
-- **Register in General** — path ready. Needs the committed in-tree bundle +
-  CI-on-GitHub; CHANGELOG frozen at 0.1.0; Jonathan comments
-  `@JuliaRegistrator register` on a CI-built `main` commit after the prep
-  merges → TagBot `v0.1.0`. See `releasing.md`.
+- **PolarAxis continuous θ/r readout**: ship `Makie.Polar` (and the letterboxed scene limits)
+  to the JS `invertAxis` so `AxisInteractable`, thresholds, ROIs, and the #92 probe work on
+  polar axes.
+- **`LScene` disposition**: decide whether it is a parity item or a Masque-wide non-goal. Until
+  then `:cairo` rejects it and `:webgl` renders it with no overlay.
+
+### Docs
+
+- **Flesh out the site.** Thirteen pages, several of which read as reference rather than
+  instruction. Each interactable and each keyword wants a worked example a reader
+  can paste, the recipes that carry a non-obvious payload want that payload shown, and the
+  common tasks (highlight what I clicked, drive a second cell from a selection, theme a
+  tooltip) want a short end-to-end page each rather than a keyword mentioned in passing.
+- **Show the interaction on the doc pages, not just in the README.** #80 shipped the hard
+  part: a demo GIF, the logos, and a purpose-built recording harness in `docs/dev/readme-demo/`
+  that drives a real Pluto session with Playwright and assembles frames into a GIF. The asset
+  question is answered by that precedent, `docs/src/assets/` at about 100 KB for a GIF. What is
+  still missing is reach: the GIF is referenced only from the README, so every page of the site
+  itself still shows nothing moving. Extend it, splitting by the "clicks need a kernel"
+  principle:
+  - **Live embeds** for hover, tooltip and highlight. The static Pluto exports the docs build
+    already ships keep the overlay alive in the browser, so these can be real rather than
+    recorded, and a reader hovers the doc page itself.
+  - **Recorded GIFs** for anything a kernel has to answer: the `@bind` round-trip, selection,
+    threshold and ROI drags, view pan and rotate. A static export cannot show these.
+  - Open: recorded media rots when overlay chrome changes, and #93 is in flight and changes
+    the highlight recipe right now, which would date every GIF showing a hover or a selection.
+    The harness makes re-recording cheap but not free, since it needs a live Pluto plus
+    `ffmpeg` and is a manual run today. Decide how many scenarios are worth that upkeep before
+    recording a set of them.
+- **#90 Supported-recipes page**: one lookup table (recipe, layer id, kind, hit unit, Axis /
+  Axis3 / PolarAxis) sourced from `_plotbase`, linked from Home, Getting started, and
+  Interactables. Kept in lockstep with #91.
+- **#81 WGLMakie cell pattern**: return `masque(f)` from the construction cell instead of
+  displaying a `Figure` (whose MIME show waits on a Bonito session Pluto never starts).
+  Update `backends.md`, `getting-started.md`, `troubleshooting.md`, and `examples/webgl_demo.jl`.
+  - **Open: should Masque enforce this in code, not just docs?** Idea under discussion — when
+    `WGLMakie` is loaded and we are inside Pluto, intercept the figure's HTML show so a raw
+    `Figure` yields an `@info` pointing at `masque(fig)` instead of a spinner that never
+    resolves. The decision is whether that is worth a `Base.show` method for a Makie type from
+    Masque's extension (piracy on another package's display path, affecting users who never
+    call `masque`), or whether the guidance stays documentation-only as #81 proposes. Not
+    decided; file an issue if we want it.
+
+### Output and scale
+
+- **SVG output path**: nothing exists; the old `vector` scaffolding was removed as dead code.
+  Gate behind a viability spike (primitive-count threshold; SVG uses `pt_per_unit/0.75`).
+  Sparse plots only, dense plots stay PNG.
+- **Non-Pluto fallback in `show`**: inline the manifest and guard `currentScript`/
+  `invalidation` so exports made without a Pluto runtime (PlutoStaticHTML) mount the overlay.
+  Optional; static Pluto exports already work.
+- **Spatial acceleration**: demand-gated and may never be built. JS hit-test is measured at
+  effectively zero cost; the high-N wall is manifest payload size. Build only if a profile
+  shows hit-test itself, not serialize/transfer, is the bottleneck.
+- **GLMakie-static backend**: GPU offscreen → PNG behind the same `AbstractBackend`. Needs
+  the projection helpers moved off CairoMakie first. Optional.
+
+### Tooling
+
+- **Early warning on Makie internals.** The extraction layer reads Makie internals heavily and
+  compat pins one minor each of Makie, CairoMakie and WGLMakie. Keep pinning minors; that is
+  the normal practice, and CompatHelper already proposes the bumps nightly. The gap is
+  detection, not policy. CompatHelper only reacts to a released version, and `CI.yml` runs only
+  on push and pull request, so a Makie change that moves an internal Masque reads surfaces when
+  someone opens a pull request after the bound moves rather than before. Add a scheduled run of
+  the canary and compat testsets against Makie's development branch, advisory like the kind
+  sweep. Two things decide whether it earns attention. Scope it to the deterministic canaries
+  rather than the whole suite, because the live sweeps already flake and a job that is often red
+  for unrelated reasons gets ignored. And Makie, CairoMakie and WGLMakie ship from one
+  repository, so the job tracks all three from a single checkout.
+- **Promote the `kind-sweep` CI job to a required check** once the WebGL "hover cleared
+  instantly (no remount fade)" flake is fixed. Until then agents run the sweep locally.
+- **Payload-size delta per pull request, modelled on Codecov.** Payload size is the wall the
+  design is organised around and every new manifest field pushes on it, so the question worth
+  answering at review time is how much a change cost. Report the delta against the merge base
+  with a tolerance, the way `codecov.yml` already does for coverage, rather than gating on an
+  absolute number that would go stale. Three things it needs. `bench/payload_envelope.jl`
+  prints formatted tables today, so it needs a machine-readable mode before anything can diff
+  it. Compare sizes only and leave latency out: the bench models msgpack bytes as a pure
+  function of the manifest, which is deterministic, while its render-latency section is
+  wall-clock and would flake. And pick the tolerance deliberately, since `codecov.yml` already
+  carries the scar of an unconfigured threshold failing a pull request on noise. The payoff
+  beyond review is that `perf-findings.md` is the single source of these numbers and is meant
+  to be re-run whenever the wire format changes; a delta says when that reconciliation is owed
+  instead of relying on someone remembering.
+- **Reconcile `perf-findings.md` scene payloads** with the sizes seen in the static notebook
+  exports (glyph atlas tiles account for most of the gap).
+- **Editor-lag knee**: measure Pluto editor stutter at MB-scale output. Only worth doing if
+  animation ships.
+
+## Directions (not filed, not committed)
+
+Ideas that fit the contract and could become issues if a use pulls for them. Kept short on
+purpose: enough to recognise the idea later, not a design.
+
+**Conventions users arrive expecting.** Each is the missing companion to something already
+shipped, which is a better filter than what other libraries happen to have.
+- **Legend click toggles series visibility.** Every comparable tool does this, and Makie's own
+  legend does it, so an interactable legend that only highlights will read as half-finished.
+  Visibility is Julia state, so it is a bond round-trip and a re-render rather than overlay
+  chrome.
+- **Double-click resets the view.** The standard companion to drag-to-pan and wheel zoom.
+  Restores the figure's original limits, or azimuth and elevation in 3D.
+- **Modifier-click for additive selection.** Shift to add, and the platform modifier to
+  toggle. Clicks are single today and box-select already returns a vector, so the contract
+  this would extend exists.
+- **Cancel and clear.** Escape aborts an in-progress threshold, ROI or view drag and restores
+  the value it started from; clicking empty space clears the current selection. Escape clears
+  focus today, which is a different thing.
+- **Pin a tooltip.** Click to keep a tooltip open so its numbers can be read or copied,
+  instead of losing it on pointer-leave.
+
+**Linking and selection**
+- **Cross-layer and cross-figure links.** The `links` field that shipped with the legend
+  generalises: hovering a point in one axis highlights the same index in a facet, a table row,
+  or a second `masque` widget sharing a bond. Within one figure that is mostly a question of
+  how a user declares the link, since the fan-out already exists. Reaching a second widget is
+  a larger job: the fan-out resolves ids against a single manifest, and each mount owns a
+  private shadow root with no registry between them.
+- **Colorbar range select.** A `selects`-style drag on the colorbar returns the cells (or
+  points) whose value falls in the dragged range; the client only needs the range, Julia
+  resolves membership.
+- **Lasso / polygon select** beside the box ROI, same `Vector{InteractionEvent}` contract.
+- **Selection persistence across reload.** Rehydrate `selected=` and the last bond from
+  `sessionStorage` so a re-opened notebook shows the state the user left.
+- **Nearest-mark snapping.** An opt-in hover mode that picks the nearest mark within a radius
+  instead of requiring the pointer inside it; sparse scatter and thin lines benefit.
+
+**Probing and readout**
+- **2D profile probe.** #92 in two dimensions: hovering a heatmap cell shows the row and column
+  profiles as sparklines in the tooltip or as overlay traces along the axes.
+- **Delta readout.** Two parked probe lines (or a two-click gesture) report the difference
+  in x and each series' y between them.
+- **Hit priority control.** Hit-test is first-match in manifest order, and the legend work
+  already had to hardcode a precedence rule: legend layers sort ahead of plot geometry so an
+  in-axis `axislegend` does not lose contested pixels to the plot beneath it, with `:view`
+  still last. A per-layer priority would replace that special case rather than add a second
+  one, and a cursor probe would need the same thing.
+
+**Tooltips and chrome**
+- **Richer tooltip content.** Small inline images or sparklines from a payload column, under
+  the same payload budget the template macro respects; markdown-lite formatting.
+- **High-contrast mode.** Honour `prefers-contrast`, alongside the existing keyboard and
+  screen-reader support. `prefers-reduced-motion` already ships.
+- **Touch gestures.** Long-press for tooltip, one-finger pan, pinch to zoom mapped onto the
+  #85 preview and a single commit.
+
+**Coverage and payload**
+- **Level-of-detail hit layers.** For high-N scatter, ship a decimated layer plus per-cell
+  counts and resolve exact membership in Julia on click; the manifest is the measured wall.
+- **Manifest compaction.** Delta or column-wise encoding of per-element geometry and payload
+  columns before MsgPack; re-run `bench/payload_envelope.jl` to decide.
+- **`DataFrame`-backed payloads.** Accept a table as `payloads=` and let `masque"…"` name its
+  columns, so tooltips and bond values carry the user's own row.
+
+**Hosts beyond Pluto**
+- **Static inspector export.** A `save_html(widget)` that writes a self-contained page with the
+  hover layer alive and no bond, for Documenter pages and sharing.
+- **Other notebook hosts.** An inspection-only mode without `@bind` for IJulia and Quarto,
+  reusing the non-Pluto `show` fallback above.
+
+**Testing**
+- **Overlay visual regression.** Golden screenshots of hover, selected, ROI, and tooltip
+  chrome from the kind sweep, diffed in CI once the sweep is a required check.
+
+## Non-goals
+
+- **Client-side GPU camera.** A camera Julia never hears about desyncs the Julia-projected
+  overlay and is structurally `:webgl`-only. #85 and #87 are written to respect this.
+- **GPU-pick occlusion.** Same reason; the symmetric alternative is the CPU cull above.
+- **High-frequency live redraw** as a smooth-drag guarantee. Per-frame kernel round-trips are
+  a shared cost limit on both backends.
+- **Per-backend feature splits.** `:cairo` ships a static base, `:webgl` a live canvas; the
+  difference is cost.
+- **A live Bonito connection** under `:webgl`. That is a different product.
+
+## Order
+
+A proposed sequence, not a decided one. Only the dependency edges are real: #92 wants #89,
+#85 wants #83 and #84, #86 is not reconsidered until #84 and #85 exist, and registration wants
+the API to have stopped moving.
+
+1. Land or park #93, the remaining in-flight PR; resolve #49.
+2. Pre-registration revisions, including new work wanted in 0.1.0. Self-contained and cheap:
+   #83, #88, #89, #81, #90, keyboard drag nudging, and the composite-recipe child walk.
+3. The remount path (#84 hold, then #85 preview). Both backends, live-verified on view-pan.
+4. #92 cursor slice, after #89.
+5. Register v0.1.0, then the notebook cleanup (drop `Pkg.develop`, re-enable Binder).
+6. Remaining coverage items as demand arrives (#91 list).
+7. Payload-gated items (animation, LOD layers) wait on a measured per-frame or per-element
+   cost reduction.
+8. Spike-gated items wait for a real use or for the spike that sizes them: the Julia-declared
+   theme, SVG output, spatial acceleration, GLMakie-static.

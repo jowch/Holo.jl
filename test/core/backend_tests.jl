@@ -171,7 +171,7 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
     end
 
     @testset "fail loud on unsupported axis types" begin
-        # PolarAxis is supported since this PR; LScene remains deferred (roadmap M3).
+        # PolarAxis is supported since this PR; LScene remains deferred (roadmap).
         fu = Figure(); LScene(fu[1, 1])
         err = (@test_throws ArgumentError ctx_for(fu)).value
         @test occursin("supports `Makie.Axis`, `Makie.Axis3`, and `Makie.PolarAxis`", err.msg)

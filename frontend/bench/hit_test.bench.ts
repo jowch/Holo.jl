@@ -1,4 +1,4 @@
-// Hit-test microbenchmark for docs/dev/roadmap.md's M5 spatial-acceleration gate: "build a
+// Hit-test microbenchmark for docs/dev/roadmap.md's spatial-acceleration gate: "build a
 // spatial index only if a profile shows JS hit-test *specifically* is the bottleneck."
 // Times `hitTest` over layers of the sizes the roadmap names, reports median per-call time.
 // Run: `npm run bench` (from frontend/) — see docs/dev/perf-findings.md for the recorded numbers.
