@@ -328,6 +328,14 @@ try {
     if (!m) return null;
     return 0.2126 * Number(m[1]) + 0.7152 * Number(m[2]) + 0.0722 * Number(m[3]);
   };
+  // Resolve the colour a TINT_CHECK_KEYS spot check must expect: `colors` whenever it's a
+  // parseable "rgb(r,g,b)" string, else `spec.tintColor` — a colour BAKED once into
+  // kind_sweep_figures.jl's `kind_sweep_meta()` from an actual CairoMakie raster sample at the
+  // manifest's own projected element centre (barplot/heatmap/poly have no resolvable `colors` at
+  // all). `??` alone would be wrong here: a `{palette, index}` per-index dict is non-null but
+  // unparseable, so the check has to be "does rawColorLuminance actually parse it", not bare
+  // nullness.
+  const expectedColorFor = (colors, tintColor) => (typeof colors === "string" ? colors : (tintColor ?? null));
   const RAW_COLOR_TOLERANCE = 20; // margin for AA/rim bleed inside the small clip box, tight enough to catch a stale/blank frame
 
   // A WGL <canvas>'s compositor frame isn't guaranteed fresh the first time a host is scrolled
@@ -337,8 +345,12 @@ try {
   // target reached only after a long scroll) returned a stale/blank frame that stayed constant
   // across repeats — a plain "retry until two reads agree" loop would exit on that SAME wrong
   // reading, since a stuck frame is trivially self-consistent. When `expectLum` is available
-  // (from rawColorLuminance), retry until the reading actually matches it instead; only fall back
-  // to inter-frame stability (no expectation to check against) when it isn't.
+  // (from `rawColorLuminance`, resolved via `expectedColorFor` so a kind with no resolvable
+  // `colors` still gets one from its baked `spec.tintColor`), retry until the reading actually
+  // matches it instead; only fall back to inter-frame stability (no expectation to check against)
+  // when neither is available. Every `TINT_CHECK_KEYS` key now asserts a non-null `expectLum`
+  // before this is ever called (see the `doTintCheck` block below), so that fallback can no
+  // longer be the only guard for those checks.
   const stableClipShot = async (key, ix, iy, { size = 8, retries = 6, tol = 1.5, expectLum = null } = {}) => {
     let prevLum = null, buf = null;
     for (let i = 0; i < retries; i++) {
@@ -569,10 +581,22 @@ try {
     if (doTintCheck) {
       const tintIndex = spec.tintIndex ?? (spec.selected ? spec.clickIndex : spec.selectedIndex);
       const tintPt = hitPoint(layer, tintIndex);
+      const expectColor = expectedColorFor(layer.colors, spec.tintColor);
+      const expectLum = rawColorLuminance(expectColor);
+      // Sanity check: every TINT_CHECK_KEYS key must resolve a real expectation, or stableClipShot
+      // silently falls back to its "two reads agree" loop — trivially satisfied by a stuck/stale
+      // frame (see stableClipShot's own comment above) — and the whole point of this check is lost.
+      if (expectLum === null) {
+        throw new Error(
+          `${key}/tint-applied: no expectation to check against ` +
+          `(layer.colors=${JSON.stringify(layer.colors)}, spec.tintColor=${JSON.stringify(spec.tintColor)}) — ` +
+          `give this kind a resolvable \`colors\` or bake a \`tintColor\` in kind_sweep_figures.jl`,
+        );
+      }
       const lumBefore = meanLuminance(PNG.sync.read(
-        await stableClipShot(key, tintPt.x, tintPt.y, { expectLum: rawColorLuminance(layer.colors) }),
+        await stableClipShot(key, tintPt.x, tintPt.y, { expectLum }),
       ));
-      assertRawColorMatch(lumBefore, layer.colors, `${key}/tint-applied`);
+      assertRawColorMatch(lumBefore, expectColor, `${key}/tint-applied`);
       await dispatchAt(key, tintPt.x, tintPt.y, "pointermove");
       await new Promise((r) => setTimeout(r, 200)); // let the 80-120ms enter fade settle
       const lumAfter = meanLuminance(PNG.sync.read(await stableClipShot(key, tintPt.x, tintPt.y)));
@@ -789,10 +813,11 @@ try {
         // source can only raise luminance). Sampled BEFORE this case's hover dispatch below.
         let lumBefore = null;
         if (tl0.kind === "circles") {
+          const expectColor = expectedColorFor(tl0.colors, spec.tintColor);
           lumBefore = meanLuminance(PNG.sync.read(
-            await stableClipShot(key, hp0.x, hp0.y, { expectLum: rawColorLuminance(tl0.colors) }),
+            await stableClipShot(key, hp0.x, hp0.y, { expectLum: rawColorLuminance(expectColor) }),
           ));
-          assertRawColorMatch(lumBefore, tl0.colors, `${key}/links[${c.index}]/tint-applied`);
+          assertRawColorMatch(lumBefore, expectColor, `${key}/links[${c.index}]/tint-applied`);
         }
 
         const norm = (s) => String(s || "").toLowerCase().replace(/\s+/g, "");

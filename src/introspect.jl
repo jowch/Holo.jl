@@ -23,11 +23,14 @@ end
 # markersize itself — see Makie.default_marker_map()/marker_scale_factor). `p.marker[]` is already
 # converted by the time a Scatter plot holds it (`to_spritemarker` resolves a Symbol like :circle
 # to its BezierPath at construction), so the Symbol branch below is a defensive fallback, not the
-# normal path. GeometryBasics `Circle`/`Rect` markers draw at exactly markersize (Makie's own
-# `rescale_marker` skips them — "Rect / Circle dont need no rescaling"), so their factor is 1.0,
-# same as the conservative fallback for markers with no readable bbox (a `Char` glyph, an image, a
-# per-element vector of markers) — those still draw within markersize, just not filling it, so
-# treating them as radius=ms/2 stays a safe (if loose) click-target bound, never an undershoot.
+# normal path. A `GeometryBasics` `Circle`/`Rect` marker — TYPE or instance — always draws at
+# exactly markersize: Makie never rescales by the instance's own radius/widths (the generic
+# `rescale_marker(atlas, char, font, markersize) = markersize` fallback, commented "Rect / Circle
+# dont need no rescaling", is what a Circle/Rect instance hits; `to_spritemarker` passes both forms
+# through unchanged), so their factor is 1.0 — same fallback as markers with no readable bbox (a
+# `Char` glyph, an image, a per-element vector of markers) — those still draw within markersize,
+# just not filling it, so treating them as radius=ms/2 stays a safe (if loose) click-target bound,
+# never an undershoot.
 function _marker_extent_factor(marker)
     shape = if marker isa Symbol
         get(Makie.default_marker_map(), marker, nothing)
@@ -36,9 +39,9 @@ function _marker_extent_factor(marker)
     else
         nothing
     end
+    # Makie.bbox is internal (not exported API, Makie/src/bezier.jl) — Project.toml pins Makie to
+    # the 0.24 minor series; a compat bump should re-check this still resolves.
     shape !== nothing && return Float64(maximum(Makie.widths(Makie.bbox(shape))))
-    marker isa _GB.Circle && return Float64(2 * _GB.radius(marker))
-    marker isa _GB.Rect && return Float64(maximum(_GB.widths(marker)))
     return 1.0
 end
 # Tooltip accent colour for a Scatter's points (HitLayer's `colors` field): a shared palette of

@@ -29,6 +29,18 @@ include(joinpath(@__DIR__, "..", "testutils.jl"))
             @test Masque._marker_radius(p_char) == 22 / 2   # conservative fallback: unreadable bbox
             p_img = scatter!(a, [1.0], [1.0]; marker = rand(4, 4), markersize = 22)
             @test Masque._marker_radius(p_img) == 22 / 2   # image marker: same fallback
+            # GeometryBasics Circle/Rect: Makie never rescales these by their own geometry (the
+            # instance's radius/widths are ignored), so a non-unit instance draws at exactly
+            # markersize the same as the TYPE form.
+            GB = Masque._GB
+            p_circle_inst = scatter!(a, [1.0], [1.0]; marker = GB.Circle(GB.Point2f(0), 3.0f0), markersize = 22)
+            @test Masque._marker_radius(p_circle_inst) == 22 / 2
+            p_rect_inst = scatter!(a, [1.0], [1.0]; marker = GB.Rect(0.0f0, 0.0f0, 2.0f0, 3.0f0), markersize = 22)
+            @test Masque._marker_radius(p_rect_inst) == 22 / 2
+            p_circle_type = scatter!(a, [1.0], [1.0]; marker = GB.Circle, markersize = 22)
+            @test Masque._marker_radius(p_circle_type) == 22 / 2
+            p_rect_type = scatter!(a, [1.0], [1.0]; marker = GB.Rect, markersize = 22)
+            @test Masque._marker_radius(p_rect_type) == 22 / 2
         end
 
         @testset "scatter radius fails loud on non-:pixel markerspace" begin

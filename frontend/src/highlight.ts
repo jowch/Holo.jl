@@ -188,7 +188,10 @@ export function clearSel(selGroups: HiGroups): void {
 // Hovering an already-selected mark draws no hover chrome at all: both layers are opaque, so a
 // 1.5px hover stroke painting over the 2px selected stroke would thin it, reading as WEAKER, not
 // added emphasis — the selected wash/ring already shows this element. The tooltip is unaffected;
-// callers (hover.ts, keyboard.ts) show it via a separate call.
+// callers (hover.ts, keyboard.ts) show it via a separate call. This is the draw-time half of the
+// guard; the other direction — a hover/focus ring already on-screen when its key ENTERS the
+// selection (e.g. a selects-ROI sweeping over a keyboard-focused mark) — is reconciled by
+// drawSelection below, which clears the stale hiGroups the moment the key becomes selected.
 export function drawHi(state: OverlayState, hiGroups: HiGroups, hit: Hit): void {
     const key = hitKey(hit)
     if (state.selKeys_.has(key)) { clearHiImmediate(state, hiGroups); return }
@@ -256,7 +259,7 @@ export function drawLink(state: OverlayState, linkGroups: HiGroups, key: string,
     state.linkKey_ = key
 }
 
-export function drawSelection(state: OverlayState, selGroups: HiGroups, hits: Hit[]): void {
+export function drawSelection(state: OverlayState, selGroups: HiGroups, hits: Hit[], hiGroups: HiGroups): void {
     const next = new Set(hits.map(hitKey))
     const entering = new Set<string>()
     for (const k of next) if (!state.selKeys_.has(k)) entering.add(k)
@@ -270,4 +273,9 @@ export function drawSelection(state: OverlayState, selGroups: HiGroups, hits: Hi
         if (made.plain) { if (enter) made.plain.classList.add("masque-enter"); selGroups.plain_.appendChild(made.plain) }
     }
     state.selKeys_ = next
+    // A hover/focus ring already on-screen when its key enters selection (e.g. a selects-ROI
+    // sweeping over a keyboard-focused mark) would otherwise sit on top of the wash just drawn
+    // above until the next pointermove self-heals it via drawHi's own guard — clear it now so the
+    // stale chrome never paints, mid-sweep included.
+    if (state.hiKey_ !== null && next.has(state.hiKey_)) clearHiImmediate(state, hiGroups)
 }

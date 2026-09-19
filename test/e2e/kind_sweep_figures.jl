@@ -16,6 +16,24 @@
 # just repeat `selectedIndex`/`tip`. `tintIndex` (only set where it must differ) is the element
 # the screenshot-based tint-applied check hovers — for `heatmap` this steers off `selectedIndex`'s
 # cell (viridis' darkest, where a dodge brightening is hardest to measure) onto a brighter one.
+#
+# `tintColor` (only set on `barplot`/`heatmap`/`poly` — every other `TINT_CHECK_KEYS` entry in
+# kind_sweep.mjs resolves a mark colour from the manifest's own `colors` field instead) is a
+# `"rgb(r,g,b)"` ground-truth BAKED from an actual CairoMakie raster: build the same figure,
+# `masque()` it, read the tinted element's centre off the manifest geometry the same way
+# kind_sweep.mjs's `hitPoint` does (barplot's `tintIndex`/`clickIndex` 0 -> `rects` centre;
+# heatmap's `tintIndex` 11 -> the `grid` cell midpoint from `xedges`/`yedges`; poly's `clickIndex`
+# 1 -> the 2nd ring's centroid, i.e. the GOLDENROD ring, not orchid), then
+# `Makie.colorbuffer(fig; px_per_unit = manifest["scaling"])` and sample a 3×3 median at that
+# point (`test/testutils.jl`'s `drawn_near` convention: `img[round(cy), round(cx)]`, already
+# image-px/top-left-origin/y-down, no flip). Deriving this at NOTEBOOK LOAD isn't an option: the
+# WGL notebook only has WGLMakie loaded, and `Makie.colorbuffer` under a live WGLMakie backend
+# throws (`MethodError: wait_for_ready(::Nothing)`) outside a real browser session; loading
+# CairoMakie just for this would also flip `_resolve_backend`'s "both loaded -> prefer Cairo"
+# choice out from under the WGL sweep for every later `masque()` call. So these three are baked
+# literals, derived once (barplot's flat grey, heatmap's brightest viridis cell, poly's alpha-blend
+# over the axis background all come out right without reimplementing colormap/alpha math here) —
+# regenerate them the same way if any of these three figures' construction changes.
 
 kind_sweep_meta() = [
     Dict(
@@ -37,7 +55,7 @@ kind_sweep_meta() = [
         "key" => "heatmap", "layerId" => "cells", "layerKind" => "grid",
         "selected" => nothing, "circle" => false, "selectedIndex" => 0, "clickIndex" => 0,
         "tip" => "0,0", "hoverIndex" => 0, "hoverTip" => "0,0", "tintIndex" => 11,
-        "mode" => "element",
+        "tintColor" => "rgb(253,231,37)", "mode" => "element",
     ),
     Dict(
         "key" => "image", "layerId" => "cells", "layerKind" => "grid",
@@ -47,12 +65,16 @@ kind_sweep_meta() = [
     Dict(
         "key" => "barplot", "layerId" => "bars", "layerKind" => "rects",
         "selected" => "wash", "circle" => false, "selectedIndex" => 1, "clickIndex" => 0,
-        "tip" => "value", "hoverIndex" => 0, "hoverTip" => "value", "mode" => "element",
+        "tip" => "value", "hoverIndex" => 0, "hoverTip" => "value",
+        "tintColor" => "rgb(128,128,128)", "mode" => "element",
     ),
     Dict(
         "key" => "poly", "layerId" => "poly", "layerKind" => "polygons",
         "selected" => "wash", "circle" => false, "selectedIndex" => 0, "clickIndex" => 1,
-        "tip" => "ring1", "hoverIndex" => 1, "hoverTip" => "ring2", "mode" => "element",
+        "tip" => "ring1", "hoverIndex" => 1, "hoverTip" => "ring2",
+        # clickIndex 1 is the 2nd ring — goldenrod (0.55 alpha over the axis background), not
+        # orchid (that's ring 0 / selectedIndex).
+        "tintColor" => "rgb(235,206,132)", "mode" => "element",
     ),
     Dict(
         "key" => "polar", "layerId" => "polar", "layerKind" => "circles",

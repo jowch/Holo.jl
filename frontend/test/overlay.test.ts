@@ -481,6 +481,39 @@ describe("mount", () => {
         expect(selChildren(shadow).length).toBe(2) // 1 point × (fill shape + edge shape)
     })
 
+    it("a selects-ROI sweep over a keyboard-focused mark clears the stale hover/focus ring (forward ordering)", () => {
+        // Reverse of "keyboard-focusing an already-selected element..." (keyboard.test.ts): here
+        // the ring is drawn FIRST (keyboard focus), then the mark enters selKeys_ mid-sweep via a
+        // selects-ROI drag, not via drawHi's own already-selected guard. Without drawSelection's
+        // reconciliation, the stale 1.5px hover/focus edge would stay live on top of the 2px
+        // selected wash until the next pointermove self-heals it.
+        const { host, script } = setup()
+        mount(script, boxSelectManifest())
+        const shadow = shadowOf(host)
+        const surface = shadow.querySelector(".surface") as HTMLElement
+        surface.focus()
+        // ArrowRight focuses pts[0] (image 300,300) — manifest order puts "pts" before the
+        // drag-only "roi" layer, which isn't in the focus list at all.
+        surface.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }))
+        expect(hiChildren(shadow).length).toBeGreaterThan(0)
+        // grab the ROI box interior (image 400,400 = client 200,200) and release without moving —
+        // encloses points 0 and 1 (see "box-select over points..." above), sweeping over the
+        // still-focused pts[0] mid-drag.
+        surface.dispatchEvent(new PointerEvent("pointerdown", { clientX: 200, clientY: 200, bubbles: true }))
+        // mid-sweep (before pointerup): the reconciliation runs on `move`, not only at `end`.
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 200, clientY: 200, bubbles: true }))
+        expect(hiChildren(shadow).length).toBe(0)
+        surface.dispatchEvent(new PointerEvent("pointerup", { clientX: 200, clientY: 200, bubbles: true }))
+        // All three g.hi groups (fill/edge/plain) are empty; g.sel holds the wash for pts[0..1].
+        expect(hiChildren(shadow).length).toBe(0)
+        expect(selChildren(shadow).length).toBe(4) // 2 points × (fill shape + edge shape)
+        // A miss restores keyboard focus's cached state (hover.ts's restoreFocus), but drawHi's
+        // own already-selected guard keeps it a no-op while pts[0] stays selected.
+        surface.dispatchEvent(new PointerEvent("pointermove", { clientX: 5, clientY: 5, bubbles: true }))
+        expect(hiChildren(shadow).length).toBe(0)
+        expect(selChildren(shadow).length).toBe(4)
+    })
+
     // Factory so each test gets a fresh geometry object — drag mutates geometry in-place.
     const gridSelectManifest = (): Manifest => ({
         width: 1200, height: 800, scaling: 2,

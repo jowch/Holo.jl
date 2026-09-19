@@ -380,7 +380,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
                 pre.push({ layer, ...hitLayerByIndex(layer, idx) })
             }
         }
-        if (pre.length) drawSelection(state, selGroup, pre)
+        if (pre.length) drawSelection(state, selGroup, pre, hiGroup)
     }
 
     const cleanup = () => {

@@ -32,7 +32,7 @@ function applyDrag(ctx: OverlayCtx, state: OverlayState, d: Drag, e: PointerEven
     } else if (d.kind === "view") {
         text = viewDrag.tip(d, p)
     } else {
-        text = roiDrag.move(d, state, ctx.selGroup_, ctx.manifest_, p)
+        text = roiDrag.move(d, state, ctx.selGroup_, ctx.hiGroup_, ctx.manifest_, p)
     }
     setMarkAccent(ctx, null) // a drag readout is never a coloured element's tooltip
     setTipText(ctx, state, text)
@@ -141,7 +141,7 @@ export function onUp(ctx: OverlayCtx, state: OverlayState, e: PointerEvent): voi
             ctx.host_.dispatchEvent(new CustomEvent("input"))
         }
     } else {
-        (ctx.host_ as unknown as { value: unknown }).value = roiDrag.end(d, state, ctx.selGroup_, ctx.manifest_)
+        (ctx.host_ as unknown as { value: unknown }).value = roiDrag.end(d, state, ctx.selGroup_, ctx.hiGroup_, ctx.manifest_)
         ctx.host_.dispatchEvent(new CustomEvent("input"))
     }
     hideTip(ctx, state); ctx.surface_.classList.remove("grabbing"); setDragHoverChrome(ctx, state, null)
