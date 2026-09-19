@@ -65,7 +65,7 @@ function Masque.context(b::CairoBackend, fig, ppu)
         ArgumentError(
             "Masque's CairoMakie backend supports `Makie.Axis`, `Makie.Axis3`, and `Makie.PolarAxis`; found " *
                 "unsupported $(join(unsupported, ", ")). This is Masque's own scoping guard, not a " *
-                "CairoMakie limit — `LScene` support is still deferred (docs/dev/roadmap.md M3). " *
+                "CairoMakie limit — `LScene` support is still deferred (docs/dev/roadmap.md). " *
                 "Today: restart this session with `using WGLMakie` (instead of `using CairoMakie`) " *
                 "to render `LScene` live (Masque builds no overlays for it on either backend).",
         ),

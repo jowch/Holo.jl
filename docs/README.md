@@ -15,5 +15,4 @@ from a previous build when iterating on prose.
 | [`frontend-delivery.md`](dev/frontend-delivery.md) | Browser-side build/delivery decisions: bundling, manifest transport, DPI/sizing, JS testing, CI. |
 | [`live-interaction-checklist.md`](dev/live-interaction-checklist.md) | The live-verification playbook run against a real Pluto + browser before any user-facing change is called done. |
 | [`perf-findings.md`](dev/perf-findings.md) | The measured payload-size and click-latency envelope; the single source of those numbers for the rest of the docs. |
-| [`releasing.md`](dev/releasing.md) | Steps for registering and tagging a Masque release. |
-| [`roadmap.md`](dev/roadmap.md) | Milestones and priorities for the rest of the feature set. |
+| [`roadmap.md`](dev/roadmap.md) | Open work, non-goals, and the order to tackle it. |

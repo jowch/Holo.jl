@@ -553,7 +553,7 @@ projection closure (post-PR #32, `transform_func` applied) and comparing against
 marker positions in the raster. `Point2f(x, y)` ≡ `Point3f(x, y, 0)` is byte-identical through
 the same closure, so widening the geometry path to 3D cannot regress 2D. This is the WS-3D
 "projection hinge" gate — cleared. Cited by `architecture.md`, `backend-comparison.md`, and
-`roadmap.md` (M3 Axis3 parity item).
+`roadmap.md`.
 
 **`:webgl` canvas half (2026-07-02, WS-3D core landing): 0.0 px.** The mirror check on the live
 canvas: render the E2E `page3d.html` (Axis3 scatter, red markers, explicit azimuth/elevation) in
@@ -600,7 +600,9 @@ reuse") was reasoned-not-measured, and is **false** on the shipped stack. `:webg
 today (the sweep round-tripped the bond on every step). What survives as fact: each re-render
 pays context + scene re-initialization — a per-step *cost*, for which the **camera-only
 resident-scene patch** (ship only the new camera + freshly projected overlay to the still-live
-scene; roadmap M3 view-manipulation item) remains the planned optimization.
+scene) is the candidate optimization, but it is gated on canvas identity, not payload size:
+Pluto destroys the `<canvas>` on every cell replacement (#86; `roadmap.md` §"View manipulation
+and the remount").
 
 **Reproduce**: `test/e2e/ctxgrowth_notebook.jl` + `test/e2e/ctx_growth.mjs` (local tools, same
 serve.jl harness as the through-Pluto E2E; not in CI — a through-Pluto job is the flake-prone

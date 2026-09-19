@@ -50,29 +50,36 @@ All notable changes to this project are documented here. The format is based on
   Troubleshooting, Examples, API Reference, and a Development page. Deployed by
   `.github/workflows/Documentation.yml`.
 
-### Internal
-- Hardened the `WGLMakie bind E2E (Pluto)` CI job (`test/e2e/bind_click.mjs`) against the
-  load-induced timeout seen on PRs #57/#60/#61/#65/#66: the overlay always emitted the click
-  correctly, but Pluto's kernel round-trip (`#bondout` flipping) stalled past the wait budget.
-  The per-attempt wait is now 5 minutes (was 3), a stalled first attempt retries once by
-  clicking a *different* scatter marker (a same-value re-click can't distinguish "kernel got it
-  and is slow" from "kernel never got it" — CI evidence showed the old same-value `input`
-  re-fire never once recovered the bond), and a timeout now reports whether any cell went busy
-  after the click. `test/e2e/serve.jl` flushes `stdout`/`stderr` every second so `pluto.log` is a
-  trustworthy artifact instead of a buffered dump. CI now uploads a screenshot, DOM dump, and the
-  Pluto log on failure (`actions/upload-artifact`, `if: failure()`).
-- CI runs the live kind sweep (`test/e2e/kind_sweep.mjs` + `test/e2e/polish_verify.mjs`
-  against `kind_sweep_cairo.jl`/`kind_sweep_webgl.jl`) on a new `kind-sweep` job,
-  `continue-on-error: true` (advisory — does not block merges), matrixed over `cairo` and
-  `webgl`, with screenshot/DOM/console-log artifacts on failure. Agents still run the sweep
-  locally before calling a user-facing change done; see `docs/dev/live-interaction-checklist.md`.
-- `frontend/build.mjs` now sets esbuild's `mangleProps: /_$/`, shortening the frontend-internal
-  property names PR #72's `overlay.ts` split introduced (`OverlayState`/`OverlayCtx`/`ROIBox`/
-  `Drag`/`FocusRef`, plus `Hit`'s `geom`/`grid`/`axis`/`roiPart`) — every such field now ends in
-  a trailing underscore by convention. No property that crosses the Julia/Pluto/DOM boundary
-  (manifest, `@bind` payload, WGLMakie's `__obs__`/`__t__` wire tags) was renamed. See
-  `docs/dev/frontend-delivery.md`'s Bundle row and `docs/dev/perf-findings.md` for the measured
-  byte delta. No observable behavior change.
+- `masque(fig, interactables)` — a Pluto `@bind` widget that overlays interactivity on a
+  static CairoMakie figure; returns an `InteractionEvent` on click (`nothing` until then).
+- `AbstractBackend` seam with `CairoBackend` (PNG; SVG groundwork). DPI derived from the
+  display width (≈2× Pluto's 700px column), opaque-background guarantee.
+- `AbstractInteractable` interface (`hitlayers` / `validate` / `events` / `tooltip` /
+  `hoverstyle`) and built-ins: `PointInteractable`, `SegmentInteractable`,
+  `RectInteractable` (list + compact grid), `PolygonInteractable`, `AxisInteractable`.
+- Custom-interaction paths with no JavaScript: `RegionInteractable` (declarative regions)
+  and `FunctionInteractable` (closure).
+- Categorical, log, and multi-axis support; payload-based linked selection.
+- TypeScript browser overlay (shadow-root, hit-testing, highlights, tooltips), bundled to
+  a committed `assets/overlay.js`; manifest shipped via `published_to_js` (survives static
+  HTML export); typed bond value via `AbstractPlutoDingetjes.Bonds.transform_value`.
+- `WebGLBackend` (`:webgl`) — a second, co-equal `AbstractBackend`: the figure renders live in
+  a browser WGLMakie `<canvas>` (client GPU) with the same overlay/`@bind` contract, making
+  animation, large/live data, and live 3D cheap where `:cairo` would re-rasterize —
+  a substrate/cost difference; the interaction contract is identical on both. `CairoMakie`/`WGLMakie` are both weak
+  dependencies gated behind package extensions; `masque(fig)` resolves whichever one is loaded
+  (errors if neither is). If both are loaded, `backend=` wins and implicit `masque` defaults to
+  Cairo. See the site's Backends page and `docs/dev/backend-comparison.md`.
+- View manipulation via `@bind` re-render: 2D `limits` zoom/pan, 3D `azimuth`/`elevation`
+  rotation, and selection persistence across view re-renders (`selected=` feedback).
+  Sliders need no Masque API; **drag-to-pan / drag-to-rotate** use `ViewInteractable`
+  (commit-on-release; Shift+drag arbitrates vs box-select/ROI). Demonstrated in
+  `examples/view_manip.jl` (CI-run); live-verified on `:cairo` and `:webgl`.
+  Live drag *preview* (high-frequency redraw) remains deferred with animation.
+- `Arrows3D` auto-extraction on `Axis3`: `SegmentInteractable(:pairs)` from processed
+  `startpoints`/`endpoints` (DATA space), with `{index,x,y,z,u,v,w}` payloads. Raw
+  `pos→pos+dir` is intentionally not used — it misses under `lengthscale`/`align` and the
+  MeshScatter children live in float32convert space (premise from #36).
 
 ### Changed
 - **Renamed the package from `Holo` to `Masque`** (same UUID). Every public name moves with
@@ -101,7 +108,35 @@ All notable changes to this project are documented here. The format is based on
   2× DPI, 12 image px instead of 8. Pass `tol = 8 / scaling` to keep the old numeric slack, or
   rely on the new default (slightly more forgiving at typical DPI).
 
+- Overlay hover skips rewriting tooltip HTML and remeasuring tip size on
+  same-hit `mousemove`; extra pointer ticks coalesce to one animation frame.
+  The 100 ms fade and locked wash / ring recipes are unchanged.
+- Agent live-verify playbook (`docs/dev/live-interaction-checklist.md`) now requires
+  **visual** fidelity as well as interaction: wash / ring / halo / overlay-pin,
+  remount fade (no pulse), Pluto/OS `prefers-color-scheme` (no notebook toggle),
+  and steel-teal `#3A6F7C` not `#ff3b30`. Agents run `kind_sweep.mjs` **and**
+  `polish_verify.mjs` on Cairo and WGL across the interactable kinds.
+- Overlay chrome uses the locked inspector ink `#3A6F7C` (JS fallback + Julia
+  `hoverstyle` default) instead of iOS-alert red `#ff3b30`. Hover is stroke-only;
+  selected closed geometry gets a wash fill; selected open kinds (segments /
+  polylines) get a two-stroke ring. Tip show/hide and highlight mount fade in
+  100 ms on state change (not remounted on every pointer frame) and honor
+  `prefers-reduced-motion`. The tooltip card is edge-clamped
+  with caret flip. Tooltip dark follows `prefers-color-scheme` (official Pluto's
+  theme signal; there is no notebook toggle). `selected=` now accepts `segments`
+  / `polyline` so the ring recipe is reachable; `grid` / `axis` / … still fail
+  loud.
+
+- Cloud sysimage bake is CairoMakie (+ Makie, Pluto, Masque workload) only — WGLMakie is
+  not preloaded. Default `julia` still uses `-J` that image; `JULIA_NOSYSIMAGE=1` is the
+  stock/WGL live-verify escape hatch.
+- `_resolve_backend` no longer throws when both backends are loaded: honor `backend=` or
+  default to Cairo. Still throws when no backend is loaded.
+
 ### Removed
+- `docs/dev/releasing.md` — the release mechanics are the Release row of
+  `docs/dev/frontend-delivery.md`; `docs/dev/roadmap.md` was rewritten as a list of open
+  work, non-goals, and order, without milestone numbers or per-item history.
 - `docs/design.md`, `docs/research-findings.md`, `docs/survey-makie-surfaces.md` — superseded
   by `docs/dev/architecture.md`/`docs/dev/roadmap.md` (kept in git history). `docs/tooltips.md`
   — its internals moved into `docs/dev/architecture.md` §10, its user-facing half into the
@@ -156,7 +191,40 @@ All notable changes to this project are documented here. The format is based on
   path (`on_shader_error`). Previously this threw `TypeError: Bonito.Connection.send_warning
   is not a function` on top of the shader error it was trying to report.
 
+- `selected=` now fails loud at `build_manifest` (and at overlay mount) for unsupported
+  layer kinds (`segments`/`grid`/…) and out-of-range indices — same doctrine as wrong-length
+  `payloads=` (`_check_payloads`). Pre-highlight remains supported for `circles`/`rects`/
+  `polygons`. Mount-time `selected=` sharing `g.sel` with box-select is covered by a unit
+  test (ROI commit replaces pre-highlights — one selection at a time). Closes #39.
+- `selected=` pre-highlights are now genuinely persistent: they draw into the overlay's
+  persistent selection group instead of the transient hover group, so they survive hovers and
+  all selected indices render (previously the first hover erased them and only the last index
+  showed — an M1.2 leftover from before box-select introduced the persistent group).
+
 ### Internal
+- Hardened the `WGLMakie bind E2E (Pluto)` CI job (`test/e2e/bind_click.mjs`) against the
+  load-induced timeout seen on PRs #57/#60/#61/#65/#66: the overlay always emitted the click
+  correctly, but Pluto's kernel round-trip (`#bondout` flipping) stalled past the wait budget.
+  The per-attempt wait is now 5 minutes (was 3), a stalled first attempt retries once by
+  clicking a *different* scatter marker (a same-value re-click can't distinguish "kernel got it
+  and is slow" from "kernel never got it" — CI evidence showed the old same-value `input`
+  re-fire never once recovered the bond), and a timeout now reports whether any cell went busy
+  after the click. `test/e2e/serve.jl` flushes `stdout`/`stderr` every second so `pluto.log` is a
+  trustworthy artifact instead of a buffered dump. CI now uploads a screenshot, DOM dump, and the
+  Pluto log on failure (`actions/upload-artifact`, `if: failure()`).
+- CI runs the live kind sweep (`test/e2e/kind_sweep.mjs` + `test/e2e/polish_verify.mjs`
+  against `kind_sweep_cairo.jl`/`kind_sweep_webgl.jl`) on a new `kind-sweep` job,
+  `continue-on-error: true` (advisory — does not block merges), matrixed over `cairo` and
+  `webgl`, with screenshot/DOM/console-log artifacts on failure. Agents still run the sweep
+  locally before calling a user-facing change done; see `docs/dev/live-interaction-checklist.md`.
+- `frontend/build.mjs` now sets esbuild's `mangleProps: /_$/`, shortening the frontend-internal
+  property names PR #72's `overlay.ts` split introduced (`OverlayState`/`OverlayCtx`/`ROIBox`/
+  `Drag`/`FocusRef`, plus `Hit`'s `geom`/`grid`/`axis`/`roiPart`) — every such field now ends in
+  a trailing underscore by convention. No property that crosses the Julia/Pluto/DOM boundary
+  (manifest, `@bind` payload, WGLMakie's `__obs__`/`__t__` wire tags) was renamed. See
+  `docs/dev/frontend-delivery.md`'s Bundle row and `docs/dev/perf-findings.md` for the measured
+  byte delta. No observable behavior change.
+
 - Every non-public Makie/WGLMakie/Bonito internal Masque relies on (`converted`, child
   `plots`, `finallimits`, scene `viewport`, Contourf's `computed_levels`, a Colorbar's
   `computedbbox`, `string_boundingboxes`, `transform_func`/`apply_transform`/`project`,
@@ -200,84 +268,6 @@ All notable changes to this project are documented here. The format is based on
   unrelated testset last left behind) now builds its own fixture. Pure test refactor — no
   manifest/payload/behavior change; verified pass counts are in the PR, not restated here.
 
-## [0.1.0] - 2026-09-12
-
-First General release. Frozen after drag-to-pan / drag-to-rotate
-(`ViewInteractable`, #48) and the overlay visual / live-verify playbook (#50,
-#52, #53) — not a sliders-only shortcut. Jonathan comments
-`@JuliaRegistrator register` on a CI-green `main` commit after the prep PR
-merges. See [`docs/dev/releasing.md`](docs/dev/releasing.md).
-
-### Changed
-- Overlay hover skips rewriting tooltip HTML and remeasuring tip size on
-  same-hit `mousemove`; extra pointer ticks coalesce to one animation frame.
-  The 100 ms fade and locked wash / ring recipes are unchanged.
-- Agent live-verify playbook (`docs/dev/live-interaction-checklist.md`) now requires
-  **visual** fidelity as well as interaction: wash / ring / halo / overlay-pin,
-  remount fade (no pulse), Pluto/OS `prefers-color-scheme` (no notebook toggle),
-  and steel-teal `#3A6F7C` not `#ff3b30`. Agents run `kind_sweep.mjs` **and**
-  `polish_verify.mjs` on Cairo and WGL across the interactable kinds.
-- Overlay chrome uses the locked inspector ink `#3A6F7C` (JS fallback + Julia
-  `hoverstyle` default) instead of iOS-alert red `#ff3b30`. Hover is stroke-only;
-  selected closed geometry gets a wash fill; selected open kinds (segments /
-  polylines) get a two-stroke ring. Tip show/hide and highlight mount fade in
-  100 ms on state change (not remounted on every pointer frame) and honor
-  `prefers-reduced-motion`. The tooltip card is edge-clamped
-  with caret flip. Tooltip dark follows `prefers-color-scheme` (official Pluto's
-  theme signal; there is no notebook toggle). `selected=` now accepts `segments`
-  / `polyline` so the ring recipe is reachable; `grid` / `axis` / … still fail
-  loud.
-
-### Added
-- `masque(fig, interactables)` — a Pluto `@bind` widget that overlays interactivity on a
-  static CairoMakie figure; returns an `InteractionEvent` on click (`nothing` until then).
-- `AbstractBackend` seam with `CairoBackend` (PNG; SVG groundwork). DPI derived from the
-  display width (≈2× Pluto's 700px column), opaque-background guarantee.
-- `AbstractInteractable` interface (`hitlayers` / `validate` / `events` / `tooltip` /
-  `hoverstyle`) and built-ins: `PointInteractable`, `SegmentInteractable`,
-  `RectInteractable` (list + compact grid), `PolygonInteractable`, `AxisInteractable`.
-- Custom-interaction paths with no JavaScript: `RegionInteractable` (declarative regions)
-  and `FunctionInteractable` (closure).
-- Categorical, log, and multi-axis support; payload-based linked selection.
-- TypeScript browser overlay (shadow-root, hit-testing, highlights, tooltips), bundled to
-  a committed `assets/overlay.js`; manifest shipped via `published_to_js` (survives static
-  HTML export); typed bond value via `AbstractPlutoDingetjes.Bonds.transform_value`.
-- `WebGLBackend` (`:webgl`) — a second, co-equal `AbstractBackend`: the figure renders live in
-  a browser WGLMakie `<canvas>` (client GPU) with the same overlay/`@bind` contract, making
-  animation, large/live data, and live 3D cheap where `:cairo` would re-rasterize —
-  a substrate/cost difference; the interaction contract is identical on both. `CairoMakie`/`WGLMakie` are both weak
-  dependencies gated behind package extensions; `masque(fig)` resolves whichever one is loaded
-  (errors if neither is). If both are loaded, `backend=` wins and implicit `masque` defaults to
-  Cairo. See the site's Backends page and `docs/dev/backend-comparison.md`.
-- View manipulation via `@bind` re-render: 2D `limits` zoom/pan, 3D `azimuth`/`elevation`
-  rotation, and selection persistence across view re-renders (`selected=` feedback).
-  Sliders need no Masque API; **drag-to-pan / drag-to-rotate** use `ViewInteractable`
-  (commit-on-release; Shift+drag arbitrates vs box-select/ROI). Demonstrated in
-  `examples/view_manip.jl` (CI-run); live-verified on `:cairo` and `:webgl`.
-  Live drag *preview* (high-frequency redraw) remains deferred with animation.
-- `Arrows3D` auto-extraction on `Axis3`: `SegmentInteractable(:pairs)` from processed
-  `startpoints`/`endpoints` (DATA space), with `{index,x,y,z,u,v,w}` payloads. Raw
-  `pos→pos+dir` is intentionally not used — it misses under `lengthscale`/`align` and the
-  MeshScatter children live in float32convert space (premise from #36).
-
-### Changed
-- Cloud sysimage bake is CairoMakie (+ Makie, Pluto, Masque workload) only — WGLMakie is
-  not preloaded. Default `julia` still uses `-J` that image; `JULIA_NOSYSIMAGE=1` is the
-  stock/WGL live-verify escape hatch.
-- `_resolve_backend` no longer throws when both backends are loaded: honor `backend=` or
-  default to Cairo. Still throws when no backend is loaded.
-
-### Fixed
-- `selected=` now fails loud at `build_manifest` (and at overlay mount) for unsupported
-  layer kinds (`segments`/`grid`/…) and out-of-range indices — same doctrine as wrong-length
-  `payloads=` (`_check_payloads`). Pre-highlight remains supported for `circles`/`rects`/
-  `polygons`. Mount-time `selected=` sharing `g.sel` with box-select is covered by a unit
-  test (ROI commit replaces pre-highlights — one selection at a time). Closes #39.
-- `selected=` pre-highlights are now genuinely persistent: they draw into the overlay's
-  persistent selection group instead of the transient hover group, so they survive hovers and
-  all selected indices render (previously the first hover erased them and only the last index
-  showed — an M1.2 leftover from before box-select introduced the persistent group).
-
 ### Notes
 - Every overlay interaction path is now exercised live in a real Pluto + browser on **every
   supported backend** (today `:cairo` and `:webgl`): the `:cairo` gallery (`examples/demo.jl`)
@@ -303,5 +293,4 @@ merges. See [`docs/dev/releasing.md`](docs/dev/releasing.md).
   CairoMakie limit (`LScene` disposition remains a roadmap decision item). High-frequency live
   redraw is a shared cost limit on both backends.
 
-[Unreleased]: https://github.com/jowch/Masque.jl/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/jowch/Masque.jl/releases/tag/v0.1.0
+[Unreleased]: https://github.com/jowch/Masque.jl/commits/main
