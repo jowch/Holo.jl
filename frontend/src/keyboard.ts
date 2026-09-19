@@ -3,9 +3,9 @@
 // tooltip reuse the existing hover/highlight machinery (drawHi, showTipAt) so there is exactly
 // one visual language for "this element is what you're on" whether you got there by mouse or
 // keyboard — see hover.ts's restoreFocus for how the two stay in sync on a pointer miss.
-import { hitLayerByIndex, layerNElements } from "./selection"
-import { drawHi, clearHi } from "./highlight"
-import { showTipAt, hideTip } from "./hover"
+import { hitLayerByIndex, isGapSegment, layerNElements } from "./selection"
+import { drawHi, clearHi, clearLink } from "./highlight"
+import { showTipAt, hideTip, updateLinkForHit } from "./hover"
 import { commitClick } from "./bond"
 import { plainTextForHit } from "./template"
 import { cssAnchor } from "./state"
@@ -23,17 +23,6 @@ const ANNOUNCE_DEBOUNCE_MS = 150
 // unbounded (a 1000x1000 heatmap is not something you arrow through one cell at a time).
 // :axis/:threshold/:roi/:view are continuous or drag-only, not element-indexed at all.
 const FOCUSABLE_KINDS = new Set(["circles", "rects", "polygons", "segments", "polyline"])
-
-// A :polyline's flat [x,y,…] vertex array uses NaN as Julia's gap sentinel (interactables.jl's
-// `_q`) — geometry.ts's hitLayer already skips a segment with either endpoint NaN for mouse
-// hover/click (`Number.isNaN(x0) || Number.isNaN(x1)`, checked on x only since a real gap
-// always carries through both coordinates of the same vertex). Do the same here: an
-// unfiltered gap "segment" would draw a highlight `<line>` with a NaN coordinate (a Chromium
-// console error) and announce/dispatch an element the mouse can never reach.
-function isGapSegment(layer: HitLayer, k: number): boolean {
-    const a = layer.geometry as number[]
-    return Number.isNaN(a[2 * k]) || Number.isNaN(a[2 * k + 2])
-}
 
 export function buildFocusable(manifest: Manifest): FocusRef[] {
     const out: FocusRef[] = []
@@ -88,6 +77,7 @@ export function focusTo(ctx: OverlayCtx, state: OverlayState, i: number | null):
         state.focusTipCss_ = null
         ctx.surface_.classList.remove("kbd-ring")
         clearHi(state, ctx.hiGroup_, true)
+        clearLink(state, ctx.linkGroup_, true)
         hideTip(ctx, state)
         scheduleAnnounce(ctx, state, "")
         return
@@ -99,6 +89,7 @@ export function focusTo(ctx: OverlayCtx, state: OverlayState, i: number | null):
     state.focusHit_ = hit
     ctx.surface_.classList.add("kbd-ring")
     drawHi(state, ctx.hiGroup_, hit)
+    updateLinkForHit(ctx, state, hit)
     // anchorFor(hit, null): no pointer to derive a "closest point on segment"/"cursor inside
     // polygon" placement from, so this falls back to the midpoint/centroid rule (geometry.ts).
     const anchor = anchorFor(hit, null)

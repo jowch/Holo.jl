@@ -594,6 +594,16 @@ function _construct(ax, p, id)
     return error("auto_interactables: $(typeof(p).name.name) passed _plotbase but has no _construct branch")
 end
 
+# Recursive `_child_plots` walk: registers `ids` for every descendant of `p` that isn't
+# already in `plotmap` (a leaf plot's `_child_plots` is `[]`, so this terminates there).
+function _register_descendants!(plotmap, p, ids)
+    for c in _child_plots(p)
+        haskey(plotmap, c) || (plotmap[c] = ids)
+        _register_descendants!(plotmap, c, ids)
+    end
+    return nothing
+end
+
 """
     auto_interactables(fig) -> Vector{AbstractInteractable}
 
@@ -612,6 +622,10 @@ yourself for huge data.
 function auto_interactables(fig)
     ints = AbstractInteractable[]
     seen = Dict{Symbol, Int}()
+    # plot -> the id(s) of the interactable(s) `_construct` built from it — the only thing
+    # LegendInteractable's plotmap-based resolution (priority (c)) needs to link a legend entry
+    # back to the layer(s) its plot(s) became.
+    plotmap = IdDict{Any, Vector{Symbol}}()
     for ax in fig.content
         ax isa Union{Makie.Axis, Makie.Axis3, Makie.PolarAxis} || continue
         for p in _child_plots(ax.scene)
@@ -645,7 +659,17 @@ function auto_interactables(fig)
             n = get(seen, base, 0) + 1
             seen[base] = n
             id = n == 1 ? base : Symbol(base, :_, n)
-            append!(ints, _construct(ax, p, id))
+            built = _construct(ax, p, id)
+            append!(ints, built)
+            ids = [ii.id for ii in built]
+            plotmap[p] = ids
+            # A compound recipe (ScatterLines/Stem/…) is what `_construct` ran on, but Makie's
+            # `legendelements` fallback puts the recipe's drawn CHILD plots on the legend entry
+            # (`Makie.get_plots(element)` returns those children, not `p`) — so every descendant
+            # of `p` needs the same ids in `plotmap` too, to auto-link. `haskey` keeps a plot's
+            # own top-level entry (set by its own iteration of this loop) from being overwritten
+            # by an ancestor's.
+            _register_descendants!(plotmap, p, ids)
         end
     end
     # Colorbar blocks live in fig.content, not in an Axis's scene.
@@ -655,6 +679,15 @@ function auto_interactables(fig)
         nc += 1
         id = nc == 1 ? :colorbar : Symbol(:colorbar_, nc)
         push!(ints, ColorbarInteractable(c; id))
+    end
+    # Likewise Legend blocks; resolved via the plotmap built above (priority (c) in
+    # LegendInteractable's own targets resolution — see src/interactables.jl).
+    nl = 0
+    for c in fig.content
+        c isa Makie.Legend || continue
+        nl += 1
+        id = nl == 1 ? :legend : Symbol(:legend_, nl)
+        push!(ints, LegendInteractable(c; id, plotmap))
     end
     return ints
 end

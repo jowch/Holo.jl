@@ -7,6 +7,13 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- `LegendInteractable`: a `Makie.Legend` block's entries as hit regions. Auto-extracted
+  `masque(fig)` legends link each entry to the plot layer(s) it labels (including a compound
+  recipe's — e.g. `scatterlines!`/`stem!` — child layers); hovering or keyboard-focusing an
+  entry highlights its linked layer(s), and a click's `@bind` payload carries `(; label,
+  group, targets)`. Custom legends resolve links via `plots=` (Makie's own kwarg) or an
+  explicit `targets=` (a label-keyed `Dict` or one-per-entry `Vector`). New optional
+  `HitLayer.links` field for cross-layer highlight targets.
 - Tooltip placement is now anchored to the hovered mark instead of the cursor, for
   `circles`/`rects`/`segments`/`polyline`/`polygons`/`grid`: the box is centred above the
   mark's top edge with a 10px gap and the caret points at the anchor (mark centre for

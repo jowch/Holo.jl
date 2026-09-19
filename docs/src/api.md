@@ -21,6 +21,7 @@ RectInteractable
 PolygonInteractable
 AxisInteractable
 ColorbarInteractable
+LegendInteractable
 TextInteractable
 ThresholdInteractable
 ROIInteractable

@@ -137,7 +137,10 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     const selGroup = document.createElementNS(SVG_NS, "g") // persistent box-selection highlights (g.sel, z-below hover)
     selGroup.setAttribute("class", "sel")
     svg.appendChild(selGroup)
-    const hiGroup = document.createElementNS(SVG_NS, "g") // transient hover highlights (g.hi, z-above sel)
+    const linkGroup = document.createElementNS(SVG_NS, "g") // legend-linked highlights (g.link, z-between sel and hi)
+    linkGroup.setAttribute("class", "link")
+    svg.appendChild(linkGroup)
+    const hiGroup = document.createElementNS(SVG_NS, "g") // transient hover highlights (g.hi, z-above sel/link)
     hiGroup.setAttribute("class", "hi")
     svg.appendChild(hiGroup)
     const surface = document.createElement("div")
@@ -194,6 +197,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     const layerStarts = computeLayerStarts(focusable)
     const ctx: OverlayCtx = {
         manifest_: manifest, host_: host, base_: base, surface_: surface, tip_: tip, hiGroup_: hiGroup, selGroup_: selGroup,
+        linkGroup_: linkGroup,
         thresholdLines_: thresholdLines, roiBoxes_: roiBoxes,
         shadowRoot_: shadow, focusable_: focusable, layerStarts_: layerStarts, liveRegion_: liveRegion,
     }
@@ -276,6 +280,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         cancelPendingMove(state)
         cancelPendingDrag(state)
         if (state.hiLeaveTimer_ != null) clearTimeout(state.hiLeaveTimer_)
+        if (state.linkLeaveTimer_ != null) clearTimeout(state.linkLeaveTimer_)
         if (state.tipFlipTimer_ != null) clearTimeout(state.tipFlipTimer_)
         if (state.announceTimer_ != null) clearTimeout(state.announceTimer_)
         shadowHost.remove()
