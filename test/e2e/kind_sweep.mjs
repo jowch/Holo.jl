@@ -813,11 +813,43 @@ try {
         // source can only raise luminance). Sampled BEFORE this case's hover dispatch below.
         let lumBefore = null;
         if (tl0.kind === "circles") {
-          const expectColor = expectedColorFor(tl0.colors, spec.tintColor);
+          // The `tintColor` fallback must come from the TARGET layer's own spec, not this
+          // legend widget's `spec` (#98) — a legend spec's `tintColor` (if it ever gains one)
+          // describes the legend row's own baked colour, not the plot layer the row links to.
+          // `layerId` isn't a global key, though: it's kind-based and repeats across UNRELATED
+          // widgets (heatmap/image both use "cells"; the legend figure's embedded `scatter!`
+          // gets auto-id "scatter", same as the entirely separate standalone `scatter` widget,
+          // which is a different Figure with a different baked colour: :gray there vs :orange
+          // here). A bare `meta.find(m => m.layerId === tl0.id)` would silently borrow that
+          // unrelated widget's spec. `meta.find((m) => m.key === key)` is already unique per
+          // widget (`key` is `spec.key`), so scoping to `m.key === key` reduces the lookup to
+          // "is `spec` itself the target's spec" — today it never is, because no `meta` entry
+          // describes a layer embedded inside ANOTHER widget's figure (the legend's linked
+          // "scatter"/"lines" layers have no entry of their own). That leaves `tl0.colors` as
+          // the only baseline source until the schema grows a per-target entry; guard it the
+          // same way the TINT_CHECK_KEYS block above does (:586-594) so a future non-string
+          // `colors` (e.g. a categorical palette) fails loudly instead of `stableClipShot`
+          // falling back to its "two reads agree" loop and `assertRawColorMatch` early-returning
+          // on a null expectation — a silent, permanent pass rather than a check.
+          const targetSpec = meta.find((m) => m.key === key && m.layerId === tl0.id);
+          const expectColor = expectedColorFor(tl0.colors, targetSpec?.tintColor);
+          const baselineFrom = typeof tl0.colors === "string"
+            ? `target layer "${tl0.id}" colors=${JSON.stringify(tl0.colors)}`
+            : targetSpec
+              ? `spec "${targetSpec.key}" tintColor`
+              : `NO baseline source (no meta entry for key "${key}" layerId "${tl0.id}")`;
+          const expectLum = rawColorLuminance(expectColor);
+          if (expectLum === null) {
+            throw new Error(
+              `${key}/links[${c.index}]/tint-applied: no expectation to check against ` +
+              `(target layer "${tl0.id}" colors=${JSON.stringify(tl0.colors)}, baseline: ${baselineFrom}) — ` +
+              `give the target layer a resolvable \`colors\` or a matching \`meta\` entry with \`tintColor\``,
+            );
+          }
           lumBefore = meanLuminance(PNG.sync.read(
-            await stableClipShot(key, hp0.x, hp0.y, { expectLum: rawColorLuminance(expectColor) }),
+            await stableClipShot(key, hp0.x, hp0.y, { expectLum }),
           ));
-          assertRawColorMatch(lumBefore, expectColor, `${key}/links[${c.index}]/tint-applied`);
+          assertRawColorMatch(lumBefore, expectColor, `${key}/links[${c.index}]/tint-applied (baseline: ${baselineFrom})`);
         }
 
         const norm = (s) => String(s || "").toLowerCase().replace(/\s+/g, "");
