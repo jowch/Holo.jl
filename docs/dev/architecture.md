@@ -153,8 +153,10 @@ events(::AbstractInteractable)::Tuple = (:click, :hover)   # which events the ov
 # The per-element `tooltip(interactable, idx, payload)` dispatch is retired (M2.3).
 # See §10 Tooltips, below.
 # hoverstyle is per-LAYER too — the manifest ships one `style` per layer, not per element.
-# stroke=nothing (default) omits "stroke" from the manifest; the overlay then derives the
-# colour itself (mark colour when resolvable via `colors`, else a neutral figure-aware ink).
+# stroke=nothing (default) omits "stroke" from the manifest; the overlay then draws its own
+# blend-mode grey tint (multiply on light figures, screen on dark) instead of a stroke colour —
+# `colors` no longer feeds the highlight, only the tooltip accent. An explicit stroke here is
+# used verbatim (no blend).
 hoverstyle(::AbstractInteractable)::NamedTuple = (; stroke=nothing, width=2)
 ```
 

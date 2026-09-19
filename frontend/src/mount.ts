@@ -6,7 +6,7 @@ import { buildFocusable, computeLayerStarts, focusTo, handleKeydown } from "./ke
 import * as thresholdDrag from "./drag/threshold"
 import * as roiDrag from "./drag/roi"
 import { createOverlayState, cancelPendingMove, cancelPendingDrag, MOTION_MS } from "./state"
-import type { OverlayCtx } from "./state"
+import type { HiGroups, OverlayCtx } from "./state"
 import type { Hit, Manifest } from "./types"
 
 // Single source for the two highlight tint strengths (mount.ts's STYLE reads both; the e2e
@@ -14,6 +14,50 @@ import type { Hit, Manifest } from "./types"
 // strongly, so the two states stay visually distinct in the same derived colour.
 const HOVER_FILL_OPACITY = 0.18
 const SELECTED_FILL_OPACITY = 0.35
+
+// Blend-tint highlight (highlight.ts's makeHiElement, the default for every layer without an
+// explicit hoverstyle stroke): instead of colour-mixing toward --masque-ink, the grey below is
+// composited over the figure with mix-blend-mode, darkening/lightening whatever the mark sits on
+// rather than mixing toward a fixed ink colour. One blend mode + 4 greys per theme, single
+// source here; mount() below picks light vs dark from the figure's own background and writes all
+// 5 onto the shadow host.
+const BLEND_TINT = {
+    light: { blend: "multiply", tintHover: "#8c8c8c", tintSel: "#666666", lineHover: "#555555", lineSel: "#333333" },
+    dark: { blend: "screen", tintHover: "#737373", tintSel: "#999999", lineHover: "#aaaaaa", lineSel: "#cccccc" },
+}
+
+// Parses the handful of CSS colour syntaxes build_manifest's `background` kwarg actually emits
+// (#rrggbb/#rgb, rgb()/rgba()) — not a general CSS colour parser (no named colours, hsl(), etc.);
+// an unparseable or absent string falls through to "light" below anyway.
+function parseRGB(css: string): [number, number, number] | null {
+    const hex6 = css.match(/^#([0-9a-f]{6})$/i)
+    if (hex6) { const n = parseInt(hex6[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255] }
+    const hex3 = css.match(/^#([0-9a-f]{3})$/i)
+    if (hex3) { const [r, g, b] = [...hex3[1]].map((c) => parseInt(c + c, 16)); return [r, g, b] }
+    const rgb = css.match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i)
+    if (rgb) return [parseFloat(rgb[1]), parseFloat(rgb[2]), parseFloat(rgb[3])]
+    return null
+}
+
+// Same light/dark pivot as --masque-ink below: 49.44 is the lch lightness of middle grey
+// (#808080), the exact threshold the CSS lch(from --masque-fig-bg …) clamp already pivots on for
+// the tooltip theme. --masque-hi-blend has to be a static value written once at mount (it can't
+// be a live lch(from …) derivation like the tooltip vars — mix-blend-mode takes a keyword, not a
+// colour), so this mirrors that CSS math in JS: sRGB → relative luminance → CIE L*. A plain WCAG
+// relative-luminance cutoff (Y > 0.5) pivots at a different point than lch lightness and would
+// disagree with the tooltip theme on some backgrounds (light tooltip next to a "multiply" tint,
+// or vice versa) — matching the constant keeps the two derivations in lockstep.
+function isLightBackground(css: string | undefined): boolean {
+    const rgb = css ? parseRGB(css) : null
+    if (!rgb) return true // unparseable/absent → light, matching --masque-fig-bg's own #ffffff default
+    const [r, g, b] = rgb.map((c) => {
+        const s = c / 255
+        return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
+    })
+    const y = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    const lStar = y > 0.008856 ? 116 * Math.cbrt(y) - 16 : 903.3 * y
+    return lStar > 49.44
+}
 
 const STYLE = `
 :host { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
@@ -78,23 +122,35 @@ svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: n
 }
 /* Highlight ink. --masque-ink is the neutral default: near-black on light figures, near-white
    on dark ones (it reuses the tooltip text colour, which already carries that lightness clamp
-   off --masque-fig-bg). A highlight element that knows its mark's colour sets --masque-mark
-   inline; its stroke is then that colour pulled 30% toward the ink — darker on a light figure,
-   lighter on a dark one. An explicit per-layer hoverstyle stroke from Julia arrives inline as
-   --masque-hi-stroke and is used verbatim. Browsers without color-mix get the plain ink. A bare
-   stroke ring reads as an odd outline on its own, so both hover and selection also tint the
-   whole closed mark in this same derived colour — hover lightly (so it doesn't compete with the
-   marks around it), selection more strongly (so the two states stay visually distinct); open
-   geometry (masque-hi with neither class, and the ring in makeRing) is unaffected. */
+   off --masque-fig-bg). An explicit per-layer hoverstyle stroke from Julia arrives inline as
+   --masque-hi-stroke and is used verbatim (highlight.ts's unblended path, drawn into
+   svg.masque-plain below) — ROI rect/handles, the threshold line, and the selected-open-geometry
+   ring always take this plain-ink route too, since they always live in svg.masque-plain. Every
+   other highlight (the default — no resolved mark colour is used here any more) is a bare shape
+   in svg.masque-blend's own g.hi/g.sel instead (highlight.ts's makeHiElement/drawHi/
+   drawSelection route it there, no per-element wrapper): mix-blend-mode lives on that svg
+   element ITSELF (see the .masque-blend rule below) — Firefox doesn't reliably blend an element
+   nested a second level inside another, unblended <svg> (verified live), so blending has to be
+   the outermost svg's own property, not a wrapper around each highlight. The two rule blocks
+   below tint the mark's own backdrop with that mix-blend-mode (multiply on a light figure,
+   screen on a dark one, picked once at mount from the figure's own background — see
+   BLEND_TINT/isLightBackground above) rather than mixing a fixed ink colour into the mark. The
+   plain rules stay as a bare stroke ring plus a light ink wash for hover/selected; browsers
+   without mix-blend-mode fall back to that same plain ink wash for the blend path too. */
 :host { --masque-ink: var(--masque-tip-color-resolved); }
 .masque-hi { --masque-hi-c: var(--masque-hi-stroke, var(--masque-ink)); stroke: var(--masque-hi-c); fill: none; }
-@supports (color: color-mix(in lch, red, blue)) {
-  .masque-hi { --masque-hi-c: var(--masque-hi-stroke, color-mix(in lch, var(--masque-mark, var(--masque-ink)) 70%, var(--masque-ink))); }
-}
 .masque-hi.masque-hover { fill: var(--masque-hi-c); fill-opacity: ${HOVER_FILL_OPACITY}; }
 .masque-hi.masque-wash { fill: var(--masque-hi-c); fill-opacity: ${SELECTED_FILL_OPACITY}; }
 .masque-hi.masque-fill { fill: var(--masque-hi-c); }
 .masque-hi.masque-nostroke { stroke: none; }
+.masque-blend { mix-blend-mode: var(--masque-hi-blend, multiply); }
+.masque-blend .masque-hi.masque-hover { fill: var(--masque-hi-tint-hover); stroke: var(--masque-hi-line-hover); fill-opacity: 1; }
+.masque-blend .masque-hi.masque-wash  { fill: var(--masque-hi-tint-sel);   stroke: var(--masque-hi-line-sel);   fill-opacity: 1; }
+.masque-blend .masque-hi.masque-nostroke { stroke: none; }
+@supports not (mix-blend-mode: multiply) {
+  .masque-blend .masque-hi.masque-hover { fill: var(--masque-ink); fill-opacity: 0.18; stroke: var(--masque-ink); }
+  .masque-blend .masque-hi.masque-wash  { fill: var(--masque-ink); fill-opacity: 0.35; stroke: var(--masque-ink); }
+}
 .masque-tip { position: absolute; opacity: 0; pointer-events: none; z-index: 10;
        padding: var(--masque-tip-padding, 8px 12px); border-radius: var(--masque-tip-radius, 4px);
        background: var(--masque-tip-bg-resolved); color: var(--masque-tip-color-resolved);
@@ -160,15 +216,33 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     const shadow = shadowHost.attachShadow({ mode: "open" })
     const style = document.createElement("style")
     style.textContent = STYLE
-    const svg = document.createElementNS(SVG_NS, "svg")
-    svg.setAttribute("viewBox", `0 0 ${manifest.width} ${manifest.height}`)
-    svg.setAttribute("preserveAspectRatio", "none")
-    const selGroup = document.createElementNS(SVG_NS, "g") // persistent box-selection highlights (g.sel, z-below hover)
-    selGroup.setAttribute("class", "sel")
-    svg.appendChild(selGroup)
-    const hiGroup = document.createElementNS(SVG_NS, "g") // transient hover highlights (g.hi, z-above sel)
-    hiGroup.setAttribute("class", "hi")
-    svg.appendChild(hiGroup)
+
+    // Two coordinate-identical top-level <svg>s, not one: mix-blend-mode has to live on
+    // svg.masque-blend ITSELF (state.ts's HiGroups doc comment explains why — Firefox won't
+    // blend an element nested inside a second, unblended <svg>), so anything that must never
+    // blend (ROI, threshold, explicit-stroke highlights, the selected-open ring) needs its own,
+    // separate svg — svg.masque-plain — rather than sharing one with the blended elements. DOM
+    // order (blend first, plain second) puts the plain layer's ROI box/handles above the wash.
+    const makeOverlaySvg = (cls: string): SVGSVGElement => {
+        const s = document.createElementNS(SVG_NS, "svg")
+        s.setAttribute("viewBox", `0 0 ${manifest.width} ${manifest.height}`)
+        s.setAttribute("preserveAspectRatio", "none")
+        s.classList.add(cls)
+        return s
+    }
+    const makeGroup = (svgEl: SVGSVGElement, cls: string): SVGGElement => {
+        const g = document.createElementNS(SVG_NS, "g")
+        g.setAttribute("class", cls)
+        svgEl.appendChild(g)
+        return g
+    }
+    const blendSvg = makeOverlaySvg("masque-blend")
+    const plainSvg = makeOverlaySvg("masque-plain")
+    // persistent box-selection highlights (g.sel, z-below hover) then transient hover highlights
+    // (g.hi, z-above sel) — same append order on both sides, so g.hi always paints over g.sel
+    // whichever svg either one lands in.
+    const selGroup: HiGroups = { blend_: makeGroup(blendSvg, "sel"), plain_: makeGroup(plainSvg, "sel") }
+    const hiGroup: HiGroups = { blend_: makeGroup(blendSvg, "hi"), plain_: makeGroup(plainSvg, "hi") }
     const surface = document.createElement("div")
     surface.className = "surface"
     // touch-action: block native scroll/pinch on the surface ONLY when this manifest has a drag
@@ -208,7 +282,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     liveRegion.setAttribute("aria-live", "polite")
     liveRegion.setAttribute("aria-atomic", "true")
 
-    shadow.append(style, svg, surface, tip, kbdHint, liveRegion)
+    shadow.append(style, blendSvg, plainSvg, surface, tip, kbdHint, liveRegion)
     host.appendChild(shadowHost)
     // --masque-fig-bg drives the CSS-only tooltip theme (mount.ts's STYLE, lch(from …)); set
     // before tipStyle below so an explicit tooltip_bg/tooltip_color kwarg (--masque-tip-bg/
@@ -216,9 +290,18 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     // together via nested var() fallbacks, not a write-order race.
     if (manifest.background) shadowHost.style.setProperty("--masque-fig-bg", manifest.background)
     if (manifest.tipStyle) for (const [k, v] of Object.entries(manifest.tipStyle)) shadowHost.style.setProperty(k, v)
+    // Blend-tint highlight: pick multiply (light figure) vs screen (dark figure) once at mount,
+    // from the same manifest.background the tooltip theme reads — see isLightBackground above.
+    const blendTint = isLightBackground(manifest.background) ? BLEND_TINT.light : BLEND_TINT.dark
+    shadowHost.style.setProperty("--masque-hi-blend", blendTint.blend)
+    shadowHost.style.setProperty("--masque-hi-tint-hover", blendTint.tintHover)
+    shadowHost.style.setProperty("--masque-hi-tint-sel", blendTint.tintSel)
+    shadowHost.style.setProperty("--masque-hi-line-hover", blendTint.lineHover)
+    shadowHost.style.setProperty("--masque-hi-line-sel", blendTint.lineSel)
 
-    const thresholdLines = thresholdDrag.buildThresholdLines(manifest, svg)
-    const roiBoxes = roiDrag.buildROIBoxes(manifest, svg)
+    // ROI rect/handles and threshold lines never blend — always svg.masque-plain.
+    const thresholdLines = thresholdDrag.buildThresholdLines(manifest, plainSvg)
+    const roiBoxes = roiDrag.buildROIBoxes(manifest, plainSvg)
     const focusable = buildFocusable(manifest)
     const layerStarts = computeLayerStarts(focusable)
     const ctx: OverlayCtx = {

@@ -80,10 +80,12 @@ Optional (default shown; all non-exported — extend as `Masque.<name>`):
   with `masque"..."`) template, or `false` to suppress. Default: `nothing`.
 - `Masque.hoverstyle(i) -> NamedTuple` — one `(; stroke, width)` hover outline style per *layer*
   (the manifest ships one style per layer, not per element). Default: `(; stroke = nothing,
-  width = 2)` — `stroke = nothing` means the overlay derives the outline colour itself (a
-  darker/lighter shade of the element's own colour when it can be resolved via `colors`, else a
-  neutral ink that follows the figure background); a CSS colour string overrides it verbatim for
-  that layer.
+  width = 2)` — `stroke = nothing` means the overlay draws its own blend-mode grey tint
+  (`mix-blend-mode: multiply` on a light figure, `screen` on a dark one) instead of a stroke
+  colour, so every layer darkens/lightens in its own hue without Masque resolving the element's
+  colour; a CSS colour string overrides it verbatim for that layer (no blend, the outline is
+  exactly that colour). `colors` (see [`HitLayer`](@ref)) no longer affects the hover/selection
+  outline at all — it only drives the tooltip's accent border.
 - `Masque.hit_tol(i) -> Union{Nothing,Real}` — logical-px hit-test slack for `:segments`/
   `:polyline` layers, shipped in the manifest as image px (`round(Int, hit_tol(i) *
   ctx.scaling)`). `nothing` (default) omits the field; the overlay then falls back to its
@@ -108,8 +110,9 @@ events(::AbstractInteractable) = (:click, :hover)
 # Per-layer: nothing = auto name/value table (default), Markup = template, false = suppress.
 tooltip_spec(::AbstractInteractable) = nothing
 # One hover style per LAYER (the manifest ships one `style` dict per layer, not per element).
-# stroke = nothing: the overlay derives the outline colour (mark colour when resolvable via
-# `colors`, else a neutral figure-aware ink); a CSS colour string here overrides it verbatim.
+# stroke = nothing: the overlay draws its own blend-mode grey tint (multiply on a light figure,
+# screen on a dark one) instead of a stroke colour — `colors` no longer feeds this, only the
+# tooltip accent; a CSS colour string here overrides it verbatim (no blend).
 hoverstyle(::AbstractInteractable) = (; stroke = nothing, width = 2)
 # Logical-px hit-test slack for :segments/:polyline layers; nothing omits the manifest field.
 hit_tol(::AbstractInteractable) = nothing

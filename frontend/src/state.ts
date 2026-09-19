@@ -40,6 +40,18 @@ export const cssAnchor = (base: HTMLElement, manifest: Manifest, a: Anchor): Anc
 // left unmangled: `.kind` is also how HitLayer's own boundary discriminant is spelled, and
 // keeping the two textually identical avoids having to thread that distinction through every
 // `.kind` read in bond.ts/hover.ts for a saving of a few bytes.
+// The overlay's two coordinate-identical top-level <svg>s (mount.ts): masque-blend carries
+// mix-blend-mode on itself (highlights with no explicit hoverstyle stroke); masque-plain is
+// everything that must never blend — ROI rect/handles, threshold lines, explicit-stroke
+// highlights, the selected-open-geometry ring — and paints ON TOP of masque-blend (DOM order),
+// so a wash never visually covers the ROI box outline it's drawn under. Each svg has its own
+// g.hi/g.sel; highlight.ts's drawHi/drawSelection/clearHi/clearSel take one of these per hi/sel
+// role and route each element into whichever side highlight.ts's makeHiElement picked.
+export interface HiGroups {
+    blend_: SVGGElement
+    plain_: SVGGElement
+}
+
 export interface ROIBox {
     rect_: SVGRectElement
     handles_: SVGRectElement[]
@@ -71,8 +83,8 @@ export interface OverlayCtx {
     base_: HTMLElement
     surface_: HTMLElement
     tip_: HTMLElement
-    hiGroup_: SVGGElement
-    selGroup_: SVGGElement
+    hiGroup_: HiGroups
+    selGroup_: HiGroups
     thresholdLines_: Map<string, SVGLineElement>
     roiBoxes_: Map<string, ROIBox>
     shadowRoot_: ShadowRoot // for `shadowRoot.activeElement === surface` focus gating (keyboard.ts)

@@ -39,6 +39,10 @@ const down = (surface: HTMLElement, key: string): KeyboardEvent => {
 // overlay.test.ts's identical helper.
 const flushFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()))
 
+// No layer in this file's manifest sets an explicit style.stroke, so every highlight lands in
+// svg.masque-blend's g.hi (mount.ts) as a bare shape — svg.masque-plain's own g.hi stays empty
+// throughout, and since svg.masque-blend is first in DOM order, plain ".hi > *" always finds the
+// blend side's live child without needing to disambiguate between the two svgs.
 describe("keyboard navigation", () => {
     it("ignores keys when the surface isn't focused", () => {
         const { surface } = setup(manifest)

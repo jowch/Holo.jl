@@ -3,9 +3,10 @@
 # on supported kinds (`circles`, `rects`, `polygons`, `segments`, `polyline`). `circle` marks a
 # kind whose highlight is a circle, so the driver checks r == geometry r (no halo offset).
 # Grid / threshold / roi / view are hover-click or drag only. `scatter_dark` is a dark
-# Makie figure so the neutral/mark-derived ink is live-checked on dark axes; `scatter` and
-# `scatter_dark` are built from the scatter plot object (not raw points) so `colors` resolves
-# and the mark-colour-derivation check has something to derive from.
+# Makie figure so the blend-tint recipe (multiply on light figures, screen on dark) is
+# live-checked on dark axes too; `scatter` and `scatter_dark` are built from the scatter plot
+# object (not raw points) so `colors` resolves and the tooltip-accent check has something to
+# derive from.
 
 kind_sweep_meta() = [
     Dict(

@@ -57,20 +57,30 @@ text and the bond payload → it gets a live check on every backend × the kinds
   heatmap/image, barplot, poly, polar, dark-figure scatter, arrows3d, hlines/vlines,
   threshold, ROI, and view-pan. Interaction without visual is unfinished; visual chrome
   without the kind sweep is unfinished. Overlay recipes (locked — cite, do not reopen):
-  highlight ink `--masque-ink` is neutral, derived from the figure background (near-black on
-  light figures, near-white on dark, not `#ff3b30`); when the element's colour is resolvable
-  (`colors`, today `scatter!`'s `color=`) the outline is that colour mixed 70/30 toward the ink
-  (darker on light, lighter on dark); an explicit `hoverstyle` stroke is used verbatim;
-  hover on a closed mark (circle/rect/poly) = 1.5px stroke flush on the mark's own drawn edge
-  + an 18% tint fill in that same colour (class `masque-hi masque-hover`); hover on an open
-  seg (lines/segments) stays stroke-only, no tint (`masque-hi`, no `masque-hover`). A scatter
-  circle's highlight `r` is the marker's DRAWN radius, not `markersize / 2` — flush against
-  the visible disc (default `:circle` marker ≈0.3525×`markersize`; a `Circle`/`Rect` geometry
-  marker draws at `markersize`; anything else falls back to `markersize / 2`); the overlay's
-  own 4px hit slack keeps clicking as forgiving as before. Selected closed = 35% wash fill +
-  2px stroke; selected open = ring (2px + 4px @ 0.25); 80–120 ms fade; tooltip
-  theme derived from the FIGURE's own background (CSS relative-colour syntax,
-  `--masque-fig-bg`) — not just OS
+  highlight is a blend-mode tint, not a mark-derived colour — `colors` (today `scatter!`'s
+  `color=`) no longer touches the highlight at all, only the tooltip accent (below). The shadow
+  root holds two overlay svgs with identical box/viewBox. Every hover/selected highlight without
+  an explicit Julia `hoverstyle` stroke is a BARE shape (no per-element wrapper) inside
+  `svg.masque-blend` (DOM-first) — `mix-blend-mode` (`multiply` on light figures, `screen` on
+  dark, chosen at mount from the figure background) sits on that svg element itself, since
+  Firefox only honours it on a top-level svg, not nested SVG content. Fixed greys: hover
+  fill/stroke `#8c8c8c`/`#555555` (dark figure `#737373`/`#aaaaaa`), fill-opacity 1, 1.5px stroke
+  flush on the mark's own drawn edge (`masque-hi masque-hover` — a `<line>` for seg hover carries
+  the same class and fill too, and reads as stroke-only on screen only because a line has no
+  interior area to fill); selected uses the stronger `#666666`/`#333333` (dark
+  `#999999`/`#cccccc`) pair at 2px, fill-opacity 1 (`masque-hi masque-wash`). The second svg,
+  `svg.masque-plain` (unblended), holds ROI box/handles, the threshold line, the selected-seg
+  ring (2px + 4px @ 0.25, unchanged ink), and hover/selected highlights for a layer with an
+  explicit `hoverstyle` stroke — single element, stroke verbatim + 18%/35% tint in that colour
+  (the pre-blend recipe, unchanged), open shapes staying stroke-only there (no `masque-hover`,
+  `fill: none`); browsers without `mix-blend-mode` fall back to that same neutral-ink tint. A
+  scatter circle's highlight `r` is the marker's DRAWN radius, not `markersize / 2` — flush
+  against the visible disc (default `:circle` marker ≈0.3525×`markersize`; a `Circle`/`Rect`
+  geometry marker draws at `markersize`; anything else falls back to `markersize / 2`); the
+  overlay's own 4px hit slack keeps clicking as forgiving as before. 80–120 ms fade — a plain
+  opacity fade on the highlight shape itself (`masque-enter`/`masque-leave`; the blend lives on
+  the svg root, so a fading child doesn't isolate it); tooltip theme derived from the FIGURE's
+  own background (CSS relative-colour syntax, `--masque-fig-bg`) — not just OS
   `prefers-color-scheme` (official Pluto has no notebook toggle), which is now only the
   fallback for browsers without relative-colour support — tooltip anchored ABOVE the hovered
   mark (not the cursor) with a 10px gap and the caret on the anchor — flips below on a

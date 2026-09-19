@@ -96,7 +96,10 @@ try {
     const hosts = [...document.querySelectorAll(".ip-host")];
     const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
     let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
-    const hi = sr.querySelector("g.hi > *");
+    // Keyboard focus draws the same bare-shape highlight a hover would: svg.masque-blend's g.hi
+    // for the default blend-tint recipe, svg.masque-plain's g.hi for an explicit `hoverstyle` —
+    // no wrapper either way, so masque-leave lives on the node itself.
+    const hi = sr.querySelector("svg.masque-blend g.hi > *") || sr.querySelector("svg.masque-plain g.hi > *");
     const live = sr.querySelector('[aria-live="polite"]');
     return {
       focused: sr.activeElement === sr.querySelector(".surface"),

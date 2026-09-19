@@ -2,7 +2,7 @@ import { invertAxis } from "../geometry"
 import { computeSelection } from "../selection"
 import { SVG_NS, DEFAULT_STYLE, drawSelection } from "../highlight"
 import { clampX, clampY, fmt } from "../state"
-import type { Drag, OverlayState, ROIBox } from "../state"
+import type { Drag, HiGroups, OverlayState, ROIBox } from "../state"
 import type { HitLayer, Manifest, ROIGeometry } from "../types"
 
 // --- draggable + resizable ROI boxes (Tier 0) ---
@@ -72,7 +72,7 @@ export function begin(
     return { kind: "roi", id_: id, box_: box, mode_: mode, ax_: ax, ay_: ay, target_: box.target_, pointerId_: pointerId }
 }
 
-export function move(d: Extract<Drag, { kind: "roi" }>, state: OverlayState, selGroup: SVGGElement, manifest: Manifest, p: { x: number; y: number }): string {
+export function move(d: Extract<Drag, { kind: "roi" }>, state: OverlayState, selGroup: HiGroups, manifest: Manifest, p: { x: number; y: number }): string {
     const box = d.box_, [vx, vy, vw, vh] = box.t_.viewport
     if ("move" in d.mode_) {
         box.g_.x = Math.max(vx, Math.min(vx + vw - box.g_.w, p.x - d.ax_))
@@ -105,7 +105,7 @@ export function move(d: Extract<Drag, { kind: "roi" }>, state: OverlayState, sel
 export function end(
     d: Extract<Drag, { kind: "roi" }>,
     state: OverlayState,
-    selGroup: SVGGElement,
+    selGroup: HiGroups,
     manifest: Manifest
 ): { items: unknown[] } | { layer: string; index: number; payload: unknown } {
     if (d.target_) {

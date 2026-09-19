@@ -1,15 +1,30 @@
 // Shared visual-fidelity asserts for kind_sweep.mjs + polish_verify.mjs.
 // Recipe (locked in CLAUDE.md's "Overlay recipes" paragraph — cite, do not reopen):
-// every highlight element carries class masque-hi and gets its colour from the shadow
-// stylesheet (never a stroke/fill attribute) — a neutral figure-aware ink by default, or the
-// mark's own colour mixed toward that ink when resolvable. Hover on a closed shape
-// (circle/rect/poly) = 1.5px stroke flush on the mark's own drawn edge + an 18% tint fill
-// (masque-hi masque-hover); hover on an open shape (seg — lines/segments) stays stroke-only
-// (masque-hi, no masque-hover, fill: none). Selected closed = 35% wash fill + 2px stroke;
-// selected open = ring; remount fade.
+// the shadow root holds two overlay svgs with identical box/viewBox. `svg.masque-blend`
+// (DOM-first) carries `mix-blend-mode` (multiply on light figures, screen on dark) on the svg
+// element itself — Firefox only honours the blend mode on a top-level svg, not nested SVG
+// content, so there is no per-element wrapper. Every hover/selected highlight without an
+// explicit Julia `hoverstyle` stroke is a BARE shape inside it: `masque-hi masque-hover` (hover
+// — circle/rect/polygon, or a `line` for seg hover; the fill is inert on a line, so it reads as
+// stroke-only on screen even though the class/fill are the same) or `masque-hi masque-wash`
+// (selected). The shape's fill/stroke are fixed greys (GREY below), fill-opacity 1, stroke-width
+// 1.5 (hover) / 2 (selected). `svg.masque-plain` (after it, unblended) holds ROI/threshold, the
+// selected-seg ring (`g.sel > g > line×2`, unchanged ink), and hover/selected highlights for a
+// layer with an explicit `hoverstyle` stroke — single element, stroke verbatim, 18%/35% tint in
+// that colour (the pre-blend recipe, unchanged), open shapes staying stroke-only there (no
+// `masque-hover`, `fill: none`). Remount fade is a plain opacity fade on the shape itself
+// (`masque-enter`/`masque-leave`, no wrapper to isolate), 80-120ms.
 
 export const ALERT_RED = "#ff3b30";
 export const TEAL = "#3A6F7C";
+
+// Fixed greys the blend-tint recipe reads from host custom properties — see mount.ts. No mark
+// colour is involved: every kind darkens (light figure, multiply) or lightens (dark figure,
+// screen) in its own hue without Masque knowing the element's colour.
+export const GREY = {
+  light: { hoverFill: "rgb(140, 140, 140)", hoverStroke: "rgb(85, 85, 85)", washFill: "rgb(102, 102, 102)", washStroke: "rgb(51, 51, 51)" },
+  dark: { hoverFill: "rgb(115, 115, 115)", hoverStroke: "rgb(170, 170, 170)", washFill: "rgb(153, 153, 153)", washStroke: "rgb(204, 204, 204)" },
+};
 
 // getComputedStyle serializes a colour back out in whatever functional notation the browser
 // picked for the value's colour space — not necessarily rgb(). A color-mix(in lch, …) result in
@@ -47,12 +62,13 @@ export function assertNoAlertRed(blob, where) {
   }
 }
 
-// The old fixed steel-teal ring #3A6F7C is retired — every highlight now derives its colour
-// from the mark or the figure-aware ink, so this literal must never appear in the overlay.
+// The old fixed steel-teal ring #3A6F7C is retired — every highlight now either draws the
+// fixed-grey blend tint (GREY above) or, for an explicit `hoverstyle`, the caller's own verbatim
+// colour, so this literal must never appear in the overlay.
 export function assertNoTeal(blob, where) {
   const s = typeof blob === "string" ? blob : JSON.stringify(blob);
   if (/#3a6f7c|rgb\(\s*58[\s,]+111[\s,]+124\s*\)/i.test(s)) {
-    throw new Error(`${where}: steel-teal ${TEAL} leaked (highlight colour must derive from the mark/ink, not a fixed literal)`);
+    throw new Error(`${where}: steel-teal ${TEAL} leaked (highlight colour must be the blend-tint grey or an explicit hoverstyle, not a fixed literal)`);
   }
 }
 
@@ -65,17 +81,35 @@ function realColor(c) {
 }
 
 // `wash`/`ring`/`hi` are captured in-page as { className, stroke, fill, fillOpacity (all
-// getComputedStyle), width, opacity (stroke-width/stroke-opacity attributes), … geometry }.
-export function assertWash(wash, where) {
+// getComputedStyle), width, opacity (stroke-width/stroke-opacity attributes), blend
+// (getComputedStyle(svg.masque-blend).mixBlendMode when the shape lives in that svg, or null
+// when it's in `svg.masque-plain` instead — the explicit-`hoverstyle` case), … geometry }.
+// `wantDark` selects the figure-relative grey pair (GREY.dark for a dark figure, GREY.light
+// otherwise) — irrelevant when `blend` is null.
+export function assertWash(wash, where, wantDark) {
   if (!wash || !hasClass(wash.className, "masque-hi") || !hasClass(wash.className, "masque-wash")) {
     throw new Error(`${where}: wash element missing masque-hi/masque-wash class ${JSON.stringify(wash)}`);
   }
   if (wash.width !== "2") throw new Error(`${where}: wash recipe ${JSON.stringify(wash)}`);
-  if (!realColor(wash.fill) || wash.fill !== wash.stroke) {
-    throw new Error(`${where}: wash fill/stroke mismatch ${JSON.stringify(wash)}`);
-  }
-  if (String(wash.fillOpacity) !== "0.35") {
-    throw new Error(`${where}: wash fill-opacity ${wash.fillOpacity} (want 0.35)`);
+  if (wash.blend) {
+    if (wash.blend !== (wantDark ? "screen" : "multiply")) {
+      throw new Error(`${where}: wash blend mode ${wash.blend} (want ${wantDark ? "screen" : "multiply"})`);
+    }
+    const g = wantDark ? GREY.dark : GREY.light;
+    if (wash.fill !== g.washFill) throw new Error(`${where}: wash fill ${wash.fill} (want ${g.washFill})`);
+    if (wash.stroke !== g.washStroke) throw new Error(`${where}: wash stroke ${wash.stroke} (want ${g.washStroke})`);
+    if (String(wash.fillOpacity) !== "1") {
+      throw new Error(`${where}: wash fill-opacity ${wash.fillOpacity} (want 1)`);
+    }
+  } else {
+    // Explicit `hoverstyle` stroke: lives in svg.masque-plain, unblended, verbatim colour + 35%
+    // tint (unchanged).
+    if (!realColor(wash.fill) || wash.fill !== wash.stroke) {
+      throw new Error(`${where}: wash fill/stroke mismatch ${JSON.stringify(wash)}`);
+    }
+    if (String(wash.fillOpacity) !== "0.35") {
+      throw new Error(`${where}: wash fill-opacity ${wash.fillOpacity} (want 0.35)`);
+    }
   }
   assertNoAlertRed(wash, where);
   assertNoTeal(wash, where);
@@ -100,11 +134,17 @@ export function assertRing(ring, where) {
   assertNoTeal(ring, where);
 }
 
-// `closed` distinguishes the two hover variants: a closed shape (circle/rect/poly) gets an
-// 18% tint fill on top of the stroke (masque-hover); an open shape (seg — lines/segments)
-// stays stroke-only. If omitted, inferred from `hi.tag` (only a `line` element is open) —
-// pass it explicitly when the caller didn't capture `tag`.
-export function assertHoverRecipe(hi, where, closed) {
+// `closed` distinguishes the two UNBLENDED hover variants (explicit `hoverstyle`, `hi.blend`
+// null, `svg.masque-plain`): a closed shape (circle/rect/poly) gets a tint fill on top of the
+// stroke (masque-hover); an open shape (seg — lines/segments) stays stroke-only, no tint class.
+// In the default BLENDED path (`hi.blend` set, `svg.masque-blend`) every hover — closed or an
+// open seg's `<line>` — carries `masque-hover` and the same fixed-grey fill/stroke; a `<line>`
+// has no interior area, so its fill is inert and it still reads as stroke-only on screen even
+// though the DOM/CSS state is identical to a closed shape's. If `closed` is omitted, it's
+// inferred from `hi.tag` (only a `line` element is open) — pass it explicitly when the caller
+// didn't capture `tag`. `wantDark` selects GREY.dark/GREY.light; irrelevant when `hi.blend` is
+// null.
+export function assertHoverRecipe(hi, where, closed, wantDark) {
   if (!hi) throw new Error(`${where}: missing hover stroke`);
   if (closed === undefined) closed = hi.tag !== "line";
   if (!hasClass(hi.className, "masque-hi")) {
@@ -116,7 +156,21 @@ export function assertHoverRecipe(hi, where, closed) {
   if (!realColor(hi.stroke)) {
     throw new Error(`${where}: hover stroke not resolved ${JSON.stringify(hi)}`);
   }
-  if (closed) {
+  if (hi.blend) {
+    if (hi.blend !== (wantDark ? "screen" : "multiply")) {
+      throw new Error(`${where}: hover blend mode ${hi.blend} (want ${wantDark ? "screen" : "multiply"})`);
+    }
+    if (!hasClass(hi.className, "masque-hover")) {
+      throw new Error(`${where}: hover missing masque-hover tint class ${JSON.stringify(hi)}`);
+    }
+    const g = wantDark ? GREY.dark : GREY.light;
+    if (hi.fill !== g.hoverFill) throw new Error(`${where}: hover fill ${hi.fill} (want ${g.hoverFill})`);
+    if (hi.stroke !== g.hoverStroke) throw new Error(`${where}: hover stroke ${hi.stroke} (want ${g.hoverStroke})`);
+    if (String(hi.fillOpacity) !== "1") {
+      throw new Error(`${where}: hover fill-opacity ${hi.fillOpacity} (want 1)`);
+    }
+  } else if (closed) {
+    // Explicit `hoverstyle` stroke, closed shape: unblended, verbatim colour + 18% tint (unchanged).
     if (!hasClass(hi.className, "masque-hover")) {
       throw new Error(`${where}: closed hover missing masque-hover tint class ${JSON.stringify(hi)}`);
     }
@@ -127,6 +181,7 @@ export function assertHoverRecipe(hi, where, closed) {
       throw new Error(`${where}: hover fill-opacity ${hi.fillOpacity} (want 0.18)`);
     }
   } else {
+    // Explicit `hoverstyle` stroke, open seg: unblended, stroke-only, no tint class.
     if (hasClass(hi.className, "masque-hover")) {
       throw new Error(`${where}: open hover unexpectedly has masque-hover tint class ${JSON.stringify(hi)}`);
     }
@@ -210,24 +265,30 @@ export async function assertTooltipColorScheme(page, sample) {
   await page.emulateMedia({ colorScheme: "light" });
 }
 
-// Mark-colour derivation: hover/selected outline colour is the mark's own colour mixed toward
-// --masque-ink (darker on light figures, lighter on dark), never the raw mark colour, and never
-// the fixed teal. `strokeL` is the highlight's computed-stroke lightness (colorLightness); `markL`
-// is the resolved mark colour's lightness (also colorLightness, of a temp element's
-// getComputedStyle(...).color after `style.color = mark` — done in-page, see kind_sweep.mjs).
-export function assertMarkDerivedInk(strokeL, markL, wantDarker, where) {
-  if (strokeL === null || markL === null) {
-    throw new Error(`${where}: could not parse stroke/mark lightness (stroke=${strokeL}, mark=${markL})`);
+// Tint-applied (blend darkens/lightens the mark itself, screenshot-verified): mean luminance
+// (0-255) of a small page.screenshot() clip centred on the mark, taken before vs. after the
+// hover blend-tint applies. A light figure must get darker (drop), a dark figure lighter
+// (rise) — by at least `minDelta`, kept loose since exact grey/blend math varies by figure and
+// GPU/driver AA. This is what replaced the old mark-derived-ink lightness check: the highlight
+// no longer reads the mark's colour at all, so there is nothing per-element left to compare —
+// only whether the blend visibly tinted the pixels in the right direction. See PNG.sync.read
+// (pngjs, already a devDependency here) for the buffer -> RGBA decode.
+export function meanLuminance(png) {
+  let sum = 0;
+  const n = png.width * png.height;
+  for (let i = 0; i < png.data.length; i += 4) {
+    sum += 0.2126 * png.data[i] + 0.7152 * png.data[i + 1] + 0.0722 * png.data[i + 2];
   }
-  const diff = markL - strokeL; // positive: stroke is darker than the mark
-  if (wantDarker ? diff < 5 : diff > -5) {
-    throw new Error(`${where}: stroke L=${strokeL.toFixed(1)} vs mark L=${markL.toFixed(1)} not ${wantDarker ? "darker" : "lighter"} by >=5`);
-  }
+  return sum / n;
 }
 
-// No resolvable mark colour (no `colors` on the layer): the outline falls back to the neutral
-// figure-aware ink, which on a light figure must read as dark (well below mid lightness).
-export function assertNeutralDarkInk(strokeL, where) {
-  if (strokeL === null) throw new Error(`${where}: could not parse stroke lightness`);
-  if (strokeL >= 30) throw new Error(`${where}: stroke L=${strokeL.toFixed(1)} not neutral dark ink (want <30)`);
+export function assertTintApplied(lumBefore, lumAfter, wantDark, where, minDelta = 4) {
+  const delta = lumAfter - lumBefore;
+  const ok = wantDark ? delta >= minDelta : delta <= -minDelta;
+  if (!ok) {
+    throw new Error(
+      `${where}: luminance before=${lumBefore.toFixed(1)} after=${lumAfter.toFixed(1)} delta=${delta.toFixed(1)} ` +
+      `(want ${wantDark ? `>= +${minDelta}` : `<= -${minDelta}`})`,
+    );
+  }
 }

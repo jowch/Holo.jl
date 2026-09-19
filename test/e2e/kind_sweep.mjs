@@ -8,11 +8,17 @@
 import { chromium } from "playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { PNG } from "pngjs";
 import {
   assertNoAlertRed, assertNoTeal, assertWash, assertRing, assertHoverRecipe, assertCircleR,
   assertRemountStable, assertLeaveFade, assertTooltipColorScheme,
-  assertMarkDerivedInk, assertNeutralDarkInk, colorLightness,
+  meanLuminance, assertTintApplied,
 } from "./visual_assert.mjs";
+
+// Kinds whose hover draws a masque-hi masque-hover fill tint (closed shapes) get the
+// screenshot-based tint-applied check below; :grid (heatmap/image) hits a "rect" geom_ too
+// (geometry.ts's grid case), so its hover is closed/filled the same as circles/rects/polygons.
+const TINT_CHECK_KEYS = new Set(["scatter", "scatter_dark", "barplot", "heatmap", "poly"]);
 
 const [base, notebook, backend, artifactDirArg] = process.argv.slice(2);
 if (!base || !notebook || !backend) {
@@ -179,9 +185,16 @@ try {
     const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
     let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
     const baseEl = host.querySelector("img, canvas");
-    const svg = sr.querySelector("svg");
-    const hb = host.getBoundingClientRect(), bb = baseEl.getBoundingClientRect(), sb = svg.getBoundingClientRect();
-    const kids = [...(sr.querySelector("g.sel")?.children ?? [])].map((el) => {
+    // Two overlay svgs, same box/viewBox: svg.masque-blend (mix-blend-mode on the svg element
+    // itself — Firefox only honours it on a top-level svg, not nested SVG content, so there is
+    // no per-element wrapper) holds the default blend-tint hover/wash; svg.masque-plain holds
+    // ROI/threshold, the selected-seg ring, and any explicit-`hoverstyle` highlight.
+    const svgBlend = sr.querySelector("svg.masque-blend");
+    const svgPlain = sr.querySelector("svg.masque-plain");
+    const bb = baseEl.getBoundingClientRect();
+    const hb = host.getBoundingClientRect();
+    const sbBlend = svgBlend.getBoundingClientRect(), sbPlain = svgPlain.getBoundingClientRect();
+    const kidsOf = (svg, blended) => [...(svg?.querySelector("g.sel")?.children ?? [])].map((el) => {
       if (el.tagName.toLowerCase() === "g") {
         return {
           kind: "ring",
@@ -200,21 +213,24 @@ try {
       return {
         kind: "closed", tag: el.tagName.toLowerCase(),
         className: el.getAttribute("class"), stroke: cs.stroke, fill: cs.fill, fillOpacity: cs.fillOpacity,
-        width: el.getAttribute("stroke-width"), mark: el.style.getPropertyValue("--masque-mark"),
+        width: el.getAttribute("stroke-width"),
+        blend: blended ? getComputedStyle(svg).mixBlendMode : null,
         r: el.getAttribute("r"), cx: el.getAttribute("cx"), cy: el.getAttribute("cy"),
         x: el.getAttribute("x"), y: el.getAttribute("y"),
         w: el.getAttribute("width"), h: el.getAttribute("height"),
         points: el.getAttribute("points"),
       };
     });
+    const kids = [...kidsOf(svgBlend, true), ...kidsOf(svgPlain, false)];
     return {
       baseTag: baseEl.tagName.toLowerCase(),
       host: { w: hb.width, h: hb.height },
       base: { w: bb.width, h: bb.height, x: bb.x, y: bb.y },
-      svg: { w: sb.width, h: sb.height, x: sb.x, y: sb.y },
+      svgBlend: { w: sbBlend.width, h: sbBlend.height, x: sbBlend.x, y: sbBlend.y },
+      svgPlain: { w: sbPlain.width, h: sbPlain.height, x: sbPlain.x, y: sbPlain.y },
       kids,
-      sel: sr.querySelector("g.sel")?.children.length ?? 0,
-      hi: sr.querySelector("g.hi")?.children.length ?? 0,
+      sel: (svgBlend.querySelector("g.sel")?.children.length ?? 0) + (svgPlain.querySelector("g.sel")?.children.length ?? 0),
+      hi: (svgBlend.querySelector("g.hi")?.children.length ?? 0) + (svgPlain.querySelector("g.hi")?.children.length ?? 0),
     };
   }, key);
 
@@ -231,7 +247,7 @@ try {
     const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
     let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
     const b = host.querySelector("img, canvas").getBoundingClientRect();
-    const outW = sr.querySelector("svg").viewBox.baseVal.width;
+    const outW = sr.querySelector("svg.masque-blend").viewBox.baseVal.width;
     const s = b.width / outW;
     const cx = b.left + ix * s, cy = b.top + iy * s;
     const o = { bubbles: true, composed: true, cancelable: true, clientX: cx, clientY: cy, pointerId: 1, pointerType: "mouse", isPrimary: true };
@@ -243,7 +259,13 @@ try {
       surface.dispatchEvent(new MouseEvent("click", o));
     }
     const tip = sr.querySelector(".masque-tip");
-    const hi = sr.querySelector("g.hi")?.firstElementChild;
+    // Bare shape in g.hi — svg.masque-blend for the default blend-tint recipe, svg.masque-plain
+    // for an explicit `hoverstyle` (no wrapper either way, unlike the retired nested-wrapper
+    // design). At most one of the two has a g.hi child for a given hit.
+    const svgBlend = sr.querySelector("svg.masque-blend"), svgPlain = sr.querySelector("svg.masque-plain");
+    const hiBlend = svgBlend?.querySelector("g.hi")?.firstElementChild;
+    const hiPlain = svgPlain?.querySelector("g.hi")?.firstElementChild;
+    const hi = hiBlend || hiPlain;
     const hiCs = hi ? getComputedStyle(hi) : null;
     return {
       show: tip?.classList.contains("show"),
@@ -254,16 +276,34 @@ try {
         fill: hiCs.fill, stroke: hiCs.stroke, fillOpacity: hiCs.fillOpacity,
         width: hi.getAttribute("stroke-width"),
         opacity: hi.getAttribute("stroke-opacity"),
-        mark: hi.style.getPropertyValue("--masque-mark"),
+        blend: hi === hiBlend ? getComputedStyle(svgBlend).mixBlendMode : null,
         r: hi.getAttribute("r"), cx: hi.getAttribute("cx"), cy: hi.getAttribute("cy"),
         x1: hi.getAttribute("x1"), y1: hi.getAttribute("y1"),
         x2: hi.getAttribute("x2"), y2: hi.getAttribute("y2"),
       } : null,
-      sel: sr.querySelector("g.sel")?.children.length ?? 0,
+      sel: (svgBlend?.querySelector("g.sel")?.children.length ?? 0) + (svgPlain?.querySelector("g.sel")?.children.length ?? 0),
     };
   }, [key, x, y, type]);
 
   const textOf = (sel) => page.evaluate((q) => document.querySelector(q)?.innerText ?? "", sel);
+
+  // A ~24x24 css-px page.screenshot() clip centred on an image-space point — used by the
+  // tint-applied check to sample real pixels before/after the hover blend-tint applies (a page
+  // screenshot, not a canvas readback, so it works on both Cairo <img> and WGL <canvas>).
+  const clipShot = async (key, ix, iy, size = 24) => {
+    const pt = await page.evaluate(([k, x, y]) => {
+      const span = document.querySelector(`#coords_${k}`);
+      const hosts = [...document.querySelectorAll(".ip-host")];
+      const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
+      host.scrollIntoView({ block: "center", inline: "nearest" });
+      let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
+      const b = host.querySelector("img, canvas").getBoundingClientRect();
+      const outW = sr.querySelector("svg.masque-blend").viewBox.baseVal.width;
+      const s = b.width / outW;
+      return { x: b.left + x * s, y: b.top + y * s };
+    }, [key, ix, iy]);
+    return page.screenshot({ clip: { x: pt.x - size / 2, y: pt.y - size / 2, width: size, height: size } });
+  };
 
   const drag = async (key, x0, y0, x1, y1, shift = false) => {
     const a = await page.evaluate(([k, ix, iy]) => {
@@ -272,7 +312,7 @@ try {
       const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
       let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
       const b = host.querySelector("img, canvas").getBoundingClientRect();
-      const outW = sr.querySelector("svg").viewBox.baseVal.width;
+      const outW = sr.querySelector("svg.masque-blend").viewBox.baseVal.width;
       const s = b.width / outW;
       return { cx: b.left + ix * s, cy: b.top + iy * s };
     }, [key, x0, y0]);
@@ -282,7 +322,7 @@ try {
       const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
       let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
       const box = host.querySelector("img, canvas").getBoundingClientRect();
-      const outW = sr.querySelector("svg").viewBox.baseVal.width;
+      const outW = sr.querySelector("svg.masque-blend").viewBox.baseVal.width;
       const s = box.width / outW;
       return { cx: box.left + ix * s, cy: box.top + iy * s };
     }, [key, x1, y1]);
@@ -321,14 +361,17 @@ try {
 
   for (const spec of meta) {
     const key = spec.key;
+    const wantDark = key === "scatter_dark"; // the only dark-figure case in kind_sweep_figures.jl
     const sh = await shadowOf(key);
     if (!sh?.ok) throw new Error(`${key}: overlay surface missing`);
     const m = await inspect(key);
     if (m.baseTag !== expectBase) throw new Error(`${key}: expected ${expectBase}, got ${m.baseTag}`);
-    const dx = Math.abs(m.svg.x - m.base.x), dy = Math.abs(m.svg.y - m.base.y);
-    const dw = Math.abs(m.svg.w - m.base.w), dh = Math.abs(m.svg.h - m.base.h);
-    if (dx > 2 || dy > 2 || dw > 3 || dh > 3) {
-      throw new Error(`${key}: overlay/base offset svg=${JSON.stringify(m.svg)} base=${JSON.stringify(m.base)}`);
+    for (const [name, svgBox] of [["masque-blend", m.svgBlend], ["masque-plain", m.svgPlain]]) {
+      const dx = Math.abs(svgBox.x - m.base.x), dy = Math.abs(svgBox.y - m.base.y);
+      const dw = Math.abs(svgBox.w - m.base.w), dh = Math.abs(svgBox.h - m.base.h);
+      if (dx > 2 || dy > 2 || dw > 3 || dh > 3) {
+        throw new Error(`${key}: overlay/base offset svg.${name}=${JSON.stringify(svgBox)} base=${JSON.stringify(m.base)}`);
+      }
     }
     passed.push(`${key}/overlay-on-base`);
 
@@ -376,7 +419,7 @@ try {
 
     if (spec.selected === "wash") {
       const wash = m.kids.find((k) => k.kind === "closed");
-      assertWash(wash, key);
+      assertWash(wash, key, wantDark);
       if (spec.circle) {
         // `hp.r` is whatever geometry the manifest shipped, not a fixed literal here — for
         // `scatter`/`scatter_dark` (markersize=22, built from the Scatter plot object) it's the
@@ -415,6 +458,34 @@ try {
       return !!(t && t.show && norm(t.text).includes(norm(spec.tip)));
     };
     const hoverPt = hitPoint(layer, spec.selectedIndex);
+    // Tint-applied (screenshot): the highlight no longer derives its colour from the mark, so
+    // the only thing left to prove live is that the blend-mode tint actually darkens (light
+    // figure) / lightens (dark figure) the pixels under the mark. Must run on an UNSELECTED
+    // point: on a key with a baked `selected` (scatter/scatter_dark/barplot/poly),
+    // spec.selectedIndex already carries the persistent wash, and mount.ts appends g.hi after
+    // g.sel (hi always paints over sel) — hovering it would swap the stronger wash grey for the
+    // deliberately *weaker* hover grey (#666666 vs #8c8c8c, CLAUDE.md), a real lightening on a
+    // light figure that has nothing to do with whether the hover tint itself darkens. clickIndex
+    // is a different, never-selected element on every TINT_CHECK_KEYS spec that has a `selected`
+    // at all; where selected is null (heatmap) selectedIndex is already clean.
+    const doTintCheck = TINT_CHECK_KEYS.has(key);
+    if (doTintCheck) {
+      const tintPt = hitPoint(layer, spec.selected ? spec.clickIndex : spec.selectedIndex);
+      const lumBefore = meanLuminance(PNG.sync.read(await clipShot(key, tintPt.x, tintPt.y)));
+      await dispatchAt(key, tintPt.x, tintPt.y, "pointermove");
+      await new Promise((r) => setTimeout(r, 200)); // let the 80-120ms enter fade settle
+      const lumAfter = meanLuminance(PNG.sync.read(await clipShot(key, tintPt.x, tintPt.y)));
+      assertTintApplied(lumBefore, lumAfter, wantDark, `${key}/tint-applied`);
+      passed.push(`${key}/tint-applied`);
+      await page.evaluate((k) => {
+        const span = document.querySelector(`#coords_${k}`);
+        const hosts = [...document.querySelectorAll(".ip-host")];
+        const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
+        let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
+        sr.querySelector(".surface").dispatchEvent(new PointerEvent("pointerleave", { bubbles: true, pointerId: 1, pointerType: "mouse", isPrimary: true }));
+      }, key);
+    }
+
     let tip = null;
     for (let a = 0; a < 8; a++) {
       tip = await dispatchAt(key, hoverPt.x, hoverPt.y, "pointermove");
@@ -425,30 +496,9 @@ try {
     // Open (stroke-only, no tint) kinds are line-geometry layers (polyline/segments); every
     // other element-kind layer (circles/rects/polygons/grid) is closed (tint + stroke).
     const closedHover = layer.kind !== "polyline" && layer.kind !== "segments";
-    assertHoverRecipe(tip.hi, key, closedHover);
+    assertHoverRecipe(tip.hi, key, closedHover, wantDark);
     assertNoAlertRed(m.kids, `${key}/sel`);
     assertNoTeal(m.kids, `${key}/sel`);
-
-    // Mark-colour derivation (the point of this change): scatter/scatter_dark resolve `colors`
-    // (from scatter!'s color=), so the hover stroke must be that mark colour mixed toward the
-    // ink — darker on the light figure, lighter on the dark one. heatmap/lines have no `colors`,
-    // so their hover stroke must fall back to the neutral, figure-aware dark ink.
-    if (layer.colors && (key === "scatter" || key === "scatter_dark")) {
-      const resolvedMark = await page.evaluate((mark) => {
-        const tmp = document.createElement("span");
-        tmp.style.color = mark;
-        document.body.appendChild(tmp);
-        const c = getComputedStyle(tmp).color;
-        tmp.remove();
-        return c;
-      }, tip.hi.mark);
-      const strokeL = colorLightness(tip.hi.stroke), markL = colorLightness(resolvedMark);
-      assertMarkDerivedInk(strokeL, markL, key === "scatter", `${key}/mark-ink`);
-      passed.push(`${key}/mark-ink`);
-    } else if (!layer.colors && (key === "heatmap" || key === "lines")) {
-      assertNeutralDarkInk(colorLightness(tip.hi.stroke), `${key}/neutral-ink`);
-      passed.push(`${key}/neutral-ink`);
-    }
 
     const hiStable = await page.evaluate(([k, ix, iy]) => {
       const span = document.querySelector(`#coords_${k}`);
@@ -456,7 +506,7 @@ try {
       const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
       let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
       const b = host.querySelector("img, canvas").getBoundingClientRect();
-      const outW = sr.querySelector("svg").viewBox.baseVal.width;
+      const outW = sr.querySelector("svg.masque-blend").viewBox.baseVal.width;
       const s = b.width / outW;
       const o = {
         bubbles: true, composed: true, cancelable: true,
@@ -464,13 +514,17 @@ try {
         pointerId: 1, pointerType: "mouse", isPrimary: true,
       };
       const surface = sr.querySelector(".surface");
+      // Bare shape in g.hi (svg.masque-blend or svg.masque-plain, see dispatchAt above) — no
+      // wrapper, so masque-enter/masque-leave live on the node itself.
+      const hiOf = () => sr.querySelector("svg.masque-blend g.hi")?.firstElementChild
+        || sr.querySelector("svg.masque-plain g.hi")?.firstElementChild;
       surface.dispatchEvent(new PointerEvent("pointermove", o));
-      const first = sr.querySelector("g.hi")?.firstElementChild;
+      const first = hiOf();
       if (!first) return { ok: false, reason: "no hover node", firstEnter: false };
       surface.dispatchEvent(new PointerEvent("pointermove", {
         ...o, clientX: o.clientX + 1, clientY: o.clientY + 1,
       }));
-      const second = sr.querySelector("g.hi")?.firstElementChild;
+      const second = hiOf();
       return {
         ok: first === second,
         reason: first === second ? "" : "hover remounted",
@@ -496,9 +550,10 @@ try {
       const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
       let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
       sr.querySelector(".surface").dispatchEvent(new PointerEvent("pointerleave", { bubbles: true, pointerId: 1, pointerType: "mouse", isPrimary: true }));
-      const hi = sr.querySelector("g.hi")?.firstElementChild;
+      const hi = sr.querySelector("svg.masque-blend g.hi")?.firstElementChild
+        || sr.querySelector("svg.masque-plain g.hi")?.firstElementChild;
       return {
-        hi: sr.querySelector("g.hi")?.children.length ?? 0,
+        hi: (sr.querySelector("svg.masque-blend g.hi")?.children.length ?? 0) + (sr.querySelector("svg.masque-plain g.hi")?.children.length ?? 0),
         leaving: !!(hi && hi.classList.contains("masque-leave")),
       };
     }, key);
