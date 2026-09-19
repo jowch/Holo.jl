@@ -169,6 +169,7 @@ deferred" call answered the wrong question — it scoped view manipulation as a 
 re-render gives pan/zoom/rotate on **both** backends with the overlay recomputed each step, so
 the backend-asymmetry objection dissolves; what remains is only a per-step **cost** difference
 (the once-suspected `:webgl` GL-context-reuse prerequisite dissolved when measured — see (†)
-and `perf-findings.md` §"WGL context lifecycle"). Both scheduled in `roadmap.md` M3 (Axis3 parity + view
+and `perf-findings.md` §"WGL context lifecycle"; what does gate a resident scene is canvas
+identity across Pluto's cell replacement, #86). Both tracked in `roadmap.md` (Axis3 coverage + view
 manipulation via `@bind` re-render); the client-side GPU camera remains a Masque-wide non-goal
 (alongside GPU-pick occlusion).
