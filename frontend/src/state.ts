@@ -40,6 +40,21 @@ export const cssAnchor = (base: HTMLElement, manifest: Manifest, a: Anchor): Anc
 // left unmangled: `.kind` is also how HitLayer's own boundary discriminant is spelled, and
 // keeping the two textually identical avoids having to thread that distinction through every
 // `.kind` read in bond.ts/hover.ts for a saving of a few bytes.
+// The overlay's three coordinate-identical top-level <svg>s (mount.ts), in DOM/paint order:
+// masque-fill (mix-blend-mode: color-dodge, brightens — FILL-only shapes), masque-edge
+// (mix-blend-mode: multiply/screen, darkens — STROKE-only shapes), masque-plain (no blend —
+// ROI rect/handles, threshold lines, explicit-hoverstyle highlights, the selected-open-geometry
+// ring). Splitting fill and edge into separate svgs (not one svg holding both) is required, not
+// stylistic: mix-blend-mode has to live on the svg ELEMENT, one mode per element, and a closed
+// hover/selection needs both a brightening fill and a darkening stroke at once. Each svg has its
+// own g.hi/g.sel; highlight.ts's drawHi/drawSelection/clearHi/clearSel take one of these per
+// hi/sel role and route each element into whichever side(s) highlight.ts's makeHiElement picked.
+export interface HiGroups {
+    fill_: SVGGElement
+    edge_: SVGGElement
+    plain_: SVGGElement
+}
+
 export interface ROIBox {
     rect_: SVGRectElement
     handles_: SVGRectElement[]
@@ -71,9 +86,9 @@ export interface OverlayCtx {
     base_: HTMLElement
     surface_: HTMLElement
     tip_: HTMLElement
-    hiGroup_: SVGGElement
-    selGroup_: SVGGElement
-    linkGroup_: SVGGElement // transient legend-linked highlights (g.link), z-ordered between sel and hi
+    hiGroup_: HiGroups
+    selGroup_: HiGroups
+    linkGroup_: HiGroups // transient legend-linked highlights (g.link), z-ordered between sel and hi
     thresholdLines_: Map<string, SVGLineElement>
     roiBoxes_: Map<string, ROIBox>
     shadowRoot_: ShadowRoot // for `shadowRoot.activeElement === surface` focus gating (keyboard.ts)

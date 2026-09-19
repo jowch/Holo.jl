@@ -1,84 +1,127 @@
 # Shared figures for the agent kind-sweep notebooks (Cairo / WGL).
 # Each widget is one interactable kind (interaction + visual). `selected=` is baked only
-# on supported kinds (`circles`, `rects`, `polygons`, `segments`, `polyline`).
+# on supported kinds (`circles`, `rects`, `polygons`, `segments`, `polyline`). `circle` marks a
+# kind whose highlight is a circle, so the driver checks r == geometry r (no halo offset).
 # Grid / threshold / roi / view are hover-click or drag only. `scatter_dark` is a dark
-# Makie figure so inspector ink is live-checked on dark axes.
+# Makie figure so the split-blend recipe (dodge fill both figures, multiply/screen edge stroke
+# on light/dark) is live-checked on dark axes too; `scatter` and `scatter_dark` are built from
+# the scatter plot object (not raw points) so `colors` resolves and the tooltip-accent check has
+# something to derive from.
+#
+# `selectedIndex`/`tip` are the BAKED-selected element (where `selected` isn't `nothing`) — used
+# for the persisted-wash / selected-survives-unhover checks. `hoverIndex`/`hoverTip` are a
+# DIFFERENT element for the standard hover-recipe check: hovering an already-selected mark draws
+# no highlight (see CLAUDE.md), so a kind with a baked selection needs its own, distinct hover
+# target to exercise the normal recipe at all. Where nothing is baked, `hoverIndex`/`hoverTip`
+# just repeat `selectedIndex`/`tip`. `tintIndex` (only set where it must differ) is the element
+# the screenshot-based tint-applied check hovers — for `heatmap` this steers off `selectedIndex`'s
+# cell (viridis' darkest, where a dodge brightening is hardest to measure) onto a brighter one.
+#
+# `tintColor` (only set on `barplot`/`heatmap`/`poly` — every other `TINT_CHECK_KEYS` entry in
+# kind_sweep.mjs resolves a mark colour from the manifest's own `colors` field instead) is a
+# `"rgb(r,g,b)"` ground-truth BAKED from an actual CairoMakie raster: build the same figure,
+# `masque()` it, read the tinted element's centre off the manifest geometry the same way
+# kind_sweep.mjs's `hitPoint` does (barplot's `tintIndex`/`clickIndex` 0 -> `rects` centre;
+# heatmap's `tintIndex` 11 -> the `grid` cell midpoint from `xedges`/`yedges`; poly's `clickIndex`
+# 1 -> the 2nd ring's centroid, i.e. the GOLDENROD ring, not orchid), then
+# `Makie.colorbuffer(fig; px_per_unit = manifest["scaling"])` and sample a 3×3 median at that
+# point (`test/testutils.jl`'s `drawn_near` convention: `img[round(cy), round(cx)]`, already
+# image-px/top-left-origin/y-down, no flip). Deriving this at NOTEBOOK LOAD isn't an option: the
+# WGL notebook only has WGLMakie loaded, and `Makie.colorbuffer` under a live WGLMakie backend
+# throws (`MethodError: wait_for_ready(::Nothing)`) outside a real browser session; loading
+# CairoMakie just for this would also flip `_resolve_backend`'s "both loaded -> prefer Cairo"
+# choice out from under the WGL sweep for every later `masque()` call. So these three are baked
+# literals, derived once (barplot's flat grey, heatmap's brightest viridis cell, poly's alpha-blend
+# over the axis background all come out right without reimplementing colormap/alpha math here) —
+# regenerate them the same way if any of these three figures' construction changes.
 
 kind_sweep_meta() = [
     Dict(
         "key" => "scatter", "layerId" => "scatter", "layerKind" => "circles",
-        "selected" => "wash", "halo" => true, "selectedIndex" => 1, "clickIndex" => 0,
-        "tip" => "beta", "mode" => "element",
+        "selected" => "wash", "circle" => true, "selectedIndex" => 1, "clickIndex" => 0,
+        "tip" => "beta", "hoverIndex" => 0, "hoverTip" => "alpha", "mode" => "element",
     ),
     Dict(
         "key" => "lines", "layerId" => "lines", "layerKind" => "polyline",
-        "selected" => "ring", "halo" => false, "selectedIndex" => 1, "clickIndex" => 0,
-        "tip" => "seg-b", "mode" => "element",
+        "selected" => "ring", "circle" => false, "selectedIndex" => 1, "clickIndex" => 0,
+        "tip" => "seg-b", "hoverIndex" => 0, "hoverTip" => "seg-a", "mode" => "element",
     ),
     Dict(
         "key" => "segments", "layerId" => "segments", "layerKind" => "segments",
-        "selected" => "ring", "halo" => false, "selectedIndex" => 0, "clickIndex" => 1,
-        "tip" => "pair-a", "mode" => "element",
+        "selected" => "ring", "circle" => false, "selectedIndex" => 0, "clickIndex" => 1,
+        "tip" => "pair-a", "hoverIndex" => 1, "hoverTip" => "pair-b", "mode" => "element",
     ),
     Dict(
         "key" => "heatmap", "layerId" => "cells", "layerKind" => "grid",
-        "selected" => nothing, "halo" => false, "selectedIndex" => 0, "clickIndex" => 0,
-        "tip" => "0,0", "mode" => "element",
+        "selected" => nothing, "circle" => false, "selectedIndex" => 0, "clickIndex" => 0,
+        "tip" => "0,0", "hoverIndex" => 0, "hoverTip" => "0,0", "tintIndex" => 11,
+        "tintColor" => "rgb(253,231,37)", "mode" => "element",
     ),
     Dict(
         "key" => "image", "layerId" => "cells", "layerKind" => "grid",
-        "selected" => nothing, "halo" => false, "selectedIndex" => 0, "clickIndex" => 0,
-        "tip" => "0,0", "mode" => "element",
+        "selected" => nothing, "circle" => false, "selectedIndex" => 0, "clickIndex" => 0,
+        "tip" => "0,0", "hoverIndex" => 0, "hoverTip" => "0,0", "mode" => "element",
     ),
     Dict(
         "key" => "barplot", "layerId" => "bars", "layerKind" => "rects",
-        "selected" => "wash", "halo" => false, "selectedIndex" => 1, "clickIndex" => 0,
-        "tip" => "value", "mode" => "element",
+        "selected" => "wash", "circle" => false, "selectedIndex" => 1, "clickIndex" => 0,
+        "tip" => "value", "hoverIndex" => 0, "hoverTip" => "value",
+        "tintColor" => "rgb(128,128,128)", "mode" => "element",
     ),
     Dict(
         "key" => "poly", "layerId" => "poly", "layerKind" => "polygons",
-        "selected" => "wash", "halo" => false, "selectedIndex" => 0, "clickIndex" => 1,
-        "tip" => "ring1", "mode" => "element",
+        "selected" => "wash", "circle" => false, "selectedIndex" => 0, "clickIndex" => 1,
+        "tip" => "ring1", "hoverIndex" => 1, "hoverTip" => "ring2",
+        # clickIndex 1 is the 2nd ring — goldenrod (0.55 alpha over the axis background), not
+        # orchid (that's ring 0 / selectedIndex).
+        "tintColor" => "rgb(235,206,132)", "mode" => "element",
     ),
     Dict(
         "key" => "polar", "layerId" => "polar", "layerKind" => "circles",
-        "selected" => "wash", "halo" => true, "selectedIndex" => 1, "clickIndex" => 0,
-        "tip" => "north", "mode" => "element",
+        "selected" => "wash", "circle" => true, "selectedIndex" => 1, "clickIndex" => 0,
+        "tip" => "north", "hoverIndex" => 0, "hoverTip" => "east", "mode" => "element",
     ),
     Dict(
         "key" => "scatter_dark", "layerId" => "scatter_dark", "layerKind" => "circles",
-        "selected" => "wash", "halo" => true, "selectedIndex" => 1, "clickIndex" => 0,
-        "tip" => "beta", "mode" => "element",
+        "selected" => "wash", "circle" => true, "selectedIndex" => 1, "clickIndex" => 0,
+        "tip" => "beta", "hoverIndex" => 0, "hoverTip" => "alpha", "mode" => "element",
     ),
     Dict(
         "key" => "arrows3d", "layerId" => "arrows3d", "layerKind" => "segments",
-        "selected" => "ring", "halo" => false, "selectedIndex" => 0, "clickIndex" => 1,
-        "tip" => "index", "mode" => "element",
+        "selected" => "ring", "circle" => false, "selectedIndex" => 0, "clickIndex" => 1,
+        "tip" => "index", "hoverIndex" => 1, "hoverTip" => "index", "mode" => "element",
     ),
     Dict(
         "key" => "hlines", "layerId" => "hlines", "layerKind" => "segments",
-        "selected" => "ring", "halo" => false, "selectedIndex" => 0, "clickIndex" => 1,
-        "tip" => "segment_index", "mode" => "element",
+        "selected" => "ring", "circle" => false, "selectedIndex" => 0, "clickIndex" => 1,
+        "tip" => "segment_index", "hoverIndex" => 1, "hoverTip" => "segment_index",
+        "mode" => "element",
     ),
     Dict(
         "key" => "threshold", "layerId" => "threshold", "layerKind" => "threshold",
-        "selected" => nothing, "halo" => false, "selectedIndex" => 0, "clickIndex" => 0,
-        "tip" => "", "mode" => "drag",
+        "selected" => nothing, "circle" => false, "selectedIndex" => 0, "clickIndex" => 0,
+        "tip" => "", "hoverIndex" => 0, "hoverTip" => "", "mode" => "drag",
     ),
     Dict(
         "key" => "roi", "layerId" => "roi", "layerKind" => "roi",
-        "selected" => nothing, "halo" => false, "selectedIndex" => 0, "clickIndex" => 0,
-        "tip" => "", "mode" => "drag",
+        "selected" => nothing, "circle" => false, "selectedIndex" => 0, "clickIndex" => 0,
+        "tip" => "", "hoverIndex" => 0, "hoverTip" => "", "mode" => "drag",
     ),
     Dict(
         "key" => "view", "layerId" => "view", "layerKind" => "view",
-        "selected" => nothing, "halo" => false, "selectedIndex" => 0, "clickIndex" => 0,
-        "tip" => "", "mode" => "drag",
+        "selected" => nothing, "circle" => false, "selectedIndex" => 0, "clickIndex" => 0,
+        "tip" => "", "hoverIndex" => 0, "hoverTip" => "", "mode" => "drag",
     ),
     Dict(
         "key" => "legend", "layerId" => "legend", "layerKind" => "rects",
         "selected" => nothing, "halo" => false, "selectedIndex" => 2, "clickIndex" => 2,
         "tip" => "pts", "mode" => "element",
+        # Nothing is baked (`selected = nothing`, like heatmap/grid), so per the module
+        # doc-comment convention `hoverIndex`/`hoverTip` repeat `selectedIndex`/`tip` — this
+        # drives the GENERIC hover-recipe check on the legend row itself (default hoverstyle,
+        # no explicit stroke override on `LegendInteractable` -> the normal split dodge-fill/
+        # grey-edge recipe applies, same as any other `rects` layer).
+        "hoverIndex" => 2, "hoverTip" => "pts",
         # A legend entry's linked highlight isn't wash/ring on the legend layer itself (that
         # meta stays `selected = nothing`, like heatmap/grid) — it's g.link on OTHER layers.
         # "cases" checks two fan-out kinds: a polyline entry (ring) and a circles entry (wash).
@@ -93,6 +136,7 @@ kind_sweep_meta() = [
         "key" => "legend_overlap", "layerId" => "legend", "layerKind" => "rects",
         "selected" => nothing, "halo" => false, "selectedIndex" => 0, "clickIndex" => 0,
         "tip" => "trend", "mode" => "element",
+        "hoverIndex" => 0, "hoverTip" => "trend",
         "links" => Dict(
             "cases" => [
                 Dict("index" => 0, "label" => "trend"),
@@ -112,11 +156,13 @@ function build_kind_sweep()
         pts = [(1.0, 1.0), (2.0, 2.0), (3.0, 1.2)]
         fig = Figure(size = (480, 260))
         ax = Axis(fig[1, 1]; title = "scatter")
-        scatter!(ax, first.(pts), last.(pts); color = :gray, markersize = 22)
+        # Built from the plot object (not raw pts) so PointInteractable resolves `colors` from
+        # `color=` — the mark-colour-derivation check needs a resolvable mark colour.
+        sc = scatter!(ax, first.(pts), last.(pts); color = :gray, markersize = 22)
         masque(
             fig,
             PointInteractable(
-                ax, pts; id = :scatter,
+                ax, sc; id = :scatter,
                 payloads = [(; label = "alpha"), (; label = "beta"), (; label = "gamma")],
             );
             selected = Dict(:scatter => [1]),
@@ -221,11 +267,11 @@ function build_kind_sweep()
             ytickcolor = :gray80,
             titlecolor = :gray90,
         )
-        scatter!(ax, first.(pts), last.(pts); color = :gray, markersize = 22)
+        sc = scatter!(ax, first.(pts), last.(pts); color = :gray, markersize = 22)
         masque(
             fig,
             PointInteractable(
-                ax, pts; id = :scatter_dark,
+                ax, sc; id = :scatter_dark,
                 payloads = [(; label = "alpha"), (; label = "beta"), (; label = "gamma")],
             );
             selected = Dict(:scatter_dark => [1]),

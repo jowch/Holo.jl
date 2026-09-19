@@ -20,7 +20,8 @@ export function buildThresholdLines(manifest: Manifest, svg: SVGSVGElement): Map
         const line = document.createElementNS(SVG_NS, "line")
         setLine(line, tg, tg.pos)
         const st = layer.style ?? DEFAULT_STYLE
-        line.setAttribute("stroke", st.stroke)
+        line.classList.add("masque-hi")
+        if (st.stroke) line.style.setProperty("--masque-hi-stroke", st.stroke)
         // Base width goes through a CSS custom property + class (not the stroke-width attribute)
         // so the hover-thicken class (mount.ts's .masque-threshold-line.hovered, applied by
         // hover.ts's setDragHoverChrome) can calc() off it — a presentation attribute would win

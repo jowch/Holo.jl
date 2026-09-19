@@ -40,17 +40,16 @@
             "geometry": [
                 551,
                 341,
-                14,
+                10,
                 647,
                 323,
-                14,
+                10,
                 743,
                 671,
-                14
+                10
             ],
             "id": "scatter",
             "style": {
-                "stroke": "#3A6F7C",
                 "width": 2
             },
             "colors": "rgb(0,114,178)",
@@ -93,7 +92,6 @@
             ],
             "id": "lines",
             "style": {
-                "stroke": "#3A6F7C",
                 "width": 2
             },
             "payloads": [

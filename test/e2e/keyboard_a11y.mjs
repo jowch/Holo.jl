@@ -49,8 +49,11 @@ try {
   let ready = false, tick = 0;
   while (Date.now() < deadline) {
     const st = await page.evaluate(() => {
+      // See kind_sweep.mjs: click the safe-preview banner exactly once — a repeated click on
+      // an already-running notebook re-triggers Pluto's reactive run and can interrupt the
+      // in-flight cell (InterruptException) under slow/contended first-open precompilation.
       const runBtn = [...document.querySelectorAll("button, a")].find((b) => /run notebook code/i.test(b.innerText || b.title || ""));
-      if (runBtn) runBtn.click();
+      if (runBtn && !window.__masqueClickedRun) { runBtn.click(); window.__masqueClickedRun = true; }
       const hosts = [...document.querySelectorAll(".ip-host")];
       let surfaces = 0;
       for (const h of hosts) {
@@ -75,6 +78,7 @@ try {
   if (!ready) throw new Error(`${backend} timed out waiting for kind-sweep widgets`);
   console.error(`phase: widgets mounted (${backend})`);
 
+  const meta = await page.evaluate(() => JSON.parse(document.querySelector("#kind_meta").textContent));
   const layersOf = (key) => page.evaluate((k) => JSON.parse(document.querySelector(`#coords_${k}`).textContent), key);
   const textOf = (sel) => page.evaluate((q) => document.querySelector(q)?.innerText ?? "", sel);
 
@@ -93,7 +97,14 @@ try {
     const hosts = [...document.querySelectorAll(".ip-host")];
     const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
     let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
-    const hi = sr.querySelector("g.hi > *");
+    // Keyboard focus draws the same bare-shape highlight a hover would: svg.masque-fill's g.hi
+    // (dodge fill half) and svg.masque-edge's g.hi (darkening edge half) for the default
+    // split-blend recipe on a closed mark, svg.masque-plain's g.hi for an explicit `hoverstyle`
+    // or an open seg (edge-only) — no wrapper either way, so masque-leave lives on the node
+    // itself. Any populated layer is enough to prove a ring was drawn; grab whichever is first.
+    const hi = sr.querySelector("svg.masque-fill g.hi > *")
+      || sr.querySelector("svg.masque-edge g.hi > *")
+      || sr.querySelector("svg.masque-plain g.hi > *");
     const live = sr.querySelector('[aria-live="polite"]');
     return {
       focused: sr.activeElement === sr.querySelector(".surface"),
@@ -121,13 +132,26 @@ try {
     const layer = layers[0];
     const n = elementCount(layer);
     const surface = await surfaceHandle(key);
+    // The baked-`selected` index for this layer (poly bakes 0; scatter/barplot bake 1), or null
+    // when nothing is baked — see kind_sweep_figures.jl's meta.
+    const spec = meta.find((m) => m.key === key);
+    const bakedSelected = spec?.selected ? spec.selectedIndex : null;
 
     await surface.focus();
     let s = await state(key);
     if (!s.focused) throw new Error(`${key}: surface.focus() did not set DOM focus (tabindex missing?)`);
     passed.push(`${key}/focusable`);
 
+    // Landing index after k ArrowRight presses from an unfocused surface is k-1 (0-based).
+    // Focusing (like hovering) an already-selected mark is a no-op — no highlight — so if the
+    // first arrow would land on this layer's baked `selected` index, press one more ArrowRight
+    // to land somewhere else before asserting the ring was drawn.
     await page.keyboard.press("ArrowRight");
+    let landed = 0;
+    if (bakedSelected === landed) {
+      await page.keyboard.press("ArrowRight");
+      landed = 1;
+    }
     s = await state(key);
     if (!s.ring) throw new Error(`${key}: ArrowRight drew no ring`);
     if (!s.tipShown) throw new Error(`${key}: ArrowRight showed no tooltip`);
@@ -135,15 +159,19 @@ try {
 
     await page.waitForTimeout(250); // live-region debounce (150ms) + margin
     s = await state(key);
-    if (!/element 1 of \d+/.test(s.liveText)) throw new Error(`${key}: live region text unexpected: ${JSON.stringify(s.liveText)}`);
+    const liveRe = new RegExp(`element ${landed + 1} of ${n}`);
+    if (!liveRe.test(s.liveText)) throw new Error(`${key}: live region text unexpected: ${JSON.stringify(s.liveText)}`);
     passed.push(`${key}/live-region`);
 
     const before = await textOf(`#out_${key}`);
     const beforeIdxMatch = new RegExp(`:${layer.id},\\s*(\\d+)\\b`).exec(before);
     const beforeIdx = beforeIdxMatch ? Number(beforeIdxMatch[1]) : -1;
     const target = (beforeIdx + 1) % n; // guaranteed != beforeIdx as long as n > 1
-    // We're at index 0 (one ArrowRight, above) — walk to `target`.
-    for (let i = 0; i < target; i++) await page.keyboard.press("ArrowRight");
+    // We're at `landed` — walk to `target`. ArrowRight/ArrowLeft clamp at the ends, they don't
+    // wrap, so step in whichever direction `target` actually is from here.
+    const delta = target - landed;
+    const stepKey = delta >= 0 ? "ArrowRight" : "ArrowLeft";
+    for (let i = 0; i < Math.abs(delta); i++) await page.keyboard.press(stepKey);
     await page.keyboard.press("Enter");
     let after = before;
     for (let i = 0; i < 40 && after === before; i++) { await page.waitForTimeout(100); after = await textOf(`#out_${key}`); }
@@ -177,6 +205,60 @@ try {
     if (s.focused) throw new Error(`${key}: Tab did not move DOM focus off the surface`);
     if (s.ring && !s.ring.leaving) throw new Error(`${key}: Tab-away left a non-fading ring`);
     passed.push(`${key}/tab-away-clears-focus`);
+  }
+
+  // A legend entry's linked highlight (g.link) is keyboard-reachable via the SAME focusTo ->
+  // updateLinkForHit path pointer hover uses (keyboard.ts's focusTo calls updateLinkForHit
+  // unconditionally, mirroring hover.ts) — this had zero prior driver coverage. `legend`'s
+  // manifest sorts the LegendInteractable layer before the plot layers it labels (src/render.jl
+  // ~line 259, regression-checked live by kind_sweep.mjs's legend-precedence assertions), so its
+  // own rows are the FIRST FOCUSABLE_KINDS entries in the flat focus list.
+  {
+    const key = "legend";
+    const linkGCount = (k) => page.evaluate((kk) => {
+      const span = document.querySelector(`#coords_${kk}`);
+      const hosts = [...document.querySelectorAll(".ip-host")];
+      const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
+      let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
+      const groups = ["svg.masque-fill", "svg.masque-edge", "svg.masque-plain"].map((sel) => sr.querySelector(sel)?.querySelector("g.link"));
+      const populated = groups.find((g) => g && g.children.length > 0);
+      return {
+        count: groups.reduce((n, g) => n + (g?.children.length ?? 0), 0),
+        leaving: populated ? populated.firstElementChild.classList.contains("masque-leave") : null,
+      };
+    }, k);
+
+    const layers = await layersOf(key);
+    const legendLayer = layers.find((l) => l.id === "legend");
+    if (!legendLayer) throw new Error(`${key}: no "legend" layer in manifest`);
+    const legendIdx = layers.indexOf(legendLayer);
+    const countOf = (l) => {
+      const g = l.geometry;
+      if (l.kind === "circles") return g.length / 3;
+      if (l.kind === "rects") return g.length / 4;
+      if (l.kind === "segments") return g.length / 4;
+      if (l.kind === "polyline") return Math.max(0, g.length / 2 - 1);
+      if (l.kind === "polygons") return g.length;
+      return 0; // :grid/:threshold/:roi/:view aren't in FOCUSABLE_KINDS
+    };
+    const FOCUSABLE = new Set(["circles", "rects", "polygons", "segments", "polyline"]);
+    let before = 0;
+    for (let i = 0; i < legendIdx; i++) if (FOCUSABLE.has(layers[i].kind)) before += countOf(layers[i]);
+    // "pts" is legend row index 2 (kind_sweep_figures.jl's links.cases) -> flat focus index
+    // before+2, landed after (before+3) ArrowRight presses (this file's k-presses-lands-k-1 rule).
+    const target = before + 2;
+    const surface = await surfaceHandle(key);
+    await surface.focus();
+    for (let i = 0; i <= target; i++) await page.keyboard.press("ArrowRight");
+    const li = await linkGCount(key);
+    if (li.count === 0) throw new Error(`${key}: keyboard focus on a legend row drew no g.link content`);
+    passed.push("legend/keyboard-focus-draws-link");
+
+    await page.keyboard.press("Escape");
+    const afterEsc = await linkGCount(key);
+    if (afterEsc.count === 0) throw new Error(`${key}: Escape cleared g.link instantly (no remount fade)`);
+    if (!afterEsc.leaving) throw new Error(`${key}: Escape did not apply masque-leave to g.link`);
+    passed.push("legend/keyboard-escape-fades-link");
   }
 
   // :grid (heatmap) must never enter the focus list — arrowing must draw nothing.

@@ -68,6 +68,17 @@
 > legend layer, ~9–11 B/entry for a short single-id link list (grows with target-id-string
 > length and link-list length per entry, same as any other string-keyed field; bounded by
 > entry count, not plot size). Doesn't scale with plot size — negligible at any N.
+> and re-run for the split blend highlight (this PR, 2026-09-18): manifest-shape change — the
+> mark-derived hover outline dropped the per-layer default `"style"."stroke"` key (`hoverstyle`'s
+> stroke is now `nothing`; the highlight split itself — three sibling top-level svgs, `mix-blend-
+> mode` color-dodge/multiply/screen — is CSS/JS-only and adds nothing to the manifest). Envelope
+> unchanged: neither bench fixture sets a custom `hoverstyle`, so re-running reproduces the
+> previous numbers byte-for-byte (scatter-1k manifest still 38.1 KB, heatmap-200² still
+> 196.8 KB). Measured the exact delta the same way as the `tol`/`label`/`links` re-runs above,
+> with `bench/payload_envelope.jl`'s own `mp(...)` byte model: the dropped `"stroke" =>
+> "#3A6F7C"` key+value pair is `_str(6) + _str(7)` = 7 B + 8 B = 15 B, once per layer — 15 B off
+> the scatter-1k row's single `:circles` layer and 15 B off the heatmap-200² row's single
+> `:grid` layer, both noise at this scale. Doesn't scale with plot size — negligible at any N.
 > baseline established after int-pixel geometry quantization, CairoMakie 0.15, Julia 1.12):
 > - **base64-PNG / manifest / render numbers** — `julia --project=. bench/payload_envelope.jl`
 >   (normal envelope) and `julia --project=. bench/stress.jl` (the 10× extremes). Both `seed!(0)`,

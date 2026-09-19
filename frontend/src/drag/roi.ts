@@ -2,7 +2,7 @@ import { invertAxis } from "../geometry"
 import { computeSelection } from "../selection"
 import { SVG_NS, DEFAULT_STYLE, drawSelection } from "../highlight"
 import { clampX, clampY, fmt } from "../state"
-import type { Drag, OverlayState, ROIBox } from "../state"
+import type { Drag, HiGroups, OverlayState, ROIBox } from "../state"
 import type { HitLayer, Manifest, ROIGeometry } from "../types"
 
 // --- draggable + resizable ROI boxes (Tier 0) ---
@@ -43,13 +43,15 @@ export function buildROIBoxes(manifest: Manifest, svg: SVGSVGElement): Map<strin
         const rg = layer.geometry as ROIGeometry
         const st = layer.style ?? DEFAULT_STYLE
         const rect = document.createElementNS(SVG_NS, "rect")
-        rect.setAttribute("fill", "none"); rect.setAttribute("stroke", st.stroke)
+        rect.classList.add("masque-hi")
         rect.setAttribute("stroke-width", String(st.width)); rect.setAttribute("vector-effect", "non-scaling-stroke")
+        if (st.stroke) rect.style.setProperty("--masque-hi-stroke", st.stroke)
         svg.appendChild(rect)
         const handles: SVGRectElement[] = []
         for (let k = 0; k < 8; k++) {
             const hdl = document.createElementNS(SVG_NS, "rect")
-            hdl.setAttribute("fill", st.stroke)
+            hdl.classList.add("masque-hi", "masque-fill")
+            if (st.stroke) hdl.style.setProperty("--masque-hi-stroke", st.stroke)
             svg.appendChild(hdl); handles.push(hdl)
         }
         // box.g_ aliases the manifest ROIGeometry so drag mutations stay visible to hitLayer,
@@ -70,7 +72,7 @@ export function begin(
     return { kind: "roi", id_: id, box_: box, mode_: mode, ax_: ax, ay_: ay, target_: box.target_, pointerId_: pointerId }
 }
 
-export function move(d: Extract<Drag, { kind: "roi" }>, state: OverlayState, selGroup: SVGGElement, manifest: Manifest, p: { x: number; y: number }): string {
+export function move(d: Extract<Drag, { kind: "roi" }>, state: OverlayState, selGroup: HiGroups, hiGroup: HiGroups, manifest: Manifest, p: { x: number; y: number }): string {
     const box = d.box_, [vx, vy, vw, vh] = box.t_.viewport
     if ("move" in d.mode_) {
         box.g_.x = Math.max(vx, Math.min(vx + vw - box.g_.w, p.x - d.ax_))
@@ -93,7 +95,7 @@ export function move(d: Extract<Drag, { kind: "roi" }>, state: OverlayState, sel
     setROI(box)
     if (d.target_) {
         const sel = computeSelection(box.g_, d.target_, manifest.transforms[d.target_.axis])
-        drawSelection(state, selGroup, sel.hits)
+        drawSelection(state, selGroup, sel.hits, hiGroup)
         return `${sel.items.length} selected`
     }
     const b = roiBounds(box)
@@ -103,12 +105,13 @@ export function move(d: Extract<Drag, { kind: "roi" }>, state: OverlayState, sel
 export function end(
     d: Extract<Drag, { kind: "roi" }>,
     state: OverlayState,
-    selGroup: SVGGElement,
+    selGroup: HiGroups,
+    hiGroup: HiGroups,
     manifest: Manifest
 ): { items: unknown[] } | { layer: string; index: number; payload: unknown } {
     if (d.target_) {
         const sel = computeSelection(d.box_.g_, d.target_, manifest.transforms[d.target_.axis])
-        drawSelection(state, selGroup, sel.hits)
+        drawSelection(state, selGroup, sel.hits, hiGroup)
         return { items: sel.items }
     }
     return { layer: d.id_, index: 0, payload: roiBounds(d.box_) }

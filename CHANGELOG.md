@@ -107,6 +107,37 @@ All notable changes to this project are documented here. The format is based on
   scaled to the rendered image's DPI like `PointInteractable`'s `radius` — e.g. at the common
   2× DPI, 12 image px instead of 8. Pass `tol = 8 / scaling` to keep the old numeric slack, or
   rely on the new default (slightly more forgiving at typical DPI).
+- The hover/selection outline now hugs the mark's own edge and draws a SPLIT blend highlight —
+  a brightening fill plus a darkening stroke — instead of a single fixed steel-teal ring 2px
+  outside it: a `color-dodge` fill (`#141414` source; measured across a 10-colour palette as the
+  only fill candidate that never rotated hue more than 8° and never dimmed a mark) plus a
+  `multiply`/`screen` (light/dark figure) edge stroke in fixed greys derived from the figure
+  background. A single darkening layer alone made a highlighted mark read muddy on a light
+  figure, which is why the highlight split into two; `colors` still doesn't feed either layer,
+  only the tooltip's accent border (unchanged). The overlay now mounts THREE sibling top-level
+  svgs instead of two: `svg.masque-fill` (`color-dodge`) and `svg.masque-edge`
+  (`multiply`/`screen`) each draw one identical-geometry half of a closed mark's highlight;
+  `svg.masque-plain` (unblended, was already there) holds ROI/threshold, the selected-seg ring,
+  and an explicit `hoverstyle`'s highlight, unchanged. Firefox only honours `mix-blend-mode` on
+  a top-level svg, not nested SVG content, which is why each blend mode is its own sibling svg.
+  A browser without `mix-blend-mode` falls back to the plain neutral ink instead (fill layer at
+  0.18 opacity, edge layer as the plain ink stroke). A circle highlight's `r` still equals the
+  geometry `r` exactly (no `r + 2` halo) on both shapes. An open shape (lines/segments) draws
+  the edge shape only — no fill shape, since a line has no interior; a `selects`-ROI's grid
+  cell-block union rect (`"rectfill"`) draws the fill shape only, since the ROI box is already
+  its outline. Because the fill is identical between hover and selected states, the edge
+  stroke's width (1.5px hover, 2px selected, both fill-opacity/stroke as before) is what
+  actually distinguishes them — and **hovering a mark that is already selected now draws no
+  highlight at all** (both layers are already opaque from the selected wash; a 1.5px hover
+  stroke over the 2px selected stroke would read as weaker, not stronger). The tooltip and
+  `@bind` still fire on that hit; only the highlight is skipped. `hoverstyle`'s default `stroke`
+  stays `nothing` (the overlay draws the split highlight) instead of the fixed `"#3A6F7C"`; an
+  explicit `stroke` still overrides it verbatim, unblended, in `svg.masque-plain`, and the
+  manifest still omits `style.stroke` unless an interactable sets one.
+- `PointInteractable(ax, ::Makie.Scatter)` now derives the circle radius from the marker's
+  drawn extent (≈0.35·`markersize` for the default `:circle`) instead of `markersize / 2`,
+  so highlights sit flush on the marker; the overlay's own 4px hit slack keeps clicking as
+  forgiving as before.
 
 - Overlay hover skips rewriting tooltip HTML and remeasuring tip size on
   same-hit `mousemove`; extra pointer ticks coalesce to one animation frame.
@@ -190,6 +221,7 @@ All notable changes to this project are documented here. The format is based on
   `Connection.send_warning`, which WGLMakie's bundled JS calls from its shader-compile-error
   path (`on_shader_error`). Previously this threw `TypeError: Bonito.Connection.send_warning
   is not a function` on top of the shader error it was trying to report.
+- Anchored tooltip caret was 2px off the mark when the per-element accent border was shown.
 
 - `selected=` now fails loud at `build_manifest` (and at overlay mount) for unsupported
   layer kinds (`segments`/`grid`/…) and out-of-range indices — same doctrine as wrong-length

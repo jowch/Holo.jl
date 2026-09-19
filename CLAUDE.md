@@ -48,8 +48,8 @@ the grid `values[]` cap is a pure-Julia change with no visible markup, yet it ch
 text and the bond payload → it gets a live check on every backend × the kinds it touches.)
 - **What "live-verified" means:** on each backend, open the affected cases in headless Pluto,
   drive them with Playwright (hover/click/drag), and confirm the actual on-screen result —
-  tooltip text **and** tooltip theme, highlight recipe (wash / ring / halo), remount fade
-  (no pulse), `@bind` round-trip, geometry on the mark (not offset), no console errors —
+  tooltip text **and** tooltip theme, highlight recipe (wash / ring / hover outline), remount
+  fade (no pulse), `@bind` round-trip, geometry on the mark (not offset), no console errors —
   matches intent. Inspect the real `published_to_js` manifest in-page when the change is
   about payload shape (unit tests never call `show`). **Agents run**
   `docs/dev/live-interaction-checklist.md` via **both** `test/e2e/kind_sweep.mjs` **and**
@@ -57,9 +57,43 @@ text and the bond payload → it gets a live check on every backend × the kinds
   heatmap/image, barplot, poly, polar, dark-figure scatter, arrows3d, hlines/vlines,
   threshold, ROI, and view-pan. Interaction without visual is unfinished; visual chrome
   without the kind sweep is unfinished. Overlay recipes (locked — cite, do not reopen):
-  inspector ink `#3A6F7C` (not `#ff3b30`), hover = stroke only, selected closed = wash,
-  selected open = ring, circle halo `r + 2`, 80–120 ms fade, tooltip theme derived from the
-  FIGURE's own background (CSS relative-colour syntax, `--masque-fig-bg`) — not just OS
+  highlight is a split blend — a brightening fill plus a darkening stroke, not a mark-derived
+  colour — `colors` (today `scatter!`'s `color=`) no longer touches the highlight at all, only
+  the tooltip accent (below). The shadow root holds THREE sibling top-level svgs, identical
+  box/viewBox, each with its own `g.hi`/`g.sel`: `svg.masque-fill` (`mix-blend-mode:
+  color-dodge`, both light and dark figures) draws the fill half of a closed mark's
+  hover/selected highlight (`masque-hi masque-fillshape`, computed fill `rgb(20, 20, 20)` /
+  `#141414`, fill-opacity 1, no stroke); `svg.masque-edge` (`multiply` on light figures, `screen`
+  on dark) draws the stroke half (`masque-hi masque-hover` at 1.5px hover, `masque-hi
+  masque-wash` at 2px selected, no fill) — Firefox only honours `mix-blend-mode` on a top-level
+  svg, not nested SVG content, which is why each blend mode gets its own sibling svg instead of
+  a per-element wrapper. Dodge against the near-black `#141414` source was, across a measured
+  10-colour palette, the only fill candidate that never rotated hue more than 8° and never
+  dimmed a mark (`bar_blue` is the limiting case for hue rotation, so the source stays
+  deliberately conservative); a single darkening layer alone made a highlighted mark read muddy
+  on a light figure, which is why the highlight split into two layers at all. Because the fill is
+  identical between hover and selected (same class, same colour, same opacity — fill strength
+  alone is sub-JND), the 1.5px-vs-2px edge-stroke width carries the entire hover-vs-selected
+  distinction. Hovering a mark that is already selected draws no highlight at all — both layers
+  are already opaque from the selected wash, so a 1.5px hover stroke over the 2px selected stroke
+  would read as weaker, not stronger — only the highlight is skipped; the tooltip and `@bind`
+  still fire for that hit. Per geometry: a closed mark (circle/rect/polygon) draws BOTH shapes,
+  identical geometry; an open seg (a line has no interior) draws the edge shape only; a
+  `selects`-ROI's grid cell-block union rect (`"rectfill"` geom tag) draws the fill shape only,
+  since the ROI box itself is already the rect's outline. The third svg, `svg.masque-plain` (no
+  blend), holds ROI box/handles, the threshold line, the selected-open-geometry ring (2px + 4px @
+  0.25, unchanged ink), and hover/selected highlights for a layer with an explicit `hoverstyle`
+  stroke — single element, stroke verbatim + 18%/35% tint in that colour (the pre-split recipe,
+  unchanged), open shapes staying stroke-only there (no `masque-hover`, `fill: none`); browsers
+  without `mix-blend-mode` fall back to the plain neutral ink instead — the fill layer to 0.18
+  opacity, the edge layer to the plain ink stroke. A scatter circle's highlight `r` is the
+  marker's DRAWN radius, not `markersize / 2` — flush against the visible disc (default `:circle`
+  marker ≈0.3525×`markersize`; a `Circle`/`Rect` geometry marker draws at `markersize`; anything
+  else falls back to `markersize / 2`); the overlay's own 4px hit slack keeps clicking as
+  forgiving as before. 80–120 ms fade — a plain opacity fade on each shape itself
+  (`masque-enter`/`masque-leave`; the blend lives on each svg root, so a fading child doesn't
+  isolate it); tooltip theme derived from the FIGURE's own background (CSS relative-colour
+  syntax, `--masque-fig-bg`) — not just OS
   `prefers-color-scheme` (official Pluto has no notebook toggle), which is now only the
   fallback for browsers without relative-colour support — tooltip anchored ABOVE the hovered
   mark (not the cursor) with a 10px gap and the caret on the anchor — flips below on a

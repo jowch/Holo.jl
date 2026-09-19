@@ -5,8 +5,9 @@ const _GB = Makie.GeometryBasics
 
 _conv(p) = _converted(p)
 
-# markersize is a :pixel-space diameter (Makie's default markerspace); radius = ms/2. Fails
-# loud on non-:pixel markerspace (e.g. :data), where ms/2 would be the wrong unit.
+# markersize is a :pixel-space diameter (Makie's default markerspace); radius = ms/2 for markers
+# whose drawn extent fills that square. Fails loud on non-:pixel markerspace (e.g. :data), where
+# ms/2 would be the wrong unit.
 function _marker_radius(p)
     p.markerspace[] === :pixel || error(
         "PointInteractable: scatter has markerspace=$(repr(p.markerspace[])); radius can only be " *
@@ -14,7 +15,34 @@ function _marker_radius(p)
     )
     ms = p.markersize[]
     d = ms isa AbstractVector ? (isempty(ms) ? 0.0 : Float64(maximum(ms))) : Float64(ms)
-    return d / 2
+    return d * _marker_extent_factor(p.marker[]) / 2
+end
+
+# Drawn extent of one marker as a fraction of markersize (1.0 = fills the markersize square, e.g.
+# Makie's default :circle draws a BezierPath disc scaled to a 0.705·markersize bounding box, not
+# markersize itself — see Makie.default_marker_map()/marker_scale_factor). `p.marker[]` is already
+# converted by the time a Scatter plot holds it (`to_spritemarker` resolves a Symbol like :circle
+# to its BezierPath at construction), so the Symbol branch below is a defensive fallback, not the
+# normal path. A `GeometryBasics` `Circle`/`Rect` marker — TYPE or instance — always draws at
+# exactly markersize: Makie never rescales by the instance's own radius/widths (the generic
+# `rescale_marker(atlas, char, font, markersize) = markersize` fallback, commented "Rect / Circle
+# dont need no rescaling", is what a Circle/Rect instance hits; `to_spritemarker` passes both forms
+# through unchanged), so their factor is 1.0 — same fallback as markers with no readable bbox (a
+# `Char` glyph, an image, a per-element vector of markers) — those still draw within markersize,
+# just not filling it, so treating them as radius=ms/2 stays a safe (if loose) click-target bound,
+# never an undershoot.
+function _marker_extent_factor(marker)
+    shape = if marker isa Symbol
+        get(Makie.default_marker_map(), marker, nothing)
+    elseif marker isa Makie.BezierPath
+        marker
+    else
+        nothing
+    end
+    # Makie.bbox is internal (not exported API, Makie/src/bezier.jl) — Project.toml pins Makie to
+    # the 0.24 minor series; a compat bump should re-check this still resolves.
+    shape !== nothing && return Float64(maximum(Makie.widths(Makie.bbox(shape))))
+    return 1.0
 end
 # Tooltip accent colour for a Scatter's points (HitLayer's `colors` field): a shared palette of
 # CSS strings + one 0-based index per point, or a single CSS string when every point is the same

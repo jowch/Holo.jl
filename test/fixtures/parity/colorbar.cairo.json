@@ -105,7 +105,6 @@
             },
             "id": "cells",
             "style": {
-                "stroke": "#3A6F7C",
                 "width": 2
             },
             "payloads": [
@@ -121,17 +120,16 @@
             "geometry": [
                 190,
                 584,
-                9,
+                6,
                 563,
                 377,
-                9,
+                6,
                 936,
                 170,
-                9
+                6
             ],
             "id": "scatter",
             "style": {
-                "stroke": "#3A6F7C",
                 "width": 2
             },
             "colors": "rgb(0,114,178)",
@@ -173,7 +171,6 @@
             ],
             "id": "lines",
             "style": {
-                "stroke": "#3A6F7C",
                 "width": 2
             },
             "payloads": [
@@ -203,7 +200,6 @@
             ],
             "id": "colorbar",
             "style": {
-                "stroke": "#3A6F7C",
                 "width": 2
             },
             "payloads": [

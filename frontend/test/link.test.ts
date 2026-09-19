@@ -49,7 +49,9 @@ describe("legend links: hover", () => {
     it("hovering a linked legend element draws the selected recipe for every element of the target layer", () => {
         const { surface, shadow } = setup(manifest)
         move(surface, 50, 50)
-        expect(linkGroupSize(shadow)).toBe(3) // "pts" has 3 circles
+        // "pts" has 3 circles; each closed hit splits into a fill element (svg.masque-fill's
+        // g.link) and an edge element (svg.masque-edge's g.link) — 3 * 2 = 6.
+        expect(linkGroupSize(shadow)).toBe(6)
     })
 
     it("hovering a non-linked legend element (links: []) draws nothing in the link group", () => {
@@ -61,11 +63,11 @@ describe("legend links: hover", () => {
     it("moving off any element clears the link group after the fade", async () => {
         const { surface, shadow } = setup(manifest)
         move(surface, 50, 50)
-        expect(linkGroupSize(shadow)).toBe(3)
+        expect(linkGroupSize(shadow)).toBe(6)
         surface.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }))
         // immediately after leave: fading out (masque-leave), not yet removed
         const stillThere = shadow.querySelectorAll("g.link > *")
-        expect(stillThere.length).toBe(3)
+        expect(stillThere.length).toBe(6)
         for (const el of stillThere) expect(el.classList.contains("masque-leave")).toBe(true)
         await new Promise((r) => setTimeout(r, 150))
         expect(linkGroupSize(shadow)).toBe(0)
@@ -86,10 +88,12 @@ describe("legend links: hover", () => {
             ],
         }
         const { surface, shadow } = setup(selManifest)
-        expect(shadow.querySelector("g.sel")!.children.length).toBe(1)
+        // "other"'s one selected circle also splits into fill + edge — g.sel across all three
+        // svgs holds 2 elements for a single selected closed hit.
+        expect(shadow.querySelectorAll("g.sel > *").length).toBe(2)
         move(surface, 50, 50) // hover the linked legend entry
-        expect(linkGroupSize(shadow)).toBe(3)
-        expect(shadow.querySelector("g.sel")!.children.length).toBe(1) // untouched
+        expect(linkGroupSize(shadow)).toBe(6)
+        expect(shadow.querySelectorAll("g.sel > *").length).toBe(2) // untouched
     })
 })
 
@@ -134,14 +138,15 @@ describe("legend links: keyboard focus", () => {
         const { surface, shadow } = setup(manifest)
         surface.focus()
         down(surface, "ArrowRight") // -> legend[0], the only focusable element
-        expect(linkGroupSize(shadow)).toBe(2)
+        // "pts" has 2 circles, each splitting into fill + edge — 2 * 2 = 4.
+        expect(linkGroupSize(shadow)).toBe(4)
     })
 
     it("blurring/moving focus away clears the linked highlight (after the fade)", async () => {
         const { surface, shadow } = setup(manifest)
         surface.focus()
         down(surface, "ArrowRight")
-        expect(linkGroupSize(shadow)).toBe(2)
+        expect(linkGroupSize(shadow)).toBe(4)
         down(surface, "Escape")
         await new Promise((r) => setTimeout(r, 150))
         expect(linkGroupSize(shadow)).toBe(0)
@@ -176,13 +181,15 @@ describe("legend links: fan-out across kinds", () => {
     it("draws linked elements from both a circles and a polyline target layer", () => {
         const { surface, shadow } = setup(manifest)
         move(surface, 50, 50)
-        // 2 circles + 2 polyline segments (a 3-vertex polyline is 2 segments); an open kind
-        // (segments/polyline) in "selected" mode is a ring (highlight.ts's makeRing) — a <g>
-        // wrapping two <line>s — rather than a bare <line>, so each still counts as one
-        // top-level g.link child.
-        expect(linkGroupSize(shadow)).toBe(4)
+        // 2 circles, each closed and splitting into a fill <circle> (svg.masque-fill's g.link)
+        // and an edge <circle> (svg.masque-edge's g.link) = 4 <circle> elements. 2 polyline
+        // segments (a 3-vertex polyline is 2 segments); an open kind (segments/polyline) in
+        // "selected" mode is unblended — a ring (highlight.ts's makeRing) in svg.masque-plain's
+        // g.link only, a <g> wrapping two <line>s rather than a bare <line>, so each still
+        // counts as one top-level g.link child = 2 <g> elements. Total 4 + 2 = 6.
+        expect(linkGroupSize(shadow)).toBe(6)
         const tags = [...shadow.querySelectorAll("g.link > *")].map((el) => el.tagName.toLowerCase())
-        expect(tags.filter((t) => t === "circle").length).toBe(2)
+        expect(tags.filter((t) => t === "circle").length).toBe(4)
         expect(tags.filter((t) => t === "g").length).toBe(2)
     })
 })

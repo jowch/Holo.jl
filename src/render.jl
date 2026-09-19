@@ -59,11 +59,13 @@ end
 
 function _layer_dict(i, L::HitLayer, ctx::InteractionContext)
     hs = hoverstyle(i)
+    style = Dict{String, Any}("width" => hs.width)
+    hs.stroke === nothing || (style["stroke"] = hs.stroke)
     d = Dict{String, Any}(
         "id" => string(L.id), "kind" => string(L.kind), "axis" => string(L.axis),
         "geometry" => L.geometry, "payloads" => L.payloads,
         "events" => [string(e) for e in L.events],
-        "style" => Dict("stroke" => hs.stroke, "width" => hs.width),
+        "style" => style,
     )
     if L.kind === :segments || L.kind === :polyline
         t = hit_tol(i)
