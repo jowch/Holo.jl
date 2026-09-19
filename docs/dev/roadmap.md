@@ -92,22 +92,22 @@ than a fix, and #102, which reframes the remount problem for gestures generally.
    frame affordable. Still commit-on-release for the final `@bind`ed value; #102 changes what
    happens *during* the drag, not what gets committed at the end.
 
-**#83 investigated the double remount to a close: unsupported-shape behaviour, not a bug.** The
-view-manipulation widget cell both defines the `@bind` and reads its own previous bond value back
-(the camera-`Ref` pattern the steps above build on, and the same shape `selected=`-style click
-persistence relies on) — a cell that does that is not a sanctioned Pluto use case. The mechanism
-traces into Pluto's own bond-cache timing (a cached entry is deleted and re-added several times
-within one reactive cascade, and the listener that would skip resending an unchanged mount-time
-value lands in the window where the entry is absent). Two candidate Masque-side fixes were built
-and rejected: dropping the `host.value` clobber, and replaying the last real value instead of
-`nothing` (catastrophic in the #83 investigation's own testing — 379+ evaluations from a single
-drag; this figure lives in the issue, not `perf-findings.md`). There is no Masque defect to fix
-and no Pluto defect to report; closed not-planned, nothing left to build. **#102 routes around it
-rather than fixing it**: a gesture channel that never remounts makes the double remount stop
-mattering for view manipulation specifically, but the same self-referencing shape is still live
-for every other bond in the notebook that uses it. #103 retires the main reason users write that
-shape at all (the `selected=` self-referencing workaround) — the more durable answer for those
-callers.
+**#83: the double remount is a consequence of an unsupported self-referencing `@bind` shape.**
+The view-manipulation widget cell both defines the `@bind` and reads its own previous bond value
+back (the camera-`Ref` pattern the steps above build on, and the same shape `selected=`-style
+click persistence relies on) — a cell that does that is not a sanctioned Pluto use case. The
+mechanism traces into Pluto's own bond-cache timing (a cached entry is deleted and re-added
+several times within one reactive cascade, and the listener that would skip resending an
+unchanged mount-time value lands in the window where the entry is absent); two candidate
+Masque-side fixes were built and rejected, dropping the `host.value` clobber and replaying the
+last real value instead of `nothing` (catastrophic in the #83 investigation's own testing — 379+
+evaluations from a single drag; this figure lives in the issue, not `perf-findings.md`). Nothing
+about that shape is contractual, so the observed behaviour has no stability guarantee across
+Pluto versions — closed not-planned, nothing left to build. **#102 routes around it rather than
+fixing it**: a gesture channel that never remounts makes the double remount stop mattering for
+view manipulation specifically, but the same self-referencing shape is still live for every other
+bond in the notebook that uses it. #103 retires the main reason users write that shape at all
+(the `selected=` self-referencing workaround) — the more durable answer for those callers.
 
 **Open, deliberately: whether live preview or commit-on-release is the default.** #102's numbers
 bound what is *possible* — viable on a light scene, not on a heavy one at the resolutions

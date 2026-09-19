@@ -195,14 +195,13 @@ Measured **2026-09-19 at commit `e9a71f3`**, Julia 1.12.7, Pluto **1.0.3**, Cair
 headless Chromium (Playwright) — a dated snapshot like the round-trip numbers above, and more so:
 its Playwright driver was run inline and never saved as a file, so there is no committed script
 to point to at all (see the header note above). Pluto's version is recorded because the double
-remount below depends on it, not because a fix is pending anywhere. It is **not a Pluto bug and
-not a Masque bug**: the scene's widget cell both defines the `@bind` and reads its own previous
-bond value back (the same self-referencing shape `selected=`-style click persistence relies on
-today), and a cell that does that is not a sanctioned Pluto use case
+remount below depends on it: the scene's widget cell both defines the `@bind` and reads its own
+previous bond value back (the same self-referencing shape `selected=`-style click persistence
+relies on today), and a cell that does that is not a sanctioned Pluto use case
 ([issue #83](https://github.com/jowch/Masque.jl/issues/83), closed not-planned after the
-mechanism was traced into Pluto's own bond-cache timing). Nothing about that shape carries a
-stability guarantee, so a different Pluto version can legitimately show a different remount count
-— that would not be a regression to chase.
+mechanism was traced into Pluto's own bond-cache timing). Nothing about that shape is
+contractual, so a different Pluto version can show a different remount count without that being
+a regression.
 
 Scene: `Axis3`, a 240-point helix `lines!` + a 12-marker `scatter!`,
 `[ViewInteractable(ax), PointInteractable(ax, pts)]` as the interactable set, figure 480×360 at
@@ -212,8 +211,8 @@ with `performance.now()` at a synthetic `pointerup` dispatch, plus a poll on `.i
 identity — identity-diffed every 15 ms (not a fixed-interval `waitChange` poll) so the
 ~100–300 ms window isn't buried in coarser polling noise. 12 drag-release trials.
 
-**Reconstructed method** (reference only — the original driver was never saved as a file, so this
-is not a runnable harness, just enough to rebuild the measurement by hand):
+**Reconstruction, not a committed driver** — not runnable as-written; captures the notebook cell
+shape and measurement approach well enough to rebuild by hand:
 
 ```julia
 # Cell A — once-init camera Ref, a separate Pluto cell so it does NOT re-run (and
