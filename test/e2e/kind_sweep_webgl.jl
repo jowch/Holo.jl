@@ -177,6 +177,24 @@ HTML(
         "<span id=\"coords_view\" style=\"display:none\">$(JSON3.write(sweep.view.manifest["layers"]))</span>",
 )
 
+# ╔═╡ d1000000-0000-0000-0000-000000000038
+@bind ev_legend sweep.legend
+
+# ╔═╡ d1000000-0000-0000-0000-000000000039
+HTML(
+    "<span id=\"out_legend\">LEGEND=$(repr(ev_legend))</span>" *
+        "<span id=\"coords_legend\" style=\"display:none\">$(JSON3.write(sweep.legend.manifest["layers"]))</span>",
+)
+
+# ╔═╡ d1000000-0000-0000-0000-000000000041
+@bind ev_legend_overlap sweep.legend_overlap
+
+# ╔═╡ d1000000-0000-0000-0000-000000000042
+HTML(
+    "<span id=\"out_legend_overlap\">LEGEND_OVERLAP=$(repr(ev_legend_overlap))</span>" *
+        "<span id=\"coords_legend_overlap\" style=\"display:none\">$(JSON3.write(sweep.legend_overlap.manifest["layers"]))</span>",
+)
+
 # ╔═╡ d1000000-0000-0000-0000-000000000040
 HTML(
     "<span id=\"kind_meta\" style=\"display:none\">$(JSON3.write(kind_sweep_meta()))</span>" *
@@ -217,4 +235,8 @@ HTML(
 # ╠═d1000000-0000-0000-0000-000000000033
 # ╠═d1000000-0000-0000-0000-000000000034
 # ╠═d1000000-0000-0000-0000-000000000035
+# ╠═d1000000-0000-0000-0000-000000000038
+# ╠═d1000000-0000-0000-0000-000000000039
+# ╠═d1000000-0000-0000-0000-000000000041
+# ╠═d1000000-0000-0000-0000-000000000042
 # ╠═d1000000-0000-0000-0000-000000000040

@@ -88,6 +88,7 @@ export interface OverlayCtx {
     tip_: HTMLElement
     hiGroup_: HiGroups
     selGroup_: HiGroups
+    linkGroup_: HiGroups // transient legend-linked highlights (g.link), z-ordered between sel and hi
     thresholdLines_: Map<string, SVGLineElement>
     roiBoxes_: Map<string, ROIBox>
     shadowRoot_: ShadowRoot // for `shadowRoot.activeElement === surface` focus gating (keyboard.ts)
@@ -102,6 +103,11 @@ export interface OverlayState {
     hiKey_: string | null
     selKeys_: Set<string>
     hiLeaveTimer_: ReturnType<typeof setTimeout> | null
+    // g.link (legend-linked highlight): keyed by hitKey() of the SOURCE element (the hovered/
+    // focused legend entry), not any one target hit — one source can fan out to many target
+    // hits across several layers, all drawn/cleared together. Same fade convention as hi/sel.
+    linkKey_: string | null
+    linkLeaveTimer_: ReturnType<typeof setTimeout> | null
     tipFlipTimer_: ReturnType<typeof setTimeout> | null
     pendingMove_: MouseEvent | null
     moveRaf_: number
@@ -134,6 +140,8 @@ export function createOverlayState(): OverlayState {
         hiKey_: null,
         selKeys_: new Set(),
         hiLeaveTimer_: null,
+        linkKey_: null,
+        linkLeaveTimer_: null,
         tipFlipTimer_: null,
         pendingMove_: null,
         moveRaf_: 0,

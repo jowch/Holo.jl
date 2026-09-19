@@ -77,6 +77,7 @@ regions grouped into **layers**, one per interactable, keyed by its `id`. The va
   backend, what a bond value looks like
 - [Interactables](@ref) — every built-in kind, its constructor, and its default payload
 - [Selection](@ref) — reacting to clicks, linking plots, persisting a highlight
+- [Legend](@ref) — hover/click a `Makie.Legend` entry to highlight the trace(s) it labels
 - [Tooltips](@ref) — `masque"..."` templates and styling
 - [Custom interactions](@ref) — `RegionInteractable` / `FunctionInteractable`
 - [Backends](@ref) — `:cairo` vs `:webgl`, and when to reach for which

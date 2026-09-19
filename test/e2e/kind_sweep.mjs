@@ -390,6 +390,34 @@ try {
     const layers = await layersOf(key);
     const layer = findLayer(layers, spec);
 
+    // Regression check for the `build_manifest` precedence fix (src/render.jl ~line 259):
+    // a `LegendInteractable` layer drawn over filled plot geometry must sort BEFORE that
+    // geometry's layer in the manifest, or the frontend's first-match `hitTest` gives every
+    // contested pixel to the plot underneath instead of the legend.
+    if (spec.overlapsGrid) {
+      const gridLayer = layers.find((l) => l.id === spec.overlapsGrid);
+      if (!gridLayer) throw new Error(`${key}: no grid layer "${spec.overlapsGrid}" in manifest`);
+      const legendIdx = layers.indexOf(layer);
+      const gridIdx = layers.indexOf(gridLayer);
+      if (!(legendIdx < gridIdx)) {
+        throw new Error(`${key}: legend layer index ${legendIdx} not before grid layer "${spec.overlapsGrid}" index ${gridIdx}`);
+      }
+      // Prove the test is meaningful: the pixel the generic hover/click checks below use must
+      // genuinely fall inside BOTH layers' claimed geometry, not just two non-overlapping boxes.
+      const hp = hitPoint(layer, spec.selectedIndex);
+      const g = gridLayer.geometry;
+      // Pixel space: xedges/yedges keep their original edge order, which can be descending
+      // (top-left-origin, y-flipped projection) — sort before treating as [min, max].
+      const xs = [g.xedges[0], g.xedges.at(-1)].sort((a, b) => a - b);
+      const ys = [g.yedges[0], g.yedges.at(-1)].sort((a, b) => a - b);
+      const inGrid = hp.x >= xs[0] && hp.x <= xs[1] && hp.y >= ys[0] && hp.y <= ys[1];
+      if (!inGrid) {
+        throw new Error(`${key}: legend test pixel ${JSON.stringify(hp)} not inside grid extent x[${xs}] y[${ys}]`);
+      }
+      passed.push(`${key}/legend-precedence-order`);
+      passed.push(`${key}/legend-precedence-pixel-contested`);
+    }
+
     if (spec.mode === "drag") {
       const p = hitPoint(layer, 0);
       const before = await textOf(`#out_${key}`);
@@ -620,7 +648,143 @@ try {
       }
     }
     passed.push(`${key}/click-bind`);
+    // `InteractionEvent` has no custom `show`, so `repr(ev)` is Julia's default positional
+    // struct print: `InteractionEvent(:legend, 0, …)` — the ":<layerId>," prefix pins which
+    // layer actually won the hit-test. Belt-and-suspenders on top of the index regex above:
+    // this fails loud specifically on "resolved to the wrong layer", not just "wrong index".
+    if (spec.overlapsGrid && new RegExp(`:${spec.overlapsGrid},\\s*\\d+\\b`).test(after)) {
+      throw new Error(`${key}-click: bond resolved to grid layer "${spec.overlapsGrid}", not legend: ${after.slice(0, 220)}`);
+    }
     console.error(`OK  ${key} — ${after.slice(0, 110)}`);
+
+    // A legend entry's linked highlight (HitLayer.links) draws the SELECTED recipe for every
+    // element of the target layer(s) into g.link — distinct from g.sel/g.hi. Generic: skipped
+    // for every spec except the one(s) that carry a "links" meta key.
+    if (spec.links) {
+      const linkInspect = (k) => page.evaluate((kk) => {
+        const span = document.querySelector(`#coords_${kk}`);
+        const hosts = [...document.querySelectorAll(".ip-host")];
+        const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
+        let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
+        const grp = sr.querySelector("g.link");
+        const kids = [...(grp?.children ?? [])].map((el) => {
+          if (el.tagName.toLowerCase() === "g") {
+            return {
+              kind: "ring",
+              lines: [...el.querySelectorAll("line")].map((ln) => ({
+                fill: ln.getAttribute("fill"), stroke: ln.getAttribute("stroke"),
+                width: ln.getAttribute("stroke-width"), opacity: ln.getAttribute("stroke-opacity"),
+                x1: ln.getAttribute("x1"), y1: ln.getAttribute("y1"),
+                x2: ln.getAttribute("x2"), y2: ln.getAttribute("y2"),
+              })),
+            };
+          }
+          return {
+            kind: "closed", tag: el.tagName.toLowerCase(),
+            fill: el.getAttribute("fill"), stroke: el.getAttribute("stroke"), width: el.getAttribute("stroke-width"),
+            r: el.getAttribute("r"), cx: el.getAttribute("cx"), cy: el.getAttribute("cy"),
+          };
+        });
+        const leaving = grp?.firstElementChild ? grp.firstElementChild.classList.contains("masque-leave") : null;
+        return { count: grp?.children.length ?? 0, kids, sel: sr.querySelector("g.sel")?.children.length ?? 0, leaving };
+      }, k);
+
+      const layerElementCount = (l) => {
+        const g = l.geometry;
+        if (l.kind === "circles") return g.length / 3;
+        if (l.kind === "rects") return g.length / 4;
+        if (l.kind === "segments") return g.length / 4;
+        if (l.kind === "polyline") return Math.max(0, g.length / 2 - 1);
+        if (l.kind === "polygons") return g.length;
+        throw new Error(`layerElementCount: unhandled kind ${l.kind}`);
+      };
+
+      for (const c of spec.links.cases) {
+        const targetIds = (layer.links && layer.links[c.index]) || [];
+        if (!targetIds.length) throw new Error(`${key}/links[${c.index}]: legend entry "${c.label}" has no links`);
+        const hp = hitPoint(layer, c.index);
+        const norm = (s) => String(s || "").toLowerCase().replace(/\s+/g, "");
+        let t = null;
+        for (let a = 0; a < 8; a++) {
+          t = await dispatchAt(key, hp.x, hp.y, "pointermove");
+          if (t?.show && norm(t.text).includes(norm(c.label))) break;
+          await new Promise((r) => setTimeout(r, 200));
+        }
+        if (!t?.show || !norm(t.text).includes(norm(c.label))) {
+          throw new Error(`${key}/links[${c.index}]: tooltip ${JSON.stringify(t)} (want "${c.label}")`);
+        }
+        assertHoverRecipe(t.hi, `${key}/links[${c.index}]/legend-row-hover`);
+
+        const li = await linkInspect(key);
+        let expected = 0;
+        for (const tid of targetIds) {
+          const tl = layers.find((l) => l.id === tid);
+          if (!tl) throw new Error(`${key}/links[${c.index}]: target layer ${tid} missing from manifest`);
+          expected += layerElementCount(tl);
+        }
+        if (li.count !== expected) {
+          throw new Error(`${key}/links[${c.index}]: g.link has ${li.count} elements, want ${expected} (targets ${JSON.stringify(targetIds)})`);
+        }
+        if (li.sel !== 0) throw new Error(`${key}/links[${c.index}]: g.sel changed during legend hover (${li.sel})`);
+
+        // Geometry: the first linked element must sit ON the plotted mark, not beside it.
+        const tl0 = layers.find((l) => l.id === targetIds[0]);
+        const hp0 = hitPoint(tl0, 0);
+        if (tl0.kind === "circles") {
+          const circleKid = li.kids.find((kk) => kk.tag === "circle");
+          if (!circleKid) throw new Error(`${key}/links[${c.index}]: no circle in g.link`);
+          assertWash(circleKid, `${key}/links[${c.index}]/wash`);
+          if (Math.abs(Number(circleKid.cx) - hp0.x) > 0.6 || Math.abs(Number(circleKid.cy) - hp0.y) > 0.6) {
+            throw new Error(`${key}/links[${c.index}]: link circle off-mark ${JSON.stringify(circleKid)} vs ${JSON.stringify(hp0)}`);
+          }
+          if (String(Number(circleKid.r)) !== String(hp0.r + 2)) {
+            throw new Error(`${key}/links[${c.index}]: link circle halo r=${circleKid.r} want ${hp0.r + 2}`);
+          }
+        } else if (tl0.kind === "polyline" || tl0.kind === "segments") {
+          const ringKid = li.kids.find((kk) => kk.kind === "ring");
+          if (!ringKid) throw new Error(`${key}/links[${c.index}]: no ring in g.link`);
+          assertRing(ringKid, `${key}/links[${c.index}]/ring`);
+          const ln = ringKid.lines[0];
+          if (Math.abs(Number(ln.x1) - hp0.x1) > 1.2 || Math.abs(Number(ln.y1) - hp0.y1) > 1.2) {
+            throw new Error(`${key}/links[${c.index}]: link ring off-mark ${JSON.stringify(ln)} vs ${JSON.stringify(hp0)}`);
+          }
+        }
+        passed.push(`${key}/links[${c.index}]`);
+      }
+
+      // Moving off the last-hovered legend entry fades g.link (not an instant clear), same
+      // contract as g.hi.
+      const fadeLink = await page.evaluate((k) => {
+        const span = document.querySelector(`#coords_${k}`);
+        const hosts = [...document.querySelectorAll(".ip-host")];
+        const host = hosts.filter((h) => (h.compareDocumentPosition(span) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
+        let sr = null; host.querySelectorAll("*").forEach((el) => { if (el.shadowRoot) sr = el.shadowRoot; });
+        sr.querySelector(".surface").dispatchEvent(new PointerEvent("pointerleave", { bubbles: true, pointerId: 1, pointerType: "mouse", isPrimary: true }));
+        const grp = sr.querySelector("g.link");
+        const first = grp?.firstElementChild;
+        return { count: grp?.children.length ?? 0, leaving: !!(first && first.classList.contains("masque-leave")) };
+      }, key);
+      if (fadeLink.count === 0) throw new Error(`${key}/links: cleared instantly (no remount fade)`);
+      if (!fadeLink.leaving) throw new Error(`${key}/links: leave did not apply masque-leave`);
+      let afterLinkLeave = await linkInspect(key);
+      for (let a = 0; a < 8 && afterLinkLeave.count !== 0; a++) {
+        await new Promise((r) => setTimeout(r, 25));
+        afterLinkLeave = await linkInspect(key);
+      }
+      if (afterLinkLeave.count !== 0) throw new Error(`${key}/links: g.link lingered ${afterLinkLeave.count}`);
+      passed.push(`${key}/links-fade`);
+
+      // The click-bind assertion above already confirmed index==clickIdx; here confirm the
+      // bond's payload actually carries label/targets (not just the index).
+      const clickTargets = (layer.links && layer.links[clickIdx]) || [];
+      if (!clickTargets.length || !clickTargets.every((tid) => new RegExp(tid, "i").test(after))) {
+        throw new Error(`${key}/links: click payload missing targets ${JSON.stringify(clickTargets)}: ${after.slice(0, 220)}`);
+      }
+      if (spec.tip && !new RegExp(spec.tip, "i").test(after)) {
+        throw new Error(`${key}/links: click payload missing label "${spec.tip}": ${after.slice(0, 220)}`);
+      }
+      passed.push(`${key}/links-click-payload`);
+    }
   }
 
   // Hover-on-selected is a no-op: hovering scatter's baked-selected element (index 1, "beta")

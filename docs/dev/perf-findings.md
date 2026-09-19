@@ -53,6 +53,24 @@
 > The mark-derived hover outline change dropped the per-layer `"style"."stroke"` key by
 > default (`hoverstyle`'s stroke is now `nothing`; was always `"#3A6F7C"`, ~18 B per layer).
 > Not re-run: it only removes bytes, and neither bench fixture sets a custom `hoverstyle`.
+> and re-run for `LegendInteractable` (this PR, 2026-09-18): manifest-shape change — a new
+> `:legend` transform + one `:rects` `HitLayer` per `Makie.Legend` block (auto-extracted the
+> same way as `ColorbarInteractable`), and `HitLayer`'s only cross-layer field, an optional
+> per-layer `"links"` (an array of string-id arrays, one per element, naming other layers to
+> highlight together with the hovered/selected entry) — present only on a `LegendInteractable`
+> layer. Envelope unchanged: neither `bench/payload_envelope.jl` nor `bench/stress.jl` builds a
+> `Legend` (grepped both for `Legend`/`legend` — no hits), so re-running reproduces the previous
+> numbers byte-for-byte. Measured the delta by direct manifest inspection instead, same method
+> as the `tol`/`label` re-runs above: a 3-entry `axislegend` (two `lines!`, one `scatter!`, each
+> auto-linked to its own layer), `build_manifest`'d and hand-sized with the same MsgPack byte
+> model `bench/payload_envelope.jl` itself uses (`mp(...)`, not MsgPack.jl — MsgPack.jl can't
+> pack the manifest's `NamedTuple` payloads without a declared `msgpack_type`, so it was not a
+> fit here either). The whole 3-entry legend layer dict (id/kind/geometry/payloads/events/
+> style/label/colors/template/links) is 341 B; its `"links"` field alone (`[["lines"],
+> ["lines_2"], ["scatter"]]`) is 26 B, 32 B including the `"links"` key itself — once per
+> legend layer, ~9–11 B/entry for a short single-id link list (grows with target-id-string
+> length and link-list length per entry, same as any other string-keyed field; bounded by
+> entry count, not plot size). Doesn't scale with plot size — negligible at any N.
 > baseline established after int-pixel geometry quantization, CairoMakie 0.15, Julia 1.12):
 > - **base64-PNG / manifest / render numbers** — `julia --project=. bench/payload_envelope.jl`
 >   (normal envelope) and `julia --project=. bench/stress.jl` (the 10× extremes). Both `seed!(0)`,

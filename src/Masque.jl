@@ -56,7 +56,7 @@ include("render.jl")
 export AbstractBackend
 export AbstractInteractable, AbstractSelector, HitLayer, InteractionContext, AxisTransform
 export PointInteractable, SegmentInteractable, RectInteractable, PolygonInteractable,
-    AxisInteractable, ColorbarInteractable, RegionInteractable, FunctionInteractable,
+    AxisInteractable, ColorbarInteractable, LegendInteractable, RegionInteractable, FunctionInteractable,
     ThresholdInteractable, ROIInteractable, TextInteractable, ViewInteractable
 export masque, auto_interactables, InteractionEvent, data_to_image_px, hitlayers
 export Markup, @masque_str

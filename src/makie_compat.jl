@@ -188,3 +188,125 @@ function _raw_colormap(p)
     end
     return v
 end
+
+# Wraps `leg.layoutobservables.computedbbox[]`; same private path as `_colorbar_bbox`, just a
+# different Block type — kept separate so the error message names the right one.
+function _legend_bbox(leg)
+    bb = try
+        leg.layoutobservables.computedbbox[]
+    catch e
+        e isa _MAKIE_SHAPE_ERRORS || rethrow()
+        return _makie_compat_error("computedbbox", "a Legend to expose `.layoutobservables.computedbbox[]`")
+    end
+    bb isa Makie.Rect2 || return _makie_compat_error("computedbbox", "a Legend's `.computedbbox[]` to be a `Rect2`")
+    return bb
+end
+
+# Recursive GridLayoutBase walk collecting each entry row's pixel bbox: per entry, Makie lays
+# out a patch Box (1 col), a Label (1 col), a shade Box (2 cols) and a halfshade Box (2 cols,
+# identical bbox) — the 2-col shade Box's bbox is the row Makie's own click-to-toggle hits.
+# Grouped (titled) legends nest each group's entries in their own GridLayout; ungrouped legends
+# lay entries directly in `leg.grid` — recursing (rather than assuming one fixed depth) covers
+# both without a special case. Multi-bank legends (`nbanks > 1`) place each bank's entries in
+# its own column pair (bank 2's shade spans cols 3:4, bank 3's 5:6, …), so the span check is
+# WIDTH (`length(...) == 2`), not a fixed `(1:2)` — the patch Box and every Label always span
+# exactly 1 column (in both vertical and horizontal orientation), so this stays unambiguous.
+function _walk_legend_grid!(boxes, seen, grid)
+    for gc in grid.content
+        c = gc.content
+        if c isa Makie.GridLayout
+            _walk_legend_grid!(boxes, seen, c)
+        elseif c isa Makie.Box && length(gc.span.cols) == 2
+            bb = c.layoutobservables.computedbbox[]
+            key = (Float64(bb.origin[1]), Float64(bb.origin[2]), Float64(bb.widths[1]), Float64(bb.widths[2]))
+            key in seen && continue
+            push!(seen, key)
+            push!(boxes, bb)
+        end
+    end
+    return boxes
+end
+
+# One deduped bbox per legend entry, in entry order (top-to-bottom, matching `entrygroups[]`
+# flattened). No public per-entry bbox accessor exists; this is what Makie's own click-to-hide
+# hit-test walks.
+function _legend_entry_boxes(leg)
+    try
+        boxes = Any[]
+        seen = Set{NTuple{4, Float64}}()
+        _walk_legend_grid!(boxes, seen, leg.grid)
+        return boxes
+    catch e
+        e isa _MAKIE_SHAPE_ERRORS || rethrow()
+        return _makie_compat_error(
+            "grid",
+            "a Legend's `.grid` to expose per-entry 2-column `Box`es via GridLayoutBase's `.content`/`.span`"
+        )
+    end
+end
+
+# Wraps `leg.entrygroups[]` into a flat, entry-ordered Vector of `(; group, label, plots,
+# elements)` — everything a `LegendInteractable` needs to resolve `targets` and accent colour,
+# available BEFORE render (unlike `_legend_entries` below, entrygroups/labels/elements don't
+# depend on layout). `group` is the entrygroup's title (`nothing` for an ungrouped/default
+# legend). `plots` is the union (order preserving) of `Makie.get_plots(el)` over every element
+# of the entry — empty for a custom `LegendElement` built without `plots=`.
+function _legend_entries_meta(leg)
+    entrygroups = try
+        leg.entrygroups[]
+    catch e
+        e isa _MAKIE_SHAPE_ERRORS || rethrow()
+        return _makie_compat_error("entrygroups", "a Legend to expose `.entrygroups[]`")
+    end
+    entrygroups isa AbstractVector || return _makie_compat_error("entrygroups", "`.entrygroups[]` to be a Vector")
+
+    out = NamedTuple[]
+    for (title, entries) in entrygroups
+        group = title === nothing ? nothing : String(title)
+        for e in entries
+            # `String(lbl)` itself must run OUTSIDE the compat try/catch: `_MAKIE_SHAPE_ERRORS`
+            # includes MethodError, so a non-`AbstractString` label (e.g. `Makie.rich(...)`,
+            # a `Makie.RichText`) would otherwise be misreported as a Makie compat break rather
+            # than converted via `string(...)` like any other label value.
+            lbl = try
+                e.label[]
+            catch err
+                err isa _MAKIE_SHAPE_ERRORS || rethrow()
+                return _makie_compat_error("label", "a LegendEntry to expose `.label[]`")
+            end
+            label = lbl isa AbstractString ? String(lbl) : string(lbl)
+            elements = try
+                e.elements
+            catch err
+                err isa _MAKIE_SHAPE_ERRORS || rethrow()
+                return _makie_compat_error("elements", "a LegendEntry to expose `.elements`")
+            end
+            plots = try
+                ps = Any[]
+                for el in elements
+                    append!(ps, Makie.get_plots(el))
+                end
+                ps
+            catch err
+                err isa _MAKIE_SHAPE_ERRORS || rethrow()
+                return _makie_compat_error("get_plots", "`Makie.get_plots(element)` to return a Vector of plots")
+            end
+            push!(out, (; group, label, plots, elements))
+        end
+    end
+    return out
+end
+
+# `_legend_entries_meta(leg)` plus each entry's pixel bbox (only valid after render — see
+# `_legend_entry_boxes`) — the shape `hitlayers(::LegendInteractable, ctx)` builds one `:rects`
+# element from.
+function _legend_entries(leg)
+    meta = _legend_entries_meta(leg)
+    boxes = _legend_entry_boxes(leg)
+    length(boxes) == length(meta) || return _makie_compat_error(
+        "grid",
+        "the number of 2-column entry `Box`es ($(length(boxes))) to match the number of legend entries " *
+            "($(length(meta))) under Makie v$(pkgversion(Makie))"
+    )
+    return [merge(m, (; bbox = boxes[k])) for (k, m) in enumerate(meta)]
+end

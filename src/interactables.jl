@@ -35,6 +35,13 @@ data needed to resolve a pointer hit to an element index and its payload. Built 
   `nothing` (default) omits it from the manifest — no accent border on the tooltip. Built by
   [`PointInteractable`](@ref)'s plot-object constructor when the source plot's colour is
   resolvable; not derived automatically for a bare-points/vertices interactable.
+- `links` — an optional `Vector{Vector{Symbol}}`, one entry per element: the ids of other
+  layers this element highlights on hover/click (e.g. a legend entry linking to the trace(s) it
+  labels). `nothing` (default) omits it from the manifest. Built by
+  [`LegendInteractable`](@ref); every id it names must belong to another layer in the same
+  `masque()` call whose `kind` supports pre-highlight (`build_manifest` raises `ArgumentError`
+  otherwise, for explicitly-given targets — the auto-extracted path drops an unsupported target
+  with a `@warn` instead of failing the whole build).
 """
 struct HitLayer
     id::Symbol
@@ -45,9 +52,11 @@ struct HitLayer
     events::Tuple
     label::Union{Nothing, String}
     colors::Any
+    links::Union{Nothing, Vector{Vector{Symbol}}}
 end
-HitLayer(id, kind, geometry, payloads, axis, events) = HitLayer(id, kind, geometry, payloads, axis, events, nothing, nothing)
-HitLayer(id, kind, geometry, payloads, axis, events, label) = HitLayer(id, kind, geometry, payloads, axis, events, label, nothing)
+HitLayer(id, kind, geometry, payloads, axis, events) = HitLayer(id, kind, geometry, payloads, axis, events, nothing, nothing, nothing)
+HitLayer(id, kind, geometry, payloads, axis, events, label) = HitLayer(id, kind, geometry, payloads, axis, events, label, nothing, nothing)
+HitLayer(id, kind, geometry, payloads, axis, events, label, colors) = HitLayer(id, kind, geometry, payloads, axis, events, label, colors, nothing)
 
 """
     AbstractInteractable
@@ -55,9 +64,9 @@ HitLayer(id, kind, geometry, payloads, axis, events, label) = HitLayer(id, kind,
 Supertype for everything [`masque`](@ref) can turn into hit-testable JS layers. The built-in
 kinds ([`PointInteractable`](@ref), [`SegmentInteractable`](@ref), [`RectInteractable`](@ref),
 [`PolygonInteractable`](@ref), [`AxisInteractable`](@ref), [`ColorbarInteractable`](@ref),
-[`ThresholdInteractable`](@ref), [`ROIInteractable`](@ref), [`TextInteractable`](@ref),
-[`ViewInteractable`](@ref), [`RegionInteractable`](@ref), [`FunctionInteractable`](@ref))
-cover most needs; implement this interface for anything else.
+[`LegendInteractable`](@ref), [`ThresholdInteractable`](@ref), [`ROIInteractable`](@ref),
+[`TextInteractable`](@ref), [`ViewInteractable`](@ref), [`RegionInteractable`](@ref),
+[`FunctionInteractable`](@ref)) cover most needs; implement this interface for anything else.
 
 # Interface
 
@@ -734,6 +743,7 @@ struct AxisInteractable <: AbstractInteractable
 end
 AxisInteractable(ax; id = :axis) = AxisInteractable(ax, id)
 function validate(i::AxisInteractable, ctx::InteractionContext)
+    i.ax isa Makie.Legend && return "AxisInteractable: ax is a Legend, not an Axis — use LegendInteractable(leg) instead."
     t = ctx.transforms[axis_id(ctx, i.ax)]
     t.is3d && return "AxisInteractable: continuous pixel→data readout is undefined on an Axis3 " *
         "(a screen pixel is a ray, not a data point). Use element interactables " *
@@ -793,6 +803,221 @@ function hitlayers(i::ColorbarInteractable, ctx)
     return [HitLayer(i.id, :axis, bbox, Any[], aid, events(i))]
 end
 
+# ============================ LegendInteractable ============================
+const _LEGEND_DEFAULT_TOOLTIP = masque"$(label)"
+
+# Best-effort per-entry accent colour: the entry's first LegendElement's own colour attribute
+# (LineElement -> linecolor, MarkerElement -> markercolor, PolyElement -> polycolor). `nothing`
+# for an unresolvable colour (e.g. still `Makie.automatic`) -- an accent is a nice-to-have, not
+# a rendering guarantee, so this never errors.
+function _legend_element_color(el)
+    # Every LegendElement forwards all three colour attributes (the unused ones default to
+    # black), so the element type — not `hasproperty` — picks the one that is drawn.
+    raw = try
+        if el isa Makie.LineElement
+            el.linecolor[]
+        elseif el isa Makie.MarkerElement
+            el.markercolor[]
+        elseif el isa Makie.PolyElement
+            el.polycolor[]
+        else
+            return nothing
+        end
+    catch e
+        e isa _MAKIE_SHAPE_ERRORS || rethrow()
+        return nothing
+    end
+    raw === Makie.automatic && return nothing
+    return try
+        Makie.to_color(raw)
+    catch e
+        e isa _MAKIE_DOWNSTREAM_ERRORS || rethrow()
+        nothing
+    end
+end
+# One accent colour per entry, or `nothing` for the whole layer the moment any entry's is
+# unresolvable (rather than a partial/misleading accent set).
+function _legend_colors(entries)
+    raws = Any[]
+    for e in entries
+        isempty(e.elements) && return nothing
+        c = _legend_element_color(first(e.elements))
+        c === nothing && return nothing
+        push!(raws, c)
+    end
+    return _categorical_palette_index(raws)
+end
+
+# Priority (a) targets::Dict{label => id(s)}, (b) targets::Vector (one per entry), (c) plotmap
+# lookup of each entry's `Makie.get_plots` union, (d) empty. Returns (resolved, lenient) —
+# `lenient` is true only for (c)/(d): those links are auto-derived, so build_manifest warns and
+# drops one that targets an unselectable-kind layer instead of erroring (an explicit (a)/(b)
+# target is the caller's own claim and fails loud on the same problem).
+# One entry's/key's `targets=` value -> Vector{Symbol}. Accepts `nothing`, a single
+# Symbol/AbstractString, or a Vector of Symbol/AbstractString — checking AbstractString BEFORE
+# the Vector branch matters: a bare String IS iterable (over its chars), so without this order
+# `collect(Symbol, "lines")` would silently produce bogus per-character layer ids instead of
+# failing loud. `desc` names the offending entry/key for the error message.
+function _coerce_legend_target_ids(v, desc)
+    v === nothing && return Symbol[]
+    v isa Symbol && return [v]
+    v isa AbstractString && return [Symbol(v)]
+    if v isa AbstractVector
+        return Symbol[
+            if t isa Symbol
+                t
+            elseif t isa AbstractString
+                Symbol(t)
+            else
+                throw(
+                    ArgumentError(
+                        "LegendInteractable: targets for $desc must be a Symbol/String or a Vector of them, got $(typeof(t)) inside the Vector",
+                    ),
+                )
+            end
+                for t in v
+        ]
+    end
+    throw(ArgumentError("LegendInteractable: targets for $desc must be a Symbol/String or a Vector of them, got $(typeof(v))"))
+end
+
+function _resolve_legend_targets(entries, targets, plotmap)
+    n = length(entries)
+    if targets isa AbstractDict
+        labelset = Set(e.label for e in entries)
+        for key in keys(targets)
+            key isa AbstractString ||
+                throw(ArgumentError("LegendInteractable: targets Dict keys must be label Strings, got $(typeof(key))"))
+            key in labelset || throw(
+                ArgumentError(
+                    "LegendInteractable: targets key \"$(key)\" matches no legend entry label " *
+                        "(available: $(join(sort(collect(labelset)), ", ")))",
+                ),
+            )
+        end
+        result = [_coerce_legend_target_ids(get(targets, e.label, nothing), "\"$(e.label)\"") for e in entries]
+        return result, false
+    elseif targets isa AbstractVector
+        length(targets) == n || throw(
+            ArgumentError(
+                "LegendInteractable: targets must have one entry per legend entry (got $(length(targets)) for $(n) entries)",
+            ),
+        )
+        result = [
+            _coerce_legend_target_ids(t, "entry $(k - 1) (\"$(entries[k].label)\")")
+                for (k, t) in enumerate(targets)
+        ]
+        return result, false
+    elseif targets === nothing
+        plotmap === nothing && return [Symbol[] for _ in 1:n], true
+        result = Vector{Vector{Symbol}}(undef, n)
+        for (k, e) in enumerate(entries)
+            ids = Symbol[]
+            seen = Set{Symbol}()
+            for p in e.plots
+                for sid in get(plotmap, p, Symbol[])
+                    sid in seen && continue
+                    push!(ids, sid); push!(seen, sid)
+                end
+            end
+            result[k] = ids
+        end
+        return result, true
+    else
+        throw(ArgumentError("LegendInteractable: targets must be nothing, a Dict, or a Vector, got $(typeof(targets))"))
+    end
+end
+
+"""
+    LegendInteractable(leg; id=:legend, targets=nothing, events=(:click,:hover), tooltip=nothing)
+
+A `Makie.Legend` block whose entries are hit regions linking to the plot layer(s) they stand
+for: hover/click an entry to highlight the layer(s) named in `targets`. Produces one `:rects`
+[`HitLayer`](@ref), one rect per legend entry.
+
+# Arguments
+- `leg` — a `Makie.Legend`.
+- `id` — the layer id; becomes `InteractionEvent.layer` on a hit. Default `:legend`.
+- `targets` — how each entry links to other layers, resolved once at construction:
+  - `nothing` (default) — auto-extracted `masque(fig)` legends resolve links from the plots
+    each entry's elements were built with (`Makie.get_plots`); anything else (a legend you
+    build by hand) gets no links (still hittable — `tooltip`/click still work, just no
+    highlight).
+  - a `Dict{<:AbstractString}` keyed by entry **label** — `Symbol` or `Vector{Symbol}` of layer
+    ids for that entry. A key matching no entry label raises `ArgumentError`.
+  - a `Vector` with one entry per legend entry (`nothing`/`Symbol`/`Vector{Symbol}`), in entry
+    order (top-to-bottom, matching `leg.entrygroups[]` flattened). A wrong-length `Vector`
+    raises `ArgumentError`.
+  Every id named here must belong to another layer in the same `masque()` call whose kind
+  supports pre-highlight (`ArgumentError` from `build_manifest` otherwise — see
+  [`HitLayer`](@ref)'s `links` field).
+- `tooltip` — `nothing` (default) shows the entry's label; `masque"..."` for a custom template
+  (payload fields: `label`, `group`, `targets`); `false` to suppress. `tooltip = true` is
+  rejected (`ArgumentError`).
+- `events` — the pointer events this layer responds to. Default `(:click, :hover)`.
+
+A custom legend built from `LineElement`/`MarkerElement`/`PolyElement` without `plots=` has
+nothing to auto-link — pass `plots=` on the element (Makie's own kwarg) or use `targets=` here.
+
+`masque` raises `ArgumentError` at build time if `leg` is handed to `AxisInteractable`,
+`ViewInteractable`, `ThresholdInteractable`, or `ROIInteractable` instead — those need a
+`Makie.Axis`, not a `Legend`.
+
+# Examples
+```julia
+l1 = lines!(ax, xs, ys1; label = "a")
+l2 = lines!(ax, xs, ys2; label = "b")
+leg = axislegend(ax)
+LegendInteractable(leg)   # entry "a" links to :lines, "b" links to :lines_2
+
+LegendInteractable(leg; targets = Dict("a" => :lines, "b" => [:lines_2, :scatter]))
+```
+"""
+struct LegendInteractable <: AbstractInteractable
+    leg
+    id::Symbol
+    targets::Vector{Vector{Symbol}}      # resolved per-entry link ids, in entry order
+    evs::Tuple
+    tooltip::Union{Nothing, Markup, Bool}
+    # Internal: true when `targets` came from the plotmap/empty fallback (the auto path) rather
+    # than a user-given Dict/Vector — see `_resolve_legend_targets`.
+    lenient::Bool
+end
+function LegendInteractable(
+        leg; id = :legend, targets = nothing, events = (:click, :hover), tooltip = nothing,
+        plotmap = nothing,   # internal: IdDict{Any,Vector{Symbol}} plot -> layer ids, set by auto_interactables
+    )
+    _check_tooltip(tooltip)
+    entries = _legend_entries_meta(leg)   # pre-render metadata only — bbox comes later, in hitlayers
+    resolved, lenient = _resolve_legend_targets(entries, targets, plotmap)
+    return LegendInteractable(leg, id, resolved, events, tooltip, lenient)
+end
+events(i::LegendInteractable) = i.evs
+tooltip_spec(i::LegendInteractable) = i.tooltip === nothing ? _LEGEND_DEFAULT_TOOLTIP : i.tooltip
+function hitlayers(i::LegendInteractable, ctx)
+    entries = _legend_entries(i.leg)
+    aid = axis_id(ctx, i.leg)
+    scaling = ctx.scaling; out_h = ctx.height
+    g = Real[]
+    payloads = Any[]
+    links = Vector{Symbol}[]
+    for (k, e) in enumerate(entries)
+        o = e.bbox.origin; wv = e.bbox.widths
+        cx = (o[1] + wv[1] / 2) * scaling
+        cy = out_h - (o[2] + wv[2] / 2) * scaling
+        append!(g, (_q(cx), _q(cy), _q(wv[1] * scaling), _q(wv[2] * scaling)))
+        tgt = i.targets[k]
+        push!(payloads, (; label = e.label, group = e.group, targets = String[string(t) for t in tgt]))
+        push!(links, tgt)
+    end
+    colors = _legend_colors(entries)
+    # `nothing` (not `[[],[]]`) when every entry's links are empty, per HitLayer's own
+    # documented contract that `nothing` omits `"links"` from the manifest — the frontend
+    # treats absent and `[]` identically (`links?.[index]`), so this is cosmetic, not behavioral.
+    links_field = all(isempty, links) ? nothing : links
+    return [HitLayer(i.id, :rects, g, payloads, aid, events(i), "Legend", colors, links_field)]
+end
+
 # ============================ ViewInteractable =============================
 """
     ViewInteractable(ax; id=:view)
@@ -828,6 +1053,7 @@ end
 ViewInteractable(ax; id = :view) = ViewInteractable(ax, id)
 events(::ViewInteractable) = (:drag,)
 function validate(i::ViewInteractable, ctx::InteractionContext)
+    i.ax isa Makie.Legend && return "ViewInteractable: ax is a Legend, not an Axis/Axis3 — a legend has no pan/orbit view."
     t = ctx.transforms[axis_id(ctx, i.ax)]
     t.ispolar && return "ViewInteractable: PolarAxis view gestures need continuous θ/r " *
         "transforms (not yet shipped). Use element interactables for discrete hits."
@@ -900,6 +1126,7 @@ function ThresholdInteractable(ax; orientation = :horizontal, value, id = :thres
 end
 events(::ThresholdInteractable) = (:drag,)
 function validate(i::ThresholdInteractable, ctx::InteractionContext)
+    i.ax isa Makie.Legend && return "ThresholdInteractable: ax is a Legend, not an Axis — a legend has no data-space scalar to drag."
     t = ctx.transforms[axis_id(ctx, i.ax)]
     t.is3d && return "ThresholdInteractable: drag inverts a pixel to a data scalar via the axis " *
         "transform, which is undefined on an Axis3 (a screen pixel is a ray, not a data value)."
@@ -974,6 +1201,7 @@ selects(i::ROIInteractable) = i.selects
 compatible_kinds(::ROIInteractable) = (:circles, :grid)
 events(::ROIInteractable) = (:drag,)
 function validate(i::ROIInteractable, ctx::InteractionContext)
+    i.ax isa Makie.Legend && return "ROIInteractable: ax is a Legend, not an Axis — a legend has no data-space bounds to drag."
     t = ctx.transforms[axis_id(ctx, i.ax)]
     t.is3d && return "ROIInteractable: drag inverts pixel corners to data-space bounds via the axis " *
         "transform, which is undefined on an Axis3 (a screen pixel is a ray, not a data point)."

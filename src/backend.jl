@@ -74,8 +74,8 @@ axis_id(ctx::InteractionContext, ax) =
     throw(
         ArgumentError(
             "Masque: $(typeof(ax)) is not registered in this backend's InteractionContext — " *
-                "no axis/colorbar transform was built for it. Interactables must be keyed to a " *
-                "Makie.Axis or Colorbar that is part of the rendered figure. (If it IS part of " *
+                "no axis/colorbar/legend transform was built for it. Interactables must be keyed to a " *
+                "Makie.Axis, Colorbar, or Legend that is part of the rendered figure. (If it IS part of " *
                 "the figure, this is a backend context() bug — please report it.)"
         )
     )
@@ -171,4 +171,16 @@ function _colorbar_transform(id, cb, scaling, out_h)
     else
         return AxisTransform(id, (lo, hi), (0.0, 1.0), sc, :identity, vpx, false, false, nothing, nothing, :x, false, false)
     end
+end
+
+# A Legend has no data-space readout — lims are degenerate placeholders (like Axis3/PolarAxis
+# above), never inverted client-side. Only the pixel viewport (the legend's whole bbox) is real.
+function _legend_transform(id, leg, scaling, out_h)
+    bb = _legend_bbox(leg)
+    o = bb.origin; wv = bb.widths
+    vpx = (o[1] * scaling, out_h - (o[2] + wv[2]) * scaling, wv[1] * scaling, wv[2] * scaling)
+    return AxisTransform(
+        id, (0.0, 1.0), (0.0, 1.0), :identity, :identity,
+        vpx, false, false, nothing, nothing, nothing, false, false
+    )
 end

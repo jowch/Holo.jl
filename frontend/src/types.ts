@@ -78,6 +78,10 @@ export interface HitLayer {
     tooltip?: false              // explicit suppress; absent + no template → auto name/value table
     selected?: number[] // element indices to draw pre-highlighted on mount
     selects?: string   // id of the target layer this ROI selects; absent → bounds-ROI (no multi-select)
+    // Per-element linked highlight (e.g. a Legend entry): ids of OTHER layers this element
+    // highlights with the selected recipe on hover/focus; [] or absent-per-element = no link.
+    // Julia guarantees every referenced id exists and has a kind in SELECTED_KINDS.
+    links?: string[][]
     label?: string     // screen-reader announcement prefix, e.g. "Scatter, element 3 of 10: …"; absent → no prefix
     // Per-element tooltip accent colour: one CSS colour string (uniform across the layer), or a
     // shared palette + one 0-based palette index per element (colormapped/categorical data).

@@ -246,10 +246,12 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     const fillSvg = makeOverlaySvg("masque-fill")
     const edgeSvg = makeOverlaySvg("masque-edge")
     const plainSvg = makeOverlaySvg("masque-plain")
-    // persistent box-selection highlights (g.sel, z-below hover) then transient hover highlights
-    // (g.hi, z-above sel) — same append order in every svg, so g.hi always paints over g.sel
-    // whichever svg(s) either one lands in.
+    // persistent box-selection highlights (g.sel, z-below link) then transient legend-linked
+    // highlights (g.link, z-above sel) then transient hover highlights (g.hi, z-above sel/link) —
+    // same append order in every svg, so g.hi always paints over g.link/g.sel whichever svg(s)
+    // any of the three lands in.
     const selGroup: HiGroups = { fill_: makeGroup(fillSvg, "sel"), edge_: makeGroup(edgeSvg, "sel"), plain_: makeGroup(plainSvg, "sel") }
+    const linkGroup: HiGroups = { fill_: makeGroup(fillSvg, "link"), edge_: makeGroup(edgeSvg, "link"), plain_: makeGroup(plainSvg, "link") }
     const hiGroup: HiGroups = { fill_: makeGroup(fillSvg, "hi"), edge_: makeGroup(edgeSvg, "hi"), plain_: makeGroup(plainSvg, "hi") }
     const surface = document.createElement("div")
     surface.className = "surface"
@@ -314,6 +316,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
     const layerStarts = computeLayerStarts(focusable)
     const ctx: OverlayCtx = {
         manifest_: manifest, host_: host, base_: base, surface_: surface, tip_: tip, hiGroup_: hiGroup, selGroup_: selGroup,
+        linkGroup_: linkGroup,
         thresholdLines_: thresholdLines, roiBoxes_: roiBoxes,
         shadowRoot_: shadow, focusable_: focusable, layerStarts_: layerStarts, liveRegion_: liveRegion,
     }
@@ -396,6 +399,7 @@ export function mount(scriptEl: HTMLElement, manifest: Manifest, invalidation?: 
         cancelPendingMove(state)
         cancelPendingDrag(state)
         if (state.hiLeaveTimer_ != null) clearTimeout(state.hiLeaveTimer_)
+        if (state.linkLeaveTimer_ != null) clearTimeout(state.linkLeaveTimer_)
         if (state.tipFlipTimer_ != null) clearTimeout(state.tipFlipTimer_)
         if (state.announceTimer_ != null) clearTimeout(state.announceTimer_)
         shadowHost.remove()

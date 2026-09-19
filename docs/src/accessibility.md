@@ -22,6 +22,11 @@ to arrow through one at a time, so keyboard focus skips it. Whole-axis readout a
 draggable threshold/ROI/view-pan interactables are mouse/touch-only in this release (see
 [Limitations](@ref accessibility-limitations) below).
 
+When the figure has a legend, its entries come first: Tab and Home land on the first legend
+entry, and Page Down steps from the legend into the plot layers. This matches the pointer, where
+a legend drawn on top of a plot takes the clicks under it. Focusing an entry highlights the
+trace it labels, exactly as hovering it does — see [Legend](@ref).
+
 Moving focus draws the same highlight ring a mouse hover would (there is never a separate
 "focus" look) and shows the same tooltip, positioned on the focused element.
 

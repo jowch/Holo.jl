@@ -77,6 +77,7 @@ function _layer_dict(i, L::HitLayer, ctx::InteractionContext)
     if L.colors !== nothing
         d["colors"] = L.colors isa AbstractString ? L.colors : Dict("palette" => L.colors.palette, "index" => L.colors.index)
     end
+    L.links === nothing || (d["links"] = [[string(id) for id in ids] for ids in L.links])
     spec = tooltip_spec(i)
     spec === true && throw(ArgumentError("tooltip = true is not meaningful — omit `tooltip` for the auto name/value table (the default), pass masque\"…\" for a template, or `false` to suppress."))
     if spec isa Markup
@@ -167,6 +168,61 @@ function _validate_selectors(interactables, layers)
     return
 end
 
+# Whether a bad `links` target on this interactable's layer(s) should warn-and-drop rather than
+# raise `ArgumentError` — true only for a `LegendInteractable` whose links came from the
+# plotmap/empty fallback (the auto path), not a user-given `targets=`. Every other interactable
+# either doesn't emit `links` at all, or (a future one that does) defaults to strict.
+_links_lenient(::AbstractInteractable) = false
+_links_lenient(i::LegendInteractable) = i.lenient
+
+# An unknown `links` id (absent from the manifest entirely) always fails loud, in both modes —
+# it's not a "can't highlight this" shape, it's a typo/dangling reference. Only an id that
+# resolves to a layer whose KIND can't be pre-highlighted is lenient-mode-dependent: fail loud
+# by default, or (for a lenient/auto-resolved layer) warn and drop.
+function _validate_links(layer_owners, layers)
+    kinds = Dict(l["id"] => Symbol(l["kind"]) for l in layers)
+    for (owner, d) in zip(layer_owners, layers)
+        haskey(d, "links") || continue
+        lenient = _links_lenient(owner)
+        d["links"] = map(enumerate(d["links"])) do (k, ids)
+            kept = String[]
+            dropped = false
+            for tid_str in ids
+                tid = Symbol(tid_str)
+                if !haskey(kinds, tid_str)
+                    throw(ArgumentError("links: layer :$(d["id"]) element $(k - 1) links to unknown layer :$(tid)"))
+                end
+                tk = kinds[tid_str]
+                if tk in _SELECTED_KINDS
+                    push!(kept, tid_str)
+                elseif lenient
+                    @warn "masque: legend entry $(k - 1) of layer :$(d["id"]) links to :$(tid) (kind :$(tk)), " *
+                        "which cannot be highlighted (supported: $(join(_SELECTED_KINDS, ", "))); dropping" maxlog = 16
+                    dropped = true
+                else
+                    throw(
+                        ArgumentError(
+                            "links: layer :$(d["id"]) element $(k - 1) links to :$(tid) (kind :$(tk)), which cannot " *
+                                "be highlighted (supported: $(join(_SELECTED_KINDS, ", ")))",
+                        ),
+                    )
+                end
+            end
+            # Keep the payload's own `targets` list (shown in the tooltip) in sync with what
+            # actually got kept — otherwise a dropped id lingers in the payload while the
+            # highlight itself silently drops it, and the two disagree.
+            if dropped && haskey(d, "payloads") && k <= length(d["payloads"])
+                pl = d["payloads"][k]
+                if pl isa NamedTuple && haskey(pl, :targets)
+                    d["payloads"][k] = merge(pl, (; targets = kept))
+                end
+            end
+            return kept
+        end
+    end
+    return nothing
+end
+
 _transform_dict(t::AxisTransform) = Dict{String, Any}(
     "xlims" => collect(t.xlims), "ylims" => collect(t.ylims),
     "xscale" => string(t.xscale), "yscale" => string(t.yscale),
@@ -189,6 +245,7 @@ it each render, so threading a bond value back keeps a selection flicker-free ac
 """
 function build_manifest(interactables, ctx::InteractionContext; selected = nothing, tip_style = nothing, background = nothing)
     layers = Any[]
+    layer_owners = Any[]   # parallel to layers: the interactable that produced each layer dict
     for i in interactables
         msg = validate(i, ctx)
         msg === nothing || throw(ArgumentError(msg))
@@ -199,12 +256,24 @@ function build_manifest(interactables, ctx::InteractionContext; selected = nothi
                 d["selected"] = _check_selected(L, sel)
             end
             push!(layers, d)
+            push!(layer_owners, i)
         end
     end
     _validate_selectors(interactables, layers)
-    # View layers are catch-all viewport hits; sort after Tier-0 threshold/ROI so ordinary
-    # drag wins without a modifier (Shift+drag still forces view in overlay.ts).
-    sort!(layers; by = (d) -> (d["kind"] == "view", 0), alg = Base.Sort.DEFAULT_STABLE)
+    _validate_links(layer_owners, layers)
+    # Precedence for the frontend's first-match-in-manifest-order `hitTest` (geometry.ts):
+    # `LegendInteractable` layers sort FIRST (a legend drawn over plot geometry must win the
+    # pixels under it, or it's unhoverable), `:view` layers sort LAST (catch-all viewport hits
+    # go after Tier-0 threshold/ROI so an ordinary drag wins without a modifier — Shift+drag
+    # still forces view in overlay.ts), everything else keeps its original relative order.
+    # `layers`/`layer_owners` are parallel; one stable sortperm keeps them aligned.
+    rank = [
+        layer_owners[k] isa LegendInteractable ? 0 : (layers[k]["kind"] == "view" ? 2 : 1)
+            for k in eachindex(layers)
+    ]
+    perm = sortperm(rank; alg = Base.Sort.DEFAULT_STABLE)
+    permute!(layers, perm)
+    permute!(layer_owners, perm)
     m = Dict{String, Any}(
         "width" => ctx.width, "height" => ctx.height, "scaling" => ctx.scaling,
         "layers" => layers,

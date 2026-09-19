@@ -1,8 +1,9 @@
 import { anchorFor, computeAnchoredPlacement, hitTest, resolvePayload, CURSOR_FOLLOWING_KINDS, ANCHOR_GAP } from "./geometry"
 import type { Anchor } from "./geometry"
 import { renderTemplate, renderAutoTable, esc } from "./template"
-import { drawHi, clearHi, markColorFor } from "./highlight"
-import { fmt, imgPx, cssAnchor, prefersReducedMotion, MOTION_MS, cancelPendingMove, cancelPendingDrag } from "./state"
+import { drawHi, clearHi, drawLink, clearLink, markColorFor } from "./highlight"
+import { linkedHits } from "./selection"
+import { fmt, imgPx, cssAnchor, hitKey, prefersReducedMotion, MOTION_MS, cancelPendingMove, cancelPendingDrag } from "./state"
 import type { OverlayCtx, OverlayState } from "./state"
 import type { Hit, ThresholdGeometry } from "./types"
 
@@ -210,6 +211,17 @@ export function showTipAt(ctx: OverlayCtx, state: OverlayState, hit: Hit, x: num
     return html
 }
 
+// A legend entry's linked highlight (HitLayer.links): draw the selected recipe for every
+// element of every layer the hit links to, or clear g.link when it links to nothing (absent,
+// or an empty links[index]). Shared by applyMove's hover-hit branch, restoreFocus (below), and
+// keyboard.ts's focusTo, so pointer and keyboard drive the same g.link lifecycle drawHi/clearHi
+// already give g.hi.
+export function updateLinkForHit(ctx: OverlayCtx, state: OverlayState, hit: Hit): void {
+    const hits = linkedHits(ctx.manifest_, hit.layer, hit.index)
+    if (hits.length) drawLink(state, ctx.linkGroup_, hitKey(hit), hits)
+    else clearLink(state, ctx.linkGroup_, true)
+}
+
 // Redraw the keyboard-focus ring/tooltip from state's cache (set by keyboard.ts's focusTo) in
 // place of a plain clear — called from applyMove's hover-miss branch and onLeave so mousing
 // over empty canvas, or off the surface, doesn't erase a focus ring that's still logically set.
@@ -217,6 +229,7 @@ export function showTipAt(ctx: OverlayCtx, state: OverlayState, hit: Hit, x: num
 export function restoreFocus(ctx: OverlayCtx, state: OverlayState): boolean {
     if (!state.focusHit_) return false
     drawHi(state, ctx.hiGroup_, state.focusHit_)
+    updateLinkForHit(ctx, state, state.focusHit_)
     if (state.focusTipHtml_ !== null && state.focusTipCss_) {
         applyTipHtml(ctx, state, state.focusTipHtml_, state.focusHit_)
         placeAnchored(ctx, state, state.focusTipCss_)
@@ -241,7 +254,7 @@ export function applyMove(ctx: OverlayCtx, state: OverlayState, e: MouseEvent): 
     const dragHit = hitTest(ctx.manifest_, p.x, p.y, "drag")
     // A full-viewport :view hit must not suppress element hover.
     if (dragHit && dragHit.layer.kind !== "view") {
-        if (!restoreFocus(ctx, state)) { clearHi(state, ctx.hiGroup_, true); hideTip(ctx, state) }
+        if (!restoreFocus(ctx, state)) { clearHi(state, ctx.hiGroup_, true); clearLink(state, ctx.linkGroup_, true); hideTip(ctx, state) }
         setDragHoverChrome(ctx, state, dragHit); ctx.surface_.classList.remove("hot")
         return
     }
@@ -249,8 +262,9 @@ export function applyMove(ctx: OverlayCtx, state: OverlayState, e: MouseEvent): 
     const hit = hitTest(ctx.manifest_, p.x, p.y, "hover")
     if (hit) {
         drawHi(state, ctx.hiGroup_, hit); showTip(ctx, state, hit, p.x, p.y, e); ctx.surface_.classList.add("hot")
+        updateLinkForHit(ctx, state, hit)
     } else {
-        if (!restoreFocus(ctx, state)) { clearHi(state, ctx.hiGroup_, true); hideTip(ctx, state) }
+        if (!restoreFocus(ctx, state)) { clearHi(state, ctx.hiGroup_, true); clearLink(state, ctx.linkGroup_, true); hideTip(ctx, state) }
         ctx.surface_.classList.remove("hot")
         if (dragHit?.layer.kind === "view") setCursorClass(ctx.surface_, "grab")
     }
@@ -271,7 +285,7 @@ export function onMove(ctx: OverlayCtx, state: OverlayState, e: MouseEvent): voi
 
 export function onLeave(ctx: OverlayCtx, state: OverlayState): void {
     cancelPendingMove(state)
-    if (!restoreFocus(ctx, state)) { clearHi(state, ctx.hiGroup_, true); hideTip(ctx, state) }
+    if (!restoreFocus(ctx, state)) { clearHi(state, ctx.hiGroup_, true); clearLink(state, ctx.linkGroup_, true); hideTip(ctx, state) }
     ctx.surface_.classList.remove("hot")
     setDragHoverChrome(ctx, state, null)
     // Fallback for tryCapture's uncaptured path: without real capture, leaving the surface

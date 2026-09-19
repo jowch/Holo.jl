@@ -19,6 +19,7 @@ makedocs(;
         "Getting started" => "getting-started.md",
         "Interactables" => "interactables.md",
         "Selection" => "selection.md",
+        "Legend" => "legend.md",
         "Tooltips" => "tooltips.md",
         "Keyboard and screen readers" => "accessibility.md",
         "Custom interactions" => "custom.md",

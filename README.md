@@ -1,23 +1,32 @@
-# Masque.jl
+<p align="center">
+  <img src="docs/src/assets/logo-animated.svg" width="180" alt="Masque.jl logo: a gold Venetian eye mask set with four jewels in the Julia colours">
+</p>
 
-[![CI](https://github.com/jowch/Masque.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/jowch/Masque.jl/actions/workflows/CI.yml)
-[![codecov](https://codecov.io/gh/jowch/Masque.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/jowch/Masque.jl)
-[![Docs stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://jowch.github.io/Masque.jl/stable)
-[![Docs dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://jowch.github.io/Masque.jl/dev)
+<h1 align="center">Masque.jl</h1>
 
-**Light, server-free interactivity for Makie plots in Pluto.**
+<p align="center"><b>Light, server-free interactivity for Makie plots in Pluto.</b></p>
 
-Masque lays a thin JS overlay over a Makie figure — hover for tooltips, click
-to select — and round-trips deliberate clicks to Julia through `@bind`.
+<p align="center">
+  <a href="https://github.com/jowch/Masque.jl/actions/workflows/CI.yml"><img src="https://github.com/jowch/Masque.jl/actions/workflows/CI.yml/badge.svg" alt="CI"></a>
+  <a href="https://codecov.io/gh/jowch/Masque.jl"><img src="https://codecov.io/gh/jowch/Masque.jl/branch/main/graph/badge.svg" alt="codecov"></a>
+  <a href="https://jowch.github.io/Masque.jl/stable"><img src="https://img.shields.io/badge/docs-stable-blue.svg" alt="Docs stable"></a>
+  <a href="https://jowch.github.io/Masque.jl/dev"><img src="https://img.shields.io/badge/docs-dev-blue.svg" alt="Docs dev"></a>
+</p>
 
-## When to use it
+<p align="center">
+  <img src="docs/src/assets/demo.gif" width="720" alt="A CairoMakie scatter in Pluto: hovering a point shows a tooltip, clicking it selects the point and updates the bound value in the cell below">
+</p>
 
-| | CairoMakie alone | WGLMakie alone | **Masque** |
-|---|---|---|---|
-| Output | static, publication-quality | live, GPU-rendered | static + thin overlay (`:cairo`) or live (`:webgl`) |
-| Interactivity | none | rich | light: hover tooltips, click-to-select, drag gestures |
-| Needs a live Julia process | no | yes | only for click → recompute |
-| Survives offline / static HTML export | yes | no | yes on both (verified) |
+Masque adds a thin JavaScript overlay to Makie figures in a Pluto notebook.
+Hovering over plot elements shows a tooltip, click selects, and the
+click reaches Julia through `@bind`. The figure itself is rendered by CairoMakie
+or WGLMakie as usual.
+
+- Points, lines, heatmap cells, bars, polygons, and text, on 2D, polar, and 3D axes.
+- Drag gestures: region of interest, threshold line, pan.
+- Hover and select still work in a static HTML export of the notebook.
+
+Tooltips and interactions can be customized.
 
 ## Install
 
@@ -25,7 +34,7 @@ to select — and round-trips deliberate clicks to Julia through `@bind`.
 julia> ] add Masque
 ```
 
-You'll also want `Pluto`, plus a Makie backend: `CairoMakie` for the default static path, or
+You'll also want `Pluto`, plus one Makie backend: `CairoMakie` for a static image, or
 `WGLMakie` for animation / large data / live 3D.
 
 ## Quick start
@@ -54,7 +63,18 @@ end
 sel === nothing ? "click a point" : "you picked $(sel.payload)"
 ```
 
-(Each fenced block above is its own Pluto cell — Pluto allows one top-level expression per
-cell, so multi-statement setup goes in `begin ... end`.)
-
 For more information, refer to our [documentation](https://jowch.github.io/Masque.jl). See [`examples/`](examples/) for several runnable Pluto notebooks.
+
+## Backends
+
+Loading `CairoMakie` or `WGLMakie` activates the matching extension. The `masque` call and
+the `@bind` value are the same on both.
+
+- **CairoMakie** renders the figure once to a static image and the overlay
+  hit-tests on top. Every re-render rasterises the whole figure, so it is a poor
+  fit for animation.
+- **WGLMakie** (`:webgl`, experimental) renders the figure live on the browser
+  GPU. Use it for animation, large or live-updating data, or 3D you want to
+  rotate. The page is heavier and needs WebGL.
+
+See [Backends](https://jowch.github.io/Masque.jl/stable/backends/) for the cost model.

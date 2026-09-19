@@ -1,5 +1,5 @@
 import { findBin, invertAxis } from "./geometry"
-import type { AxisTransform, GridGeometry, Hit, HitLayer } from "./types"
+import type { AxisTransform, GridGeometry, Hit, HitLayer, Manifest } from "./types"
 
 // Bond item shape emitted per contained element in a selects-ROI { items: SelectionItem[] }
 export type SelectionItem = { layer: string; index: number; payload: unknown }
@@ -115,4 +115,43 @@ export function hitLayerByIndex(layer: HitLayer, index: number): Omit<Hit, "laye
     }
     // polygons (only remaining closed SELECTED_KINDS entry)
     return { index, geom_: ["poly", (g as number[][])[index]] }
+}
+
+// A :polyline's flat [x,y,…] vertex array uses NaN as Julia's gap sentinel (interactables.jl's
+// `_q`) — geometry.ts's hitLayer already skips a segment with either endpoint NaN for mouse
+// hover/click (`Number.isNaN(x0) || Number.isNaN(x1)`, checked on x only since a real gap
+// always carries through both coordinates of the same vertex). Shared by keyboard.ts's
+// buildFocusable and hitsForLayer below, so neither draws/announces/highlights a segment the
+// mouse can never reach.
+export function isGapSegment(layer: HitLayer, k: number): boolean {
+    const a = layer.geometry as number[]
+    return Number.isNaN(a[2 * k]) || Number.isNaN(a[2 * k + 2])
+}
+
+// Every element of a layer as a Hit, for the "highlight the whole target layer" case (a legend
+// entry's `links`) — same building blocks (layerNElements + hitLayerByIndex) mount.ts uses for
+// `selected=`. A :polyline's NaN-gap segments are skipped, same as buildFocusable.
+export function hitsForLayer(layer: HitLayer): Hit[] {
+    const n = layerNElements(layer)
+    const hits: Hit[] = []
+    for (let i = 0; i < n; i++) {
+        if (layer.kind === "polyline" && isGapSegment(layer, i)) continue
+        hits.push({ layer, ...hitLayerByIndex(layer, i) })
+    }
+    return hits
+}
+
+// The linked-highlight fan-out for one legend element: every element of every layer named in
+// `layer.links[index]`, flattened into one Hit[] for drawLink. Julia guarantees each id exists
+// and names a SELECTED_KINDS layer, so hitsForLayer never throws here; a missing id (a stale
+// manifest) degrades to skipping that target rather than throwing.
+export function linkedHits(manifest: Manifest, layer: HitLayer, index: number): Hit[] {
+    const ids = layer.links?.[index]
+    if (!ids || !ids.length) return []
+    const hits: Hit[] = []
+    for (const id of ids) {
+        const target = manifest.layers.find((l) => l.id === id)
+        if (target) hits.push(...hitsForLayer(target))
+    }
+    return hits
 }
