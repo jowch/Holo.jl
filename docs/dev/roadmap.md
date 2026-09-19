@@ -8,7 +8,11 @@ PR on `jowch/Masque.jl`.
 ## Principles
 
 - **Explicit declaration is the contract; introspection is sugar** on top of it.
-- **The frontend is a stateless view.** Authoritative state lives in Julia via `@bind`.
+- **The frontend is a stateless view. *Authoritative* state lives in Julia via `@bind`** — a
+  value the notebook's own analysis depends on. Not every value Julia computes is authoritative
+  in this sense: a value the notebook never reads (a mid-drag camera parameter, hover chrome) can
+  be asked for and answered without going through `@bind` at all. The three-question split below
+  is the sharpened form of this principle, not an exception to it.
 - **No parallel server.** Inspection survives static export; clicks need a kernel.
 - **Fail loud, never silently wrong** (per-capability `validate`).
 - **Backends differ in cost, never in the interaction contract.** No feature ships on one
@@ -16,6 +20,13 @@ PR on `jowch/Masque.jl`.
 - **YAGNI.** Build a surface or feature when a real use pulls for it.
 - **Live-verify on every backend** (`live-interaction-checklist.md`) before a user-facing
   change is called done. Interaction and visual, across the interactable kinds.
+
+**Where a value lives — three questions, in order** (framing from #102): does the notebook need
+this value (→ `@bind`)? Must it survive static export (→ precompute + `published_to_js`)?
+Neither (→ `AbstractPlutoDingetjes.Display.with_js_link`, a pull channel outside Pluto's state
+management — correct for chrome and transient parameters, wrong for anything the user considers
+part of their analysis, since nothing it returns is recorded in the notebook)? This is the
+general form the view-manipulation work below is the first concrete case of.
 
 ## Where things stand
 
@@ -60,8 +71,9 @@ Runic, and an advisory live kind sweep.
 
 `ViewInteractable` is commit-on-release: nothing moves during the drag, and the commit
 replaces the cell output, which on `:webgl` is a blank canvas plus a scene re-init. Two
-problems and five children: four steps in this order, plus #86, which corrects an earlier
-claim rather than adding work.
+problems and six children: four steps in this order, plus #86, which corrects an earlier
+claim rather than adding work, plus #102, which reframes the remount problem for gestures
+generally rather than adding a fifth step to this list.
 
 1. **#83 Spurious second `@bind` on remount** (bug). `Bonds.initial_value` returns `nothing`,
    so every remounted widget emits a bond update that re-runs the reading cell. Fix the
@@ -73,9 +85,20 @@ claim rather than adding work.
    base and overlay slide together; commit the existing `limits` payload once on release or
    wheel idle. Julia authored the frame being slid, so this is not a client camera. Accepted
    artifacts: ticks and decorations move with the photograph until the commit.
-4. **#87 3D orbit preview**: parked. The overlay is a projection at the old
-   `azimuth`/`elevation`, so a live orbit either freezes the overlay or needs 3D coordinates
-   in JS. Decide an overlay policy before any camera work. Orbit stays commit-on-release.
+4. **#87 3D orbit preview**: no longer parked — **#102 makes it buildable.** The blocker was
+   that the overlay is a projection at the old `azimuth`/`elevation`, so a live orbit either
+   freezes the overlay or needs 3D coordinates in JS, and neither respects the
+   Julia-authored-projection principle this list is written to keep. #102 answers it: route the
+   gesture through `with_js_link` and have Julia return a fresh manifest on every frame, so
+   projection stays Julia-authored throughout the drag, not just at commit. `perf-findings.md`'s
+   manifest rebuild figure (flat regardless of scene weight) is what makes a fresh manifest per
+   frame affordable. Still commit-on-release for the final `@bind`ed value; #102 changes what
+   happens *during* the drag, not what gets committed at the end.
+
+**#102 also routes around #83 for gestures, without fixing it.** A gesture channel that never
+remounts makes the double-remount stop mattering for view manipulation specifically — #83's bug
+is still live for the final `@bind` commit and for every other bond in the notebook. #83 stays
+open and step 1 above stays worth doing on its own.
 
 **#86 corrects an earlier roadmap claim.** The camera-only resident-scene patch for `:webgl`
 is gated on DOM identity, not payload size: Pluto destroys the `<canvas>` on every cell
@@ -139,6 +162,21 @@ canvas-identity strategy keeps projection Julia-authored.
 - **Animation / scrubbing**: precomputed frames in one manifest plus a JS scrubber; bond value
   is the frame or parameter. Gated on payload, not latency: frames × per-frame PNG is the hard
   ceiling in `perf-findings.md`, so per-frame cost must shrink first (downscale, fewer frames).
+  A pull channel (#102) inverts this: ship zero frames up front, request frame *k* on demand over
+  `with_js_link`, and the constraint becomes per-request latency instead of total payload.
+  Animation stands to benefit more from this than orbit does, because its frame set is
+  enumerable and cacheable — after one pass through, every frame requested once is local — while
+  orbit's `azimuth`/`elevation` parameter space is continuous and never fully caches. Open,
+  unresolved by #102: the **container** question. N separate per-frame PNGs are far larger on
+  the wire than one inter-frame-compressed GIF, but an animated GIF hides the current frame from
+  the overlay, so frame-accurate hit geometry is lost the moment the browser owns frame
+  advancement instead of Julia. A possible way out is splitting static geometry (ships once) from
+  per-frame values (pulled), but that is not designed here. Also relevant: Pluto itself preserves
+  GIFs through an HTML export — `image/gif` is a first-class MIME in `PlutoRunner`'s MIME
+  handling, image MIMEs keep their raw bytes, and `CellOutput.js` has an explicit case for them.
+  That sets a compatibility floor: a Masque animation feature must not be worse than a plain GIF
+  for export, which argues for embed-by-default (works everywhere a GIF does) with live-pull as
+  an opt-in on top, not a replacement for it.
 - **`:webgl` in-place buffer patching API**: the manual `find_plots(uuid)` technique works for
   data updates on a canvas that is still alive; wrap it in a Julia uuid accessor and a JS
   `updatePlotData(uuid, attr, frame)` helper. Same canvas-identity caveat as #86 across a
@@ -234,6 +272,13 @@ tick it and update the docs page (#90) whenever `_plotbase` grows a branch.
   require? Pull removes the cap and the resolution-dependent contract, but hover stops working
   in a static export, which the principles say inspection should survive. Answer that before
   either is built on further.
+
+  #102 makes the pull side concrete: `with_js_link` is exactly a mechanism for "pulled per hit
+  from the kernel," which was previously an unmechanized option in this question. If a pull path
+  ships, it would retire the `values[]` cap outright — the one manifest term bounded by source
+  resolution rather than by display size, described above. It does not change the static-export
+  cost of pulling: a live-pull heatmap hover still needs a kernel, same as any other
+  `with_js_link` value.
 
 - **PolarAxis continuous θ/r readout**: ship `Makie.Polar` (and the letterboxed scene limits)
   to the JS `invertAxis` so `AxisInteractable`, thresholds, ROIs, and the #92 probe work on
@@ -360,6 +405,15 @@ shipped, which is a better filter than what other libraries happen to have.
   points) whose value falls in the dragged range; the client only needs the range, Julia
   resolves membership.
 - **Lasso / polygon select** beside the box ROI, same `Vector{InteractionEvent}` contract.
+- **Client-side click-echo selection ([#103](https://github.com/jowch/Masque.jl/issues/103)).**
+  Retire the five-cell self-referencing-`selected=` workaround in `selection.md` by having the
+  overlay track "what was clicked" itself, in the browser, so a widget cell never needs its own
+  bond fed back. `selected=` stays purely declarative on the Julia side. Resets on remount by
+  design (a remount means the figure was rebuilt, and indices from before it may no longer mean
+  the same thing); persistence across a rebuild becomes an explicit `selected=` from the user,
+  not an inferred default. Also the reason a self-referencing `selected=` widget and a
+  `with_js_link` gesture channel (#102) don't have to coexist: moving click-echo off the
+  reactive path removes that collision by construction.
 - **Selection persistence across reload.** Rehydrate `selected=` and the last bond from
   `sessionStorage` so a re-opened notebook shows the state the user left.
 - **Nearest-mark snapping.** An opt-in hover mode that picks the nearest mark within a radius
@@ -408,7 +462,10 @@ shipped, which is a better filter than what other libraries happen to have.
   overlay and is structurally `:webgl`-only. #85 and #87 are written to respect this.
 - **GPU-pick occlusion.** Same reason; the symmetric alternative is the CPU cull above.
 - **High-frequency live redraw** as a smooth-drag guarantee. Per-frame kernel round-trips are
-  a shared cost limit on both backends.
+  a shared cost limit on both backends. #102 measured this limit rather than lifting it: a light
+  scene lands in an interactive frame-rate range over `with_js_link`, a heavier scene does not,
+  on the same mechanism. A viable case on one scene is not a guarantee across scenes, and does
+  not reopen this non-goal.
 - **Per-backend feature splits.** `:cairo` ships a static base, `:webgl` a live canvas; the
   difference is cost.
 - **A live Bonito connection** under `:webgl`. That is a different product.
