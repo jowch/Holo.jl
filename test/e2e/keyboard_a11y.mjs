@@ -120,12 +120,12 @@ try {
   // the last observation on timeout" shape as kind_sweep.mjs's stableClipShot — so a genuine
   // regression (announcement never arrives) still fails, just after the deadline instead of
   // instantly.
-  const waitForLiveRegion = async (key, re, { tries = 20, interval = 150 } = {}) => {
+  const waitForLiveRegion = async (widgetKey, re, { tries = 20, interval = 150 } = {}) => {
     let s = null;
     for (let i = 0; i < tries; i++) {
-      s = await state(key);
+      s = await state(widgetKey);
       if (re.test(s.liveText)) return s;
-      await new Promise((r) => setTimeout(r, interval));
+      if (i < tries - 1) await new Promise((r) => setTimeout(r, interval));
     }
     return s;
   };
