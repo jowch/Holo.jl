@@ -25,25 +25,31 @@ everything below is a candidate for it. `CHANGELOG.md` `[Unreleased]` is the run
 Shipped: `masque(fig)` auto-extraction over Scatter, Lines/LineSegments/ScatterLines, Stairs,
 Stem, Errorbars/Rangebars, HLines/VLines, HSpan/VSpan, Heatmap, Image, Spy, BarPlot, Hist,
 Waterfall, CrossBar, BoxPlot (box body), Band, Density, Violin, Contourf, Voronoiplot, Poly,
-Text/Annotation, Colorbar, Legend, MeshScatter, Wireframe, Arrows3D (the live table is #91);
+Text/Annotation, Colorbar, Legend, MeshScatter, Wireframe, Arrows3D (#91 tracks the full list);
 explicit constructors for every primitive; `Axis`, `Axis3`, and `PolarAxis` (discrete hits) on both
 backends; tooltips (`masque"…"` templates, auto table, figure-aware theme, mark-anchored
 placement); selection round-trip and re-highlight; box-select via a `selects`-ROI; threshold
 and ROI drags; drag-to-pan/rotate and slider-driven view changes through `@bind` re-render;
 keyboard navigation and screen-reader announcements; the `:cairo` (PNG) and `:webgl` (live
-canvas) backends behind one contract; a Documenter site with static notebook exports; CI
-covering Julia, frontend, Runic, a Pluto bind E2E, and an advisory live kind sweep.
+canvas) backends behind one contract; a Documenter site with static notebook exports; and eight
+CI jobs covering Julia on two versions, the no-backend error path, the WGLMakie extension with
+its own real-browser end-to-end check, a second through-Pluto bind end-to-end, every example
+notebook, the frontend, Runic, and an advisory live kind sweep.
 
 ## In flight
 
-- **#93 Mark-coloured flush highlight** (draft): replaces the fixed `#3A6F7C` ring drawn
-  outside the mark with a stroke on the mark's own edge in the mark's own colour, mixed toward
-  a figure-derived ink. Also ships the drawn radius for `scatter!` instead of `markersize/2`.
-  If it lands, the locked recipe text in `CLAUDE.md` and `live-interaction-checklist.md`
-  changes with it.
-- **#49 Registration prep** (draft, stale): everything it carried appears to be on `main`
-  already (TagBot, compat, changelog). Probably closeable — registration is a maintainer step
-  rather than a PR — but confirm nothing in it is unmerged first.
+- **#93 Split blend highlight** (draft): replaces the fixed `#3A6F7C` ring drawn outside the
+  mark with a highlight flush on the mark, built from blend modes rather than from the mark's
+  colour, so it works for every kind without Masque resolving a colour at all. The fill
+  brightens with `color-dodge` and the stroke darkens with `multiply`, or `screen` on a dark
+  figure. A resolved `colors` now feeds only the tooltip accent. Also ships the drawn radius
+  for `scatter!` instead of `markersize/2`. If it lands, the locked recipe text in `CLAUDE.md`
+  and `live-interaction-checklist.md` changes with it.
+- **#49 Registration prep** (draft, stale): superseded rather than merged. TagBot, the
+  `Base64` compat bound and the README install line reached `main` by other routes, but its
+  `test/registry_readiness.jl` was deliberately dropped in #55, its `docs/` paths moved under
+  `docs/dev/`, the `releasing.md` it added is deleted by this PR, and the changelog freeze it
+  proposed is explicitly reversed. Close it; nothing in it is still wanted.
 
 ## Open work
 
@@ -59,7 +65,8 @@ covering Julia, frontend, Runic, a Pluto bind E2E, and an advisory live kind swe
 
 `ViewInteractable` is commit-on-release: nothing moves during the drag, and the commit
 replaces the cell output, which on `:webgl` is a blank canvas plus a scene re-init. Two
-problems, four children, in this order:
+problems and five children: four steps in this order, plus #86, which corrects an earlier
+claim rather than adding work.
 
 1. **#83 Spurious second `@bind` on remount** (bug). `Bonds.initial_value` returns `nothing`,
    so every remounted widget emits a bond update that re-runs the reading cell. Fix the
@@ -151,8 +158,8 @@ canvas-identity strategy keeps projection Julia-authored.
   hooks for the highlight recipe alone.
 
   The pattern is already proven on one surface. Tooltips take `tooltip_*` keywords in Julia and
-  land as custom properties inside the shadow root, which is most of the nineteen
-  `--masque-*` properties that exist today. Custom properties inherit across the shadow
+  land as custom properties inside the shadow root, which is most of the `--masque-*`
+  properties that exist today. Custom properties inherit across the shadow
   boundary, so the transport works and nothing leaks into the notebook.
 
   The gap is that the rest is not CSS at all. The hover, selected and link recipes set their
@@ -179,7 +186,8 @@ tick it and update the docs page (#90) whenever `_plotbase` grows a branch.
 - **Informative default payloads for statistical recipes.** `architecture.md`'s rule is hit
   geometry from the rendered shape, payload values from Makie's computed values. Some
   extractors follow it — `violin!` ships `(; x)`, `contourf!` `(; low, high)`, `boxplot!`
-  `(; q1, median, q3)`, the bar family `(; low, high, value)`. Others fall through to the
+  `(; q1, median, q3)`, `barplot!`/`hist!`/`waterfall!` `(; low, high, value)`, and `crossbar!`
+  `(; midpoint, low, high)`. Others fall through to the
   primitive's generic `(; index)` and so tell the user nothing they can't see: `density!` and
   `band!` are each a single polygon whose entire payload is `index = 0`, and `voronoiplot!`
   ships a cell index where the generating point would be more useful. Give these the
@@ -198,11 +206,12 @@ tick it and update the docs page (#90) whenever `_plotbase` grows a branch.
   them; each waits for a real use.
 - **`TextLabel`**: a `Block`, not a plot, so it needs the figure-block walk `Colorbar` and
   `Legend` use. Small.
-- **Legend follow-ups.** Two gaps left by the shipped `LegendInteractable`, both already
-  tracked elsewhere: an entry cannot highlight a `:grid` target, which is one of the grid's
-  special cases listed above, and `series!` entries resolve to no layer until #89 extracts
-  series. Separately, Makie's own `Legend(fig, polaraxis)` raises a `MethodError`, which is
-  upstream rather than ours but worth confirming before promising polar legends.
+- **Legend follow-ups.** First, tick Legend in #91's table, which still lists it as not
+  auto-extracted even though #94 merged. Two further gaps, both already tracked elsewhere: an
+  entry cannot highlight a `:grid` target, which is one of the grid's special cases listed
+  above, and `series!` entries resolve to no layer until #89 extracts series. Separately,
+  Makie's own `Legend(fig, polaraxis)` raises a `MethodError`, which is upstream rather than
+  ours but worth confirming before promising polar legends.
 - **Contour family**: compound polygons (ring groups) so Contourf levels with holes hit-test
   correctly.
 - **HLines/VLines fractional span attributes** (`xmin`/`xmax`, `ymin`/`ymax`): ignored today,
@@ -216,8 +225,9 @@ tick it and update the docs page (#90) whenever `_plotbase` grows a branch.
   behaviour with no per-element payload, no keyboard focus, and it cannot be a highlight target
   for a legend. Its `values[]` matrix is the only term in the manifest bounded by source
   resolution rather than by display size, which is why it needs the on-screen-size cap at all.
-  That cap makes the user-visible contract depend on a rendering detail: the same heatmap shows
-  a value on hover in a wide cell and only `(i, j)` in a narrow one.
+  That cap makes the user-visible contract depend on a rendering detail. It is one
+  all-or-nothing decision per grid, taken from the average cell size, so the same heatmap hovers
+  values at one display width and only `(i, j)` at a narrower one.
 
   What `surface!` adds. The same dense cell field and the same unbounded per-cell payload, plus
   self-occlusion and a hit-test that is no longer a 2-D bin search. Its occlusion policy is
@@ -238,8 +248,8 @@ tick it and update the docs page (#90) whenever `_plotbase` grows a branch.
 
 ### Docs
 
-- **Flesh out the site.** Twelve pages, about 1 250 lines total, and several read as reference
-  rather than instruction. Each interactable and each keyword wants a worked example a reader
+- **Flesh out the site.** Thirteen pages, several of which read as reference rather than
+  instruction. Each interactable and each keyword wants a worked example a reader
   can paste, the recipes that carry a non-obvious payload want that payload shown, and the
   common tasks (highlight what I clicked, drive a second cell from a selection, theme a
   tooltip) want a short end-to-end page each rather than a keyword mentioned in passing.
@@ -293,8 +303,8 @@ tick it and update the docs page (#90) whenever `_plotbase` grows a branch.
 - **Early warning on Makie internals.** The extraction layer reads Makie internals heavily and
   compat pins one minor each of Makie, CairoMakie and WGLMakie. Keep pinning minors; that is
   the normal practice, and CompatHelper already proposes the bumps nightly. The gap is
-  detection, not policy. CompatHelper only reacts to a released version, and CI has no
-  scheduled trigger at all, so a Makie change that moves an internal Masque reads surfaces when
+  detection, not policy. CompatHelper only reacts to a released version, and `CI.yml` runs only
+  on push and pull request, so a Makie change that moves an internal Masque reads surfaces when
   someone opens a pull request after the bound moves rather than before. Add a scheduled run of
   the canary and compat testsets against Makie's development branch, advisory like the kind
   sweep. Two things decide whether it earns attention. Scope it to the deterministic canaries
@@ -346,8 +356,10 @@ shipped, which is a better filter than what other libraries happen to have.
 **Linking and selection**
 - **Cross-layer and cross-figure links.** The `links` field that shipped with the legend
   generalises: hovering a point in one axis highlights the same index in a facet, a table row,
-  or a second `masque` widget sharing a bond. The browser-side fan-out already exists, so this
-  is mostly a question of how a user declares the link in Julia.
+  or a second `masque` widget sharing a bond. Within one figure that is mostly a question of
+  how a user declares the link, since the fan-out already exists. Reaching a second widget is
+  a larger job: the fan-out resolves ids against a single manifest, and each mount owns a
+  private shadow root with no registry between them.
 - **Colorbar range select.** A `selects`-style drag on the colorbar returns the cells (or
   points) whose value falls in the dragged range; the client only needs the range, Julia
   resolves membership.
@@ -371,8 +383,8 @@ shipped, which is a better filter than what other libraries happen to have.
 **Tooltips and chrome**
 - **Richer tooltip content.** Small inline images or sparklines from a payload column, under
   the same payload budget the template macro respects; markdown-lite formatting.
-- **Reduced-motion and high-contrast modes.** Honour `prefers-reduced-motion` (no fade) and
-  `prefers-contrast`, alongside the existing keyboard and screen-reader support.
+- **High-contrast mode.** Honour `prefers-contrast`, alongside the existing keyboard and
+  screen-reader support. `prefers-reduced-motion` already ships.
 - **Touch gestures.** Long-press for tooltip, one-finger pan, pinch to zoom mapped onto the
   #85 preview and a single commit.
 
@@ -408,7 +420,8 @@ shipped, which is a better filter than what other libraries happen to have.
 ## Order
 
 A proposed sequence, not a decided one. Only the dependency edges are real: #92 wants #89,
-#85 wants #83 and #84, and registration wants the API to have stopped moving.
+#85 wants #83 and #84, #86 is not reconsidered until #84 and #85 exist, and registration wants
+the API to have stopped moving.
 
 1. Land or park #93, the remaining in-flight PR; resolve #49.
 2. Pre-registration revisions, including new work wanted in 0.1.0. Self-contained and cheap:

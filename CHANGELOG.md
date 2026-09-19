@@ -92,7 +92,7 @@ All notable changes to this project are documented here. The format is based on
   start, a pointer to the new site) — everything else it used to cover now lives on the site.
 - Maintainer/design docs moved from `docs/` to `docs/dev/` (`architecture.md`,
   `perf-findings.md`, `roadmap.md`, `backend-comparison.md`, `live-interaction-checklist.md`,
-  `frontend-delivery.md`, `releasing.md`); `docs/README.md` is now a short index pointing at
+  `frontend-delivery.md`); `docs/README.md` is now a short index pointing at
   the site and at `docs/dev/`.
 - `hoverstyle(::AbstractInteractable, ::Int)` narrowed to `hoverstyle(::AbstractInteractable)`
   — the manifest ships one hover style per layer, not per element; the old per-element
