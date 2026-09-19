@@ -100,6 +100,13 @@ remounts makes the double-remount stop mattering for view manipulation specifica
 is still live for the final `@bind` commit and for every other bond in the notebook. #83 stays
 open and step 1 above stays worth doing on its own.
 
+**Open, deliberately: whether live preview or commit-on-release is the default.** #102's numbers
+bound what is *possible* — viable on a light scene, not on a heavy one at the resolutions
+tested (`perf-findings.md`) — they don't settle what the default should be, per backend and
+possibly per scene weight. That choice is left for when a real implementation exists and can be
+felt, not picked from spike numbers alone. A default right for a 240-point helix may be wrong for
+a large surface; the honest answer may be that it adapts rather than being fixed.
+
 **#86 corrects an earlier roadmap claim.** The camera-only resident-scene patch for `:webgl`
 is gated on DOM identity, not payload size: Pluto destroys the `<canvas>` on every cell
 replacement. It needs a portaled canvas outside the cell output or a Pluto that morphs
@@ -267,18 +274,40 @@ tick it and update the docs page (#90) whenever `_plotbase` grows a branch.
   already settled in `architecture.md`: document-and-accept on both backends, with a build-time
   CPU cull in Julia as the upgrade path, since GPU picking is a Masque-wide non-goal.
 
-  The question to answer once, for both. Should per-cell values be pushed into the manifest at
-  build time, as today plus a cap, or pulled per hit from the kernel that clicks already
-  require? Pull removes the cap and the resolution-dependent contract, but hover stops working
-  in a static export, which the principles say inspection should survive. Answer that before
-  either is built on further.
+  The question to answer once, for both, is now three-way rather than binary:
 
-  #102 makes the pull side concrete: `with_js_link` is exactly a mechanism for "pulled per hit
-  from the kernel," which was previously an unmechanized option in this question. If a pull path
-  ships, it would retire the `values[]` cap outright — the one manifest term bounded by source
-  resolution rather than by display size, described above. It does not change the static-export
-  cost of pulling: a live-pull heatmap hover still needs a kernel, same as any other
-  `with_js_link` value.
+  - **Push** per-cell values into the manifest at build time, as today plus a cap — export-safe,
+    but the user-visible contract depends on a rendering detail, described above.
+  - **Pull** per hit from the kernel that clicks already require ([#102](https://github.com/jowch/Masque.jl/issues/102)
+    makes this concrete: `with_js_link` is exactly a mechanism for "pulled per hit from the
+    kernel," previously unmechanized here) — removes the cap and the resolution-dependent
+    contract, but hover stops working in a static export, which the principles say inspection
+    should survive.
+  - **Subsample to display resolution**
+    ([#105](https://github.com/jowch/Masque.jl/issues/105)) — keep the push model, so nothing
+    changes about when a kernel is needed, but bound the shipped payload by *display size* rather
+    than *source resolution*: report the one cell (or the aggregate of the cells) under each
+    screen pixel, not the whole matrix. This retires the `values[]` cap outright, the same way
+    pull would, without giving up static-export safety. The argument isn't just convenience: a
+    cap is an arbitrary size threshold, whereas declining to report per-cell values for cells the
+    user cannot individually point at is a statement about what hovering *means* — a subpixel
+    cell isn't hoverable in any meaningful sense, so shipping it a value was never buying real
+    fidelity.
+
+  Subsampling and the gesture channel compound if both ship: with #102 making zoom cheap,
+  fidelity under subsampling becomes **navigable rather than fixed** — a user who wants the exact
+  value at a cell zooms in, fewer source cells land under each screen pixel as they do, and the
+  subsample resolves progressively finer. That turns a fixed contract compromise (pick a
+  resolution once, live with it at every zoom level) into an interaction.
+
+  Keep this distinct from the heavy-scene render latency in `perf-findings.md` (an 80×80
+  `surface!` case) — that cost is dominated by Makie's own draw time, not by payload or hit-test,
+  so subsampling what gets *reported* does nothing for it. Decimating what gets *rendered* during
+  a gesture — a coarser frame mid-drag, full fidelity on release, in the spirit of #85's already-
+  accepted "ticks and decorations move with the photograph until the commit" — is the separate
+  companion idea for that cost; named here, not designed.
+
+  Answer the push/pull/subsample question before any of the three is built on further.
 
 - **PolarAxis continuous θ/r readout**: ship `Makie.Polar` (and the letterboxed scene limits)
   to the JS `invertAxis` so `AxisInteractable`, thresholds, ROIs, and the #92 probe work on
