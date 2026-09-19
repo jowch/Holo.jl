@@ -71,21 +71,18 @@ Runic, and an advisory live kind sweep.
 
 `ViewInteractable` is commit-on-release: nothing moves during the drag, and the commit
 replaces the cell output, which on `:webgl` is a blank canvas plus a scene re-init. Two
-problems and six children: four steps in this order, plus #86, which corrects an earlier
-claim rather than adding work, plus #102, which reframes the remount problem for gestures
-generally rather than adding a fifth step to this list.
+problems and six children: three steps in this order, plus #86, which corrects an earlier
+claim rather than adding work, #83, which investigated the double remount to a close rather
+than a fix, and #102, which reframes the remount problem for gestures generally.
 
-1. **#83 Spurious second `@bind` on remount** (bug). `Bonds.initial_value` returns `nothing`,
-   so every remounted widget emits a bond update that re-runs the reading cell. Fix the
-   protocol handling, not by inventing a fake event. Removes one of the two remounts.
-2. **#84 Last-frame hold.** Park the last painted frame (Cairo PNG `src`, or a bitmap from the
+1. **#84 Last-frame hold.** Park the last painted frame (Cairo PNG `src`, or a bitmap from the
    WGL canvas) and show it until the new base is ready. Hides the remaining remount. Not a
    GL-context transfer: a context cannot move to a new canvas.
-3. **#85 2D photographic preview.** During pan and wheel zoom, CSS-transform the host so the
+2. **#85 2D photographic preview.** During pan and wheel zoom, CSS-transform the host so the
    base and overlay slide together; commit the existing `limits` payload once on release or
    wheel idle. Julia authored the frame being slid, so this is not a client camera. Accepted
    artifacts: ticks and decorations move with the photograph until the commit.
-4. **#87 3D orbit preview**: no longer parked — **#102 makes it buildable.** The blocker was
+3. **#87 3D orbit preview**: no longer parked — **#102 makes it buildable.** The blocker was
    that the overlay is a projection at the old `azimuth`/`elevation`, so a live orbit either
    freezes the overlay or needs 3D coordinates in JS, and neither respects the
    Julia-authored-projection principle this list is written to keep. #102 answers it: route the
@@ -95,10 +92,22 @@ generally rather than adding a fifth step to this list.
    frame affordable. Still commit-on-release for the final `@bind`ed value; #102 changes what
    happens *during* the drag, not what gets committed at the end.
 
-**#102 also routes around #83 for gestures, without fixing it.** A gesture channel that never
-remounts makes the double-remount stop mattering for view manipulation specifically — #83's bug
-is still live for the final `@bind` commit and for every other bond in the notebook. #83 stays
-open and step 1 above stays worth doing on its own.
+**#83 investigated the double remount to a close: unsupported-shape behaviour, not a bug.** The
+view-manipulation widget cell both defines the `@bind` and reads its own previous bond value back
+(the camera-`Ref` pattern the steps above build on, and the same shape `selected=`-style click
+persistence relies on) — a cell that does that is not a sanctioned Pluto use case. The mechanism
+traces into Pluto's own bond-cache timing (a cached entry is deleted and re-added several times
+within one reactive cascade, and the listener that would skip resending an unchanged mount-time
+value lands in the window where the entry is absent). Two candidate Masque-side fixes were built
+and rejected: dropping the `host.value` clobber, and replaying the last real value instead of
+`nothing` (catastrophic in the #83 investigation's own testing — 379+ evaluations from a single
+drag; this figure lives in the issue, not `perf-findings.md`). There is no Masque defect to fix
+and no Pluto defect to report; closed not-planned, nothing left to build. **#102 routes around it
+rather than fixing it**: a gesture channel that never remounts makes the double remount stop
+mattering for view manipulation specifically, but the same self-referencing shape is still live
+for every other bond in the notebook that uses it. #103 retires the main reason users write that
+shape at all (the `selected=` self-referencing workaround) — the more durable answer for those
+callers.
 
 **Open, deliberately: whether live preview or commit-on-release is the default.** #102's numbers
 bound what is *possible* — viable on a light scene, not on a heavy one at the resolutions
@@ -502,12 +511,13 @@ shipped, which is a better filter than what other libraries happen to have.
 ## Order
 
 A proposed sequence, not a decided one. Only the dependency edges are real: #92 wants #89,
-#85 wants #83 and #84, #86 is not reconsidered until #84 and #85 exist, and registration wants
-the API to have stopped moving.
+#85 wants #84, #86 is not reconsidered until #84 and #85 exist, and registration wants
+the API to have stopped moving. (#83 closed not-planned — nothing left to build, so it is not
+a dependency of anything below.)
 
 1. Resolve #49.
 2. Pre-registration revisions, including new work wanted in 0.1.0. Self-contained and cheap:
-   #83, #88, #89, #81, #90, keyboard drag nudging, and the composite-recipe child walk.
+   #88, #89, #81, #90, keyboard drag nudging, and the composite-recipe child walk.
 3. The remount path (#84 hold, then #85 preview). Both backends, live-verified on view-pan.
 4. #92 cursor slice, after #89.
 5. Register v0.1.0, then the notebook cleanup (drop `Pkg.develop`, re-enable Binder).
